@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native builds
+/ios
+/android
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro bundler cache
+.metro-health-check*
+
+# Environment / secrets (Firebase keys, etc.)
+.env
+.env.*
+google-services.json
+GoogleService-Info.plist
+
+# Logs
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+
+# macOS / editor junk
+.DS_Store
+*.pem
+
+# TypeScript
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
