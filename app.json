@@ -5,8 +5,7 @@
     "version": "1.0.0",
     "platforms": ["android"],
     "android": {
-      "package": "com.modu.app",
-      "googleServicesFile": "./google-services.json"
+      "package": "com.modu.app"
     }
   }
 }

@@ -23,8 +23,6 @@ expo-env.d.ts
 # Environment / secrets (Firebase keys, etc.)
 .env
 .env.*
-google-services.json
-GoogleService-Info.plist
 
 # Logs
 npm-debug.*
