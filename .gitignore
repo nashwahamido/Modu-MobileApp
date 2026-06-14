@@ -20,9 +20,20 @@ expo-env.d.ts
 # Metro bundler cache
 .metro-health-check*
 
-# Environment / secrets (Firebase keys, etc.)
+# Environment / secrets
 .env
 .env.*
+!.env.example
+
+# 3D model files (stored in Supabase Storage, not in repo)
+*.glb
+*.gltf
+*.obj
+*.mtl
+
+# Tool files
+git-filter-repo
+git-filter-repo.txt
 
 # Logs
 npm-debug.*
