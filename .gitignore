@@ -25,11 +25,11 @@ expo-env.d.ts
 .env.*
 !.env.example
 
-# 3D model files (stored in Supabase Storage, not in repo)
-*.glb
-*.gltf
-*.obj
-*.mtl
+# # 3D model files (stored in Supabase Storage, not in repo) - comment out for now
+# *.glb
+# *.gltf
+# *.obj
+# *.mtl
 
 # Tool files
 git-filter-repo

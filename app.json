@@ -2,6 +2,7 @@
   "expo": {
     "name": "Modu",
     "slug": "modu",
+    "scheme": "modu",
     "version": "1.0.0",
     "platforms": ["android"],
     "android": {
