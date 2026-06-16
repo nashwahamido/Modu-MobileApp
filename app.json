@@ -4,9 +4,16 @@
     "slug": "modu",
     "scheme": "modu",
     "version": "1.0.0",
-    "platforms": ["android"],
+    "icon": "./assets/images/Modu_Icon.png",
     "android": {
-      "package": "com.modu.app"
+      "package": "com.modu.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/Modu_Icon.png",
+        "backgroundColor": "#ffffff"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.modu.app"
     }
   }
 }
