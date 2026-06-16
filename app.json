@@ -4,11 +4,11 @@
     "slug": "modu",
     "scheme": "modu",
     "version": "1.0.0",
-    "icon": "./assets/images/Modu_Icon.png",
+    "icon": "./src/assets/images/Modu_Icon.png",
     "android": {
       "package": "com.modu.app",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/Modu_Icon.png",
+        "foregroundImage": "./src/assets/images/Modu_Icon.png",
         "backgroundColor": "#ffffff"
       }
     },
