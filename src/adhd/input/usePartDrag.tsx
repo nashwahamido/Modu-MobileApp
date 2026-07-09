@@ -352,6 +352,8 @@ export function usePartDrag({
   // One stable gesture instance per action: store updates re-render the tray
   // mid-touch, and handing GestureDetector a fresh Gesture.Pan() then would
   // reattach the handler and kill the active gesture.
+  // Rebuild the cache if buildGesture identity changes (keeps gestures fresh).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const gestureCache = useMemo(() => new Map<string, GestureType>(), [buildGesture]);
   const gestureFor = useCallback(
     (action: AssemblyAction) => {

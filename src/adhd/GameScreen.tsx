@@ -26,6 +26,14 @@ import { FurnitureStyle } from "@/src/adhd/core/type";
 import { LACK } from "@/src/adhd/furnitures/LACK";
 import { instructionText } from "@/src/adhd/core/presentation/instructions";
 
+// ui related
+import { GreenFlash } from "@/src/adhd/ui/GreenFlash";
+import { FitChip } from "@/src/adhd/ui/FitChip";
+import { PartsTray } from "@/src/adhd/ui/PartsTray";
+import { BaseStashControl } from "@/src/adhd/ui/BaseStashControl";
+import { DevAutoStep } from "@/src/adhd/ui/DevAutoStep";
+import { SettingsPanel } from "@/src/adhd/ui/SettingsPanel";
+
 // This screen assembles the LACK table.
 const ACTIVE_FURNITURE = LACK;
 
@@ -49,14 +57,6 @@ const BACKDROPS: Record<
     dark: require("@/src/adhd/assets/images/cartoonish-dark.png"),
   },
 };
-
-// ui related
-import { GreenFlash } from "@/src/adhd/ui/GreenFlash";
-import { FitChip } from "@/src/adhd/ui/FitChip";
-import { PartsTray } from "@/src/adhd/ui/PartsTray";
-import { BaseStashControl } from "@/src/adhd/ui/BaseStashControl";
-import { DevAutoStep } from "@/src/adhd/ui/DevAutoStep";
-import { SettingsPanel } from "@/src/adhd/ui/SettingsPanel";
 
 /** Compact on-screen toggle (bottom-right): Focus / Hints / Auto-View. */
 function ToggleChip({

@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 
 import { useGameStore } from "@/src/adhd/core/store";
 import { FurnitureStyle, LightingChoice } from "@/src/adhd/core/type";
@@ -93,49 +94,83 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const settings = useGameStore((s) => s.settings);
   const setSettings = useGameStore((s) => s.setSettings);
 
+  // Custom scroll indicator (the native one can't be recolored, kept visible,
+  // or moved off the text). Track content vs. viewport to size/position a thumb.
+  const [scrollY, setScrollY] = useState(0);
+  const [viewH, setViewH] = useState(0);
+  const [contentH, setContentH] = useState(0);
+  const canScroll = contentH > viewH + 1;
+  const thumbH = canScroll ? Math.max(28, (viewH / contentH) * viewH) : 0;
+  const maxScroll = Math.max(1, contentH - viewH);
+  const thumbY = canScroll
+    ? (Math.min(Math.max(scrollY, 0), maxScroll) / maxScroll) * (viewH - thumbH)
+    : 0;
+
   return (
     <View style={styles.backdrop} pointerEvents="box-none">
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
       <View style={styles.panel}>
         <Text style={styles.title}>Settings</Text>
-        <Stepper
-          label="Style"
-          desc="Table look & backdrop"
-          value={settings.style}
-          options={STYLE_OPTIONS}
-          onChange={(v) => setSettings({ style: v as FurnitureStyle })}
-        />
-        <Stepper
-          label="Lighting"
-          desc="Auto = each style's natural rig"
-          value={settings.lightingPreset}
-          options={LIGHTING_OPTIONS}
-          onChange={(v) => setSettings({ lightingPreset: v as LightingChoice })}
-        />
-        <Row
-          label="Hints"
-          desc="Show the ghost placement guides"
-          value={settings.showHints}
-          onValueChange={(v) => setSettings({ showHints: v })}
-        />
-        <Row
-          label="Dark mode"
-          desc="Use the dark background theme"
-          value={settings.darkMode}
-          onValueChange={(v) => setSettings({ darkMode: v })}
-        />
-        <Row
-          label="Toon shader"
-          desc="Cel-shaded calendula table, keeps the outline (test)"
-          value={settings.toonShader}
-          onValueChange={(v) => setSettings({ toonShader: v })}
-        />
-        <Row
-          label="Auto-return parts"
-          desc="On: a released part snaps back to the tray. Off: it floats where you drop it, with a Put-back button."
-          value={settings.autoReturn}
-          onValueChange={(v) => setSettings({ autoReturn: v })}
-        />
+        <View style={styles.scrollWrap}>
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            scrollEventThrottle={16}
+            onScroll={(e) => setScrollY(e.nativeEvent.contentOffset.y)}
+            onLayout={(e) => setViewH(e.nativeEvent.layout.height)}
+            onContentSizeChange={(_w, h) => setContentH(h)}
+          >
+          <Stepper
+            label="Style"
+            desc="Table look & backdrop"
+            value={settings.style}
+            options={STYLE_OPTIONS}
+            onChange={(v) => setSettings({ style: v as FurnitureStyle })}
+          />
+          <Stepper
+            label="Lighting"
+            desc="Auto = each style's natural rig"
+            value={settings.lightingPreset}
+            options={LIGHTING_OPTIONS}
+            onChange={(v) => setSettings({ lightingPreset: v as LightingChoice })}
+          />
+          <Row
+            label="Hints"
+            desc="Show the ghost placement guides"
+            value={settings.showHints}
+            onValueChange={(v) => setSettings({ showHints: v })}
+          />
+          <Row
+            label="Dark mode"
+            desc="Use the dark background theme"
+            value={settings.darkMode}
+            onValueChange={(v) => setSettings({ darkMode: v })}
+          />
+          <Row
+            label="Toon shader"
+            desc="Cel-shaded calendula table, keeps the outline (test)"
+            value={settings.toonShader}
+            onValueChange={(v) => setSettings({ toonShader: v })}
+          />
+          <Row
+            label="Auto-return parts"
+            desc="On: a released part snaps back to the tray. Off: it floats where you drop it, with a Put-back button."
+            value={settings.autoReturn}
+            onValueChange={(v) => setSettings({ autoReturn: v })}
+          />
+          </ScrollView>
+          {canScroll ? (
+            <View style={styles.scrollTrack} pointerEvents="none">
+              <View
+                style={[
+                  styles.scrollThumb,
+                  { height: thumbH, transform: [{ translateY: thumbY }] },
+                ]}
+              />
+            </View>
+          ) : null}
+        </View>
         <Pressable style={styles.done} onPress={onClose} hitSlop={8}>
           <Text style={styles.doneText}>Done</Text>
         </Pressable>
@@ -158,6 +193,7 @@ const styles = StyleSheet.create({
   panel: {
     width: 320,
     maxWidth: "86%",
+    maxHeight: "88%",
     backgroundColor: "#f7f3ea",
     borderRadius: 18,
     padding: 18,
@@ -167,6 +203,23 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
     elevation: 8,
+  },
+  scrollWrap: { flexShrink: 1, minHeight: 0, position: "relative" },
+  scroll: { flexShrink: 1 },
+  scrollContent: { gap: 6, paddingRight: 16 },
+  scrollTrack: {
+    position: "absolute",
+    right: 2,
+    top: 0,
+    bottom: 0,
+    width: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(60,50,40,0.10)",
+  },
+  scrollThumb: {
+    width: 6,
+    borderRadius: 3,
+    backgroundColor: "#6f8a68",
   },
   title: {
     fontSize: 17,
