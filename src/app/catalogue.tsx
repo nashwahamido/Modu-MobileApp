@@ -32,7 +32,11 @@ export default function CatalogueScreen() {
               key={m.id}
               meta={m}
               dark={scheme === "dark"}
-              onPress={() => router.push({ pathname: "/play", params: { id: m.id } })}
+              onPress={() =>
+                m.id === "LACK"
+                  ? router.push({ pathname: "/choose", params: { id: m.id } })
+                  : router.push({ pathname: "/play", params: { id: m.id } })
+              }
             />
           ))}
         </View>

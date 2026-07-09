@@ -16,16 +16,30 @@
         "monochromeImage": "./src/assets/images/Modu_Icon.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.app.modu"
     },
-    "plugins": ["expo-router", "expo-audio", "expo-asset"],
+    "plugins": [
+      "expo-router",
+      "expo-audio",
+      "expo-asset"
+    ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "ac5a6dfb-7e96-4602-8cb9-3ae1cdec0817"
+      }
     }
   }
 }
