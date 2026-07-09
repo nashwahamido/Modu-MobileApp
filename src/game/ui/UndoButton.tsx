@@ -1,29 +1,26 @@
-import { Alert, Pressable, StyleSheet, Text } from "react-native";
+import { Pressable, StyleSheet, Text } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
 
-/** Top-left ctrl button (right of Undo, Nashwa's control-row treatment) that
- *  restarts the assembly from scratch (with confirm). */
-export function ResetButton() {
+/** Top-left ctrl button (Nashwa placement — the undo/reset row under the
+ *  points chip) that steps back to the previous step. Nashwa's ctrl-button
+ *  treatment: ↶ glyph in a bordered 42×36 chip, theme-aware. */
+export function UndoButton() {
   const completedCount = useGameStore((s) => s.completed.length);
-  const reset = useGameStore((s) => s.reset);
+  const undoLastAction = useGameStore((s) => s.undoLastAction);
   const dark = useGameStore((s) => s.theme === "dark");
 
-  const confirmReset = () => {
-    if (completedCount === 0) return;
-    Alert.alert("Start over?", "This clears all assembly progress.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Reset", style: "destructive", onPress: reset },
-    ]);
-  };
-
+  const disabled = completedCount === 0;
   return (
     <Pressable
-      style={[styles.btn, dark && styles.btnDark, completedCount === 0 && styles.btnIdle]}
-      onPress={confirmReset}
+      style={[styles.btn, dark && styles.btnDark, disabled && styles.btnIdle]}
+      onPress={() => {
+        if (!disabled) undoLastAction();
+      }}
+      disabled={disabled}
       hitSlop={8}
-      accessibilityLabel="Restart assembly"
+      accessibilityLabel="Back one step"
     >
-      <Text style={[styles.text, dark && styles.textDark]}>↺</Text>
+      <Text style={[styles.text, dark && styles.textDark]}>↶</Text>
     </Pressable>
   );
 }
@@ -32,7 +29,7 @@ const styles = StyleSheet.create({
   btn: {
     position: "absolute",
     top: 54,
-    left: 62,
+    left: 14,
     width: 42,
     height: 36,
     borderRadius: 12,
