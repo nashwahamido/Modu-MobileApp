@@ -4,16 +4,28 @@
     "slug": "modu",
     "scheme": "modu",
     "version": "1.0.0",
+    "orientation": "landscape",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
     "icon": "./src/assets/images/Modu_Icon.png",
     "android": {
       "package": "com.modu.app",
       "adaptiveIcon": {
         "foregroundImage": "./src/assets/images/Modu_Icon.png",
-        "backgroundColor": "#ffffff"
-      }
+        "backgroundColor": "#ffffff",
+        "monochromeImage": "./src/assets/images/Modu_Icon.png"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
     },
     "ios": {
-      "bundleIdentifier": "com.modu.app"
+      "supportsTablet": true,
+      "bundleIdentifier": "com.app.modu"
+    },
+    "plugins": ["expo-router", "expo-audio", "expo-asset"],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
     }
   }
 }
