@@ -20,6 +20,7 @@ export interface AccessibilitySettings {
   style: FurnitureStyle; // visual preset: table look + backdrop
   lightingPreset: LightingChoice; // lighting rig (auto = per-style default)
   toonShader: boolean; // apply the custom toon material to the table (test)
+  autoReturn: boolean; // released part snaps back to the tray (vs. float + Put-back)
   // ADDITIVE toggles…
   showPictogram: boolean;
   showSymbols: boolean;
@@ -37,6 +38,7 @@ const DEFAULT_SETTINGS: AccessibilitySettings = {
   style: "realistic",
   lightingPreset: "auto",
   toonShader: false,
+  autoReturn: false,
   showPictogram: false,
   showSymbols: false,
   audioCues: false,

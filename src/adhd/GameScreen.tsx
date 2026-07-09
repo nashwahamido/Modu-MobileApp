@@ -252,7 +252,7 @@ function GameScreen() {
           <Text style={[styles.recenterText, dark && styles.recenterTextDark]}>⟲ Recenter</Text>
         </Pressable>
       )}
-      {heldActionId ? (
+      {heldActionId && !settings.autoReturn ? (
         <Pressable
           style={styles.putBackButton}
           onPress={() => useGameStore.getState().cancelHeld()}

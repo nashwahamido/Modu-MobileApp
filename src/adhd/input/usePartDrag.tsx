@@ -235,8 +235,13 @@ export function usePartDrag({
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         }
       });
+    } else if (store.settings.autoReturn) {
+      // Auto-return: a part released away from a socket snaps straight back to
+      // the tray (matches Standard mode). No floating part, no Put-back needed.
+      store.cancelHeld();
+      Haptics.selectionAsync();
     } else {
-      // Not aligned: leave the part FLOATING where you let go. heldActionId
+      // Manual return: leave the part FLOATING where you let go. heldActionId
       // stays set and the driver keeps its offset, so the part renders where
       // you dropped it — drag it again on the canvas (or long-press its tray
       // card) to keep moving it; the Put-back button returns it to the tray.

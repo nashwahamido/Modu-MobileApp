@@ -130,6 +130,12 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           value={settings.toonShader}
           onValueChange={(v) => setSettings({ toonShader: v })}
         />
+        <Row
+          label="Auto-return parts"
+          desc="On: a released part snaps back to the tray. Off: it floats where you drop it, with a Put-back button."
+          value={settings.autoReturn}
+          onValueChange={(v) => setSettings({ autoReturn: v })}
+        />
         <Pressable style={styles.done} onPress={onClose} hitSlop={8}>
           <Text style={styles.doneText}>Done</Text>
         </Pressable>
