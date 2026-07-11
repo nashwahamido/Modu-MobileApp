@@ -19,11 +19,19 @@ const INSTRUCTIONS = buildInstructions(ACTIONS, P, LABELS_ALL, BEATS, CLUSTERS);
 
 const model = require("../../../../assets/models/furnitures/LACK/LACK.glb");
 const shadow = require("../../../../assets/models/furnitures/LACK/shadow.glb");
+// Per-style table looks (same 9 node names as the base model). The scene swaps the whole model by renderStyle via furniture.styleModels
+const MODEL_COZY = require("../../../../assets/models/furnitures/LACK/LACK_cozy.glb");
+const MODEL_CARTOON = require("../../../../assets/models/furnitures/LACK/LACK_cartoon.glb");
 
 export const LACK: Furniture = {
   meta: LACK_META,
   model,
   shadow,
+  styleModels: {
+    realistic: model,
+    cozy: MODEL_COZY,
+    cartoon: MODEL_CARTOON,
+  },
   parts: PARTS_WITH_STRUCTURE,
   actions: ACTIONS,
   liaisons: LIAISONS,

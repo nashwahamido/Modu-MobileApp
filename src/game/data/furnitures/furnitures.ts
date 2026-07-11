@@ -3,9 +3,7 @@ import { DALFRED_META } from "./DALFRED/meta";
 import { LACK_META } from "./LACK/meta";
 import { MALM_META } from "./MALM/meta";
 
-/** Lightweight list for the furniture picker (no heavy payload loaded).
- *  Entries flagged `engineOnly` (no GLB yet) are for the test harness — the
- *  3D picker filters them out. */
+/** Lightweight list for the furniture picker (no heavy payload loaded).  Entries flagged `engineOnly` (no GLB yet) are for the test harness — the  3D picker filters them out. */
 export const FURNITURE_METAS: FurnitureMeta[] = [DALFRED_META, LACK_META, MALM_META];
 
 /** Lazy loaders for the full build payload. Adding a furniture = one line. */
