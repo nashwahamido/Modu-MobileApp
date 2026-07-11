@@ -62,13 +62,9 @@ export function ToggleChips() {
 
 const styles = StyleSheet.create({
   row: {
-    position: "absolute",
-    right: 14,
-    top: 10,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    zIndex: 15,
   },
   chip: {
     height: 36,

@@ -1,12 +1,7 @@
 import { StyleSheet, View } from "react-native";
 import { selectFirstDrop, useGameStore } from "@/src/game/core/store";
 
-/**
- * First-part drop target. The very first part of a cluster has nothing to align
- * to, so instead of a socket ghost we centre the camera on where it lands and
- * show this ring at screen centre — drag the part over it and drop. It turns
- * green when the part is close enough to place. Hidden for every later part.
- */
+/** First-part drop target. The very first part of a cluster has nothing to align to, so instead of a socket ghost we centre the camera on where it lands and show this ring at screen centre. It turns green when the part is close enough to place. Hidden for every later part. */
 const SIZE = 92;
 
 export function CenterDropRing() {

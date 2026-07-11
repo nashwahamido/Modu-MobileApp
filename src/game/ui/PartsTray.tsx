@@ -19,11 +19,7 @@ interface Props {
   thumbs?: ThumbMap;
 }
 
-/**
- * Inventory column (right edge): everything the current stage uses, grouped
- * with remaining counts. Long-press an enabled card to take one in hand and
- * drag it into the scene; locked cards are waiting on other steps.
- */
+/** Inventory column (right edge): everything the current stage uses, grouped with remaining counts. Long-press an enabled card to take one in hand and drag it into the scene; locked cards are waiting on other steps. */
 export function PartsTray({ items, gestureFor, header, thumbs }: Props) {
   const theme = useColorScheme() === "dark" ? "dark" : "light";
   if (items.length === 0 && !header) return null;

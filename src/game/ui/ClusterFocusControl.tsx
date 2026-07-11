@@ -83,7 +83,8 @@ export function ClusterFocusControl() {
 
   return (
     <View style={[styles.switcher, dark && styles.switcherDark]}>
-      <Text style={[styles.kicker, dark && styles.kickerDark]}>FOCUS</Text>
+      {/* <Text style={[styles.kicker, dark && styles.kickerDark]}>FOCUS</Text>
+      NOTE: Compact: no "FOCUS" kicker — the cluster chips are self-explanatory. */}
       <View style={styles.chipRow}>
         {clusters.map((clusterId) => {
           const selected = activeCluster === clusterId;
@@ -111,7 +112,9 @@ export function ClusterFocusControl() {
                   finished && !selected && styles.chipTextFinished,
                 ]}
               >
-                {finished ? `✓ ${clusterLabel(furniture, clusterId)}` : clusterLabel(furniture, clusterId)}
+                {finished
+                  ? `✓ ${clusterLabel(furniture, clusterId)}`
+                  : clusterLabel(furniture, clusterId)}
               </Text>
             </Pressable>
           );
@@ -151,7 +154,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#1b2230",
     borderColor: "rgba(255,255,255,0.14)",
   },
-  title: { color: "#2e2a24", fontSize: 18, fontWeight: "800", letterSpacing: 0.2 },
+  title: {
+    color: "#2e2a24",
+    fontSize: 18,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+  },
   subtitle: { color: "#7c7064", fontSize: 13, lineHeight: 18, marginBottom: 6 },
   subtitleDark: { color: "#9aa4b4" },
   optionList: { gap: 10 },
@@ -179,9 +187,10 @@ const styles = StyleSheet.create({
   optionMetaLocked: { color: "#9a8f82" },
 
   switcher: {
+    // Top-right, in the strip above the parts tray (tray starts at top:70). Kicker dropped so the compact chip row fits.
     position: "absolute",
-    left: 14,
-    top: 150,
+    right: 14,
+    top: 10,
     backgroundColor: "rgba(255,255,255,0.9)",
     borderRadius: 14,
     borderWidth: 1,
@@ -197,7 +206,12 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(22,30,44,0.9)",
     borderColor: "rgba(255,255,255,0.16)",
   },
-  kicker: { color: "#9a8f82", fontSize: 9, fontWeight: "800", letterSpacing: 1 },
+  kicker: {
+    color: "#9a8f82",
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
   kickerDark: { color: "#8b93a3" },
   chipRow: { flexDirection: "row", gap: 6 },
   chip: {

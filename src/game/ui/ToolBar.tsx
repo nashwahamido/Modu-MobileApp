@@ -5,14 +5,7 @@ import { toolList } from "@/src/game/data/tools";
 import { pickThumb } from "@/src/game/core/presentation/labels";
 import type { ToolId } from "@/src/game/core/type";
 
-/**
- * Manual tool choice (settings.manualTools): a single toolbox icon under the
- * parts tray. Tapping it expands a horizontal tool tray (leftward); tapping
- * again collapses it. The player equips a tool before a tighten will accept
- * the gesture. Picking a WRONG tool for the active step gives a calm nudge
- * naming the right one — a learning moment, not an error. Hidden entirely in
- * auto mode (the system equips tools silently).
- */
+/** Manual tool choice (settings.manualTools): a single toolbox icon under the parts tray. Tapping it expands a horizontal tool tray (leftward); tapping again collapses it. The player equips a tool before a tighten will accept the gesture. Picking a WRONG tool for the active step gives a calm nudge naming the right one — a learning moment, not an error. Hidden entirely in auto mode (the system equips tools silently). */
 export function ToolBar({ neededTool }: { neededTool: ToolId | null }) {
   const [open, setOpen] = useState(false);
   const furniture = useGameStore((s) => s.furniture);
@@ -73,9 +66,10 @@ export function ToolBar({ neededTool }: { neededTool: ToolId | null }) {
 
 const styles = StyleSheet.create({
   bar: {
+    // Bottom-centre: bottom-right belongs to the toggles row, bottom-left to the joystick, and the right edge above is the parts tray.
     position: "absolute",
-    right: 10,
-    bottom: 20,
+    alignSelf: "center",
+    bottom: 16,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,

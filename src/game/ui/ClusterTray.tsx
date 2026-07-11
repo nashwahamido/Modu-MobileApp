@@ -75,13 +75,7 @@ function buildDrag(
     });
 }
 
-/**
- * A finished cluster you're not currently on becomes a card here (its rendered
- * preview), shown from the moment it finishes until it's combined — alongside the
- * current cluster's part cards (rendered as the PartsTray header). Once combine is
- * reachable, drag the card out like a part: the cluster spawns to the side and you
- * drag it in to seat onto the in-scene cluster, with a ghost + green fit feedback.
- */
+/** A finished cluster you're not currently on becomes a card here (its rendered preview), shown from the moment it finishes until it's combined — alongside the current cluster's part cards (rendered as the PartsTray header). Once combine is reachable, drag the card out like a part: the cluster spawns to the side and you drag it in to seat onto the in-scene cluster, with a ghost + green fit feedback. */
 export function ClusterTray({ clusterDriver }: { clusterDriver: ClusterDriver }) {
   const furniture = useGameStore((s) => s.furniture);
   const completed = useGameStore((s) => s.completed);

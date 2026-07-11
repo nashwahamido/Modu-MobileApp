@@ -2,13 +2,7 @@ import { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
 
-/**
- * FREE-mode soft nudge: a calm, low-stimulation message shown when the player
- * reaches for a part that isn't ready yet ("Maybe place the leg first."). Not an
- * error — it fades on its own and clears on the next interaction. Driven by
- * store.hint (set by noteBlocked); off entirely in plan/guide and when the
- * softHints setting is off (noteBlocked no-ops there).
- */
+/** FREE-mode soft nudge: a calm, low-stimulation message shown when the player reaches for a part that isn't ready yet ("Maybe place the leg first."). Driven by store.hint (set by noteBlocked); off entirely in plan/guide and when the softHints setting is off (noteBlocked no-ops there). */
 const DISMISS_MS = 3200;
 
 export function HintToast() {
