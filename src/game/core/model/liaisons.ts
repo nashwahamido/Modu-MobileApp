@@ -15,10 +15,7 @@ const toArray = (x?: readonly PartId[]): readonly PartId[] => x ?? [];
 
 const KIND_BY_PREFIX = FASTENER_KINDS.prefixes as Record<string, FastenerKind>;
 
-/** What a fastener DOES: the authored `fastenerKind` override, else derived
- *  from the group name's prefix (fastener-kinds.json). A group matching no
- *  prefix (a typeOverride / an unlisted `…__a&b` name) falls back to
- *  "secured" — the inert choice: it never defines a joint or preloads. */
+/** What a fastener DOES: the authored `fastenerKind` override, else derived  from the group name's prefix (fastener-kinds.json). A group matching no  prefix (a typeOverride / an unlisted `…__a&b` name) falls back to  "secured" — the inert choice: it never defines a joint or preloads. */
 export function fastenerKindOf(p: PartDef): FastenerKind {
   if (p.fastenerKind) return p.fastenerKind;
   for (const [prefix, kind] of Object.entries(KIND_BY_PREFIX)) {
@@ -27,9 +24,7 @@ export function fastenerKindOf(p: PartDef): FastenerKind {
   return "secured";
 }
 
-/** A JOINT-DEFINING fastener bridging two named endpoints (bolt/pin/cam between
- *  `…__a&b`) — the parts that get OR-side insertion + the preload lock. Any
- *  non-"secured" kind qualifies; only a plain securer (screw/nail/…) does not. */
+/** A JOINT-DEFINING fastener bridging two named endpoints (bolt/pin/cam between  `…__a&b`) — the parts that get OR-side insertion + the preload lock. Any  non-"secured" kind qualifies; only a plain securer (screw/nail/…) does not. */
 export function isConnector(p: PartDef): boolean {
   return (
     p.type === "fastener" &&
@@ -38,12 +33,7 @@ export function isConnector(p: PartDef): boolean {
   );
 }
 
-/**
- * Overlay authored structural data (directJoins / slideJoins / seed / unstable)
- * onto the generated parts. Most joints come from the fasteners' `attached`
- * (mesh names), so `directJoins`/`slideJoins` are only needed for fastener-free
- * contacts; the rest is build intent.
- */
+/** Overlay authored structural data (directJoins / slideJoins / seed / unstable) onto the generated parts. Most joints come from the fasteners' `attached` (mesh names), so `directJoins`/`slideJoins` are only needed for fastener-free contacts; the rest is build intent. */
 export type StructureOverlay = Record<
   PartId,
   Partial<
@@ -119,13 +109,7 @@ export function isSlider(liaisons: LiaisonMap, partId: PartId): boolean {
   );
 }
 
-/**
- * The AND side of the frontier for placing `partId`: every SAME-cluster part it
- * slides into (groove owners) or threads into (receivers) must already be
- * placed — you can't enter a groove or a thread that isn't there. Cross-cluster
- * threaded edges are the joint the COMBINE step realizes, never this
- * placement's business, so they are excluded here.
- */
+/** The AND side of the frontier for placing `partId`: every SAME-cluster part it slides into (groove owners) or threads into (receivers) must already be placed — you can't enter a groove or a thread that isn't there. Cross-cluster threaded edges are the joint the COMBINE step realizes, never this placement's business, so they are excluded here. */
 export function andFrontierTargets(
   liaisons: LiaisonMap,
   parts: Parts,
@@ -142,11 +126,7 @@ export function andFrontierTargets(
   return out;
 }
 
-/**
- * Threaded edges whose MOVER sits in `cluster` and whose other endpoint sits
- * outside it — the joint a combineClusters step realizes as a screwing motion
- * (DALFRED: the seat's pole winds into the base).
- */
+/** Threaded edges whose MOVER sits in `cluster` and whose other endpoint sits outside it — the joint a combineClusters step realizes as a screwing motion (DALFRED: the seat's pole winds into the base). */
 export function crossClusterThreads(
   liaisons: LiaisonMap,
   parts: Parts,

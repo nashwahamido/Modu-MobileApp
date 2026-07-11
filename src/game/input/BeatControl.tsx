@@ -21,11 +21,7 @@ const HINTS: Record<"up" | "down", { arrow: string; verb: string }> = {
   down: { arrow: "↓", verb: "Swipe down" },
 };
 
-/**
- * Player-facing control for reorient/combine beats: a card the player swipes
- * in the indicated direction. Beats are symbolic (parts stay at their baked
- * poses; the free camera makes a literal flip unnecessary — user decision).
- */
+/** Player-facing control for reorient/combine beats: a card the player swipes in the indicated direction. Beats are symbolic (parts stay at their baked poses; the free camera makes a literal flip unnecessary — user decision). */
 export function BeatControl({ action }: { action: AssemblyAction }) {
   const direction = BEAT_DIRECTION[action.actionId] ?? "up";
   const fired = useRef(false);

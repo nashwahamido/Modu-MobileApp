@@ -17,11 +17,7 @@ interface Props {
   sinkDriver: OffsetDriver;
 }
 
-/**
- * Circular tighten gesture (user-designed): trace the rotate sign clockwise;
- * rotation accumulates with haptic ticks per quarter-turn until the fastener
- * sits flush (2 full turns).
- */
+/** Circular tighten gesture (user-designed): trace the rotate sign clockwise; rotation accumulates with haptic ticks per quarter-turn until the fastener sits flush (2 full turns). */
 export function TightenControl({ action, sinkDriver }: Props) {
   const deg = useGameStore((s) => s.tightenDeg[action.actionId] ?? 0);
   const lastAngle = useRef<number | null>(null);

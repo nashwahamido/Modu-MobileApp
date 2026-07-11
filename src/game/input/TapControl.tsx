@@ -16,11 +16,7 @@ interface Props {
   sinkDriver: OffsetDriver;
 }
 
-/**
- * Mallet control: tap the target repeatedly; each hit drives the part one
- * step toward flush (heavy haptic per hit). Counterpart of TightenControl's
- * circular gesture for hand-tool fasteners.
- */
+/** Mallet control: tap the target repeatedly; each hit drives the part one step toward flush (heavy haptic per hit). Counterpart of TightenControl's circular gesture for hand-tool fasteners. */
 export function TapControl({ action, sinkDriver }: Props) {
   const deg = useGameStore((s) => s.tightenDeg[action.actionId] ?? 0);
   const squash = useRef(new Animated.Value(1)).current;

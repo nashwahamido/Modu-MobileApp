@@ -10,10 +10,12 @@ interface Props {
   onStart: () => void;
   onMove: (x: number, y: number) => void;
   onEnd: () => void;
+  /** Lighten the joystick for dark backdrops (ported from the on-release engine). */
+  dark?: boolean;
 }
 
 /** Fixed virtual joystick: stable base circle, spring-back thumb. */
-export function Joystick({ onStart, onMove, onEnd }: Props) {
+export function Joystick({ onStart, onMove, onEnd, dark }: Props) {
   const tx = useSharedValue(0);
   const ty = useSharedValue(0);
 
@@ -40,8 +42,8 @@ export function Joystick({ onStart, onMove, onEnd }: Props) {
 
   return (
     <GestureDetector gesture={pan}>
-      <View style={styles.base}>
-        <Animated.View style={[styles.thumb, thumbStyle]} />
+      <View style={[styles.base, dark && styles.baseDark]}>
+        <Animated.View style={[styles.thumb, dark && styles.thumbDark, thumbStyle]} />
       </View>
     </GestureDetector>
   );
@@ -63,5 +65,12 @@ const styles = StyleSheet.create({
     height: THUMB,
     borderRadius: THUMB / 2,
     backgroundColor: 'rgba(60, 50, 40, 0.45)',
+  },
+  baseDark: {
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+  },
+  thumbDark: {
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
   },
 });

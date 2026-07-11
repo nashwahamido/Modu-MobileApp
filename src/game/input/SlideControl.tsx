@@ -11,20 +11,13 @@ const TRACK = 220;
 
 interface Props {
   action: AssemblyAction;
-  /** The held part's driver — glided from its parked offset toward the seat as
-   *  the thumb advances. */
+  /** The held part's driver — glided from its parked offset toward the seat as  the thumb advances. */
   driver?: OffsetDriver;
-  /** Slide staging (engagement.slideParkInfo): the backed-off offset the part
-   *  parks at; the drive eases it to [0,0,0]. */
+  /** Slide staging (engagement.slideParkInfo): the backed-off offset the part  parks at; the drive eases it to [0,0,0]. */
   park?: ParkInfo | null;
 }
 
-/**
- * Slide control: drag the thumb along the track to GLIDE the parked part into
- * its groove. Linear counterpart of RotateControl's dial — a slider doesn't
- * turn, it travels, so the gesture is a straight drag and the part follows 1:1.
- * Progress is normalized 0..1 (store.advanceDrive); at 1 the placement commits.
- */
+/** Slide control: drag the thumb along the track to GLIDE the parked part into its groove. Linear counterpart of RotateControl's dial — a slider doesn't turn, it travels, so the gesture is a straight drag and the part follows 1:1. Progress is normalized 0..1 (store.advanceDrive); at 1 the placement commits. */
 export function SlideControl({ action, driver, park }: Props) {
   const progress = useGameStore((s) => s.driveProgress[action.actionId] ?? 0);
   const parked = useRef<Vec3 | null>(null);

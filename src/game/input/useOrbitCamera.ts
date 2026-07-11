@@ -1,10 +1,37 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useWindowDimensions } from "react-native";
-import { useCameraManipulator } from "react-native-filament";
+import { InteractionManager, useWindowDimensions } from "react-native";
+import { useCameraManipulator, useFilamentContext } from "react-native-filament";
 import { buildPartStage } from "@/src/game/core/scene/targets";
 import { clusterPivot } from "@/src/game/core/geometry/staging";
 import { PartDef, Vec3 } from "@/src/game/core/type";
 import { useGameStore } from "@/src/game/core/store";
+
+/** Drop-in replacement for the library's useCameraManipulator that fixes its swap race. On a pivot change the library hook sets its state to undefined and releases the old native manipulator while the replacement is still arriving via a promise — the Camera's render-thread callback can execute the already-released pointer in between ("Pointer ManipulatorWrapper has already been manually released!"). Here the hook keeps returning the OLD manipulator until the replacement is created (synchronously) and committed; the old wrapper's release is deferred until well after the commit that hands the render callback its replacement. */
+function useStableOrbitManipulator(
+  eye: readonly [number, number, number],
+  target: readonly [number, number, number],
+): ReturnType<typeof useCameraManipulator> {
+  const { engine } = useFilamentContext();
+  const [manipulator, setManipulator] =
+    useState<ReturnType<typeof useCameraManipulator>>();
+  const [eyeX, eyeY, eyeZ] = eye;
+  const [targetX, targetY, targetZ] = target;
+  useEffect(() => {
+    const next = engine.createOrbitCameraManipulator({
+      orbitHomePosition: [eyeX, eyeY, eyeZ],
+      targetPosition: [targetX, targetY, targetZ],
+      orbitSpeed: [0.005, 0.005],
+    });
+    setManipulator(next);
+    return () => {
+      // The successor effect runs right after this cleanup and commits the replacement; by the time this fires the render thread is off the old pointer. runAfterInteractions also keeps the release out of an active gesture, matching the library's own withCleanupScope timing.
+      InteractionManager.runAfterInteractions(() => {
+        setTimeout(() => next.release(), 100);
+      });
+    };
+  }, [engine, eyeX, eyeY, eyeZ, targetX, targetY, targetZ]);
+  return manipulator;
+}
 
 const ORBIT_RATE = 220;
 const ZOOM_RATE = 32;
@@ -13,11 +40,7 @@ const QUARTER_TURN_PX = Math.PI / 2 / 0.005;
 const AUTOVIEW_MIN_MOVE_M = 0.12;
 const AUTOVIEW_SETTLE_MS = 450;
 
-/**
- * Camera orbit pivot for a stage: the vertical centre of what's visible. When
- * a cluster is focused, frame that sub-assembly; otherwise frame everything
- * built up to and including the stage.
- */
+/** Camera orbit pivot for a stage: the vertical centre of what's visible. When a cluster is focused, frame that sub-assembly; otherwise frame everything built up to and including the stage. */
 function pivotFor(
   parts: Record<string, PartDef>,
   partStage: Record<string, number>,
@@ -42,14 +65,9 @@ function pivotFor(
 }
 
 /**
- * Rate-control orbit: while the stick is deflected, a 16ms loop feeds
- * accumulated viewport deltas into the manipulator's grab session.
- * Pinch scale deltas map to scroll() zoom.
+ * Rate-control orbit: while the stick is deflected, a 16ms loop feeds accumulated viewport deltas into the manipulator's grab session. Pinch scale deltas map to scroll() zoom.
  *
- * The orbit pivot tracks the centre of the assembly built so far (per
- * stage). Filament manipulators take their target at construction, so a
- * pivot change recreates the manipulator; the current eye position is
- * carried over so only the gaze re-aims.
+ * The orbit pivot tracks the centre of the assembly built so far (per stage). Filament manipulators take their target at construction, so a pivot change recreates the manipulator; the current eye position is carried over so only the gaze re-aims.
  */
 export function useOrbitCamera() {
   const stage = useGameStore((s) => s.stage());
@@ -138,11 +156,7 @@ export function useOrbitCamera() {
     targetRef.current = home.target;
   }, [home.target]);
 
-  const manipulator = useCameraManipulator({
-    orbitHomePosition: home.eye,
-    targetPosition: home.target,
-    orbitSpeed: [0.005, 0.005],
-  });
+  const manipulator = useStableOrbitManipulator(home.eye, home.target);
 
   const captureEye = useCallback(() => {
     const la = manipulator?.getLookAt();
