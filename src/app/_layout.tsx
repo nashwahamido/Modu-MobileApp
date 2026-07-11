@@ -1,24 +1,22 @@
-// This is the root router, where initialization code sits
-// controlling dark/light theme
+// This is the root router, where initialization code sits controlling orientation & safeArea view
+import { Stack } from "expo-router";
+import { OrientationLock } from "expo-screen-orientation";
+import { StatusBar } from "expo-status-bar";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import "react-native-reanimated";
 
-import { Stack } from 'expo-router';
-import { OrientationLock } from 'expo-screen-orientation';
-import { StatusBar } from 'expo-status-bar';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import 'react-native-reanimated';
-
-import { useScreenOrientationLock } from '@/src/hooks/use-screen-orientation-lock';
+import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 
 export default function RootLayout() {
-  // The whole app is landscape. app.json's "orientation" covers fresh native
-  // builds; this runtime lock covers every screen regardless, including dev
-  // clients built before the app.json change.
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <Stack screenOptions={{ headerShown: false }} />
-      <StatusBar style="auto" hidden />
+      <SafeAreaProvider>
+        <Stack screenOptions={{ headerShown: false }} />
+        <StatusBar style="auto" hidden />
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

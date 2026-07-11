@@ -32,11 +32,8 @@ export default function CatalogueScreen() {
               key={m.id}
               meta={m}
               dark={scheme === "dark"}
-              onPress={() =>
-                m.id === "LACK"
-                  ? router.push({ pathname: "/choose", params: { id: m.id } })
-                  : router.push({ pathname: "/play", params: { id: m.id } })
-              }
+              // Straight to the build. The experience/profile is set by onboarding (and adjustable in Settings) — not a per-item chooser.
+              onPress={() => router.push({ pathname: "/play", params: { id: m.id } })}
             />
           ))}
         </View>
