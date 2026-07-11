@@ -39,9 +39,7 @@ export function thumbFor(
   return set ? pickThumb(set, theme) : undefined;
 }
 
-/** The chosen render style (realistic/cartoon), falling back to `realistic` (or
- *  undefined → the scene uses each model's own GLB materials). Its own axis,
- *  independent of theme — a model can be cartoon in light OR dark. */
+/** The chosen render style (realistic/cartoon), falling back to `realistic` (or  undefined → the scene uses each model's own GLB materials). Its own axis,  independent of theme — a model can be cartoon in light OR dark. */
 export function styleFor(
   styles: StyleSet | undefined,
   style: RenderStyleId = "realistic",

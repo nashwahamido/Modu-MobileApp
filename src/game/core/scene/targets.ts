@@ -54,12 +54,7 @@ export function buildPartStage(
   return out;
 }
 
-/**
- * World drop target for a snap/insert action: the baked pose, or — for a
- * hand-inserted fastener — the loose pose backed out along its engage axis.
- * Pass `done` so the axis is SIGNED by the engaged endpoint (reverse path:
- * a bolt entering the LEG backs out of the opposite side).
- */
+/** World drop target for a snap/insert action: the baked pose, or — for a hand-inserted fastener — the loose pose backed out along its engage axis. Pass `done` so the axis is SIGNED by the engaged endpoint (reverse path: a bolt entering the LEG backs out of the opposite side). */
 export function targetPositionForAction(
   action: AssemblyAction,
   parts: Parts,
@@ -85,12 +80,7 @@ export interface GroupCandidate {
   visualPosition: Vec3;
 }
 
-/**
- * Every currently-available socket interchangeable with the picked
- * representative: same action type and same part GROUP (e.g. all open leg
- * sockets). Lets the player drop a grouped part on whichever match is nearest,
- * not just the one the tray card happened to reference.
- */
+/** Every currently-available socket interchangeable with the picked representative: same action type and same part GROUP (e.g. all open leg sockets). Lets the player drop a grouped part on whichever match is nearest, not just the one the tray card happened to reference. */
 export function groupCandidates(
   avail: readonly AssemblyAction[],
   rep: AssemblyAction,

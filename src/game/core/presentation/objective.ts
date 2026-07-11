@@ -17,8 +17,7 @@ export function objectiveText(o: ObjectiveInput): string {
   return o.stepText ?? "Switch focus";
 }
 
-/** Whether step audio should auto-speak the current step in this mode —
- *  mirrors the objective policy (free mode stays quiet until asked). */
+/** Whether step audio should auto-speak the current step in this mode —  mirrors the objective policy (free mode stays quiet until asked). */
 export function speaksSteps(mode: AssemblyMode): boolean {
   return mode !== "free";
 }

@@ -66,8 +66,7 @@ export function currentStageForClusterFocus(
   return stages[0] ?? f.actions[f.actions.length - 1]?.stage ?? 1;
 }
 
-/** Lowest stage among a cluster's still-incomplete actions (Infinity if done).
- *  Drives PLAN mode: an action is offered only at its cluster's current stage. */
+/** Lowest stage among a cluster's still-incomplete actions (Infinity if done).  Drives PLAN mode: an action is offered only at its cluster's current stage. */
 export function clusterCurrentStage(
   f: Furniture,
   clusterId: ClusterId,
@@ -79,9 +78,7 @@ export function clusterCurrentStage(
   return stages.length ? Math.min(...stages) : Infinity;
 }
 
-/** Complete when every action whose part belongs to the cluster is done.
- *  Actions without a partId (combine, finishing beats) belong to no cluster,
- *  so a cluster can't depend on the very combine that consumes it. */
+/** Complete when every action whose part belongs to the cluster is done.  Actions without a partId (combine, finishing beats) belong to no cluster,  so a cluster can't depend on the very combine that consumes it. */
 export function clusterComplete(
   f: Furniture,
   clusterId: ClusterId,
@@ -106,10 +103,7 @@ export function clusterPrereqsMet(
   );
 }
 
-/** A combineClusters action is ready when all (prerequisite) clusters are
- *  complete. Uses authored ClusterDef ids when present, else the clusters
- *  derived from parts. Single-combine furniture = "all clusters"; multi-combine
- *  would reference specific clusters per action (future). */
+/** A combineClusters action is ready when all (prerequisite) clusters are  complete. Uses authored ClusterDef ids when present, else the clusters  derived from parts. Single-combine furniture = "all clusters"; multi-combine  would reference specific clusters per action (future). */
 export function combineReady(
   f: Furniture,
   done: ReadonlySet<ActionId>,

@@ -67,13 +67,9 @@ export const action = (a: ActionInput): DraftAction => {
 interface FastenerPairOptions {
   insertRequiresAny?: readonly ActionId[];
   tightenRequires?: readonly ActionId[];
-  /** Tool stamped on the INSERT action too. Screws/bolts are positioned by
-   *  hand and only the tighten is tool-driven — but a CAM bolt's insert IS the
-   *  tool moment (screwing the bolt into its panel; the later tighten is the
-   *  cam-disc turn), so cam fasteners pass the tool here as well. */
+  /** Tool stamped on the INSERT action too. Screws/bolts are positioned by  hand and only the tighten is tool-driven — but a CAM bolt's insert IS the  tool moment (screwing the bolt into its panel; the later tighten is the  cam-disc turn), so cam fasteners pass the tool here as well. */
   insertTool?: ToolId;
-  /** How the tighten LOOKS (presentation axis; resolved by expandFastenerRules
-   *  from HARDWARE.motion ?? the kind default). */
+  /** How the tighten LOOKS (presentation axis; resolved by expandFastenerRules  from HARDWARE.motion ?? the kind default). */
   motion?: DriveMotion;
 }
 
@@ -112,9 +108,7 @@ const pair = (
 export type FastenerRule = {
   group: GroupId;
   stage: number;
-  /** RARE per-build override. Tool normally comes from the global hardware
-   *  catalogue (data/hardware.ts) — resolution chain:
-   *  rule.tool → HARDWARE[group].tool → part.tool → none (bare hands). */
+  /** RARE per-build override. Tool normally comes from the global hardware  catalogue (data/hardware.ts) — resolution chain:  rule.tool → HARDWARE[group].tool → part.tool → none (bare hands). */
   tool?: ToolId;
   /** Optional override for AND prereqs before insertion. Defaults from fastenerKind. */
   requires?: (p: PartDef) => readonly ActionId[];
@@ -139,10 +133,7 @@ function defaultTightenRequires(p: PartDef): readonly ActionId[] {
   return isConnector(p) && fastenerKindOf(p) === "cam" ? attachedSnaps(p) : [];
 }
 
-/** Expand each authored rule into insert+tighten pairs for every fastener in
- *  the group. `hardware` is the global catalogue (data/hardware.ts), passed in
- *  by the data layer so core stays free of data imports. Tool resolution:
- *  rule.tool (rare override) → hardware[group].tool → part.tool → none. */
+/** Expand each authored rule into insert+tighten pairs for every fastener in  the group. `hardware` is the global catalogue (data/hardware.ts), passed in  by the data layer so core stays free of data imports. Tool resolution:  rule.tool (rare override) → hardware[group].tool → part.tool → none. */
 export function expandFastenerRules(
   rules: readonly FastenerRule[],
   parts: Record<PartId, PartDef>,
@@ -170,11 +161,7 @@ export function expandFastenerRules(
   );
 }
 
-/** Stamp the canonical `order` (used by guide mode) onto authored/expanded
- *  drafts, by their final position in the composed action list. When `parts`
- *  is given, also resolve each action's missing tool from its part's default
- *  (action.tool → part.tool → none): DALFRED's pole authors `tool: "mallet"`
- *  ONCE in STRUCTURE and every action touching it inherits it. */
+/** Stamp the canonical `order` (used by guide mode) onto authored/expanded  drafts, by their final position in the composed action list. When `parts`  is given, also resolve each action's missing tool from its part's default  (action.tool → part.tool → none): DALFRED's pole authors `tool: "mallet"`  ONCE in STRUCTURE and every action touching it inherits it. */
 export const withOrder = (
   drafts: readonly DraftAction[],
   parts?: Record<PartId, PartDef>,
@@ -185,9 +172,7 @@ export const withOrder = (
     return { ...a, ...(partTool ? { tool: partTool } : {}), order: i };
   });
 
-/** The tighten-action ids for every fastener in a group, e.g. "tighten_<partId>"
- *  for each screw105251. Lets an authored step say "after EVERY leg screw is
- *  driven" declaratively, without filtering the expanded action list. */
+/** The tighten-action ids for every fastener in a group, e.g. "tighten_<partId>"  for each screw105251. Lets an authored step say "after EVERY leg screw is  driven" declaratively, without filtering the expanded action list. */
 export function tightenActionIds(
   parts: Record<PartId, PartDef>,
   group: GroupId,

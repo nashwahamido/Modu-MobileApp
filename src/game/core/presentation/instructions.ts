@@ -21,12 +21,7 @@ export const TOOL_NAME: Record<string, string> = {
   hand: "your hands",
 };
 
-/**
- * Generate step text for every action. Part-bearing steps use shared templates
- * + the furniture's labels; part-less beats get generic defaults worded from
- * the cluster labels — `beats[actionId]` overrides any of them with custom
- * prose (only author what deserves better wording).
- */
+/** Generate step text for every action. Part-bearing steps use shared templates + the furniture's labels; part-less beats get generic defaults worded from the cluster labels — `beats[actionId]` overrides any of them with custom prose (only author what deserves better wording). */
 export function buildInstructions(
   actions: readonly AssemblyAction[],
   parts: Record<string, PartDef>,
@@ -100,9 +95,7 @@ export function buildInstructions(
   );
 }
 
-/** The wording for a step at a given text level, falling back to standard.
- *  When the audio setting is on the clip is the primary channel (see
- *  `stepAudio`); this text stays as the on-screen fallback. */
+/** The wording for a step at a given text level, falling back to standard.  When the audio setting is on the clip is the primary channel (see  `stepAudio`); this text stays as the on-screen fallback. */
 export function instructionText(
   instructions: InstructionSet,
   actionId: ActionId,
@@ -114,9 +107,7 @@ export function instructionText(
   return c.text ?? "";
 }
 
-/** The spoken clip for a step, if the furniture ships audio. Undefined when the
- *  furniture has no `audio` map or no clip for this step (caller falls back to
- *  reading `instructionText`). */
+/** The spoken clip for a step, if the furniture ships audio. Undefined when the  furniture has no `audio` map or no clip for this step (caller falls back to  reading `instructionText`). */
 export function stepAudio(
   audio: AudioMap | undefined,
   actionId: ActionId,

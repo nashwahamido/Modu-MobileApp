@@ -43,11 +43,7 @@ export function quatAngleDeg(a: Quat, b: Quat): number {
   return (2 * Math.acos(Math.min(1, dot)) * 180) / Math.PI;
 }
 
-/**
- * Spherical-linear interpolation between two unit quaternions (xyzw). t=0 → a,
- * t=1 → b, taking the shortest arc. Used to ease a held part's rotation toward
- * the socket it's approaching so the drop has no orientation pop.
- */
+/** Spherical-linear interpolation between two unit quaternions (xyzw). t=0 → a, t=1 → b, taking the shortest arc. Used to ease a held part's rotation toward the socket it's approaching so the drop has no orientation pop. */
 export function quatSlerp(a: Quat, b: Quat, t: number): Quat {
   let dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
   let bx = b[0],
@@ -81,10 +77,7 @@ export function quatSlerp(a: Quat, b: Quat, t: number): Quat {
   ];
 }
 
-/**
- * Unit quaternion (xyzw) as axis-angle — the form filament's setEntityRotation
- * wants. Returns null for the identity (no rotation needed).
- */
+/** Unit quaternion (xyzw) as axis-angle — the form filament's setEntityRotation wants. Returns null for the identity (no rotation needed). */
 export function quatToAxisAngle(
   q: Quat,
 ): { angleRad: number; axis: [number, number, number] } | null {
@@ -99,11 +92,7 @@ export function quatToAxisAngle(
   };
 }
 
-/**
- * Shortest rotation taking unit vector `from` onto unit vector `to`, as
- * axis-angle (the form filament's setEntityRotation wants). Antiparallel
- * inputs rotate pi about an arbitrary perpendicular axis.
- */
+/** Shortest rotation taking unit vector `from` onto unit vector `to`, as axis-angle (the form filament's setEntityRotation wants). Antiparallel inputs rotate pi about an arbitrary perpendicular axis. */
 export function axisAngleBetween(
   from: Vec3,
   to: Vec3,
@@ -132,12 +121,7 @@ export interface LookAt {
   up: Vec3;
 }
 
-/**
- * Unproject a screen point through the camera and intersect the horizontal
- * plane y = planeY. Returns the world point, or null when the ray runs parallel
- * to the plane or away from it. fovYDeg is the full vertical field of view;
- * screen coords share the viewport's units, origin top-left, y down.
- */
+/** Unproject a screen point through the camera and intersect the horizontal plane y = planeY. Returns the world point, or null when the ray runs parallel to the plane or away from it. fovYDeg is the full vertical field of view; screen coords share the viewport's units, origin top-left, y down. */
 export function screenPointOnPlane(
   look: LookAt,
   fovYDeg: number,

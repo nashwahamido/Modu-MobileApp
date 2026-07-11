@@ -16,9 +16,7 @@ export function spawnDelta(pose: PartPose, planeY: number): Vec3 {
   ];
 }
 
-/** Offset of a fastener's loose (inserted, untightened) pose from its baked
- *  pose. Pass the SIGNED axis (engagement.engageAxis) when the engaged endpoint
- *  matters — in the reverse path the bolt backs out of the opposite side. */
+/** Offset of a fastener's loose (inserted, untightened) pose from its baked  pose. Pass the SIGNED axis (engagement.engageAxis) when the engaged endpoint  matters — in the reverse path the bolt backs out of the opposite side. */
 export function looseDelta(
   part: PartDef,
   axis: Vec3 = part.engageDir ?? [0, 0, 0],
@@ -28,14 +26,7 @@ export function looseDelta(
   return [lp[0] - p[0], lp[1] - p[1], lp[2] - p[2]];
 }
 
-/**
- * Camera pivot for a set of parts: the center of their structural bounding box,
- * built over each part's VISUAL centre (pose.position + visualCenterOffset) —
- * a part's origin can sit at one end of its mesh (a LACK leg's foot), and
- * centring the camera on origins makes a lone first part look off-centre.
- * Fasteners are ignored when structural parts are present, so cluster orbit
- * stays centered on the furniture body rather than on surrounding screw heads.
- */
+/** Camera pivot for a set of parts: the center of their structural bounding box, built over each part's VISUAL centre (pose.position + visualCenterOffset) — a part's origin can sit at one end of its mesh (a LACK leg's foot), and centring the camera on origins makes a lone first part look off-centre. Fasteners are ignored when structural parts are present, so cluster orbit stays centered on the furniture body rather than on surrounding screw heads. */
 export function clusterPivot(parts: readonly PartDef[]): Vec3 {
   const structural = parts.filter((part) => part.type !== "fastener");
   const pivotParts = structural.length ? structural : parts;

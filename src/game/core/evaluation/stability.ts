@@ -225,8 +225,7 @@ export function stabilityAllows(
   return applicable.some((l) => l.allowed.has(action.actionId));
 }
 
-/** When a lock blocks `action`: everything the locks WOULD allow instead —
- *  hint material ("insert the cam bolt first"). Empty when nothing blocks. */
+/** When a lock blocks `action`: everything the locks WOULD allow instead —  hint material ("insert the cam bolt first"). Empty when nothing blocks. */
 export function stabilityNextSteps(
   f: Furniture,
   action: AssemblyAction,

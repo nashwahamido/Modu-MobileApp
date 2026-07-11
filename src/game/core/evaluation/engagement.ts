@@ -21,17 +21,14 @@ const gammaOf = (f: Furniture): LiaisonMap => f.liaisons ?? buildLiaisons(f.part
 
 export type PlaceEngagement = "drop" | "screw" | "slide" | "press";
 
-/** How far a sliding / pressing part parks off its seat before the gesture
- *  drives it home, in meters. Slide travels further than a press push. */
+/** How far a sliding / pressing part parks off its seat before the gesture  drives it home, in meters. Slide travels further than a press push. */
 export const SLIDE_BACKOFF_M = 0.1;
 export const PRESS_BACKOFF_M = 0.03;
 
-/** How far a screwing STRUCTURAL part (leg / tabletop) parks off its seat
- *  before the rotation gesture sinks it home, in meters. */
+/** How far a screwing STRUCTURAL part (leg / tabletop) parks off its seat  before the rotation gesture sinks it home, in meters. */
 export const SCREW_BACKOFF_M = 0.045;
 
-/** Visible revolutions of the SPINNING part while a screw joint seats: full
- *  turns only, so the start/end orientations equal the baked one — no pop. */
+/** Visible revolutions of the SPINNING part while a screw joint seats: full  turns only, so the start/end orientations equal the baked one — no pop. */
 export const SCREW_SPIN_DEG = 360;
 
 function preloadedThreadedFor(
@@ -113,12 +110,7 @@ const unit = (v: Vec3): Vec3 | null => {
   return l < 1e-6 ? null : [v[0] / l, v[1] / l, v[2] / l];
 };
 
-/**
- * Unit direction `part` TRAVELS as it seats. Authored `placeDir` wins (the only
- * reliable source — a groove's axis isn't in the poses). Else a coarse
- * heuristic: the part backs out AWAY from the joint targets, so it travels
- * TOWARD their centroid. Falls back to world-down when that is degenerate.
- */
+/** Unit direction `part` TRAVELS as it seats. Authored `placeDir` wins (the only reliable source — a groove's axis isn't in the poses). Else a coarse heuristic: the part backs out AWAY from the joint targets, so it travels TOWARD their centroid. Falls back to world-down when that is degenerate. */
 function travelAxis(part: PartDef, targets: PartDef[]): Vec3 {
   if (part.placeDir) return unit(part.placeDir) ?? [0, -1, 0];
   if (targets.length) {
@@ -153,8 +145,7 @@ function joinedByKind(
   return out;
 }
 
-/** True when a press-fit (directJoins) partner of `partId` is already placed —
- *  the push-fit needs something to press against. */
+/** True when a press-fit (directJoins) partner of `partId` is already placed —  the push-fit needs something to press against. */
 function pressPartnerPlaced(
   f: Furniture,
   partId: string,
@@ -166,8 +157,7 @@ function pressPartnerPlaced(
 export interface ParkInfo {
   /** Unit direction the part travels to seat (placeDir or heuristic). */
   axis: Vec3;
-  /** Backed-off offset from the baked seat where the part parks; the gesture
-   *  eases this to [0,0,0] as it drives home. Points OPPOSITE the travel axis. */
+  /** Backed-off offset from the baked seat where the part parks; the gesture  eases this to [0,0,0] as it drives home. Points OPPOSITE the travel axis. */
   offset: Vec3;
 }
 
@@ -178,8 +168,7 @@ function parkInfo(axis: Vec3, backoff: number): ParkInfo {
   };
 }
 
-/** Staging for a SLIDE placement: the glide axis and the backed-off park
- *  offset. Null when `action` isn't a slider ready to glide. */
+/** Staging for a SLIDE placement: the glide axis and the backed-off park  offset. Null when `action` isn't a slider ready to glide. */
 export function slideParkInfo(
   f: Furniture,
   action: AssemblyAction,
@@ -192,8 +181,7 @@ export function slideParkInfo(
   return parkInfo(travelAxis(part, owners), SLIDE_BACKOFF_M);
 }
 
-/** Staging for a PRESS placement: the push axis and the backed-off park offset.
- *  Null when `action` isn't a push-fit against a placed partner. */
+/** Staging for a PRESS placement: the push axis and the backed-off park offset.  Null when `action` isn't a push-fit against a placed partner. */
 export function pressParkInfo(
   f: Furniture,
   action: AssemblyAction,
@@ -206,13 +194,7 @@ export function pressParkInfo(
   return parkInfo(travelAxis(part, partners), PRESS_BACKOFF_M);
 }
 
-/**
- * SIGNED engage axis for a fastener — points from its seat toward the side it
- * backs out of (= toward the MISSING endpoint). The baked `engageDir` assumes
- * the fastener drives into `attached[0]`; when the OTHER endpoint is the one
- * placed (the reverse path: bolt into the LEG instead of the table), the
- * fastener enters from the opposite side, so the axis flips.
- */
+/** SIGNED engage axis for a fastener — points from its seat toward the side it backs out of (= toward the MISSING endpoint). The baked `engageDir` assumes the fastener drives into `attached[0]`; when the OTHER endpoint is the one placed (the reverse path: bolt into the LEG instead of the table), the fastener enters from the opposite side, so the axis flips. */
 export function engageAxis(part: PartDef, done: ReadonlySet<ActionId>): Vec3 {
   const e = part.engageDir ?? [0, 0, 0];
   if (isConnector(part)) {
@@ -223,11 +205,7 @@ export function engageAxis(part: PartDef, done: ReadonlySet<ActionId>): Vec3 {
   return e;
 }
 
-/**
- * Park offset for the LATER part of a screw joint — non-null only when the
- * later part is itself the spinner. Null → it seats directly (and, when the
- * placement isn't a screw at all, it just drops flush as usual).
- */
+/** Park offset for the LATER part of a screw joint — non-null only when the later part is itself the spinner. Null → it seats directly (and, when the placement isn't a screw at all, it just drops flush as usual). */
 export function screwParkOffset(
   f: Furniture,
   action: AssemblyAction,
@@ -254,11 +232,7 @@ export function screwParkOffset(
   ];
 }
 
-/**
- * Displacement of the PLACED spinner at the start of the screw phase (reverse
- * path: the flush leg backs off away from the incoming top, then rises in as
- * the gesture progresses). Null when the spinner is the later part instead.
- */
+/** Displacement of the PLACED spinner at the start of the screw phase (reverse path: the flush leg backs off away from the incoming top, then rises in as the gesture progresses). Null when the spinner is the later part instead. */
 export function screwMoverParkOffset(
   f: Furniture,
   action: AssemblyAction,
@@ -276,15 +250,7 @@ export function screwMoverParkOffset(
   ];
 }
 
-/**
- * Which endpoint physically SPINS when a threaded joint screws together —
- * DERIVED, no authoring: the endpoint with FEWER connector joints is the
- * satellite (a LACK leg carries 1 bolt; the top is a 4-bolt hub you'd never
- * spin). Independent of placement order, so the LEG is the spinner in both
- * the top-first and leg-first paths. Ties fall to attached[0]'s counterpart…
- * rare and physically ambiguous anyway — that's what the authored
- * `screwMover` override on the fastener is for.
- */
+/** Which endpoint physically SPINS when a threaded joint screws together — DERIVED, no authoring: the endpoint with FEWER connector joints is the satellite (a LACK leg carries 1 bolt; the top is a 4-bolt hub you'd never spin). Independent of placement order, so the LEG is the spinner in both the top-first and leg-first paths. Ties fall to attached[0]'s counterpart… rare and physically ambiguous anyway — that's what the authored `screwMover` override on the fastener is for. */
 export function screwMoverFor(
   f: Furniture,
   connector: PartDef,
@@ -306,11 +272,7 @@ export function screwMoverFor(
   return tieBreaker ?? b;
 }
 
-/**
- * Everything the presentation needs to animate a screw-in for `action` (the
- * later endpoint of a preloaded threaded joint): the SIGNED axis and which
- * part spins. Null for non-screw placements.
- */
+/** Everything the presentation needs to animate a screw-in for `action` (the later endpoint of a preloaded threaded joint): the SIGNED axis and which part spins. Null for non-screw placements. */
 export function screwSpinInfo(
   f: Furniture,
   action: AssemblyAction,

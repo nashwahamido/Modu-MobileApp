@@ -12,9 +12,7 @@ const centreOf = (p: PartDef): Vec3 => {
   return [px + ox, py + oy, pz + oz];
 };
 
-/** Diagonal of the AABB over all structural part centres — the model's scale
- *  reference, so the thresholds are resolution-independent. 0 when there are
- *  fewer than two structural parts (nothing to scale against). */
+/** Diagonal of the AABB over all structural part centres — the model's scale  reference, so the thresholds are resolution-independent. 0 when there are  fewer than two structural parts (nothing to scale against). */
 function modelDiagonal(parts: Parts): number {
   const lo: [number, number, number] = [Infinity, Infinity, Infinity];
   const hi: [number, number, number] = [-Infinity, -Infinity, -Infinity];
@@ -31,9 +29,7 @@ function modelDiagonal(parts: Parts): number {
   return n >= 2 ? Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) : 0;
 }
 
-/** Coarse geometric plausibility warnings for the joint graph. Pure; returns
- *  warning messages (never errors — see the module note on why it can only be
- *  a heuristic). `liaisons` is Γ as built from `parts`. */
+/** Coarse geometric plausibility warnings for the joint graph. Pure; returns  warning messages (never errors — see the module note on why it can only be  a heuristic). `liaisons` is Γ as built from `parts`. */
 export function geometryWarnings(parts: Parts, liaisons: LiaisonMap): string[] {
   const out: string[] = [];
   const diag = modelDiagonal(parts);

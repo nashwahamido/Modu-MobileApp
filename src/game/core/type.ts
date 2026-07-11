@@ -29,7 +29,7 @@ export type FurnitureCategory =
 
 export type ThemeId = "light" | "dark" | "high_contrast";
 export type RenderStyleId = "realistic" | "cozy" | "cartoon";
-export type BackdropId = "clean" | "studio" | "dot";
+export type BackdropId = "studio" | "clear" | "cozy" | "cartoon";
 
 export type AssemblyMode = "free" | "guide" | "strict";
 export type TextLevel = "standard" | "simple";

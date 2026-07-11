@@ -14,11 +14,7 @@ export interface BlockReason {
 const groupOf = (f: Furniture, partId?: PartId): string | undefined =>
   partId ? (f.parts[partId]?.group ?? partId) : undefined;
 
-/**
- * The first, most actionable reason `actionId` isn't available — or null if it's
- * actually available (or unknown). Order mirrors the common blockers so the hint
- * points at the most direct next step.
- */
+/** The first, most actionable reason `actionId` isn't available — or null if it's actually available (or unknown). Order mirrors the common blockers so the hint points at the most direct next step. */
 export function blockReason(
   f: Furniture,
   actionId: ActionId,

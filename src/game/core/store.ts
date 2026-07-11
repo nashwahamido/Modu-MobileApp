@@ -15,7 +15,6 @@ import {
   Furniture,
   PartId,
   RenderStyleId,
-  TextLevel,
   ThemeId,
   ToolId,
 } from "@/src/game/core/type";
@@ -32,37 +31,14 @@ export const ORIENTATION_TOTAL_DEG = 180;
 /** Taps to press a push-fit part home (PressControl). */
 export const PRESS_TAPS = 4;
 
-export interface AccessibilitySettings {
-  textLevel: TextLevel;
-  /** Spoken steps: play each step's clip (independent of textLevel). */
-  audio: boolean;
-  showPictogram: boolean;
-  showSymbols: boolean;
-  authoredSteps: boolean;
-  /** FREE-mode soft hints when reaching for a not-yet-available part. */
-  softHints: boolean;
-  /** Player picks the tool from the tool bar before tightening; off = the
-   *  system equips the right tool automatically. */
-  manualTools: boolean;
-  /** Show only the current part + action; hide the rest of the chrome. */
-  focusMode: boolean;
-  /** Auto-orient the camera to frame the next open target socket. */
-  autoView: boolean;
-  fontScale: number;
-}
-
-const DEFAULT_SETTINGS: AccessibilitySettings = {
-  textLevel: "standard",
-  audio: false,
-  showPictogram: false,
-  showSymbols: false,
-  authoredSteps: false,
-  softHints: true,
-  manualTools: false,
-  focusMode: false,
-  autoView: false,
-  fontScale: 1,
-};
+// Setting types live in accessibility.ts; defaults + profiles in profile.ts.
+import { AccessibilitySettings } from "@/src/game/core/accessibility";
+import {
+  PROFILE_MODE,
+  ProfileId,
+  settingsForProfile,
+} from "@/src/game/core/profile";
+export type { AccessibilitySettings } from "@/src/game/core/accessibility";
 
 /** What the player is inspecting via single-tap (look only, no assembly). */
 export type ExamineTarget =
@@ -74,7 +50,6 @@ interface GameState {
   furniture: Furniture | null;
   /** Completed action ids — the source of truth for progress. */
   completed: ActionId[];
-
   /** Part picked up for ASSEMBLY via long-press (the drag flow). */
   heldActionId: ActionId | null;
   /** Item being EXAMINED via single-tap — look, don't commit. */
@@ -95,18 +70,17 @@ interface GameState {
   orientationActionId: ActionId | null;
   /** Accumulated orientation correction per snap-action id, in degrees. */
   orientationDeg: Record<ActionId, number>;
-  /** placePart parked at its seat awaiting a slide/press DRIVE gesture (null =
-   *  none). Parallel to the orientation/screw park, but for the linear gestures:
-   *  a slider glided in, a push-fit pressed home. */
+  /** placePart parked at its seat awaiting a slide/press DRIVE gesture (null = none). Parallel to the orientation/screw park, but for the linear gestures: a slider glided in, a push-fit pressed home. */
   driveActionId: ActionId | null;
   driveKind: "slide" | "press" | null;
-  /** Normalized 0..1 drive progress per parked action id (SlideControl adds a
-   *  drag fraction; PressControl adds 1/PRESS_TAPS per tap). */
+  /** Normalized 0..1 drive progress per parked action id (SlideControl adds a  drag fraction; PressControl adds 1/PRESS_TAPS per tap). */
   driveProgress: Record<ActionId, number>;
   /** Tool the player holds when `settings.manualTools` is on (sticky across steps). */
   selectedTool: ToolId | null;
 
   settings: AccessibilitySettings;
+  /** The last-applied onboarding profile (the settings picker shows/sets it). */
+  profile: ProfileId;
   /** How the assembly task is gated: free | plan | guide. */
   mode: AssemblyMode;
   /** 3D render style for the scene: realistic | cozy | cartoon (own axis, not theme). */
@@ -131,7 +105,11 @@ interface GameState {
   setTheme: (theme: ThemeId) => void;
 
   completeAction: (id: ActionId) => void;
+  /** Undo history for redo: actions undone since the last new completion. */
+  undoneActions: ActionId[];
   undoLastAction: () => void;
+  /** Re-apply the most recently undone action (only while nothing new was completed since — completing anything clears the redo stack). */
+  redoLastAction: () => void;
   addTightenDeg: (actionId: ActionId, deg: number) => void;
   parkOrientation: (actionId: ActionId) => void;
   addOrientationDeg: (actionId: ActionId, deg: number) => void;
@@ -160,6 +138,8 @@ interface GameState {
   setCombiningCluster: (cluster: ClusterId | null) => void;
 
   setSettings: (patch: Partial<AccessibilitySettings>) => void;
+  /** Reset settings to a profile's defaults (onboarding / avatar change). */
+  applyProfile: (profile: ProfileId) => void;
 }
 
 const CLEARED = {
@@ -173,6 +153,7 @@ const CLEARED = {
 export const useGameStore = create<GameState>()((set, get) => ({
   furniture: null,
   completed: [],
+  undoneActions: [],
   ...CLEARED,
   activeCluster: null,
   combiningCluster: null,
@@ -183,16 +164,19 @@ export const useGameStore = create<GameState>()((set, get) => ({
   driveKind: null,
   driveProgress: {},
   selectedTool: null,
-  settings: DEFAULT_SETTINGS,
+  // Initial settings = the "control" profile (not raw defaults), so the store always matches its declared profile.
+  settings: settingsForProfile("control"),
+  profile: "control",
   mode: "free",
   renderStyle: "realistic",
-  backdrop: "clean",
+  backdrop: "studio",
   theme: "light",
 
   loadFurniture: (f) =>
     set({
       furniture: f,
       completed: [],
+      undoneActions: [],
       activeCluster: null,
       combiningCluster: null,
       tightenDeg: {},
@@ -207,6 +191,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
   reset: () =>
     set({
       completed: [],
+      undoneActions: [],
       activeCluster: null,
       combiningCluster: null,
       tightenDeg: {},
@@ -226,7 +211,12 @@ export const useGameStore = create<GameState>()((set, get) => ({
   availableForMode: () => {
     const s = get();
     return s.furniture
-      ? availableInMode(s.furniture, new Set(s.completed), s.mode, s.activeCluster)
+      ? availableInMode(
+          s.furniture,
+          new Set(s.completed),
+          s.mode,
+          s.activeCluster,
+        )
       : [];
   },
   stage: () => {
@@ -246,7 +236,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
     const s = get();
     if (s.completed.includes(id)) return;
     if (!s.available().some((a) => a.actionId === id)) return;
-    set({ completed: [...s.completed, id] });
+    set({ completed: [...s.completed, id], undoneActions: [] });
   },
   undoLastAction: () => {
     const completed = get().completed;
@@ -262,13 +252,29 @@ export const useGameStore = create<GameState>()((set, get) => ({
 
     set({
       completed: completed.slice(0, -1),
+      undoneActions: [...get().undoneActions, lastActionId],
       tightenDeg,
       orientationDeg,
       driveProgress,
       orientationActionId:
-        get().orientationActionId === lastActionId ? null : get().orientationActionId,
-      driveActionId: get().driveActionId === lastActionId ? null : get().driveActionId,
+        get().orientationActionId === lastActionId
+          ? null
+          : get().orientationActionId,
+      driveActionId:
+        get().driveActionId === lastActionId ? null : get().driveActionId,
       driveKind: get().driveActionId === lastActionId ? null : get().driveKind,
+      ...CLEARED,
+    });
+  },
+  redoLastAction: () => {
+    const s = get();
+    if (s.undoneActions.length === 0) return;
+    const next = s.undoneActions[s.undoneActions.length - 1];
+    // only re-apply if it is legal again (its prerequisites still hold)
+    if (!s.available().some((a) => a.actionId === next)) return;
+    set({
+      completed: [...s.completed, next],
+      undoneActions: s.undoneActions.slice(0, -1),
       ...CLEARED,
     });
   },
@@ -278,7 +284,9 @@ export const useGameStore = create<GameState>()((set, get) => ({
     if (cur >= TIGHTEN_TOTAL_DEG) get().completeAction(actionId);
   },
   parkOrientation: (actionId) => {
-    const a = get().available().find((x) => x.actionId === actionId);
+    const a = get()
+      .available()
+      .find((x) => x.actionId === actionId);
     if (!a || a.type !== "placePart") return;
     set({
       orientationActionId: actionId,
@@ -301,7 +309,9 @@ export const useGameStore = create<GameState>()((set, get) => ({
     }
   },
   parkDrive: (actionId, kind) => {
-    const a = get().available().find((x) => x.actionId === actionId);
+    const a = get()
+      .available()
+      .find((x) => x.actionId === actionId);
     if (!a || a.type !== "placePart") return;
     set({
       driveActionId: actionId,
@@ -313,7 +323,10 @@ export const useGameStore = create<GameState>()((set, get) => ({
   },
   advanceDrive: (actionId, delta) => {
     if (get().driveActionId !== actionId) return;
-    const cur = Math.min(1, Math.max(0, (get().driveProgress[actionId] ?? 0) + delta));
+    const cur = Math.min(
+      1,
+      Math.max(0, (get().driveProgress[actionId] ?? 0) + delta),
+    );
     set({ driveProgress: { ...get().driveProgress, [actionId]: cur } });
     if (cur >= 1) {
       get().completeAction(actionId);
@@ -330,7 +343,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
     const s = get();
     if (s.mode !== "free" || !s.settings.softHints || !s.furniture) return;
     const reason = blockReason(s.furniture, actionId, new Set(s.completed));
-    if (reason) set({ hint: hintText(reason, s.furniture, s.settings.textLevel) });
+    if (reason)
+      set({ hint: hintText(reason, s.furniture, s.settings.textLevel) });
   },
   suggestNext: () => {
     const s = get();
@@ -379,26 +393,31 @@ export const useGameStore = create<GameState>()((set, get) => ({
       ...CLEARED,
     }),
 
-  examinePart: (partId) => set({ ...CLEARED, examine: { kind: "part", partId } }),
-  examineCluster: (cluster) => set({ ...CLEARED, examine: { kind: "cluster", cluster } }),
+  examinePart: (partId) =>
+    set({ ...CLEARED, examine: { kind: "part", partId } }),
+  examineCluster: (cluster) =>
+    set({ ...CLEARED, examine: { kind: "cluster", cluster } }),
   clearExamine: () => set({ examine: null }),
   setActiveCluster: (cluster) => set({ activeCluster: cluster }),
   setCombiningCluster: (cluster) => set({ combiningCluster: cluster }),
 
   setSettings: (patch) => set({ settings: { ...get().settings, ...patch } }),
+  applyProfile: (profile) =>
+    set({
+      profile,
+      settings: settingsForProfile(profile),
+      mode: PROFILE_MODE[profile],
+    }),
 }));
 
-/**
- * The "first part" case: a part is held AND the cluster it belongs to has no
- * structural part placed yet. The very first drop gets a simplified UX — drop on
- * a centre ring instead of aiming at a socket ghost. Shared by the scene, the
- * drag, and the centre-ring overlay so they agree.
- */
+/** The "first part" case: a part is held AND the cluster it belongs to has no structural part placed yet. The very first drop gets a simplified UX — drop on a centre ring instead of aiming at a socket ghost. Shared by the scene, the drag, and the centre-ring overlay so they agree. */
 export const selectFirstDrop = (s: GameState): boolean => {
   const f = s.furniture;
   if (!f || !s.heldActionId) return false;
   const held = f.actions.find((a) => a.actionId === s.heldActionId);
-  const cluster = s.activeCluster ?? (held?.partId ? f.parts[held.partId]?.cluster ?? null : null);
+  const cluster =
+    s.activeCluster ??
+    (held?.partId ? (f.parts[held.partId]?.cluster ?? null) : null);
   const done = new Set(s.completed);
   return !f.actions.some(
     (a) =>

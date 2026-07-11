@@ -2,18 +2,11 @@ import { availableActions } from "@/src/game/core/evaluation/availability";
 import { ActionId, AssemblyAction, Furniture } from "@/src/game/core/type";
 import type { ValidationIssue } from "./validateFurniture";
 
-/** Stable ordering of a batch of concurrently-legal actions: earliest stage,
- *  then the author's own `order`, then id — so the derived sequence is
- *  reproducible and stays close to the author's intent within a layer. */
+/** Stable ordering of a batch of concurrently-legal actions: earliest stage,  then the author's own `order`, then id — so the derived sequence is  reproducible and stays close to the author's intent within a layer. */
 const batchOrder = (a: AssemblyAction, b: AssemblyAction): number =>
   a.stage - b.stage || a.order - b.order || (a.actionId < b.actionId ? -1 : 1);
 
-/**
- * A valid topological linearization of every action, obtained by running the
- * real legality engine forward. `order` is the sequence; `unreached` lists any
- * actions that never become legal (a cycle or an over-constrained graph — the
- * same condition validateFurniture reports as "not solvable").
- */
+/** A valid topological linearization of every action, obtained by running the real legality engine forward. `order` is the sequence; `unreached` lists any actions that never become legal (a cycle or an over-constrained graph — the same condition validateFurniture reports as "not solvable"). */
 export function deriveTopoOrder(f: Furniture): {
   order: ActionId[];
   unreached: ActionId[];
@@ -35,14 +28,9 @@ export function deriveTopoOrder(f: Furniture): {
 }
 
 /**
- * Warn when the AUTHORED array order is not a valid build sequence — i.e. some
- * action is listed before an action it depends on. Strict mode picks the
- * lowest-`order` LEGAL step, so it still completes, but the authored sequence
- * misleads anyone reading it top-to-bottom (and guide-mode stage grouping is
- * only as trustworthy as the order). Advisory: warnings only.
+ * Warn when the AUTHORED array order is not a valid build sequence — i.e. some action is listed before an action it depends on. Strict mode picks the lowest-`order` LEGAL step, so it still completes, but the authored sequence misleads anyone reading it top-to-bottom (and guide-mode stage grouping is only as trustworthy as the order). Advisory: warnings only.
  *
- * Unsolvable actions are left to validateFurniture's solvability error, so this
- * only considers actions that DO become reachable.
+ * Unsolvable actions are left to validateFurniture's solvability error, so this only considers actions that DO become reachable.
  */
 export function sequenceIssues(f: Furniture): ValidationIssue[] {
   const issues: ValidationIssue[] = [];

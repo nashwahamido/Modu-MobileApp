@@ -22,11 +22,7 @@ import {
 } from "../model/liaisons";
 import { stabilityAllows } from "./stability";
 
-/**
- * Suggested focus stage: the earliest stage with incomplete work. This is a
- * UI SCAFFOLD only (a gentle "where to look next"), NOT a hard gate — clusters
- * can be built in any order, so availability does not depend on it.
- */
+/** Suggested focus stage: the earliest stage with incomplete work. This is a UI SCAFFOLD only (a gentle "where to look next"), NOT a hard gate — clusters can be built in any order, so availability does not depend on it. */
 export function currentStage(
   actions: readonly AssemblyAction[],
   done: ReadonlySet<ActionId>,
@@ -118,8 +114,7 @@ export function availableActions(
 }
 
 /**
- * The actions a given MODE offers right now. All three modes filter the same
- * legal set from `availableActions` — never loosening it:
+ * The actions a given MODE offers right now. All three modes filter the same legal set from `availableActions` — never loosening it:
  *   - free   — everything legal in the focused cluster (current behaviour).
  *   - guide  — same, but only actions at their cluster's current (lowest
  *              incomplete) stage, so stages are done in order.
