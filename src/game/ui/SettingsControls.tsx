@@ -4,6 +4,7 @@
 import { Alert, Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
 import type {
+  DragPlane,
   GhostStyle,
   LightingPreset,
   ReleaseBehavior,
@@ -36,6 +37,10 @@ const GHOST: { value: GhostStyle; label: string }[] = [
 const RELEASE: { value: ReleaseBehavior; label: string }[] = [
   { value: "autoReturn", label: "Auto-return" },
   { value: "float", label: "Float" },
+];
+const DRAG_PLANE: { value: DragPlane; label: string }[] = [
+  { value: "adaptive", label: "Adaptive" },
+  { value: "level", label: "Level" },
 ];
 const MODES: { value: AssemblyMode; label: string }[] = [
   { value: "free", label: "Free" },
@@ -262,6 +267,13 @@ export function SettingsControls() {
         value={settings.releaseBehavior}
         options={RELEASE}
         onChange={(v) => setSettings({ releaseBehavior: v })}
+      />
+      <Choice
+        label="Drag mechanism"
+        desc="Adaptive matches sockets on screen and follows their height; Level fixes the plane at one height (comparison mode — struggles on multi-height sockets)"
+        value={settings.dragPlane}
+        options={DRAG_PLANE}
+        onChange={(v) => setSettings({ dragPlane: v })}
       />
       <Row
         label="Canvas strafe"
