@@ -11,14 +11,9 @@ interface Base {
 }
 
 /**
- * Imperatively drives one entity's pose: a world-space translation offset from
- * its baked position, plus an (optional) absolute rotation. Both are applied
- * together each frame via the same `setEntityRotation(false)+setEntityPosition`
- * sequence the static placement uses, so a held part can ease its orientation
- * toward the socket it's approaching without an orientation pop on drop.
+ * Imperatively drives one entity's pose: a world-space translation offset from its baked position, plus an (optional) absolute rotation. Both are applied together each frame via the same `setEntityRotation(false)+setEntityPosition` sequence the static placement uses, so a held part can ease its orientation toward the socket it's approaching without an orientation pop on drop.
  *
- * Plain JS arrays only — worklets-core 1.6 shared-value arrays arrive in
- * filament's native layer as objects and are rejected ("expected an array").
+ * Plain JS arrays only — worklets-core 1.6 shared-value arrays arrive in filament's native layer as objects and are rejected ("expected an array").
  */
 export interface OffsetDriver {
   attach(tm: TransformManager, entity: Entity, initial: Float3, base: Base): void;
@@ -83,11 +78,7 @@ export function createOffsetDriver(): OffsetDriver {
   };
 }
 
-/**
- * Like OffsetDriver but for a WHOLE cluster: many entities share one offset and
- * move in unison (used to lower a finished sub-assembly onto another at combine).
- * Each part registers its entity; `set` applies the offset to all of them.
- */
+/** Like OffsetDriver but for a WHOLE cluster: many entities share one offset and move in unison (used to lower a finished sub-assembly onto another at combine). Each part registers its entity; `set` applies the offset to all of them. */
 export interface ClusterDriver {
   /** Register one part's entity at its baked pose; returns an unregister fn. */
   register(tm: TransformManager, entity: Entity, base: Base): () => void;

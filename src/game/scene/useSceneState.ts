@@ -19,11 +19,7 @@ import {
 } from "@/src/game/core/type";
 import { useGameStore } from "@/src/game/core/store";
 
-/**
- * socket_hint: an unplaced part whose snap or insert socket is currently
- * reachable (same group as the held part). Renders as a glowing ghost
- * at its target position so the player can see all valid drop targets at once.
- */
+/** socket_hint: an unplaced part whose snap or insert socket is currently reachable (same group as the held part). Renders as a glowing ghost at its target position so the player can see all valid drop targets at once. */
 export type PartMode =
   | "hidden"
   | "flush"
@@ -66,6 +62,8 @@ export function deriveSceneState(
   mode: AssemblyMode = "free",
   combiningCluster: ClusterId | null = null,
   focusMode = false,
+  /** Static-socket ghosts: hint EVERY available same-group socket, not just the proximity-matched one (the ghost component colors matched vs unmatched). */
+  showAllGroupSockets = false,
 ): SceneState {
   const done = new Set(completed);
   const actionById = new Map(furniture.actions.map((a) => [a.actionId, a]));
@@ -104,7 +102,8 @@ export function deriveSceneState(
       } else if (pickable && !availableIds.has(g.action?.actionId as never)) {
         g.action = a;
       }
-      if (draggable) g.enabled = true;
+      // isHeld: a floating part (releaseBehavior "float") stays re-grabbable from its card — don't render it disabled.
+      if (draggable || isHeld) g.enabled = true;
     } else {
       groups.set(part.group, {
         label,
@@ -112,7 +111,7 @@ export function deriveSceneState(
         partId: part.partId,
         remaining: 1,
         action: a,
-        enabled: draggable,
+        enabled: draggable || isHeld,
         kind: part.type,
       });
     }
@@ -125,7 +124,8 @@ export function deriveSceneState(
       const only = allTray.filter((t) => t.group === heldG);
       trayItems = only.length ? only : allTray.slice(0, 1);
     } else {
-      trayItems = allTray.slice(0, 1);
+      // The one card shown must be ACTIONABLE: the first group with an enabled action, not just the first group in authored order (which could be a stability-blocked leg while the next legal step is a bolt).
+      trayItems = [allTray.find((t) => t.enabled) ?? allTray[0]];
     }
   }
   const firstTighten = available.find((a) => a.type === "tightenFastener") ?? null;
@@ -170,7 +170,7 @@ export function deriveSceneState(
         furniture.parts[id].group === heldGroup &&
         hintActionId &&
         availableIds.has(hintActionId) &&
-        hintActionId === matchedActionId
+        (showAllGroupSockets || hintActionId === matchedActionId)
       ) {
         modes[id] = "socket_hint";
       } else {
@@ -192,11 +192,12 @@ export function useSceneState(): SceneState {
   const mode = useGameStore((s) => s.mode);
   const combiningCluster = useGameStore((s) => s.combiningCluster);
   const focusMode = useGameStore((s) => s.settings.focusMode);
+  const staticSockets = useGameStore((s) => s.settings.ghostStyle === "staticSockets");
   return useMemo(
     () =>
       furniture
-        ? deriveSceneState(furniture, completed, heldActionId, activeCluster, matchedActionId, mode, combiningCluster, focusMode)
+        ? deriveSceneState(furniture, completed, heldActionId, activeCluster, matchedActionId, mode, combiningCluster, focusMode, staticSockets)
         : { modes: {}, heldAction: null, trayItems: [], activeTighten: null, activeBeat: null },
-    [furniture, completed, heldActionId, activeCluster, matchedActionId, mode, combiningCluster, focusMode],
+    [furniture, completed, heldActionId, activeCluster, matchedActionId, mode, combiningCluster, focusMode, staticSockets],
   );
 }

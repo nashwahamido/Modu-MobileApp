@@ -10,7 +10,7 @@ import {
 import { useGameStore } from "@/src/game/core/store";
 import type { PartId } from "@/src/game/core/type";
 import { FOCAL_LENGTH_MM } from "./cameraConfig";
-import { FILL_LIGHT, IBL_INTENSITY, KEY_LIGHT, RIM_LIGHT } from "./lighting";
+import { getLightRig, IBL_INTENSITY } from "./lighting";
 import type { ClusterDriver, OffsetDriver } from "./offsetDriver";
 import { PartModel } from "./PartModel";
 import { ShadowPlane } from "./ShadowPlane";
@@ -42,6 +42,9 @@ export function AssemblyScene({
     { instanceCount: 2, addToScene: false },
   );
   const manualTools = useGameStore((s) => s.settings.manualTools);
+  const lightingPreset = useGameStore((s) => s.settings.lightingPreset);
+  const dark = useGameStore((s) => s.theme) === "dark";
+  const rig = getLightRig(renderStyle, dark, lightingPreset);
   const selectedTool = useGameStore((s) => s.selectedTool);
   const driveActionId = useGameStore((s) => s.driveActionId);
 
@@ -68,22 +71,22 @@ export function AssemblyScene({
       />
       <Light
         type="directional"
-        colorKelvin={KEY_LIGHT.colorKelvin}
-        intensity={KEY_LIGHT.intensity}
-        direction={KEY_LIGHT.direction}
+        colorKelvin={rig.key.colorKelvin}
+        intensity={rig.key.intensity}
+        direction={rig.key.direction}
         castShadows
       />
       <Light
         type="directional"
-        colorKelvin={FILL_LIGHT.colorKelvin}
-        intensity={FILL_LIGHT.intensity}
-        direction={FILL_LIGHT.direction}
+        colorKelvin={rig.fill.colorKelvin}
+        intensity={rig.fill.intensity}
+        direction={rig.fill.direction}
       />
       <Light
         type="directional"
-        colorKelvin={RIM_LIGHT.colorKelvin}
-        intensity={RIM_LIGHT.intensity}
-        direction={RIM_LIGHT.direction}
+        colorKelvin={rig.rim.colorKelvin}
+        intensity={rig.rim.intensity}
+        direction={rig.rim.direction}
       />
       {furniture.shadow && anySeated ? (
         <ShadowPlane source={furniture.shadow} />

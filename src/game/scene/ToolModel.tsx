@@ -14,11 +14,7 @@ import { LOOSE_OFFSET_M } from "@/src/game/core/geometry/fastenerPose";
 import { AssemblyAction, ToolId } from "@/src/game/core/type";
 import { TIGHTEN_TOTAL_DEG, useGameStore } from "@/src/game/core/store";
 
-/**
- * Direction each tool's body extends away from its contact-point origin
- * (read from the GLB geometry bounds): allen key short arm up +Y,
- * screwdriver body -Z behind the tip, mallet head +Z behind the face.
- */
+/** Direction each tool's body extends away from its contact-point origin (read from the GLB geometry bounds): allen key short arm up +Y, screwdriver body -Z behind the tip, mallet head +Z behind the face. */
 const REST_AXIS: Partial<Record<ToolId, [number, number, number]>> = {
   allenkey: [0, 1, 0],
   screwdriver: [0, 0, -1],
@@ -31,13 +27,7 @@ const TIP_GAP_M = 0.012;
 /** How far the mallet pulls back between strikes. */
 const MALLET_SWING_M = 0.07;
 
-/**
- * The active tool, rendered at the fastener being tightened. Transform is
- * rebuilt imperatively each update (same plain-array transformManager path
- * as OffsetDriver — SharedValues don't cross into filament): alignment
- * rotation (replace), spin about the fastener axis (multiply), then
- * translation to the sinking fastener head (multiply).
- */
+/** The active tool, rendered at the fastener being tightened. Transform is rebuilt imperatively each update (same plain-array transformManager path as OffsetDriver — SharedValues don't cross into filament): alignment rotation (replace), spin about the fastener axis (multiply), then translation to the sinking fastener head (multiply). */
 export function ToolModel({ action }: { action: AssemblyAction }) {
   const tool = action.tool!;
   const strike = (action.motion ?? (tool === "mallet" ? "strike" : "spin")) === "strike";
