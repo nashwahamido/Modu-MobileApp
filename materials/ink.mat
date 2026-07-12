@@ -1,0 +1,456 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// ink.mat — the "illustrated" look: cel bands + warm shadow + ink contours,
+//           over a hand-painted wood texture.
+//
+// Compile with matc from Filament v1.68.0 (MATERIAL_VERSION 68 — the version
+// react-native-filament 1.11.0 vendors; check with `matinfo toon.filamat`):
+//
+//   matc -a all -p mobile -o src/assets/materials/ink.filamat materials/ink.mat
+//
+// ── Why it is built this way ─────────────────────────────────────────────────
+//
+// shadingModel: lit + customSurfaceShading
+//   We own the direct-light term (so we can band it), but Filament still gives
+//   us IBL and real cast shadows. `unlit` would have thrown both away.
+//
+//   CRITICAL: surfaceShading() runs ONCE PER LIGHT and the results are SUMMED.
+//   Band three directional lights and the three staggered ramps add back up to a
+//   smooth gradient — the banding cancels itself out and the exposure blows.
+//   A cel look needs ONE dominant light: AssemblyScene drops the fill and rim
+//   while a shader look is active. Do not re-add them.
+//
+// postLightingBlending: multiply
+//   Ink lines are painted OVER the lit result, so a contour survives where the
+//   key light is bright.
+//
+// Procedural grain, NOT a texture map
+//   A sampler would be the obvious way to paint the wood, and react-native-filament
+//   does expose Material.setDefaultTextureParameter — but its texture path touches
+//   the Filament driver, which lives on the RENDER thread. RNF's own only use of it
+//   sits inside a 'worklet' for exactly that reason. Called from a JS-thread effect
+//   (which is where a per-part material hook necessarily runs), the texture object is
+//   created but its data never reaches the render thread's GL context: the surface
+//   samples white and the driver race kills the process about a second later.
+//   Making the texture route work means hoisting material creation onto the worklet
+//   context and out of the per-part hook. Until then, the grain is generated here.
+//
+//   Everything is projected TRIPLANAR from object-space position — never uv0. The
+//   IKEA dataset's UVs are per-material CAD atlases with no meaningful scale or grain
+//   direction. Object space (not world) so the grain travels with a part as it is
+//   dragged, held, or spun.
+// ─────────────────────────────────────────────────────────────────────────────
+
+material {
+    name : ink,
+
+    shadingModel : lit,
+    customSurfaceShading : true,
+    postLightingBlending : multiply,
+
+    blending : opaque,
+    culling : back,
+    doubleSided : false,
+
+    // Object-space position, forwarded from the vertex stage.
+    // objPos for the wood projection; the three axes to FACET the shading (below).
+    // Filament allows exactly four custom variables — this uses all of them.
+    variables : [ objPos, axisX, axisY, axisZ ],
+
+    parameters : [
+        // ── wood ─────────────────────────────────────────────────────────────
+        // The painted grain map. Sampled TRIPLANAR from object space, never through
+        // uv0: the IKEA dataset's UVs are per-material CAD atlases with no meaningful
+        // scale or grain direction.
+        { type : sampler2d, name : grainMap },
+        // 1 = sample grainMap, 0 = generate the grain procedurally. The texture must be
+        // uploaded from the RENDER thread (see shaders.ts); this is the escape hatch if
+        // that ever fails, so a missing texture degrades instead of rendering black.
+        { type : float,  name : useTexture },
+        // Texture repeats per METRE across the grain.
+        { type : float,  name : textureTiles },
+        // Phase shift ACROSS the grain, in plank widths.
+        //
+        // Every LACK part is centred on its object origin, and the map's column 0 is a
+        // plank SEAM — so at phase 0 a seam falls exactly down the middle of every leg
+        // face and along the middle of the table top's edge band. 0.5 puts the part's
+        // centre in the MIDDLE of a plank instead, which is where a solid piece of timber
+        // should be. The top face is 6 planks wide, so it still gets its seams.
+        { type : float,  name : grainPhase },
+        // Object-space direction the grain RUNS (down a leg, along a top).
+        { type : float3, name : grainAxis },
+        // Planks per METRE across the grain. A LEG wants a value so low that the whole
+        // part sits inside one plank (i.e. no seam ever crosses it).
+        { type : float,  name : plankScale },
+        // Grain strokes per METRE across the grain — deliberately NOT per plank, or a
+        // 4 cm leg would get half a stroke while the 55 cm top got thirty.
+        { type : float,  name : grainScale },
+        // 0 = flat colour, 1 = full grain.
+        { type : float,  name : grainStrength },
+
+        // ── palette (LINEAR, not sRGB) ───────────────────────────────────────
+        // Tints the texture. White = the texture's own colour.
+        { type : float3, name : baseColor },
+        // The colour the surface turns in shadow. Illustration shading shifts HUE
+        // toward a warm brown rather than just multiplying brightness down — that
+        // hue shift is most of what makes it read as "drawn".
+        { type : float3, name : shadeColor },
+        { type : float3, name : inkColor },
+
+        // ── cel ramp ─────────────────────────────────────────────────────────
+        { type : float,  name : bands },       // 2–4; 3 matches the reference
+        { type : float,  name : softness },    // 0.02 = hard cel, 0.35 = soft
+        { type : float,  name : ambientLift }, // floor, so shadows never crush out
+        { type : float,  name : lightScale },  // trims the key light
+        // How much the shadow map darkens the surface. A cel look with a single key is
+        // very sensitive to shadow-map noise: any partial visibility lands the pixel in
+        // a different BAND, so acne that a smooth material hides as a faint smudge shows
+        // up here as a hard-edged dark patch across half a face. 0 = ignore shadows.
+        { type : float,  name : shadowStrength },
+
+        // ── ink ──────────────────────────────────────────────────────────────
+        // Outline thickness in PIXELS. A real screen-space width, so it does not vary
+        // with how squarely a face happens to sit to the camera.
+        { type : float,  name : contourPixels },
+        // How near-edge-on a surface must ALSO be before it may be inked (|n·v| below
+        // this). Without it, the pixel test alone fires on any high-curvature area — and
+        // the LACK meshes are FILLETED (a leg carries 80 distinct normals, the top 814),
+        // so every rounded corner drew a line INBOARD of the real silhouette: one down
+        // each leg, one along the table top's edge band. Both gates together put the ink
+        // only where the surface is genuinely turning away AND is a pixel or two from
+        // the outline — i.e. on the corner itself.
+        { type : float,  name : contourMaxFacing },
+        { type : float,  name : creaseStrength },  // hard-edge lines (0..1)
+        // The normal-derivative a crease must exceed. A FILLET changes its normal
+        // gradually, a real crease breaks it — raise this until the rounded edges stop
+        // drawing. On LACK almost every edge is rounded, so the cel bands (a different
+        // tone per face) do the work of separating faces instead.
+        { type : float,  name : creaseThreshold },
+        { type : float,  name : lineDarkness },   // 1 = full ink, 0.6 = pencil
+
+        // ── edge ink ─────────────────────────────────────────────────────────
+        // Drawn from AXIS ALIGNMENT, not curvature.
+        //
+        // These parts are boxes with FILLETED corners. Every flat face's object-space
+        // normal is axis-aligned (|n·x| or |n·y| or |n·z| = 1); only a fillet's normal is
+        // diagonal, bottoming out at 0.707 halfway round. So "how far is this normal from
+        // the nearest object axis" IS the edge, exactly, with no derivatives and no
+        // curvature guessing. The line's width is the fillet's own width in WORLD space,
+        // so it thickens as the part comes closer — perspective weight variation, for
+        // free, rather than a uniform screen-space stroke.
+        //
+        // Ink where alignment falls between these: edgeEnd is the flat-face side.
+        { type : float,  name : edgeStart },   // ~0.72 — the middle of a fillet
+        { type : float,  name : edgeEnd },     // ~0.90 — where the flat face begins
+        { type : float,  name : edgeInk },     // strength, 0..1
+
+        // A lit edge in the reference is not dark — it is a bright rim. Same line, tinted
+        // by how much the KEY light rakes across it: ink in shadow, highlight in light.
+        { type : float3, name : keyDir },            // world-space direction TO the key
+        { type : float3, name : highlightColor },    // >1 brightens (multiply blending)
+        { type : float,  name : highlightStrength },
+
+        // ── faceting ─────────────────────────────────────────────────────────
+        // 1 = snap the shading normal to the part's nearest axis, so a ROUNDED corner
+        // takes the tone of the face it belongs to instead of sweeping a soft gradient
+        // between two faces. That smear is what reads as a pair of vague bands down every
+        // leg and a split along the table top's edge band. An illustration has flat faces
+        // and crisp corners; this is what makes them flat.
+        { type : float,  name : facetStrength }
+    ]
+}
+
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        // getPosition() is object space here, before any transform is applied.
+        material.objPos = vec4(getPosition().xyz, 1.0);
+
+        // The part's own axes, in WORLD space. The fragment stage needs these to snap a
+        // filleted corner's normal onto the face it belongs to; it cannot derive them,
+        // because Filament packs normals as tangent quaternions and gives the fragment no
+        // object->world matrix.
+        mat3 m = mat3(getWorldFromModelMatrix());
+        material.axisX = vec4(normalize(m[0]), 0.0);
+        material.axisY = vec4(normalize(m[1]), 0.0);
+        material.axisZ = vec4(normalize(m[2]), 0.0);
+    }
+}
+
+fragment {
+
+    /** The part's nearest axis to `n`, signed — i.e. the face this pixel belongs to.
+     *  Also returns how axis-ALIGNED the normal already was: 1.0 on a flat face, and
+     *  bottoming out at 0.707 in the middle of a fillet. That number is the edge. */
+    vec3 faceNormal(vec3 n, out float axisAlign) {
+        vec3 ax = normalize(variable_axisX.xyz);
+        vec3 ay = normalize(variable_axisY.xyz);
+        vec3 az = normalize(variable_axisZ.xyz);
+
+        float dx = dot(n, ax), dy = dot(n, ay), dz = dot(n, az);
+        float adx = abs(dx), ady = abs(dy), adz = abs(dz);
+
+        axisAlign = max(adx, max(ady, adz));
+        if (adx >= ady && adx >= adz) return ax * sign(dx);
+        if (ady >= adz) return ay * sign(dy);
+        return az * sign(dz);
+    }
+
+    float hash11(float n) {
+        return fract(sin(n) * 43758.5453);
+    }
+
+    /**
+     * One plank: a seam at each edge, strokes running ALONG the grain, and a tone
+     * that varies plank to plank — the three things that read as "painted wood".
+     *
+     * `across` is in PLANK units (1.0 = one plank width), `along` in metres.
+     * Returns darkness 0..1; `tint` comes back as this plank's tone offset.
+     */
+    float plankPattern(float acrossPlank, float acrossM, float along, out float tint) {
+        tint = hash11(floor(acrossPlank) * 1.37);
+
+        // Seam: a thin dark line at each plank edge. fwidth keeps it one pixel wide
+        // when a leg is small on screen instead of aliasing into a dashed mess.
+        float inPlank = fract(acrossPlank);
+        float dSeam = min(inPlank, 1.0 - inPlank);
+        float aaSeam = fwidth(acrossPlank) * 1.5 + 1e-4;
+        float seam = 1.0 - smoothstep(0.004, 0.004 + aaSeam, dSeam);
+
+        // Strokes: stripes measured in METRES across the grain, warped by two
+        // incommensurate waves along it, so they drift and occasionally pinch together
+        // the way real grain does. The plank's tint seeds the warp, so no two planks
+        // share a pattern.
+        float w = acrossM * materialParams.grainScale
+                + sin(along * 2.3 + tint * 21.0) * 0.42
+                + sin(along * 5.7 + tint * 11.0) * 0.14;
+        float f = fract(w);
+        float dGrain = min(f, 1.0 - f);
+        float aaGrain = fwidth(w) * 1.5 + 1e-4;
+        float grain = 1.0 - smoothstep(0.035, 0.035 + aaGrain, dGrain);
+
+        return clamp(seam + grain * 0.6, 0.0, 1.0);
+    }
+
+    /** The painted map, projected triplanar so the grain runs correctly on every face.
+     *
+     *  Same frame as the procedural path: a = grain direction, u/w perpendicular.
+     *  The map's own grain runs along its V axis, so V is always the `a` coordinate.
+     *    faces looking along ±u → uv = (w, a)
+     *    faces looking along ±w → uv = (u, a)
+     *    faces looking along ±a → uv = (u, w)   END GRAIN (a leg's foot, a cut end)
+     */
+    vec3 texturedWood(vec3 p, vec3 n, vec3 a, vec3 u, vec3 w) {
+        float tiles = materialParams.textureTiles;
+        float phase = materialParams.grainPhase;
+        // `a` runs ALONG the grain (the map's V) — no phase. u and w are the two ACROSS
+        // axes (the map's U, where the plank seams live) — both get the phase.
+        float pa = dot(p, a) * tiles;
+        float pu = dot(p, u) * tiles + phase;
+        float pw = dot(p, w) * tiles + phase;
+
+        vec3 bw = vec3(abs(dot(n, u)), abs(dot(n, w)), abs(dot(n, a)));
+        bw = pow(bw, vec3(4.0));
+        bw /= (bw.x + bw.y + bw.z + 1e-5);
+
+        vec3 cu = texture(materialParams_grainMap, vec2(pw, pa)).rgb;
+        vec3 cw = texture(materialParams_grainMap, vec2(pu, pa)).rgb;
+        vec3 ca = texture(materialParams_grainMap, vec2(pu, pw)).rgb;
+
+        return (cu * bw.x + cw * bw.y + ca * bw.z) * materialParams.baseColor;
+    }
+
+    /** The plank pattern, projected triplanar so it runs correctly on every face.
+     *
+     *  Frame: a = grain direction, u/w = the two perpendiculars.
+     *    faces looking along ±u → across = w   grain runs correctly
+     *    faces looking along ±w → across = u   grain runs correctly
+     *    faces looking along ±a → END GRAIN (a leg's foot, a cut end): no strokes
+     */
+    vec3 proceduralWood(vec3 p, vec3 n, vec3 a, vec3 u, vec3 w) {
+        float along = dot(p, a);
+        float mu = dot(p, u);
+        float mw = dot(p, w);
+
+        // Plank coordinate, offset by half a plank so a seam never lands on the part's
+        // own origin (fract(0) sits exactly ON a seam — that put a dark stripe straight
+        // down the middle of every leg).
+        float scale = materialParams.plankScale;
+        float acrossU = mu * scale + 0.5;
+        float acrossW = mw * scale + 0.5;
+
+        // Blend weights: how squarely the face looks down each axis. Raised to a
+        // power so each face is dominated by ONE projection rather than a smear.
+        vec3 bw = vec3(abs(dot(n, u)), abs(dot(n, w)), abs(dot(n, a)));
+        bw = pow(bw, vec3(4.0));
+        bw /= (bw.x + bw.y + bw.z + 1e-5);
+
+        float tintU, tintW;
+        float du = plankPattern(acrossW, mw, along, tintU);
+        float dw = plankPattern(acrossU, mu, along, tintW);
+
+        float dark = du * bw.x + dw * bw.y;          // end grain (bw.z) stays clean
+        float tint = tintU * bw.x + tintW * bw.y;
+
+        // Darkness toward the shade colour (so grain stays in the wood's own family,
+        // never turning grey), plus a gentle per-plank tone shift.
+        vec3 wood = mix(materialParams.baseColor, materialParams.shadeColor,
+                        dark * materialParams.grainStrength);
+        return wood * (0.94 + 0.12 * tint);
+    }
+
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+
+        vec3 n = getWorldGeometricNormalVector();
+
+        // ── wood ─────────────────────────────────────────────────────────────
+        // The triplanar weights need the normal in OBJECT space, in the same frame
+        // as the projection axes — a WORLD normal would pick the wrong projection
+        // the moment a part is rotated, sliding the grain across the face.
+        //
+        // Filament's vertex stage packs normals into tangent QUATERNIONS, so there
+        // is no cheap object-space normal getter. But the object-space geometric
+        // normal is just the cross product of the screen-space derivatives of the
+        // object-space position, which we already carry. Flat per face, which is
+        // exactly right for these boxy parts. Sign is irrelevant: the weights abs().
+        vec3 objN = normalize(cross(dFdx(variable_objPos.xyz), dFdy(variable_objPos.xyz)));
+
+        // One frame, shared by both wood paths.
+        vec3 a = normalize(materialParams.grainAxis);
+        vec3 up = abs(a.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+        vec3 u = normalize(cross(a, up));
+        vec3 w = cross(a, u);
+
+        vec3 wood = materialParams.useTexture > 0.5
+            ? texturedWood(variable_objPos.xyz, objN, a, u, w)
+            : proceduralWood(variable_objPos.xyz, objN, a, u, w);
+
+        material.baseColor.rgb = wood;
+        material.metallic  = 0.0;
+        material.roughness = 0.95;
+
+        // ── ink ──────────────────────────────────────────────────────────────
+        vec3 v = normalize(getWorldViewVector());
+        float facing = abs(dot(n, v));
+
+        // Silhouette: the surface turns away from the camera → darken. This draws
+        // the outline around each leg and around the top.
+        // SILHOUETTE, measured in pixels — not "how much the surface turns away".
+        //
+        // A plain fresnel rim (1 - smoothstep(w, w+f, facing)) darkens by how squarely a
+        // face sits to the camera, which is NOT the same thing as being near an outline.
+        // Pan the camera level with the table and the top face's `facing` drops to ~0.1
+        // across its whole area, so the entire top inks over and reads as the light
+        // dying. That is a bug in the model of what an outline IS, not a tuning problem.
+        //
+        // `facing / fwidth(facing)` is the screen-space DISTANCE, in pixels, to where
+        // facing would reach 0 — i.e. to the silhouette. On a flat face seen at a grazing
+        // angle, facing is small but nearly CONSTANT, so fwidth is tiny and the distance
+        // is enormous: no ink. Near a true silhouette, facing falls away fast, the
+        // distance is a pixel or two, and the line is drawn. It also gives a
+        // CONSTANT-WEIGHT line, which the fresnel version never could.
+        float edgeDist = facing / max(fwidth(facing), 1e-5);
+        float nearEdge = 1.0 - smoothstep(
+            materialParams.contourPixels,
+            materialParams.contourPixels + 1.0,
+            edgeDist);
+
+        // Second gate: the surface must also be close to edge-on. A fillet has a fast
+        // `facing` gradient, so the pixel test alone fires halfway across a rounded
+        // corner while it is still facing the camera at 0.5. Requiring facing to be small
+        // as well pins the line to the corner itself.
+        float turning = 1.0 - smoothstep(
+            materialParams.contourMaxFacing * 0.5,
+            materialParams.contourMaxFacing,
+            facing);
+
+        float contour = nearEdge * turning;
+
+        // Creases: a hard edge is a DISCONTINUITY in the shading normal, so its
+        // screen-space derivative spikes on exactly the pixels straddling it. This
+        // draws the line between the top face and the front face. Needs split
+        // normals in the GLB — LACK has them on every shared position.
+        float crease = smoothstep(materialParams.creaseThreshold,
+                                  materialParams.creaseThreshold * 2.0,
+                                  length(fwidth(n)))
+                     * materialParams.creaseStrength;
+
+        // ── the edge itself ──────────────────────────────────────────────────
+        // How far the normal has swung off the part's nearest axis: 1.0 on a flat face,
+        // 0.707 in the middle of a fillet. Everything between edgeStart and edgeEnd is
+        // the drawn edge. Exact for a box-with-fillets; no derivatives, no guessing.
+        float axisAlign;
+        vec3 faceN = faceNormal(n, axisAlign);
+        float edge = (1.0 - smoothstep(materialParams.edgeStart,
+                                       materialParams.edgeEnd,
+                                       axisAlign)) * materialParams.edgeInk;
+
+        float ink = clamp(max(edge, contour) + crease, 0.0, 1.0)
+                  * materialParams.lineDarkness;
+
+        // Ink in shadow, HIGHLIGHT in light — the same stroke, tinted by how squarely the
+        // key rakes across it. This is what stops the outline reading as a flat uniform
+        // border: the top-front edges catch the light and go bright, the undersides go
+        // dark, exactly as in a drawn illustration.
+        float edgeLit = clamp(dot(faceN, normalize(materialParams.keyDir)), 0.0, 1.0);
+        vec3 lineTint = mix(
+            materialParams.inkColor,
+            materialParams.highlightColor,
+            smoothstep(0.35, 0.85, edgeLit) * materialParams.highlightStrength);
+
+        material.postLightingColor = vec4(mix(vec3(1.0), lineTint, ink), 1.0);
+    }
+
+    /**
+     * Direct light only; IBL runs underneath and keeps the shadow side from going
+     * flat black. Filament supplies the customSurfaceShading() shim — THIS is the
+     * hook it calls (shaders/src/surface_shading_lit_custom.fs).
+     */
+    vec3 surfaceShading(const MaterialInputs materialInputs, const ShadingData shadingData,
+            const LightData lightData) {
+        // NoL from the GEOMETRIC normal, not the interpolated shading normal.
+        //
+        // The LACK table top carries 814 distinct normals — it is not perfectly flat, and
+        // its normals drift by a few degrees across the face. A smooth material hides
+        // that; a CEL ramp does not. A drifting NoL walks across a band edge somewhere in
+        // the middle of the face, and the terminator lands right there — half the top
+        // lit, half of it a step darker, which reads as a lighting bug. Faceting the
+        // normal makes each flat face exactly one tone, which is what a cel look is FOR.
+        vec3 nGeom = getWorldGeometricNormalVector();
+
+        // Light the FACE, not the fillet. A rounded corner's normal sweeps smoothly from
+        // one face to the next, so a cel ramp paints a soft gradient band across every
+        // corner — the vague double lines down the legs and the split along the table
+        // top's edge band. Snapping to the part's nearest axis gives each face exactly one
+        // tone and makes the corner a crisp step, which is what a drawn illustration is.
+        float axisAlign;
+        vec3 shadeN = mix(nGeom, faceNormal(nGeom, axisAlign), materialParams.facetStrength);
+        float NoL = clamp(dot(normalize(shadeN), lightData.l), 0.0, 1.0);
+
+        // Quantize to `bands` steps, smoothstepping across each edge so the
+        // terminator is soft — the reference is soft, not a hard 2-tone cel.
+        float b = max(materialParams.bands, 1.0);
+        float t = NoL * b;
+        float bandIndex = floor(t);
+        float bandFrac = t - bandIndex;
+        float sm = clamp(materialParams.softness, 0.001, 0.5);
+        float ramp = (bandIndex + smoothstep(0.5 - sm, 0.5 + sm, bandFrac)) / b;
+
+        float shadow = mix(1.0, lightData.visibility, materialParams.shadowStrength);
+        float lit = mix(materialParams.ambientLift, 1.0,
+                        ramp * lightData.attenuation * shadow);
+
+        // Hue-shifting shadow: the BAND is carried by the colour, not by a second
+        // brightness multiply. Multiplying by `lit` again here is what turned the
+        // bands back into a gradient in the first pass.
+        vec3 tone = mix(materialParams.shadeColor, shadingData.diffuseColor, lit);
+
+        // Filament's Lambert diffuse is baseColor/PI · NoL · light. Omitting the 1/PI
+        // runs the material ~3x hot against the same rig every other look uses, which
+        // then has to be papered over with an arbitrary lightScale. Divide properly and
+        // lightScale becomes a real 1.0-is-neutral trim.
+        const float FRAC_1_PI = 0.3183098862;
+
+        return tone * FRAC_1_PI * lightData.colorIntensity.rgb * lightData.colorIntensity.w
+                * materialParams.lightScale;
+    }
+}

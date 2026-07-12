@@ -48,9 +48,12 @@ const MODES: { value: AssemblyMode; label: string }[] = [
   { value: "strict", label: "Strict" },
 ];
 const STYLES: { value: RenderStyleId; label: string }[] = [
+  // The first three swap the GLB; the last two swap the MATERIAL (scene/shaders.ts).
   { value: "realistic", label: "Realistic" },
   { value: "cozy", label: "Cozy" },
   { value: "cartoon", label: "Cartoon" },
+  { value: "toon", label: "Toon" },
+  { value: "illustrated", label: "Illustrated" },
 ];
 const BACKDROPS: { value: BackdropId; label: string }[] = [
   { value: "studio", label: "Studio" },
@@ -309,12 +312,6 @@ export function SettingsControls() {
         desc="Use the dark background theme"
         value={theme === "dark"}
         onValueChange={(v) => setTheme(v ? "dark" : "light")}
-      />
-      <Row
-        label="Toon shader"
-        desc="Cel-shaded table (metal bolts keep their finish)"
-        value={settings.toonShader}
-        onValueChange={(v) => setSettings({ toonShader: v })}
       />
       <Choice
         label="Instructions"

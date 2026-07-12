@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useLocalSearchParams } from "expo-router";
 import { OrientationLock } from "expo-screen-orientation";
-import { Image, ImageBackground, Pressable, StyleSheet, Text, View } from "react-native";
+import { ImageBackground, Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -298,7 +298,7 @@ function GameScreen() {
       <GestureDetector gesture={sceneGesture}>
         <View style={styles.sceneWrap}>
           <AssemblyScene
-            key={`${renderStyle}:${settings.toonShader}`}
+            key={renderStyle}
             cameraManipulator={manipulator}
             sceneState={sceneState}
             heldDriver={heldDriver}

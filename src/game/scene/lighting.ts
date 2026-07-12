@@ -6,10 +6,23 @@ export const SCENE_BACKGROUND = "#f0e9dd";
 /** Ambient/reflection from the image-based light. Kept LOW on purpose — high IBL flattens everything; lowering it lets the key/rim sculpt the parts. Raise toward ~40000 if the shadow side goes too dark. */
 export const IBL_INTENSITY = 30_000;
 
+/** Ambient for the SHADER looks (toon / illustrated).
+ *
+ *  Cel bands are a step function on the direct light; a strong ambient wash sits on
+ *  top of them and smooths the steps back into a gradient. Cutting the IBL is what
+ *  lets the banding actually read. Safe to vary per look only because AssemblyScene
+ *  remounts on `renderStyle` (EnvironmentalLight releases its buffer after first use
+ *  and throws if the intensity is changed in place). */
+export const CEL_IBL_INTENSITY = 9_000;
+
 // ── Selectable lighting rigs (ported from the on-release engine) ─────────────
 // The `studio` preset below is the base rig (KEY warm upper-front-left + shadows, FILL cool opposite, RIM strong cool back-light); the others shift the mood. All mood variation lives in the three directional lights; IBL_INTENSITY is deliberately FIXED (react-native-filament's EnvironmentalLight releases its buffer after first use, so changing ambient at runtime throws).
 type Dir = [number, number, number];
-const DIR_KEY: Dir = [-0.5, -1, -0.6];
+/** The key light's travel direction. Shared by every preset — only colour and intensity
+ *  change — so the ink shader's edge highlight can key off it safely. Exported because
+ *  scene/shaders.ts needs the direction TO the light (i.e. negated) to decide which edges
+ *  catch the light and go bright rather than dark. */
+export const DIR_KEY: Dir = [-0.5, -1, -0.6];
 const DIR_FILL: Dir = [0.6, -0.45, 0.5];
 const DIR_RIM: Dir = [0.3, -0.25, 0.85];
 
@@ -53,6 +66,11 @@ const STYLE_DEFAULT: Record<RenderStyleId, Preset> = {
   realistic: "studio",
   cozy: "warm",
   cartoon: "soft",
+  // The two SHADER looks want a flat, even rig: the cel bands should do the
+  // shading, not the lights. A dramatic key fights the ramp and the banding
+  // turns to mush.
+  toon: "soft",
+  illustrated: "soft",
 };
 
 /** Resolve the active rig from render style + dark theme + the lighting choice. Dark dims key/fill for moody backdrops but keeps the rim relatively strong so the table still separates from the dark background. (Ambient/IBL is fixed.) */

@@ -1,4 +1,3 @@
-
 export type Vec3 = readonly [number, number, number];
 export type Quat = readonly [number, number, number, number];
 
@@ -28,7 +27,15 @@ export type FurnitureCategory =
   | "Other";
 
 export type ThemeId = "light" | "dark" | "high_contrast";
-export type RenderStyleId = "realistic" | "cozy" | "cartoon";
+/** How the furniture is rendered. Two mechanisms, one axis:
+ *    realistic | cozy | cartoon   → the GLB is the look (Furniture.styleModels)
+ *    toon | illustrated           → the MATERIAL is the look (scene/shaders.ts) */
+export type RenderStyleId =
+  | "realistic"
+  | "cozy"
+  | "cartoon"
+  | "toon"
+  | "illustrated";
 export type BackdropId = "studio" | "clear" | "cozy" | "cartoon";
 
 export type AssemblyMode = "free" | "guide" | "strict";
@@ -175,8 +182,10 @@ export interface MaterialParams {
   materialId?: string;
 }
 export interface RenderStyle {
-  toon?: boolean;
-  outline?: boolean;
+  /** Custom Filament material this look renders with. The DEFAULT per look lives in
+   *  scene/shaders.ts (STYLE_SHADER); set this only to override for one furniture —
+   *  e.g. a build whose GLB already looks hand-drawn opting out of the ink pass. */
+  shader?: "off" | "toon" | "ink";
   material?: Record<string, MaterialParams>;
 }
 export type StyleSet = Partial<Record<RenderStyleId, RenderStyle>>;
