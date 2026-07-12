@@ -5,7 +5,8 @@
   "scripts": {
     "start": "npx expo start",
     "android": "npx expo run:android",
-    "ios": "npx expo run:ios"
+    "ios": "npx expo run:ios",
+    "fix:ios-paths": "node scripts/fix-ios-space-paths.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.0",

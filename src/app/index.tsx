@@ -10,14 +10,24 @@ export default function App() {
       <Text style={styles.title}>Modu</Text>
       <Text style={styles.sub}>Build furniture, step by step</Text>
       <View style={styles.actions}>
-        <Link href="/catalogue" asChild>
+        <Link href="/auth" asChild>
           <Pressable
             style={({ pressed }) => [
               styles.button,
               pressed && styles.buttonPressed,
             ]}
           >
-            <Text style={styles.buttonText}>Start building</Text>
+            <Text style={styles.buttonText}>Get started</Text>
+          </Pressable>
+        </Link>
+        <Link href="/catalogue" asChild>
+          <Pressable
+            style={({ pressed }) => [
+              styles.settingsLink,
+              pressed && styles.settingsLinkPressed,
+            ]}
+          >
+            <Text style={styles.settingsLinkText}>Browse catalogue</Text>
           </Pressable>
         </Link>
         <Link href="/settings" asChild>
@@ -27,7 +37,7 @@ export default function App() {
               pressed && styles.settingsLinkPressed,
             ]}
           >
-            <Text style={styles.settingsLinkText}>⚙ Settings</Text>
+            <Text style={styles.settingsLinkText}>Settings</Text>
           </Pressable>
         </Link>
       </View>
