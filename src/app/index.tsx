@@ -1,118 +1,89 @@
-// This is the homepage of modu
+import { Link } from "expo-router";
+import type { Href } from "expo-router";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { Link } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+const authRoute = "/auth" as Href;
 
-export default function App() {
+export default function Home() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Modu</Text>
-      <Text style={styles.sub}>Build furniture, step by step</Text>
-      <View style={styles.actions}>
-        <Link href="/catalogue" asChild>
-          <Pressable
-            style={({ pressed }) => [
-              styles.button,
-              pressed && styles.buttonPressed,
-            ]}
-          >
-            <Text style={styles.buttonText}>Start building</Text>
-          </Pressable>
-        </Link>
-        <Link href="/settings" asChild>
-          <Pressable
-            style={({ pressed }) => [
-              styles.settingsLink,
-              pressed && styles.settingsLinkPressed,
-            ]}
-          >
-            <Text style={styles.settingsLinkText}>⚙ Settings</Text>
-          </Pressable>
-        </Link>
+    <View style={styles.root}>
+      <View style={styles.logoLockup}>
+        <Text style={[styles.doodle, styles.greenDoodle]}>:)</Text>
+        <Text style={styles.logo}>MODU</Text>
+        <Text style={[styles.doodle, styles.blueDoodle]}>o</Text>
+        <Text style={[styles.doodle, styles.pinkDoodle]}>+</Text>
       </View>
-      {__DEV__ && (
-        <View style={styles.devRow}>
-          <Link href="/engine-test" asChild>
-            <Pressable style={styles.devLink}>
-              <Text style={styles.devLinkText}>engine test (dev)</Text>
-            </Pressable>
-          </Link>
-          {/* REFERENCE ONLY — Nashwa's original engine, untouched. Delete this link together with src/adhd + play-adhd.tsx (merge plan Phase 7). */}
-          <Link href="/play-adhd" asChild>
-            <Pressable style={styles.devLink}>
-              <Text style={styles.devLinkText}>adhd original (ref)</Text>
-            </Pressable>
-          </Link>
-        </View>
-      )}
-      <StatusBar style="light" />
+      <Text style={styles.subtitle}>Turning every piece into progress.</Text>
+      <Link href={authRoute} asChild>
+        <Pressable style={styles.primaryButton}>
+          <Text style={styles.primaryButtonText}>Get started</Text>
+        </Pressable>
+      </Link>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    backgroundColor: "#16162a",
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#f2eadb",
+    paddingHorizontal: 28,
+    gap: 22,
   },
-  title: {
-    color: "white",
-    fontSize: 28,
-    fontWeight: "600",
-  },
-  sub: {
-    color: "rgba(255,255,255,0.5)",
-    fontSize: 14,
-    marginTop: 8,
-  },
-  actions: {
-    flexDirection: "row",
+  logoLockup: {
     alignItems: "center",
-    gap: 24,
-    marginTop: 36,
+    justifyContent: "center",
+    minHeight: 120,
+    width: "100%",
   },
-  button: {
-    backgroundColor: "#5b6cff",
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 28,
+  logo: {
+    color: "#b9a486",
+    fontSize: 76,
+    fontWeight: "800",
+    letterSpacing: 10,
   },
-  buttonPressed: {
-    backgroundColor: "#4a59d9",
+  doodle: {
+    position: "absolute",
+    fontSize: 26,
+    fontWeight: "800",
   },
-  buttonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "700",
+  greenDoodle: {
+    left: "16%",
+    top: 16,
+    color: "#23856f",
+    transform: [{ rotate: "-10deg" }],
   },
-  settingsLink: {
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.25)",
+  blueDoodle: {
+    right: "30%",
+    top: 4,
+    color: "#98b8ef",
+    transform: [{ rotate: "16deg" }],
   },
-  settingsLinkPressed: { backgroundColor: "rgba(255,255,255,0.08)" },
-  settingsLinkText: {
-    color: "rgba(255,255,255,0.85)",
-    fontSize: 15,
+  pinkDoodle: {
+    left: "46%",
+    bottom: 6,
+    color: "#df9588",
+    transform: [{ rotate: "8deg" }],
+  },
+  subtitle: {
+    color: "#5f564b",
+    fontSize: 17,
     fontWeight: "600",
+    textAlign: "center",
   },
-  devRow: {
-    marginTop: 28,
-    flexDirection: "row",
-    gap: 16,
+  primaryButton: {
+    minWidth: 190,
+    alignItems: "center",
+    backgroundColor: "#2d2a26",
+    borderRadius: 28,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
   },
-  devLink: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  devLinkText: {
-    color: "rgba(255,255,255,0.35)",
-    fontSize: 12,
-    textDecorationLine: "underline",
+  primaryButtonText: {
+    color: "#fff9ef",
+    fontSize: 17,
+    fontWeight: "800",
   },
 });

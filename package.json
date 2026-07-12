@@ -5,7 +5,8 @@
   "scripts": {
     "start": "npx expo start",
     "android": "npx expo run:android",
-    "ios": "npx expo run:ios"
+    "ios": "npx expo run:ios",
+    "fix:ios-paths": "node scripts/fix-ios-space-paths.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.0",
@@ -20,6 +21,7 @@
     "expo-linking": "~8.0.12",
     "expo-router": "~6.0.23",
     "expo-screen-orientation": "~9.0.9",
+    "expo-speech": "~14.0.8",
     "expo-splash-screen": "~31.0.13",
     "expo-status-bar": "~3.0.9",
     "expo-symbols": "~1.0.8",
