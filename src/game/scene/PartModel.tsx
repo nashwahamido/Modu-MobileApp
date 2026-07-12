@@ -1,6 +1,6 @@
 // TODO: settle down the part marked as dev
 import { useEffect, useMemo } from "react";
-import { useFilamentContext } from "react-native-filament";
+import { useBuffer, useFilamentContext } from "react-native-filament";
 import type {
   Entity,
   FilamentModel,
@@ -53,6 +53,50 @@ function usePartMaterial(def: PartDef): MaterialParams | undefined {
     const style = styleFor(styles, renderStyle);
     return style?.material?.[def.meshName] ?? style?.material?.[def.group];
   }, [styles, renderStyle, def.meshName, def.group]);
+}
+
+/** The compiled Filament toon (cel) material. Applied per-entity in PartModel — NOT from the scene — because PartModel owns each entity and adds it to the scene; a scene-level apply is superseded by these components' own material effects. */
+const TOON_MATERIAL_SRC = require("@/src/assets/materials/toon.filamat");
+/** calendula gold (#c8862a) in linear space, for the shader's baseColor param. */
+const TOON_COLOR: [number, number, number] = [0.5776, 0.2384, 0.0232];
+/** Metal fasteners keep their own finish. */
+const TOON_SKIP_GROUP = "bolt115980";
+
+/** One Material per engine, reused by every part (a Material per part would waste native memory). */
+let toonCache: { engine: unknown; material: any } | null = null;
+
+/**
+ * Swap a part's material for the cel-shaded toon material while the setting is
+ * on. Call this AFTER a component's other material effects so it wins.
+ * Note: the toon material has no emissiveFactor/baseColorFactor params, so the
+ * fit-glow tint is a no-op on toon-shaded parts.
+ */
+function useToonMaterial(entity: Entity | null, def: PartDef) {
+  const { engine, renderableManager } = useFilamentContext();
+  const on = useGameStore((s) => s.settings.toonShader);
+  const buffer = useBuffer({
+    source: TOON_MATERIAL_SRC,
+    releaseOnUnmount: false,
+  });
+  useEffect(() => {
+    if (!on || !entity || !engine || !buffer) return;
+    if (def.group === TOON_SKIP_GROUP) return;
+    try {
+      if (!toonCache || toonCache.engine !== engine) {
+        toonCache = { engine, material: engine.createMaterial(buffer) };
+      }
+      const material = toonCache.material;
+      const count = renderableManager.getPrimitiveCount(entity);
+      for (let i = 0; i < count; i++) {
+        const mi = material.createInstance();
+        mi.setFloat3Parameter("baseColor", TOON_COLOR);
+        renderableManager.setMaterialInstanceAt(entity, i, mi);
+      }
+      if (__DEV__) console.log(`[toon] ${def.meshName}: ${count} prim(s)`);
+    } catch (e) {
+      if (__DEV__) console.log(`[toon] failed ${def.meshName}`, e);
+    }
+  }, [on, entity, engine, buffer, renderableManager, def.group, def.meshName]);
 }
 
 /** Apply a theme's material override to a world entity. No params → return early and leave the GLB's baked materials untouched (the fallback). Crude for now: sets the standard glTF material factors; it doesn't cache/restore originals, so switching FROM a themed style back to none won't auto-revert until reload. */
@@ -383,6 +427,9 @@ function DrivenEntity({
     if (entity) applyThemeMaterial(renderableManager, entity, material);
   }, [entity, renderableManager, material]);
 
+  // Declared AFTER the theme-material effect so the toon swap wins.
+  useToonMaterial(entity, def);
+
   return null;
 }
 
@@ -422,6 +469,9 @@ function ClusterDrivenEntity({
   useEffect(() => {
     if (entity) applyThemeMaterial(renderableManager, entity, material);
   }, [entity, renderableManager, material]);
+
+  // Declared AFTER the theme-material effect so the toon swap wins.
+  useToonMaterial(entity, def);
 
   return null;
 }
@@ -466,6 +516,9 @@ function StaticEntity({
   useEffect(() => {
     if (entity) applyThemeMaterial(renderableManager, entity, material);
   }, [entity, renderableManager, material]);
+
+  // Declared AFTER the theme-material effect so the toon swap wins.
+  useToonMaterial(entity, def);
 
   return null;
 }

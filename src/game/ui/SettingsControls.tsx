@@ -310,6 +310,12 @@ export function SettingsControls() {
         value={theme === "dark"}
         onValueChange={(v) => setTheme(v ? "dark" : "light")}
       />
+      <Row
+        label="Toon shader"
+        desc="Cel-shaded table (metal bolts keep their finish)"
+        value={settings.toonShader}
+        onValueChange={(v) => setSettings({ toonShader: v })}
+      />
       <Choice
         label="Instructions"
         desc="Wording detail for each step"

@@ -43,6 +43,8 @@ export interface AccessibilitySettings {
   releaseBehavior: ReleaseBehavior;
   /** Lighting rig mood; "auto" follows the render style. */
   lightingPreset: LightingPreset;
+  /** Cel-shade the table with a custom Filament toon material (keeps bolts metal). */
+  toonShader: boolean;
   /** Snap ACCEPTANCE radius in meters — how far from the matched socket a release still counts as placed (and where the magnet reaches full strength). Profiles may raise it for a gentler fit. Consumers clamp to ≤0.2 (below LACK's 0.25m half-spacing). Targeting/hysteresis constants are deliberately NOT settings: they are the anti-jumping machinery and stay fixed. */
   snapDistance: number;
   /** One-finger drag on the empty scene pans (strafes) the camera. The canvas RE-GRAB has no toggle of its own — it comes with releaseBehavior "float". */

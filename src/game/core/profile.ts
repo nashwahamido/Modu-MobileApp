@@ -22,6 +22,7 @@ export const DEFAULT_SETTINGS: AccessibilitySettings = {
   ghostStyle: "movingGhost",
   releaseBehavior: "autoReturn",
   lightingPreset: "auto",
+  toonShader: false,
   snapDistance: 0.14,
   canvasStrafe: false,
   dragPlane: "adaptive",

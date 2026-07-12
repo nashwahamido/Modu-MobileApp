@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useLocalSearchParams } from "expo-router";
 import { OrientationLock } from "expo-screen-orientation";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, ImageBackground, Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -280,23 +280,25 @@ function GameScreen() {
   if (!furniture) return <View style={styles.root} />;
 
   return (
-    <View style={[styles.root, theme === "dark" && styles.rootDark]}>
-      {/* "clear": no image — the milk-white root (SCENE_BACKGROUND) / dark root shows through. Every other backdrop is a full-bleed image. */}
-      {backdrop === "clear" ? null : (
-        <Image
-          source={
-            (BACKDROPS[backdrop] ?? BACKDROPS.studio)[
+    <ImageBackground
+      // Focus Mode renders its backdrop this way (ImageBackground as the root).
+      // A separate <Image style={absoluteFill}> here scaled the artwork
+      // differently for the same file, so mirror the working structure exactly.
+      // "clear": no source — the milk-white root (SCENE_BACKGROUND) / dark root shows through.
+      source={
+        backdrop === "clear"
+          ? undefined
+          : (BACKDROPS[backdrop] ?? BACKDROPS.studio)[
               theme === "dark" ? "dark" : "light"
             ]
-          }
-          style={StyleSheet.absoluteFill}
-          resizeMode="cover"
-        />
-      )}
+      }
+      resizeMode="cover"
+      style={[styles.root, theme === "dark" && styles.rootDark]}
+    >
       <GestureDetector gesture={sceneGesture}>
         <View style={styles.sceneWrap}>
           <AssemblyScene
-            key={renderStyle}
+            key={`${renderStyle}:${settings.toonShader}`}
             cameraManipulator={manipulator}
             sceneState={sceneState}
             heldDriver={heldDriver}
@@ -454,7 +456,7 @@ function GameScreen() {
       </View>
       {ringOverlay}
       <GreenFlash trigger={completedCount} />
-    </View>
+    </ImageBackground>
   );
 }
 

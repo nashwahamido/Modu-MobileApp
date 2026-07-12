@@ -17,6 +17,7 @@ import { ShadowPlane } from "./ShadowPlane";
 import { ToolModel } from "./ToolModel";
 import { SceneState } from "./useSceneState";
 
+
 export type OrbitManipulator = ReturnType<typeof useCameraManipulator>;
 
 interface Props {
@@ -44,9 +45,13 @@ export function AssemblyScene({
   const manualTools = useGameStore((s) => s.settings.manualTools);
   const lightingPreset = useGameStore((s) => s.settings.lightingPreset);
   const dark = useGameStore((s) => s.theme) === "dark";
+  // The blob shadow only reads correctly on the plain ("clear") backdrop — on the
+  // illustrated backdrops it sits on artwork it doesn't belong to.
+  const backdrop = useGameStore((s) => s.backdrop);
   const rig = getLightRig(renderStyle, dark, lightingPreset);
   const selectedTool = useGameStore((s) => s.selectedTool);
   const driveActionId = useGameStore((s) => s.driveActionId);
+
 
   const { modes, heldAction, activeTighten } = sceneState;
   if (!furniture) return null;
@@ -88,7 +93,7 @@ export function AssemblyScene({
         intensity={rig.rim.intensity}
         direction={rig.rim.direction}
       />
-      {furniture.shadow && anySeated ? (
+      {furniture.shadow && anySeated && backdrop === "clear" ? (
         <ShadowPlane source={furniture.shadow} />
       ) : null}
       {(Object.keys(furniture.parts) as PartId[]).map((id) => (
