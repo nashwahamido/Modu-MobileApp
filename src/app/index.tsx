@@ -1,48 +1,40 @@
-// This is the homepage of modu
+// Home. The workbench palette: a warm near-black, one lavender action, everything else quiet.
+import { Link } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { StyleSheet, Text, View } from "react-native";
 
-import { Link } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Button } from "@/src/game/ui/Button";
+import { SPACE, THEMES, TYPE } from "@/src/game/ui/theme";
+
+// The home screen sits outside a build, so it doesn't read the store's theme — it IS the
+// palette's home. Dark, always.
+const t = THEMES.dark;
 
 export default function App() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Modu</Text>
       <Text style={styles.sub}>Build furniture, step by step</Text>
+
       <View style={styles.actions}>
         <Link href="/catalogue" asChild>
-          <Pressable
-            style={({ pressed }) => [
-              styles.button,
-              pressed && styles.buttonPressed,
-            ]}
-          >
-            <Text style={styles.buttonText}>Start building</Text>
-          </Pressable>
+          {/* The ONE primary action on the screen. */}
+          <Button label="Start building" variant="primary" pill />
         </Link>
         <Link href="/settings" asChild>
-          <Pressable
-            style={({ pressed }) => [
-              styles.settingsLink,
-              pressed && styles.settingsLinkPressed,
-            ]}
-          >
-            <Text style={styles.settingsLinkText}>⚙ Settings</Text>
-          </Pressable>
+          <Button label="Settings" pill />
         </Link>
       </View>
+
       {__DEV__ && (
         <View style={styles.devRow}>
           <Link href="/engine-test" asChild>
-            <Pressable style={styles.devLink}>
-              <Text style={styles.devLinkText}>engine test (dev)</Text>
-            </Pressable>
+            <Button label="engine test (dev)" variant="ghost" small />
           </Link>
-          {/* REFERENCE ONLY — Nashwa's original engine, untouched. Delete this link together with src/adhd + play-adhd.tsx (merge plan Phase 7). */}
+          {/* REFERENCE ONLY — Nashwa's original engine, untouched. Delete this link
+              together with src/adhd + play-adhd.tsx (merge plan Phase 7). */}
           <Link href="/play-adhd" asChild>
-            <Pressable style={styles.devLink}>
-              <Text style={styles.devLinkText}>adhd original (ref)</Text>
-            </Pressable>
+            <Button label="adhd original (ref)" variant="ghost" small />
           </Link>
         </View>
       )}
@@ -54,65 +46,17 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#16162a",
+    backgroundColor: t.bg,
     alignItems: "center",
     justifyContent: "center",
   },
-  title: {
-    color: "white",
-    fontSize: 28,
-    fontWeight: "600",
-  },
-  sub: {
-    color: "rgba(255,255,255,0.5)",
-    fontSize: 14,
-    marginTop: 8,
-  },
+  title: { fontSize: 34, fontWeight: "800", color: t.text, letterSpacing: 0.5 },
+  sub: { ...TYPE.body, color: t.textDim, marginTop: SPACE.sm },
   actions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 24,
+    gap: SPACE.lg,
     marginTop: 36,
   },
-  button: {
-    backgroundColor: "#5b6cff",
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 28,
-  },
-  buttonPressed: {
-    backgroundColor: "#4a59d9",
-  },
-  buttonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  settingsLink: {
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.25)",
-  },
-  settingsLinkPressed: { backgroundColor: "rgba(255,255,255,0.08)" },
-  settingsLinkText: {
-    color: "rgba(255,255,255,0.85)",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  devRow: {
-    marginTop: 28,
-    flexDirection: "row",
-    gap: 16,
-  },
-  devLink: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  devLinkText: {
-    color: "rgba(255,255,255,0.35)",
-    fontSize: 12,
-    textDecorationLine: "underline",
-  },
+  devRow: { marginTop: SPACE.xl, flexDirection: "row", gap: SPACE.md },
 });

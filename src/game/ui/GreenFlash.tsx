@@ -1,9 +1,11 @@
+import { Theme, useStyles } from "@/src/game/ui/theme";
 import { useEffect, useRef } from 'react';
 import { StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 
 /** Full-screen green completion flash; fires whenever `trigger` increases. */
 export function GreenFlash({ trigger }: { trigger: number }) {
+  const styles = useStyles(makeStyles);
   const opacity = useSharedValue(0);
   const prev = useRef(trigger);
 
@@ -18,6 +20,8 @@ export function GreenFlash({ trigger }: { trigger: number }) {
   return <Animated.View pointerEvents="none" style={[styles.flash, style]} />;
 }
 
-const styles = StyleSheet.create({
-  flash: { ...StyleSheet.absoluteFillObject, backgroundColor: '#37c871' },
-});
+const makeStyles = (t: Theme) =>
+  StyleSheet.create({
+  // The completion pulse. SUCCESS green — the one moment the colour is earned.
+    flash: { ...StyleSheet.absoluteFillObject, backgroundColor: t.success },
+  });

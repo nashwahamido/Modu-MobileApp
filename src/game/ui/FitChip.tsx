@@ -2,17 +2,25 @@ import { StyleSheet, Text, View } from "react-native";
 import { FitState } from "@/src/game/core/geometry/fit";
 import { screwSpinInfo } from "@/src/game/core/evaluation/engagement";
 import { useGameStore } from "@/src/game/core/store";
+import { Theme, useStyles, useTheme } from "@/src/game/ui/theme";
 
-const LOOK: Record<FitState, { color: string; label: string } | null> = {
+/** Fit feedback speaks in the palette's own three signals, and adds no fourth colour:
+ *    accent  = in progress, keep going
+ *    success = this is right, let go
+ *    danger  = this is not the place
+ *  The LABEL carries the nuance; the colour carries only the verdict. */
+const lookFor = (t: Theme): Record<FitState, { color: string; label: string } | null> => ({
   idle: null,
-  held: { color: "#4a90d9", label: "Find the spot" },
-  nearCorrect: { color: "#37c871", label: "Drop it!" },
-  nearRotation: { color: "#e8842c", label: "Almost — drop to settle" },
-  wrongTarget: { color: "#d95757", label: "Belongs elsewhere" },
-};
+  held: { color: t.accent, label: "Find the spot" },
+  nearCorrect: { color: t.success, label: "Drop it!" },
+  nearRotation: { color: t.accent, label: "Almost — drop to settle" },
+  wrongTarget: { color: t.danger, label: "Belongs elsewhere" },
+});
 
 /** Color+text fit feedback near the objective bar (in-scene glow comes in M4). */
 export function FitChip() {
+  const styles = useStyles(makeStyles);
+  const t = useTheme();
   const fitState = useGameStore((s) => s.fitState);
   const orientationActionId = useGameStore((s) => s.orientationActionId);
   const driveKind = useGameStore((s) => s.driveKind);
@@ -20,14 +28,14 @@ export function FitChip() {
   const furniture = useGameStore((s) => s.furniture);
   const completed = useGameStore((s) => s.completed);
 
-  let look = LOOK[fitState];
+  let look = lookFor(t)[fitState];
   if (driveKind === "slide") {
-    look = { color: "#37c871", label: "Slide it into the groove" };
+    look = { color: t.success, label: "Slide it into the groove" };
   } else if (driveKind === "press") {
     const tool = furniture?.actions.find((a) => a.actionId === driveActionId)?.tool;
     const struck = tool === "mallet" || tool === "hammer";
     look = {
-      color: "#37c871",
+      color: t.success,
       label: struck ? "Tap it in with the mallet" : "Press it into place",
     };
   } else if (orientationActionId) {
@@ -37,8 +45,8 @@ export function FitChip() {
       !!action?.partId &&
       !!screwSpinInfo(furniture, action, new Set(completed));
     look = screwing
-      ? { color: "#37c871", label: "Turn to screw it in" }
-      : { color: "#e8842c", label: "Turn to line it up" };
+      ? { color: t.success, label: "Turn to screw it in" }
+      : { color: t.accent, label: "Turn to line it up" };
   }
 
   if (!look) return null;
@@ -52,7 +60,8 @@ export function FitChip() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) =>
+  StyleSheet.create({
   chip: {
     position: "absolute",
     top: 52,
@@ -61,5 +70,5 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 14,
   },
-  text: { color: "#fff", fontWeight: "700", fontSize: 13 },
-});
+  text: { color: t.text, fontWeight: "700", fontSize: 13 },
+  });

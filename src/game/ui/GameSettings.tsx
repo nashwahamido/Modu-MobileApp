@@ -12,30 +12,30 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useGameStore } from "@/src/game/core/store";
+import { Theme, useStyles } from "@/src/game/ui/theme";
 import { SettingsControls } from "@/src/game/ui/SettingsControls";
 
 const SETTINGS_ICON = require("@/src/assets/images/ui/setting_icon.png");
 
 export function GameSettings() {
+  const styles = useStyles(makeStyles);
   const [open, setOpen] = useState(false);
   const { height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const cardMaxHeight = winH - insets.top - insets.bottom - 32;
-  const dark = useGameStore((s) => s.theme === "dark");
 
   return (
     <>
       {/* Settings icon — rounded-square chip with a minimalist sliders glyph. subject to change*/}
       <Pressable
-        style={[styles.gear, dark && styles.gearDark]}
+        style={[styles.gear]}
         onPress={() => setOpen(true)}
         hitSlop={8}
         accessibilityLabel="Settings"
       >
         <Image
           source={SETTINGS_ICON}
-          style={[styles.icon, dark && styles.iconDark]}
+          style={[styles.icon]}
           resizeMode="contain"
         />
       </Pressable>
@@ -92,7 +92,8 @@ export function GameSettings() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) =>
+  StyleSheet.create({
   gear: {
     position: "absolute",
     top: 8,
@@ -100,24 +101,22 @@ const styles = StyleSheet.create({
     width: 42,
     height: 36,
     borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.85)",
+    backgroundColor: t.surface,
     alignItems: "center",
     justifyContent: "center",
   },
-  gearDark: { backgroundColor: "rgba(22,30,44,0.86)" },
   icon: { width: 30, height: 30 },
   // The PNG is dark artwork; invert it (tint white) for the dark chip.
-  iconDark: { tintColor: "#eef1f6" },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(20,18,15,0.35)",
+    backgroundColor: t.scrim,
     alignItems: "center",
     justifyContent: "center",
   },
   card: {
     width: 340,
     maxWidth: "90%",
-    backgroundColor: "#f7f3ea",
+    backgroundColor: t.bg,
     borderRadius: 18,
     padding: 18,
     shadowColor: "#000",
@@ -126,7 +125,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     elevation: 8,
   },
-  title: { fontSize: 17, fontWeight: "800", color: "#2e2a24", marginBottom: 2 },
+  title: { fontSize: 17, fontWeight: "800", color: t.text, marginBottom: 2 },
   cardScroll: { paddingBottom: 4 },
   footer: {
     flexDirection: "row",
@@ -134,12 +133,12 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginTop: 12,
   },
-  homeText: { fontSize: 14, fontWeight: "700", color: "#7a7163" },
+  homeText: { fontSize: 14, fontWeight: "700", color: t.textDim },
   done: {
-    backgroundColor: "#6f8a68",
+    backgroundColor: t.success,
     borderRadius: 12,
     paddingHorizontal: 18,
     paddingVertical: 9,
   },
-  doneText: { color: "#fff", fontWeight: "700", fontSize: 14 },
-});
+  doneText: { color: t.text, fontWeight: "700", fontSize: 14 },
+  });

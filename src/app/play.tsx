@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useLocalSearchParams } from "expo-router";
 import { OrientationLock } from "expo-screen-orientation";
-import { ImageBackground, Pressable, StyleSheet, Text, View } from "react-native";
+import { ImageBackground, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -15,7 +15,6 @@ import {
   createOffsetDriver,
 } from "@/src/game/scene/offsetDriver";
 import { useSceneState } from "@/src/game/scene/useSceneState";
-import { SCENE_BACKGROUND } from "@/src/game/scene/lighting";
 
 import { Joystick } from "@/src/game/input/Joystick";
 import { useOrbitCamera } from "@/src/game/input/useOrbitCamera";
@@ -57,6 +56,8 @@ import { DevAutoStep } from "@/src/game/ui/DevAutoStep";
 import { ToggleChips } from "@/src/game/ui/ToggleChips";
 import { ClusterFocusControl } from "@/src/game/ui/ClusterFocusControl";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
+import { Button, ProgressBar } from "@/src/game/ui/Button";
+import { ELEVATION, RADIUS, SPACE, SIZE, Theme, TYPE, useTheme } from "@/src/game/ui/theme";
 import {
   currentStageForClusterFocus,
   requiresClusterFocus,
@@ -130,6 +131,8 @@ function GameScreen() {
   const mode = useGameStore((s) => s.mode);
   const focus = settings.focusMode;
   const dark = theme === "dark";
+  const t = useTheme();
+  const styles = useMemo(() => makeStyles(t), [t]);
   const firstAvailable = useGameStore((s) => {
     const f = s.furniture;
     if (!f) return undefined;
@@ -293,7 +296,7 @@ function GameScreen() {
             ]
       }
       resizeMode="cover"
-      style={[styles.root, theme === "dark" && styles.rootDark]}
+      style={styles.root}
     >
       <GestureDetector gesture={sceneGesture}>
         <View style={styles.sceneWrap}>
@@ -325,36 +328,25 @@ function GameScreen() {
           style={[
             styles.objectiveBar,
             !settings.showInstructions && styles.objectiveBarSlim,
-            dark && styles.objectiveBarDark,
           ]}
           pointerEvents="none"
         >
           {settings.showInstructions ? (
-            <Text style={[styles.objectiveText, dark && styles.objectiveTextDark, { fontSize: objectiveFontSize }]}>
+            <Text style={[styles.objectiveText, { fontSize: objectiveFontSize }]}>
               Stage {stage} · {objective} · {completedCount}/{totalCount}
             </Text>
           ) : null}
-          <View
-            style={[
-              styles.progressTrack,
-              !settings.showInstructions && styles.progressTrackSlim,
-              dark && styles.progressTrackDark,
-            ]}
-          >
-            <View
-              style={[
-                styles.progressFill,
-                !settings.showInstructions && styles.progressFillSlim,
-                {
-                  width: `${totalCount ? (completedCount / totalCount) * 100 : 0}%`,
-                },
-              ]}
-            />
-          </View>
+          {/* Fills in the ACCENT and only turns green at 100% — a half-built table is not
+              done, and green is the one signal reserved for done. */}
+          <ProgressBar
+            value={completedCount}
+            total={totalCount}
+            style={settings.showInstructions ? styles.progressGap : undefined}
+          />
         </View>
         {focus ? null : (
-          <View style={[styles.pointsChip, dark && styles.pointsChipDark]} pointerEvents="none">
-            <Text style={[styles.pointsText, dark && styles.pointsTextDark]}>
+          <View style={styles.pointsChip} pointerEvents="none">
+            <Text style={styles.pointsText}>
               ★ {completedCount * furniture.xpPerStep}
             </Text>
           </View>
@@ -378,13 +370,12 @@ function GameScreen() {
         />
         <ToolBar neededTool={neededTool} />
         {mode === "free" && !focus ? (
-          <Pressable
+          <Button
+            label="?"
+            small
             style={styles.hintButton}
-            hitSlop={8}
             onPress={() => useGameStore.getState().suggestNext()}
-          >
-            <Text style={styles.hintButtonText}>?</Text>
-          </Pressable>
+          />
         ) : null}
         {sceneState.activeTighten && toolReady ? (
           sceneState.activeTighten.tool === "mallet" ? (
@@ -435,23 +426,22 @@ function GameScreen() {
             dark={dark}
           />
         </View>
-        <Pressable
-          style={[styles.recenterButton, dark && styles.recenterButtonDark]}
+        <Button
+          label="⟲ Recenter"
+          small
+          style={styles.recenterButton}
           onPress={resetCamera}
-          hitSlop={8}
-        >
-          <Text style={[styles.recenterText, dark && styles.recenterTextDark]}>⟲ Recenter</Text>
-        </Pressable>
+        />
 
       {heldActionId && settings.releaseBehavior === "float" ? (
           // Float mode: a released part stays where it was set down; this is the way back to the tray. (In autoReturn mode a miss returns by itself.)
-          <Pressable
+          <Button
+            label="↩ Put back"
+            small
+            variant="primary"
             style={styles.putBackButton}
             onPress={() => useGameStore.getState().cancelHeld()}
-            hitSlop={8}
-          >
-            <Text style={styles.putBackText}>↩ Put back</Text>
-          </Pressable>
+          />
         ) : null}
       </View>
       {ringOverlay}
@@ -468,105 +458,64 @@ export default function PlayRoute() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: SCENE_BACKGROUND },
-  rootDark: { backgroundColor: "#17140f" },
-  sceneWrap: { ...StyleSheet.absoluteFillObject },
-  chrome: { position: "absolute" },
-  objectiveBar: {
-    position: "absolute",
-    top: 10,
-    alignSelf: "center",
-    backgroundColor: "rgba(255,255,255,0.75)",
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    borderRadius: 18,
-  },
-  // Instructions hidden: a slim fixed-width pill so the bar doesn't collapse without its text.
-  objectiveBarSlim: { width: 260, paddingVertical: 7 },
-  objectiveText: { fontSize: 14, color: "#2e2a24", fontWeight: "600" },
-  // Bar-only mode: thicker track/fill so the lone bar stays clearly visible.
-  progressTrackSlim: { marginTop: 0, height: 7, borderRadius: 3.5 },
-  progressFillSlim: { height: 7, borderRadius: 3.5 },
-  progressTrack: {
-    marginTop: 6,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "rgba(60,50,40,0.15)",
-    alignSelf: "stretch",
-    overflow: "hidden",
-  },
-  progressFill: { height: 4, borderRadius: 2, backgroundColor: "#37c871" },
-  pointsChip: {
-    // Fixed size so the top-left row never shifts, whether the score is 0 or 300.
-    position: "absolute",
-    top: 8,
-    left: 14,
-    width: 70,
-    height: 36,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.75)",
-    borderRadius: 14,
-  },
-  pointsText: { fontSize: 13, fontWeight: "700", color: "#b8741a" },
-  hintButton: {
-    // Same line as the settings icon (points chip → gear → ?), shared 42×36 grid.
-    position: "absolute",
-    left: 142,
-    top: 8,
-    width: 42,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.85)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  hintButtonText: { fontSize: 17, fontWeight: "800", color: "#7a6f5d" },
-  joystickZone: { position: "absolute", left: 28, bottom: 28 },
-  recenterButton: {
-    position: "absolute",
-    left: 14,
-    top: 102,
-    backgroundColor: "rgba(255,255,255,0.85)",
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderWidth: 1,
-    borderColor: "rgba(60,50,40,0.15)",
-  },
-  recenterText: { fontSize: 12, fontWeight: "700", color: "#2e2a24" },
-  // Dark-mode chrome (on-release engine's palette): dark translucent surfaces, light text, warm points accent.
-  objectiveBarDark: { backgroundColor: "rgba(22,30,44,0.82)" },
-  objectiveTextDark: { color: "#eef1f6" },
-  progressTrackDark: { backgroundColor: "rgba(255,255,255,0.16)" },
-  pointsChipDark: { backgroundColor: "rgba(22,30,44,0.82)" },
-  pointsTextDark: { color: "#f0b866" },
-  recenterButtonDark: {
-    backgroundColor: "rgba(22,30,44,0.86)",
-    borderColor: "rgba(255,255,255,0.18)",
-  },
-  recenterTextDark: { color: "#eef1f6" },
-  // Dev-Setting: complimentary function for float mode
-  putBackButton: {
-    position: "absolute",
-    left: 14,
-    top: 150,
-    backgroundColor: "rgba(232,132,44,0.92)",
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderWidth: 1,
-    borderColor: "rgba(60,50,40,0.15)",
-  },
-  putBackText: { fontSize: 12, fontWeight: "700", color: "#fff" },
-  togglesRow: {
-    position: "absolute",
-    right: 14,
-    bottom: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    zIndex: 15,
-  },
-});
+/** Theme-driven: every colour comes from ui/theme.ts, so the HUD follows the palette and
+ *  the hand-rolled `…Dark` variants that used to shadow every rule are gone. */
+const makeStyles = (t: Theme) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: t.bg },
+    sceneWrap: { ...StyleSheet.absoluteFillObject },
+    chrome: { position: "absolute" },
+
+    objectiveBar: {
+      position: "absolute",
+      top: 10,
+      alignSelf: "center",
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderWidth: StyleSheet.hairlineWidth * 2,
+      paddingHorizontal: SPACE.lg,
+      paddingVertical: SPACE.sm,
+      borderRadius: RADIUS.panel,
+      ...ELEVATION.card,
+    },
+    // Instructions hidden: a fixed-width pill, so the bar doesn't collapse without its text.
+    objectiveBarSlim: { width: 260, paddingVertical: SPACE.sm },
+    objectiveText: { ...TYPE.body, color: t.text },
+    progressGap: { marginTop: SPACE.sm },
+
+    // Fixed size, so the row never shifts whether the score is 0 or 300.
+    pointsChip: {
+      position: "absolute",
+      top: 8,
+      left: 14,
+      width: 76,
+      height: SIZE.controlHeightSm,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderWidth: StyleSheet.hairlineWidth * 2,
+      borderRadius: RADIUS.control,
+      ...ELEVATION.card,
+    },
+    // GOLD: earned, not pressable. The one place this colour appears.
+    pointsText: { ...TYPE.numeric, color: t.gold },
+
+    // Same line as the points chip and the gear.
+    hintButton: { position: "absolute", left: 148, top: 8, minWidth: 42 },
+    recenterButton: { position: "absolute", left: 14, top: 102 },
+    // The way back to the tray in float mode. PRIMARY: while a part is in the air, this is
+    // the one thing the player might need, so it is the one thing that carries the accent.
+    putBackButton: { position: "absolute", left: 14, top: 150 },
+
+    joystickZone: { position: "absolute", left: 28, bottom: 28 },
+    togglesRow: {
+      position: "absolute",
+      right: 14,
+      bottom: 16,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: SPACE.sm,
+      zIndex: 15,
+    },
+  });

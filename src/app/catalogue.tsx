@@ -10,10 +10,15 @@ import {
 } from "react-native";
 
 import { FURNITURE_METAS } from "@/src/game/data/furnitures/furnitures";
+import { Panel } from "@/src/game/ui/Button";
+import { ELEVATION, RADIUS, SPACE, THEMES, TYPE } from "@/src/game/ui/theme";
 import { brandFor } from "@/src/game/data/brands";
 import type { FurnitureMeta } from "@/src/game/core/type";
 
 const DIFFICULTY: Record<1 | 2 | 3, string> = { 1: "Easy", 2: "Medium", 3: "Hard" };
+
+// The picker sits outside a build, like Home: it IS the palette's home. Dark, always.
+const t = THEMES.dark;
 
 export default function CatalogueScreen() {
   const router = useRouter();
@@ -76,33 +81,45 @@ function FurnitureCard({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#16162a" },
-  content: { padding: 20, paddingTop: 64 },
-  title: { color: "white", fontSize: 26, fontWeight: "700" },
-  subtitle: { color: "rgba(255,255,255,0.5)", fontSize: 14, marginTop: 4, marginBottom: 20 },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 14 },
+  root: { flex: 1, backgroundColor: t.bg },
+  content: { padding: SPACE.xl, paddingTop: 56 },
+  title: { fontSize: 28, fontWeight: "800", color: t.text },
+  subtitle: {
+    ...TYPE.body,
+    color: t.textDim,
+    marginTop: SPACE.xs,
+    marginBottom: SPACE.xl,
+  },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: SPACE.lg },
   card: {
     flexBasis: "47%",
     flexGrow: 1,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderRadius: 18,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: t.surface,
+    borderRadius: RADIUS.panel,
+    padding: SPACE.lg,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: t.border,
+    ...ELEVATION.card,
   },
-  cardPressed: { backgroundColor: "rgba(255,255,255,0.12)" },
+  cardPressed: { backgroundColor: t.surfaceRaised },
   thumbWrap: {
     height: 120,
-    borderRadius: 12,
-    backgroundColor: "rgba(0,0,0,0.2)",
+    borderRadius: RADIUS.control,
+    // Inset, like every other groove in the palette — the thumbnail sits IN the card.
+    backgroundColor: t.surfaceInset,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
+    marginBottom: SPACE.md,
   },
   thumb: { width: "80%", height: "80%" },
-  name: { color: "white", fontSize: 17, fontWeight: "700" },
-  brand: { color: "rgba(255,255,255,0.55)", fontSize: 12, marginTop: 2 },
-  metaRow: { flexDirection: "row", alignItems: "center", marginTop: 8, flexWrap: "wrap" },
-  metaText: { color: "rgba(255,255,255,0.75)", fontSize: 12, fontWeight: "600" },
-  metaDot: { color: "rgba(255,255,255,0.35)", fontSize: 12, marginHorizontal: 6 },
+  name: { fontSize: 17, fontWeight: "700", color: t.text },
+  brand: { ...TYPE.labelSm, fontWeight: "500", color: t.textDim, marginTop: 2 },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: SPACE.sm,
+    flexWrap: "wrap",
+  },
+  metaText: { ...TYPE.labelSm, color: t.textDim },
+  metaDot: { color: t.textFaint, fontSize: 12, marginHorizontal: 6 },
 });

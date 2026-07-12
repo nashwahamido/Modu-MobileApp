@@ -1,3 +1,4 @@
+import { Theme, useStyles } from "@/src/game/ui/theme";
 import { StyleSheet, View } from "react-native";
 import { selectFirstDrop, useGameStore } from "@/src/game/core/store";
 
@@ -5,6 +6,7 @@ import { selectFirstDrop, useGameStore } from "@/src/game/core/store";
 const SIZE = 92;
 
 export function CenterDropRing() {
+  const styles = useStyles(makeStyles);
   const firstDrop = useGameStore(selectFirstDrop);
   const fitState = useGameStore((s) => s.fitState);
   if (!firstDrop) return null;
@@ -16,7 +18,8 @@ export function CenterDropRing() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) =>
+  StyleSheet.create({
   wrap: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
@@ -28,10 +31,10 @@ const styles = StyleSheet.create({
     borderRadius: SIZE / 2,
     borderWidth: 3,
     borderStyle: "dashed",
-    borderColor: "rgba(255,255,255,0.75)",
+    borderColor: t.surface,
   },
   ringReady: {
     borderStyle: "solid",
-    borderColor: "rgba(70,200,110,0.95)",
+    borderColor: t.success,
   },
-});
+  });

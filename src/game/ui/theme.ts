@@ -17,6 +17,8 @@
 //   Green = complete (you did this). Gold = earned (XP, score). If a fourth meaning shows
 //   up, it does NOT get a fourth colour — it gets a shape or a position.
 
+import { useMemo } from "react";
+import type { TextStyle } from "react-native";
 import { ThemeId } from "@/src/game/core/type";
 import { useGameStore } from "@/src/game/core/store";
 
@@ -162,6 +164,19 @@ export function useTheme(): Theme {
   return THEMES[useGameStore((s) => s.theme)];
 }
 
+/** Theme-driven styles, in one line per component:
+ *
+ *    const makeStyles = (t: Theme) => StyleSheet.create({ … })   // outside the component
+ *    const styles = useStyles(makeStyles);                       // inside it
+ *
+ *  React Native has no cascade — no CSS variables, nothing inherits — so every StyleSheet
+ *  has to reach for the tokens itself. This is the whole ceremony required to do that, and
+ *  it memoises, so the sheet is rebuilt only when the theme actually changes. */
+export function useStyles<T extends object>(make: (theme: Theme) => T): T {
+  const theme = useTheme();
+  return useMemo(() => make(theme), [make, theme]);
+}
+
 // ── shape ───────────────────────────────────────────────────────────────────
 // Three radii, not five. The mockup uses a soft, generous curve everywhere and never
 // mixes: a control is 14, a panel is 20, a pill is a pill.
@@ -209,11 +224,15 @@ export const SIZE = {
   icon: 20,
 } as const;
 
-export const TYPE = {
+export const TYPE: Record<
+  "label" | "labelSm" | "body" | "title" | "numeric",
+  TextStyle
+> = {
   label: { fontSize: 14, fontWeight: "700" },
   labelSm: { fontSize: 12, fontWeight: "700" },
   body: { fontSize: 14, fontWeight: "500" },
   title: { fontSize: 18, fontWeight: "800" },
-  /** Numbers that change (XP, counts) — tabular, so the layout doesn't jitter. */
+  /** Numbers that CHANGE (XP, counts). Tabular figures, so the layout doesn't jitter as
+   *  the score ticks up — the one typographic detail worth spending here. */
   numeric: { fontSize: 13, fontWeight: "700", fontVariant: ["tabular-nums"] },
-} as const;
+};

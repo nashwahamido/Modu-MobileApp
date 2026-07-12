@@ -4,7 +4,14 @@ import {
   availableInMode,
   currentStage,
 } from "@/src/game/core/evaluation/availability";
+// Setting TYPES live in accessibility.ts; their defaults + the profiles in profile.ts.
+import { AccessibilitySettings } from "@/src/game/core/accessibility";
 import { actionCluster } from "@/src/game/core/evaluation/clusters";
+import {
+  PROFILE_MODE,
+  ProfileId,
+  settingsForProfile,
+} from "@/src/game/core/profile";
 import { FitState } from "@/src/game/core/geometry/fit";
 import {
   ActionId,
@@ -31,13 +38,6 @@ export const ORIENTATION_TOTAL_DEG = 180;
 /** Taps to press a push-fit part home (PressControl). */
 export const PRESS_TAPS = 4;
 
-// Setting types live in accessibility.ts; defaults + profiles in profile.ts.
-import { AccessibilitySettings } from "@/src/game/core/accessibility";
-import {
-  PROFILE_MODE,
-  ProfileId,
-  settingsForProfile,
-} from "@/src/game/core/profile";
 export type { AccessibilitySettings } from "@/src/game/core/accessibility";
 
 /** What the player is inspecting via single-tap (look only, no assembly). */
@@ -170,7 +170,10 @@ export const useGameStore = create<GameState>()((set, get) => ({
   mode: "free",
   renderStyle: "realistic",
   backdrop: "studio",
-  theme: "light",
+  // The workbench palette (ui/theme.ts) is a warm near-black; dark is the look the UI was
+  // designed around, so it is the default. Light and high-contrast are the same product
+  // in different light, not different products.
+  theme: "dark",
 
   loadFurniture: (f) =>
     set({

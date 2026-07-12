@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
+import { Theme, useStyles } from "@/src/game/ui/theme";
 import { toolList } from "@/src/game/data/tools";
 import { pickThumb } from "@/src/game/core/presentation/labels";
 import type { ToolId } from "@/src/game/core/type";
 
 /** Manual tool choice (settings.manualTools): a single toolbox icon under the parts tray. Tapping it expands a horizontal tool tray (leftward); tapping again collapses it. The player equips a tool before a tighten will accept the gesture. Picking a WRONG tool for the active step gives a calm nudge naming the right one — a learning moment, not an error. Hidden entirely in auto mode (the system equips tools silently). */
 export function ToolBar({ neededTool }: { neededTool: ToolId | null }) {
+  const styles = useStyles(makeStyles);
   const [open, setOpen] = useState(false);
   const furniture = useGameStore((s) => s.furniture);
   const manualTools = useGameStore((s) => s.settings.manualTools);
@@ -64,7 +66,8 @@ export function ToolBar({ neededTool }: { neededTool: ToolId | null }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) =>
+  StyleSheet.create({
   bar: {
     // Bottom-centre: bottom-right belongs to the toggles row, bottom-left to the joystick, and the right edge above is the parts tray.
     position: "absolute",
@@ -78,25 +81,27 @@ const styles = StyleSheet.create({
     width: 46,
     height: 46,
     borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.88)",
+    backgroundColor: t.surface,
     borderWidth: 2,
-    borderColor: "rgba(0,0,0,0.12)",
+    borderColor: t.border,
     alignItems: "center",
     justifyContent: "center",
   },
-  toggleOpen: { backgroundColor: "#efe9dd" },
+  toggleOpen: { backgroundColor: t.surfaceRaised },
   slot: {
     width: 46,
     height: 46,
     borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.88)",
+    backgroundColor: t.surface,
     borderWidth: 2,
-    borderColor: "rgba(0,0,0,0.12)",
+    borderColor: t.border,
     alignItems: "center",
     justifyContent: "center",
   },
-  slotActive: { borderColor: "#3c7d4e", backgroundColor: "#e2f3e6" },
-  slotWanted: { borderColor: "#e8842c" },
+  // The tool you're holding: ACCENT, not green — it's a live selection, not a
+  // completed step.
+  slotActive: { borderColor: t.accent, backgroundColor: t.surfaceRaised },
+  slotWanted: { borderColor: t.accent },
   icon: { width: 34, height: 34 },
-  prompt: { fontSize: 11, fontWeight: "700", color: "#7a6f5d", marginRight: 2 },
-});
+  prompt: { fontSize: 11, fontWeight: "700", color: t.textDim, marginRight: 2 },
+  });

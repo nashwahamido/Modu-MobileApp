@@ -11,6 +11,7 @@ import {
 import type { FitState } from "@/src/game/core/geometry/fit";
 import { pickThumb } from "@/src/game/core/presentation/labels";
 import { useGameStore } from "@/src/game/core/store";
+import { Theme, useStyles } from "@/src/game/ui/theme";
 import type { ActionId, ClusterId } from "@/src/game/core/type";
 import { animateClusterDriver, type ClusterDriver } from "@/src/game/scene/offsetDriver";
 import { useColorScheme } from "@/src/hooks/use-color-scheme";
@@ -77,6 +78,7 @@ function buildDrag(
 
 /** A finished cluster you're not currently on becomes a card here (its rendered preview), shown from the moment it finishes until it's combined — alongside the current cluster's part cards (rendered as the PartsTray header). Once combine is reachable, drag the card out like a part: the cluster spawns to the side and you drag it in to seat onto the in-scene cluster, with a ghost + green fit feedback. */
 export function ClusterTray({ clusterDriver }: { clusterDriver: ClusterDriver }) {
+  const styles = useStyles(makeStyles);
   const furniture = useGameStore((s) => s.furniture);
   const completed = useGameStore((s) => s.completed);
   const activeCluster = useGameStore((s) => s.activeCluster);
@@ -155,21 +157,22 @@ export function ClusterTray({ clusterDriver }: { clusterDriver: ClusterDriver })
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) =>
+  StyleSheet.create({
   container: { gap: 8 },
   card: {
-    backgroundColor: "rgba(255,255,255,0.85)",
+    backgroundColor: t.surface,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: "#37c871",
+    borderColor: t.success,
     paddingVertical: 7,
     paddingHorizontal: 8,
     alignItems: "center",
     gap: 4,
   },
-  cardWaiting: { borderColor: "rgba(60,50,40,0.2)", opacity: 0.85 },
+  cardWaiting: { borderColor: t.borderStrong, opacity: 0.85 },
   cardDragging: { opacity: 0.4 },
   thumb: { width: 44, height: 44 },
-  label: { fontSize: 11, fontWeight: "700", color: "#2e2a24", textAlign: "center" },
-  hint: { fontSize: 9, fontWeight: "600", color: "#37871f" },
-});
+  label: { fontSize: 11, fontWeight: "700", color: t.text, textAlign: "center" },
+  hint: { fontSize: 9, fontWeight: "600", color: t.success },
+  });
