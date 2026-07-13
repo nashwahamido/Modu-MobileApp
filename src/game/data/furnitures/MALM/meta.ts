@@ -9,9 +9,10 @@ import { AUTHORED_ACTIONS, FASTENER_RULES, META, STRUCTURE } from "./authored";
 import { HARDWARE } from "@/src/game/data/hardware";
 import { ALL_PART_IDS, PARTS } from "./parts";
 
+// MALM reuses LACK's furniture preview. Light-only (no dark thumbnails); the UI
+// falls back to light for dark themes via pickThumb.
 const thumbnail = {
   light: require("../../../../assets/thumbnails/furnitures/LACK/light/LACK.png"),
-  dark: require("../../../../assets/thumbnails/furnitures/LACK/dark/LACK.png"),
 } satisfies ThumbSet;
 
 const P = applyStructure(PARTS, STRUCTURE);
