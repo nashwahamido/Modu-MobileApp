@@ -62,25 +62,6 @@ material {
         // uv0: the IKEA dataset's UVs are per-material CAD atlases with no meaningful
         // scale or grain direction.
         { type : sampler2d, name : grainMap },
-        // The SECOND map. A table is made of two kinds of board, and it shows: the top and
-        // the underside are cut from a PANEL (fine boards), while the edge band and the
-        // legs are solid TIMBER (coarse, wide stock). One map on everything is the tell
-        // that a thing was textured rather than built.
-        { type : sampler2d, name : sideMap },
-        // Repeats per metre for the side map. Its planks are ~120 mm — deliberately wider
-        // than a 49 mm leg, so no seam can ever run down one.
-        { type : float,  name : sideTiles },
-        // Object-space axis whose faces are CAPS, i.e. get the panel map. For the table top
-        // that is the thickness axis, so its top and underside are panel and its four edges
-        // are timber. A ZERO vector means "no caps" — every face is timber, which is what a
-        // leg is.
-        { type : float3, name : capAxis },
-        // How abruptly panel gives way to timber. High = a crisp changeover on the rounded
-        // corner, which is exactly where a real edge-banded panel changes material.
-        { type : float,  name : capSharp },
-        // The timber runs darker than the panel: partly true (edge grain drinks more
-        // stain), partly so the top keeps reading as the surface you are working ON.
-        { type : float,  name : sideDarken },
         // 1 = sample grainMap, 0 = generate the grain procedurally. The texture must be
         // uploaded from the RENDER thread (see shaders.ts); this is the escape hatch if
         // that ever fails, so a missing texture degrades instead of rendering black.
@@ -257,15 +238,7 @@ fragment {
      *    faces looking along ±w → uv = (u, a)
      *    faces looking along ±a → uv = (u, w)   END GRAIN (a leg's foot, a cut end)
      */
-    /** Triplanar blend weights for a normal, in the part's own frame. */
-    vec3 triWeights(vec3 n, vec3 a, vec3 u, vec3 w) {
-        vec3 bw = vec3(abs(dot(n, u)), abs(dot(n, w)), abs(dot(n, a)));
-        bw = pow(bw, vec3(4.0));
-        return bw / (bw.x + bw.y + bw.z + 1e-5);
-    }
-
-    /** The PANEL map — the fine boards on the top and the underside. */
-    vec3 panelWood(vec3 p, vec3 bw, vec3 a, vec3 u, vec3 w) {
+    vec3 texturedWood(vec3 p, vec3 n, vec3 a, vec3 u, vec3 w) {
         float tiles = materialParams.textureTiles;
         float phase = materialParams.grainPhase;
         // `a` runs ALONG the grain (the map's V) — no phase. u and w are the two ACROSS
@@ -274,42 +247,15 @@ fragment {
         float pu = dot(p, u) * tiles + phase;
         float pw = dot(p, w) * tiles + phase;
 
-        return texture(materialParams_grainMap, vec2(pw, pa)).rgb * bw.x
-             + texture(materialParams_grainMap, vec2(pu, pa)).rgb * bw.y
-             + texture(materialParams_grainMap, vec2(pu, pw)).rgb * bw.z;
-    }
+        vec3 bw = vec3(abs(dot(n, u)), abs(dot(n, w)), abs(dot(n, a)));
+        bw = pow(bw, vec3(4.0));
+        bw /= (bw.x + bw.y + bw.z + 1e-5);
 
-    /** The TIMBER map — the coarse stock of the edge band and the legs, run slightly dark. */
-    vec3 timberWood(vec3 p, vec3 bw, vec3 a, vec3 u, vec3 w) {
-        float tiles = materialParams.sideTiles;
-        float phase = materialParams.grainPhase;
-        float pa = dot(p, a) * tiles;
-        float pu = dot(p, u) * tiles + phase;
-        float pw = dot(p, w) * tiles + phase;
+        vec3 cu = texture(materialParams_grainMap, vec2(pw, pa)).rgb;
+        vec3 cw = texture(materialParams_grainMap, vec2(pu, pa)).rgb;
+        vec3 ca = texture(materialParams_grainMap, vec2(pu, pw)).rgb;
 
-        vec3 c = texture(materialParams_sideMap, vec2(pw, pa)).rgb * bw.x
-               + texture(materialParams_sideMap, vec2(pu, pa)).rgb * bw.y
-               + texture(materialParams_sideMap, vec2(pu, pw)).rgb * bw.z;
-
-        return c * (1.0 - materialParams.sideDarken);
-    }
-
-    vec3 texturedWood(vec3 p, vec3 n, vec3 a, vec3 u, vec3 w) {
-        vec3 bw = triWeights(n, a, u, w);
-
-        // Which board is this face cut from? A face square-on to capAxis is PANEL; anything
-        // else is TIMBER. A zero capAxis means the whole part is timber — a leg.
-        float capLen = length(materialParams.capAxis);
-        float cap = capLen < 1e-4
-            ? 0.0
-            : pow(abs(dot(n, materialParams.capAxis / capLen)), materialParams.capSharp);
-
-        vec3 wood = mix(
-            timberWood(p, bw, a, u, w),
-            panelWood(p, bw, a, u, w),
-            cap
-        );
-        return wood * materialParams.baseColor;
+        return (cu * bw.x + cw * bw.y + ca * bw.z) * materialParams.baseColor;
     }
 
     /** The plank pattern, projected triplanar so it runs correctly on every face.

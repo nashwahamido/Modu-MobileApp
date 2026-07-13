@@ -4,13 +4,12 @@ import { StatusBar } from "expo-status-bar";
 import { StyleSheet, Text, View } from "react-native";
 
 import { Button } from "@/src/game/ui/Button";
-import { SPACE, THEMES, TYPE } from "@/src/game/ui/theme";
+import { SPACE, Theme, TYPE, useStyles} from "@/src/game/ui/theme";
 
 // The home screen sits outside a build, so it doesn't read the store's theme — it IS the
-// palette's home. Dark, always.
-const t = THEMES.dark;
 
 export default function App() {
+  const styles = useStyles(makeStyles);
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Modu</Text>
@@ -43,7 +42,8 @@ export default function App() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: t.bg,
@@ -59,4 +59,4 @@ const styles = StyleSheet.create({
     marginTop: 36,
   },
   devRow: { marginTop: SPACE.xl, flexDirection: "row", gap: SPACE.md },
-});
+  });

@@ -48,6 +48,27 @@ const METAL_GROUPS: readonly string[] = ["bolt115980"];
 /** The painted grain map. Multiplied by baseColor, so keep baseColor near white or the
  *  map's own colour gets tinted twice. */
 const GRAIN_MAP = require("@/src/assets/textures/wood_grain.png");
+/** The SIDE map: coarse 6-plank timber for the edge band and the legs. A table is made of
+ *  two kinds of board — a panel for the top, solid stock for the legs — and using one map
+ *  on everything is the tell that a thing was textured rather than built. */
+const SIDE_MAP = require("@/src/assets/textures/wood_grain_side.png");
+
+/** Repeats per metre for the side map. 6 planks per tile at 1.4 → ~120 mm boards, wider
+ *  than a 49 mm leg, so no seam can ever run down one. */
+const SIDE_TILES = 1.4;
+/** How much darker the timber runs than the panel. Partly true — edge grain drinks more
+ *  stain — and partly so the top keeps reading as the surface you're working ON. */
+const SIDE_DARKEN = 0.12;
+
+/** The object-space axis whose faces get the PANEL map. From the meshes' own bounding
+ *  boxes: the table top is X=0.550 Y=0.550 Z=0.049, so Z is the thickness — its top and
+ *  underside are panel, its four edges are timber. A leg has NO cap: it is solid stock on
+ *  every face, so a zero vector puts timber everywhere. */
+const CAP_AXIS: Record<string, Vec3> = {
+  tableTop: [0, 0, 1],
+  leg: [0, 0, 0],
+};
+const CAP_AXIS_DEFAULT: Vec3 = [0, 0, 0];
 
 /** Set false to fall back to the shader's procedural planks (no texture, no render-thread
  *  upload). The material supports both; this flips the `useTexture` uniform. */
@@ -57,12 +78,25 @@ const USE_TEXTURE = true;
 const INK_BASE: Vec3 = [1.0, 1.0, 1.0];
 /** The wood's own colour when the procedural path is used instead (#d8ab6b pine). */
 const INK_BASE_PROCEDURAL: Vec3 = [0.699, 0.399, 0.153];
-/** Map repeats per METRE across the grain.
+/** How many planks the MAP itself contains.
  *
- *  The cleaned map holds 32 whole planks, so planks-across-a-face = 32 · length · TILES.
- *  The LACK top is 0.55 m → 0.35 puts ~6 planks across it. A leg is 0.049 m → ~0.5 of a
- *  plank, i.e. a leg is one piece of timber, which is what a leg IS. */
-const TEXTURE_TILES = 0.35;
+ *  16, in a 2048 px map → 128 px per plank. The original crop held 32 planks in 1024 px,
+ *  i.e. 32 px each, and was then MAGNIFIED across the table — which is why the grain looked
+ *  soft and stretched. Fewer planks per tile at a bigger budget is what buys the density.
+ *
+ *  The map is 2048 ACROSS the grain and only 1024 along it: the detail — seams, strokes —
+ *  all runs across, while along the grain the wood is smooth. Halving the axis that carries
+ *  no information halves the file (1.9 MB, not 3.4) and costs nothing visible. */
+const PLANKS_PER_TILE = 16;
+
+/** Planks across the LACK top (0.55 m). This is the number to turn if the grain looks too
+ *  coarse or too fine — and turning it UP also sharpens the result, because the map then
+ *  tiles more often per metre of surface. Nothing is traded away. */
+const PLANKS_ACROSS_TOP = 10;
+
+/** Map repeats per METRE across the grain, derived rather than guessed:
+ *      planks across a face = PLANKS_PER_TILE · length · TILES  */
+const TEXTURE_TILES = PLANKS_ACROSS_TOP / (PLANKS_PER_TILE * 0.55);
 
 /** Phase shift across the grain, in plank widths.
  *
@@ -85,7 +119,51 @@ const INK_HIGHLIGHT: Vec3 = [1.45, 1.4, 1.3];
  *  the light and go bright instead of dark. Derived from lighting.ts so the two cannot
  *  drift apart. */
 const KEY_TO_LIGHT: Vec3 = [-DIR_KEY[0], -DIR_KEY[1], -DIR_KEY[2]];
-const TOON_BASE: Vec3 = [0.5776, 0.2384, 0.0232]; // calendula gold #c8862a
+// ── the POSTERISED toon palette ─────────────────────────────────────────────
+//
+// FOUR AUTHORED TONES. Not one colour plus lighten/darken — that is exactly what makes a
+// cel shader look cheap, and the reference proves why:
+//
+//   deep #15345d   hue 214°  sat 77%  val 37%
+//   mid  #295e92   hue 210°  sat 72%  val 57%
+//   base #4194c3   hue 202°  sat 67%  val 77%
+//   lift #8ad2e7   hue 194°  sat 40%  val 91%
+//
+// The shadow does not merely darken: the hue ROTATES 202° → 214° toward navy and the
+// SATURATION CLIMBS 67% → 77%. It gets more colourful as it gets darker. The highlight
+// goes the other way — brighter AND far less saturated — and it cannot be reached by
+// mixing the base toward white at all (that would need 22% white in red but 56% in blue).
+//
+// The wood palette below is that exact structure carried onto the pine hue: the same hue
+// rotation, the same saturation climb, the same value spread. Copying the RELATIONSHIPS
+// rather than the numbers is what keeps it looking painted instead of computed.
+// HONEYCOMB. Base #E8D48C — hue 47°, sat 40%, val 91%.
+//
+// The reference's structure, mirrored for a warm hue. A BLUE deepens by rotating UP into
+// navy; a YELLOW deepens by rotating DOWN into amber and brown — yellow's dark neighbour
+// is not olive. So the hue rotation flips sign while its magnitude, the saturation climb
+// and the value spread all stay:
+//
+//   deep #826540   hue 34°  sat 51%  val 51%   ← more saturated as it darkens
+//   mid  #B89B66   hue 39°  sat 45%  val 72%
+//   base #E8D48C   hue 47°  sat 40%  val 91%
+//   lift #FFFADC   hue 51°  sat 14%  val 100%  ← brighter AND far less saturated
+const TOON_DEEP: Vec3 = [0.2271, 0.1315, 0.048]; //  #826540
+const TOON_MID: Vec3 = [0.4851, 0.3335, 0.132]; //   #B89B66
+const TOON_BASE: Vec3 = [0.8122, 0.6661, 0.2674]; // #E8D48C
+const TOON_LIFT: Vec3 = [0.9996, 0.9549, 0.7237]; // #FFFADC
+
+/** The glint. Near-white, faintly warm, so it doesn't read as a pasted-on sticker. */
+const TOON_SPEC: Vec3 = [1.0, 0.96, 0.88];
+
+/** The reference's OWN blue, if you want the vinyl-toy look rather than stylised wood.
+ *  Drop these into paramsFor's float3 block and reload — no recompile. */
+export const TOON_BLUE = {
+  deep: [0.0041, 0.0303, 0.1087] as Vec3, // #15345d
+  mid: [0.0179, 0.1113, 0.2932] as Vec3, //  #295e92
+  base: [0.0494, 0.3021, 0.5542] as Vec3, // #4194c3
+  lift: [0.259, 0.6524, 0.8046] as Vec3, //  #8ad2e7
+};
 
 
 /**
@@ -119,13 +197,13 @@ const GRAIN_STROKES = 55;
 // import would need a `declare module "*.filamat"` shim and would break that convention.
 const SOURCES: Record<Exclude<ShaderStyleId, "off">, number> = {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  toon: require("@/src/assets/materials/toon.filamat"),
+  toon: require("@/src/assets/materials/toon_v2.filamat"),
   // ink_v2, not ink: a NEW asset path can't be served from a stale Metro/dev-client
   // cache, and if it is missing Metro errors loudly. Filament SILENTLY IGNORES a
   // setParameter for a name a material doesn't have, so a new shaders.ts against an old
   // .filamat renders with no edges and no error — which is a miserable thing to debug.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  ink: require("@/src/assets/materials/ink_v2.filamat"),
+  ink: require("@/src/assets/materials/ink_v3.filamat"),
 };
 
 /**
@@ -141,7 +219,32 @@ function paramsFor(
   override?: MaterialParams,
 ): { float3: Record<string, Vec3>; float: Record<string, number> } {
   if (style === "toon") {
-    return { float3: { baseColor: override?.baseColor ?? TOON_BASE }, float: {} };
+    return {
+      float3: {
+        deepColor: TOON_DEEP,
+        midColor: TOON_MID,
+        baseColor: override?.baseColor ?? TOON_BASE,
+        liftColor: TOON_LIFT,
+        specColor: TOON_SPEC,
+        // Three edges on N·L → FOUR flat tones (deep, mid, base, lift). Pushed low
+        // because a single key light leaves a lot of the model below 0.5, and the
+        // reference's darkest band is a large region, not a sliver.
+        bandEdges: [0.18, 0.45, 0.78],
+      },
+      float: {
+        // The glint: a TIGHT blob with a hard edge. specPower sets its size,
+        // specThreshold cuts it off — that cut is what makes it a flat shape rather
+        // than a soft highlight, and it is the whole reason the surface reads as
+        // glossy vinyl instead of matte plastic.
+        specPower: 48,
+        specThreshold: 0.35,
+        specStrength: 0.9,
+        lightScale: 1,
+        // A hard ramp turns shadow-map noise into a hard-edged dark PATCH rather than a
+        // soft smudge, so shadows stay off by default here — same reason as the ink look.
+        shadowStrength: 0,
+      },
+    };
   }
   return {
     float3: {
@@ -152,12 +255,21 @@ function paramsFor(
       highlightColor: INK_HIGHLIGHT,
       keyDir: KEY_TO_LIGHT,
       grainAxis: GRAIN_AXIS[def.group] ?? GRAIN_AXIS_DEFAULT,
+      // Which faces are PANEL and which are TIMBER. Table top → its thickness axis, so the
+      // top and underside are panel and the four edges are timber. Leg → zero: solid stock
+      // on every face.
+      capAxis: CAP_AXIS[def.group] ?? CAP_AXIS_DEFAULT,
     },
     float: {
-      // wood — the texture path, and the procedural fallback's knobs
+      // wood — the panel map, the timber map, and the procedural fallback's knobs
       useTexture: USE_TEXTURE ? 1 : 0,
       textureTiles: TEXTURE_TILES,
       grainPhase: GRAIN_PHASE,
+      sideTiles: SIDE_TILES,
+      sideDarken: SIDE_DARKEN,
+      // A crisp changeover, so panel gives way to timber ON the rounded corner — which is
+      // exactly where a real edge-banded top changes material.
+      capSharp: 8,
       plankScale: PLANKS[def.group] ?? PLANKS_DEFAULT,
       grainScale: GRAIN_STROKES,
       grainStrength: 0.85,
@@ -174,37 +286,31 @@ function paramsFor(
       // top. The ShadowPlane still grounds the model. Raise toward 1 if you want the legs
       // to cast onto the top and can live with the speckle.
       shadowStrength: 0,
-      // Outline thickness in PIXELS — a real screen-space width, so it stays constant
-      // whatever angle a face sits at, and a table top seen edge-on no longer inks over
-      // entirely (which is what made the light look like it was dying).
+      // ── ink: OFF ──────────────────────────────────────────────────────────────────
+      //
+      // lineDarkness 0 kills every ink term at once — contour, crease and edge — because
+      // they are all multiplied by it. The parameters below stay wired up for a model
+      // whose edges are big enough to carry a line; on LACK they are not.
+      //
+      // Why they had to go: the fillet on these parts is a 1 mm radius on a 49 mm leg,
+      // which is about 0.6 PIXELS on a phone. Every geometry-derived outline draws a line
+      // exactly as wide as the model's own edge, so the line is SUB-PIXEL — and a
+      // sub-pixel line cannot hold still. It flickers between pixels as the camera moves,
+      // which is precisely the shakiness you saw. No threshold fixes that; the only stable
+      // outline is one whose width comes from somewhere other than the geometry (an
+      // inverted hull), and that read as a sticker border on a model this soft-edged.
+      //
+      // The faceted shading below is what separates the faces now: each one is a single
+      // flat tone, so the corner reads as a clean tonal step instead of a drawn line.
+      lineDarkness: 0,
       contourPixels: 1.4,
-      // …but the pixel test alone also fires on CURVATURE, and the LACK meshes are
-      // filleted (a leg carries 80 distinct normals, the top 814). Every rounded corner
-      // drew a line inboard of the real silhouette: one down each leg, one along the
-      // table top's edge band. This second gate requires the surface to be near edge-on
-      // as well, which pins the ink to the corner itself.
       contourMaxFacing: 0.3,
-      // The crease term is now redundant: it detected edges by CURVATURE, which is what
-      // smeared lines inboard across the fillets. Edges are drawn from axis alignment
-      // instead (below), which is exact for these box-with-fillet parts. Left at 0 — turn
-      // it up only if a model with genuinely hard edges shows up.
       creaseThreshold: 0.6,
       creaseStrength: 0,
-      lineDarkness: 1,
-
-      // ── edge ink ──────────────────────────────────────────────────────────────────
-      // A flat face's object-space normal is axis-aligned (alignment 1.0); a fillet's is
-      // diagonal, bottoming out at 0.707. So the drawn edge is simply "alignment below a
-      // threshold" — exact, no derivatives, no curvature guessing.
-      //
-      // Because the line's width is the FILLET's width in world space, it thickens as a
-      // part comes nearer and thins as it recedes. That is the perspective weight
-      // variation you get in a drawing, and it is why this does not read as one uniform
-      // border. Narrow the gap (0.76 → 0.86) for a finer line, widen it for a bolder one.
       edgeStart: 0.72,
       edgeEnd: 0.9,
-      edgeInk: 1,
-      highlightStrength: 0.9,
+      edgeInk: 0,
+      highlightStrength: 0,
 
       // Snap the shading normal to the part's nearest axis, so a rounded corner takes its
       // FACE's tone instead of sweeping a gradient between two faces. Without this, the
@@ -258,6 +364,7 @@ function ensureMaterial(
   workletContext: any,
   buffer: any,
   grain: any,
+  side: any,
 ): Promise<any> {
   const existing = materialPromises.get(style);
   if (existing) return existing;
@@ -277,6 +384,7 @@ function ensureMaterial(
         // from it inherits the texture — one upload, nine parts. RNF binds with
         // WrapMode::REPEAT, which is what makes the triplanar tiling work.
         material.setDefaultTextureParameter(renderableManager, "grainMap", grain, "sRGB");
+        material.setDefaultTextureParameter(renderableManager, "sideMap", side, "sRGB");
       }
       return material;
     }),
@@ -330,6 +438,7 @@ export function useShaderOverride(
     releaseOnUnmount: false,
   });
   const grain = useBuffer({ source: GRAIN_MAP, releaseOnUnmount: false });
+  const side = useBuffer({ source: SIDE_MAP, releaseOnUnmount: false });
 
   // The material resolves ASYNCHRONOUSLY (it is built on the render thread), so this
   // state is what re-runs the apply-effect once it lands. Until then the part keeps its
@@ -337,9 +446,12 @@ export function useShaderOverride(
   const [material, setMaterial] = useState<any>(null);
   useEffect(() => {
     if (style === "off" || !buffer) return;
-    if (style === "ink" && USE_TEXTURE && !grain) return; // texture not loaded yet
+    // BOTH maps must be uploaded before any instance is built: an instance copies the
+    // material's defaults AT CREATION, so one made before a sampler is bound reads black
+    // forever.
+    if (style === "ink" && USE_TEXTURE && (!grain || !side)) return;
     let live = true;
-    ensureMaterial(style, engine, renderableManager, workletContext, buffer, grain)
+    ensureMaterial(style, engine, renderableManager, workletContext, buffer, grain, side)
       .then((m) => {
         if (live) setMaterial(m);
       })
@@ -350,7 +462,7 @@ export function useShaderOverride(
     return () => {
       live = false;
     };
-  }, [style, engine, renderableManager, workletContext, buffer, grain]);
+  }, [style, engine, renderableManager, workletContext, buffer, grain, side]);
 
   useEffect(() => {
     if (!entity || !engine || !renderableManager) return;

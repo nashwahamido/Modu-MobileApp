@@ -11,16 +11,15 @@ import {
 
 import { FURNITURE_METAS } from "@/src/game/data/furnitures/furnitures";
 import { Panel } from "@/src/game/ui/Button";
-import { ELEVATION, RADIUS, SPACE, THEMES, TYPE } from "@/src/game/ui/theme";
+import { ELEVATION, RADIUS, SPACE, Theme, TYPE, useStyles} from "@/src/game/ui/theme";
 import { brandFor } from "@/src/game/data/brands";
 import type { FurnitureMeta } from "@/src/game/core/type";
 
 const DIFFICULTY: Record<1 | 2 | 3, string> = { 1: "Easy", 2: "Medium", 3: "Hard" };
 
-// The picker sits outside a build, like Home: it IS the palette's home. Dark, always.
-const t = THEMES.dark;
 
 export default function CatalogueScreen() {
+  const styles = useStyles(makeStyles);
   const router = useRouter();
   const scheme = useColorScheme();
   // Only furniture with a real 3D model — engine-only entries stay hidden.
@@ -56,6 +55,9 @@ function FurnitureCard({
   dark: boolean;
   onPress: () => void;
 }) {
+  const styles = useStyles(makeStyles);
+  // `dark` survives here for the ARTWORK, not the styling: each meta ships a light and a
+  // dark thumbnail, and that choice can't come from a colour token.
   const thumb = (dark ? meta.thumbnail.dark : meta.thumbnail.light) ?? meta.thumbnail.light;
   return (
     <Pressable
@@ -80,7 +82,8 @@ function FurnitureCard({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) =>
+  StyleSheet.create({
   root: { flex: 1, backgroundColor: t.bg },
   content: { padding: SPACE.xl, paddingTop: 56 },
   title: { fontSize: 28, fontWeight: "800", color: t.text },
@@ -122,4 +125,4 @@ const styles = StyleSheet.create({
   },
   metaText: { ...TYPE.labelSm, color: t.textDim },
   metaDot: { color: t.textFaint, fontSize: 12, marginHorizontal: 6 },
-});
+  });

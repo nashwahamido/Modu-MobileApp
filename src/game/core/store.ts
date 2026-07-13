@@ -170,10 +170,12 @@ export const useGameStore = create<GameState>()((set, get) => ({
   mode: "free",
   renderStyle: "realistic",
   backdrop: "studio",
-  // The workbench palette (ui/theme.ts) is a warm near-black; dark is the look the UI was
-  // designed around, so it is the default. Light and high-contrast are the same product
-  // in different light, not different products.
-  theme: "dark",
+  // Light by default. The palette (ui/theme.ts) was designed against the dark reference,
+  // but light is the safer default for a study: it survives a bright room, a projector,
+  // and a participant's own phone brightness, none of which we control. Dark and
+  // high-contrast are the SAME product in different light — same three accent hues, same
+  // meanings — so switching costs nothing but the setting.
+  theme: "light",
 
   loadFurniture: (f) =>
     set({
