@@ -1,4 +1,6 @@
 {
-  "compilerOptions": {},
+  "compilerOptions": {
+    "moduleSuffixes": [".ios", ".native", ".web", ""]
+  },
   "extends": "expo/tsconfig.base"
 }

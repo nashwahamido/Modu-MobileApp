@@ -4,6 +4,7 @@
     "slug": "modu",
     "scheme": "modu",
     "version": "1.0.0",
+    "orientation": "landscape",
     "icon": "./src/assets/images/Modu_Icon.png",
     "android": {
       "package": "com.modu.app",
@@ -14,6 +15,20 @@
     },
     "ios": {
       "bundleIdentifier": "com.modu.app"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "7f5bfd07-f55b-4403-a41b-99a2d936ab9e"
+      }
+    },
+    "owner": "emma1106s-team",
+    "plugins": [
+      [
+        "expo-asset",
+        {
+          "assets": ["./src/assets/models"]
+        }
+      ]
+    ]
   }
 }
