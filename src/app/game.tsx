@@ -27,6 +27,9 @@ import { MascotGuideOverlay } from '../legacyTutorial/tutorial/MascotGuideOverla
 import { useTutorialStore } from '../legacyTutorial/tutorial/store';
 import { TUTORIAL_REWARD_TOKENS, type ToolTutorialKind } from '../legacyTutorial/tutorial/steps';
 
+const TRAINING_GRID_ROWS = Array.from({ length: 12 }, (_, index) => index);
+const TRAINING_GRID_COLUMNS = Array.from({ length: 18 }, (_, index) => index);
+
 function GameScreen() {
   const { manipulator, onStickStart, onStickMove, onStickEnd, onZoomDelta, onPanStart, onPanMove, onPanEnd, resetCamera } =
     useOrbitCamera();
@@ -99,6 +102,28 @@ function GameScreen() {
 
   return (
     <View style={styles.root} collapsable={false}>
+      <View pointerEvents="none" style={styles.trainingBackdrop}>
+        {TRAINING_GRID_ROWS.map((line) => (
+          <View
+            key={`grid-row-${line}`}
+            style={[
+              styles.gridLineHorizontal,
+              line % 4 === 0 ? styles.gridLineStrong : null,
+              { top: `${10 + line * 7.2}%` },
+            ]}
+          />
+        ))}
+        {TRAINING_GRID_COLUMNS.map((line) => (
+          <View
+            key={`grid-column-${line}`}
+            style={[
+              styles.gridLineVertical,
+              line % 4 === 0 ? styles.gridLineStrong : null,
+              { left: `${5 + line * 5.4}%` },
+            ]}
+          />
+        ))}
+      </View>
       <GestureDetector gesture={sceneGesture}>
         <View style={styles.sceneWrap} collapsable={false}>
           <TutorialTarget id="scene" style={styles.sceneFill}>
@@ -217,6 +242,38 @@ export default function GameRoute() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: SCENE_BACKGROUND },
+  trainingBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: SCENE_BACKGROUND,
+    overflow: 'hidden',
+  },
+  trainingGlow: {
+    position: 'absolute',
+    left: '-8%',
+    right: '-8%',
+    top: '-22%',
+    height: '70%',
+    backgroundColor: 'transparent',
+    borderBottomLeftRadius: 260,
+    borderBottomRightRadius: 260,
+  },
+  gridLineHorizontal: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(251, 248, 243, 0.1)',
+  },
+  gridLineVertical: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 1,
+    backgroundColor: 'rgba(251, 248, 243, 0.08)',
+  },
+  gridLineStrong: {
+    backgroundColor: 'rgba(251, 248, 243, 0.14)',
+  },
   sceneWrap: { ...StyleSheet.absoluteFillObject },
   sceneFill: { flex: 1 },
   assemblyTarget: {
@@ -230,31 +287,31 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 10,
     alignSelf: 'center',
-    backgroundColor: 'rgba(255,255,255,0.75)',
+    backgroundColor: 'rgba(251,248,243,0.76)',
     paddingHorizontal: 18,
     paddingVertical: 8,
     borderRadius: 18,
   },
-  objectiveText: { fontSize: 14, color: '#2e2a24', fontWeight: '600' },
+  objectiveText: { fontSize: 14, color: '#231F20', fontWeight: '600' },
   progressTrack: {
     marginTop: 6,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(60,50,40,0.15)',
+    backgroundColor: 'rgba(35,31,32,0.15)',
     alignSelf: 'stretch',
     overflow: 'hidden',
   },
-  progressFill: { height: 4, borderRadius: 2, backgroundColor: '#37c871' },
+  progressFill: { height: 4, borderRadius: 2, backgroundColor: '#8FA876' },
   pointsChip: {
     position: 'absolute',
     top: 10,
     left: 14,
-    backgroundColor: 'rgba(255,255,255,0.75)',
+    backgroundColor: 'rgba(251,248,243,0.76)',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 14,
   },
-  pointsText: { fontSize: 13, fontWeight: '700', color: '#b8741a' },
+  pointsText: { fontSize: 13, fontWeight: '700', color: '#C9A876' },
   joystickZone: { position: 'absolute', left: 28, bottom: 28 },
   recenterTarget: {
     position: 'absolute',
@@ -262,26 +319,26 @@ const styles = StyleSheet.create({
     bottom: 196,
   },
   recenterButton: {
-    backgroundColor: 'rgba(255,255,255,0.85)',
+    backgroundColor: 'rgba(251,248,243,0.86)',
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderWidth: 1,
-    borderColor: 'rgba(60,50,40,0.15)',
+    borderColor: 'rgba(35,31,32,0.15)',
   },
-  recenterText: { fontSize: 12, fontWeight: '700', color: '#2e2a24' },
+  recenterText: { fontSize: 12, fontWeight: '700', color: '#231F20' },
   dropBehaviorButton: {
     position: 'absolute',
     left: 28,
     bottom: 148,
     minWidth: 118,
-    backgroundColor: 'rgba(255,255,255,0.85)',
+    backgroundColor: 'rgba(251,248,243,0.86)',
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderWidth: 1,
-    borderColor: 'rgba(60,50,40,0.15)',
+    borderColor: 'rgba(35,31,32,0.15)',
   },
-  dropBehaviorLabel: { fontSize: 9, fontWeight: '800', color: '#7c746b' },
-  dropBehaviorText: { marginTop: 1, fontSize: 12, fontWeight: '800', color: '#2e2a24' },
+  dropBehaviorLabel: { fontSize: 9, fontWeight: '800', color: '#665f55' },
+  dropBehaviorText: { marginTop: 1, fontSize: 12, fontWeight: '800', color: '#231F20' },
 });

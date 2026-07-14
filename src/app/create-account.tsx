@@ -99,7 +99,7 @@ export default function CreateAccountScreen() {
               inputMode="email"
               onChangeText={setEmail}
               placeholder="Email address"
-              placeholderTextColor="#9a8f80"
+              placeholderTextColor="#8b8174"
               style={styles.input}
               value={email}
             />
@@ -142,7 +142,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#fffaf0",
+    backgroundColor: "#F3ECE0",
     paddingHorizontal: 42,
     paddingVertical: 20,
   },
@@ -171,19 +171,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   brand: {
-    color: "#b9a486",
+    color: "#C9A876",
     fontSize: 32,
     fontWeight: "900",
     letterSpacing: 7,
   },
   title: {
-    color: "#26231f",
+    color: "#231F20",
     fontSize: 30,
     fontWeight: "900",
     lineHeight: 35,
   },
   subtitle: {
-    color: "#746a5d",
+    color: "#665f55",
     fontSize: 15,
     fontWeight: "700",
     lineHeight: 21,
@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
   segmented: {
     flexDirection: "row",
     borderRadius: 24,
-    backgroundColor: "#eee4d4",
+    backgroundColor: "#e4dccf",
     padding: 4,
   },
   segment: {
@@ -205,24 +205,24 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   activeSegment: {
-    backgroundColor: "#fffaf0",
+    backgroundColor: "#FBF8F3",
   },
   segmentText: {
-    color: "#7d7365",
+    color: "#665f55",
     fontSize: 15,
     fontWeight: "900",
   },
   activeSegmentText: {
-    color: "#26231f",
+    color: "#231F20",
   },
   emailGroup: {
     gap: 10,
   },
   input: {
-    borderColor: "#d9cdbc",
+    borderColor: "#d8cdbb",
     borderRadius: 18,
     borderWidth: 2,
-    color: "#26231f",
+    color: "#231F20",
     fontSize: 16,
     fontWeight: "700",
     paddingHorizontal: 16,
@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     alignItems: "center",
-    backgroundColor: "#2d2a26",
+    backgroundColor: "#2D2A26",
     borderRadius: 24,
     paddingVertical: 13,
   },
@@ -238,18 +238,18 @@ const styles = StyleSheet.create({
     opacity: 0.58,
   },
   primaryButtonText: {
-    color: "#fff9ef",
+    color: "#FBF8F3",
     fontSize: 16,
     fontWeight: "900",
   },
   errorText: {
-    color: "#a83b32",
+    color: "#C98B76",
     fontSize: 12,
     fontWeight: "800",
     lineHeight: 16,
   },
   statusText: {
-    color: "#2f7c57",
+    color: "#8FA876",
     fontSize: 12,
     fontWeight: "800",
     lineHeight: 16,
@@ -262,10 +262,10 @@ const styles = StyleSheet.create({
   divider: {
     flex: 1,
     height: 1,
-    backgroundColor: "#ded2c2",
+    backgroundColor: "#d8cdbb",
   },
   dividerText: {
-    color: "#8b8174",
+    color: "#665f55",
     fontSize: 13,
     fontWeight: "800",
   },
@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
     minHeight: 46,
     flexDirection: "row",
     alignItems: "center",
-    borderColor: "#d9cdbc",
+    borderColor: "#d8cdbb",
     borderRadius: 23,
     borderWidth: 2,
     paddingHorizontal: 14,
@@ -288,20 +288,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 13,
-    backgroundColor: "#2d2a26",
+    backgroundColor: "#e4dccf",
   },
   methodMarkText: {
-    color: "#fff9ef",
+    color: "#231F20",
     fontSize: 13,
     fontWeight: "900",
   },
   methodText: {
-    color: "#2d2a26",
+    color: "#231F20",
     fontSize: 15,
     fontWeight: "900",
   },
   prototypeNote: {
-    color: "#8b8174",
+    color: "#665f55",
     fontSize: 12,
     fontWeight: "700",
     lineHeight: 16,

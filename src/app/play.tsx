@@ -1,7 +1,8 @@
 // TODO: settle down the part marked as dev-setting (float mode vs auto return)
 
-import { useEffect, useMemo, useRef } from "react";
-import { useLocalSearchParams } from "expo-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { router, useLocalSearchParams } from "expo-router";
+import type { Href } from "expo-router";
 import { OrientationLock } from "expo-screen-orientation";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -83,6 +84,7 @@ const BACKDROPS: Record<string, { light: number; dark: number }> = {
 function GameScreen() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
   const insets = useSafeAreaInsets();
+  const [showRoomPrompt, setShowRoomPrompt] = useState(false);
 
   const {
     manipulator,
@@ -139,6 +141,7 @@ function GameScreen() {
   const completedCount = useGameStore((s) => s.completed.length);
   const orientationActionId = useGameStore((s) => s.orientationActionId);
   const totalCount = furniture?.actions.length ?? 0;
+  const taskComplete = totalCount > 0 && completedCount >= totalCount;
   const objectiveFontSize = Math.round(14 * settings.fontScale);
   const orientationAction = orientationActionId
     ? furniture?.actions.find((a) => a.actionId === orientationActionId)
@@ -189,6 +192,12 @@ function GameScreen() {
     needsFocusChoice || !speaksSteps(mode) ? undefined : firstAvailable,
     settings.audio,
   );
+
+  useEffect(() => {
+    if (taskComplete) {
+      setShowRoomPrompt(true);
+    }
+  }, [taskComplete]);
 
   const selectedTool = useGameStore((s) => s.selectedTool);
   const neededTool = settings.manualTools
@@ -452,6 +461,31 @@ function GameScreen() {
           </Pressable>
         ) : null}
       </View>
+      {showRoomPrompt ? (
+        <View style={styles.roomPromptLayer} pointerEvents="auto">
+          <View style={styles.roomPromptCard}>
+            <Text style={styles.roomPromptKicker}>Assembly complete</Text>
+            <Text style={styles.roomPromptTitle}>Your task is finished.</Text>
+            <Text style={styles.roomPromptBody}>Now enter your room and place your furniture.</Text>
+            <View style={styles.roomPromptActions}>
+              <Pressable
+                style={styles.roomPromptSecondary}
+                onPress={() => setShowRoomPrompt(false)}
+                hitSlop={8}
+              >
+                <Text style={styles.roomPromptSecondaryText}>Stay here</Text>
+              </Pressable>
+              <Pressable
+                style={styles.roomPromptPrimary}
+                onPress={() => router.replace("/room" as Href)}
+                hitSlop={8}
+              >
+                <Text style={styles.roomPromptPrimaryText}>Enter room</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      ) : null}
       {ringOverlay}
       <GreenFlash trigger={completedCount} />
     </View>
@@ -567,4 +601,46 @@ const styles = StyleSheet.create({
     gap: 8,
     zIndex: 15,
   },
+  roomPromptLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 80,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(20, 18, 15, 0.34)",
+    padding: 24,
+  },
+  roomPromptCard: {
+    width: "100%",
+    maxWidth: 430,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(60,50,40,0.14)",
+    backgroundColor: "#fffaf0",
+    paddingHorizontal: 24,
+    paddingVertical: 22,
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  roomPromptKicker: { color: "#37a65a", fontSize: 13, fontWeight: "900", marginBottom: 6 },
+  roomPromptTitle: { color: "#171512", fontSize: 25, fontWeight: "900" },
+  roomPromptBody: { marginTop: 8, color: "#6a6258", fontSize: 15, lineHeight: 21, fontWeight: "700" },
+  roomPromptActions: { marginTop: 18, flexDirection: "row", alignItems: "center", gap: 12 },
+  roomPromptPrimary: {
+    borderRadius: 18,
+    backgroundColor: "#2f2a24",
+    paddingHorizontal: 20,
+    paddingVertical: 11,
+  },
+  roomPromptPrimaryText: { color: "#fff", fontSize: 14, fontWeight: "900" },
+  roomPromptSecondary: {
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: "#d9cdb8",
+    backgroundColor: "rgba(255,255,255,0.64)",
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+  },
+  roomPromptSecondaryText: { color: "#5f574f", fontSize: 14, fontWeight: "900" },
 });

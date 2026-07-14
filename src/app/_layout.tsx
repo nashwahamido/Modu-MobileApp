@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import "react-native-reanimated";
 
+import { GmTestPanel } from "@/src/components/GmTestPanel";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 
 export default function RootLayout() {
@@ -15,6 +16,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <Stack screenOptions={{ headerShown: false }} />
+        <GmTestPanel />
         <StatusBar style="auto" hidden />
       </SafeAreaProvider>
     </GestureHandlerRootView>

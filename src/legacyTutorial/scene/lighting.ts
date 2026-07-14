@@ -1,6 +1,6 @@
-// Readability is an accessibility requirement (players incl. dyslexia/ADHD):
-// near-black parts must read as crisp silhouettes on a warm light background.
-export const SCENE_BACKGROUND = '#f0e9dd';
+// Match the task workbench so parts keep the same readable silhouette when the
+// onboarding flow hands off to the assembly experience.
+export const SCENE_BACKGROUND = '#a8cfe0';
 export const IBL_INTENSITY = 40_000;
 export const KEY_LIGHT = {
   colorKelvin: 4_500,

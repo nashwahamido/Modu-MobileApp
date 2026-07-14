@@ -41,10 +41,10 @@ const styles = StyleSheet.create({
     height: 44,
     alignItems: "center",
     justifyContent: "center",
-    borderColor: "#d3c8b6",
+    borderColor: "#d8cdbb",
     borderRadius: 22,
     borderWidth: 1,
-    backgroundColor: "#fffef8",
+    backgroundColor: "#FBF8F3",
   },
   smallButton: {
     width: 36,
