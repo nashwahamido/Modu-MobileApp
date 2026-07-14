@@ -34,12 +34,14 @@ expo-env.d.ts
 # Tool files
 git-filter-repo
 git-filter-repo.txt
+.test
 
 # Logs
 npm-debug.*
 yarn-debug.*
 yarn-error.*
 *.log
+docs/
 
 # macOS / editor junk
 .DS_Store
@@ -51,3 +53,6 @@ yarn-error.*
 # IDE
 .vscode/
 .idea/
+
+# processGLB tool
+tools/processGLB/work/
