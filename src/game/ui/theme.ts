@@ -31,13 +31,22 @@ const PALETTE = {
   ink500: "#5a5451", // hairline
 
   paper100: "#faf7f1", // the light theme's backdrop
-  paper200: "#f2ece1", // light: panel
+  paper200: "#F5EADD", // light: cards, icon buttons, an UNPRESSED action button — the cream from the joystick dial
   paper300: "#e6ddcd", // light: raised
   paper400: "#cfc3ae", // light: hairline
+  /** Text on a FILLED button. Not pure white — it belongs to the same warm family as the
+   *  paper, so a filled button reads as part of the set rather than a hole punched in it. */
+  linen: "#EDE7DD",
+  /** A pressed action button, light mode. Lighter than the resting accent, because in this
+   *  language "raised" means live: a pressed control lifts toward the light. */
+  lilac: "#A996C2",
 
   lavender: "#8d799f",
   lavenderDim: "#79668b",
   lavenderLift: "#a992ba",
+  /** The interactive lavender for LIGHT mode: buttons, the joystick knob, any control that
+   *  can be pressed. One colour, one meaning. */
+  lavenderLight: "#8D7BA8",
 
   sage: "#7d8b6e",
   sageDim: "#6b7860",
@@ -113,22 +122,24 @@ const DARK: Theme = {
 // SAME product — so the hues do not change, only what they sit on.
 const LIGHT: Theme = {
   bg: PALETTE.paper100,
-  surface: "rgba(255,253,249,0.94)",
+  surface: PALETTE.paper200,
   surfaceRaised: PALETTE.paper300,
   surfaceInset: "rgba(60,50,40,0.10)",
   border: "rgba(60,50,40,0.12)",
   borderStrong: "rgba(60,50,40,0.22)",
 
-  text: "#2e2924",
+  text: "#231F20",
   textDim: "#6f665c",
   textFaint: "#9a9086",
 
-  accent: PALETTE.lavenderDim,
-  accentPressed: "#635373",
-  onAccent: "#ffffff",
+  // Every pressable thing in light mode is this lavender — settings buttons, the joystick
+  // knob, an action button. accentPressed lifts toward the light on press.
+  accent: PALETTE.lavenderLight,
+  accentPressed: PALETTE.lilac,
+  onAccent: PALETTE.linen,
 
   success: PALETTE.sageDim,
-  onSuccess: "#ffffff",
+  onSuccess: PALETTE.linen,
 
   gold: "#a9762f",
   danger: "#a8543f",
@@ -152,6 +163,10 @@ const HIGH_CONTRAST: Theme = {
   success: "#9db488",
   gold: "#e8bd80",
 };
+
+/** The interactive lavender, light mode. Exported for the joystick, which lives outside the
+ *  themed component tree and can't read useTheme. */
+export const ACCENT_LIGHT = PALETTE.lavenderLight;
 
 export const THEMES: Record<ThemeId, Theme> = {
   light: LIGHT,

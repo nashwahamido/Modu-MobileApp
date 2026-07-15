@@ -42,7 +42,43 @@ export const STYLE_SHADER: Record<RenderStyleId, ShaderStyleId> = {
 };
 
 /** Metal fasteners keep their own finish under every style. */
-const METAL_GROUPS: readonly string[] = ["bolt115980"];
+/** The metal map: brushed steel, gradient flattened so it tiles without banding. */
+const METAL_MAP = require("@/src/assets/textures/metal.png");
+
+/** Steel, not wood. LINEAR — a light neutral grey the map is tinted by. */
+const METAL_BASE: Vec3 = [0.52, 0.53, 0.56];
+/** The shadow side. COLD — steel's shadow goes blue-grey, where wood's goes brown. That
+ *  one difference does most of the work of telling the two materials apart. */
+const METAL_SHADE: Vec3 = [0.055, 0.06, 0.075];
+/** Repeats per metre. A screw is ~10 mm across, so the map has to be dense to show any
+ *  brushing at all at that size. */
+const METAL_TILES = 24;
+
+/** Rendered with the METAL map, not the wood.
+ *
+ *  These used to be SKIPPED entirely, keeping whatever material the GLB shipped — which is
+ *  why an unlisted group silently came out looking like pine. They are now shaded like
+ *  everything else, just out of a different box. */
+const METAL_GROUPS: readonly string[] = [
+  // LACK
+  "bolt115980",
+  // DALFRED — the hardware.
+  "screw100212",
+  "screw105251",
+  "screw105298",
+  "screw108443",
+  "cap107675",
+  // DALFRED — the structural metal. Not fasteners, but not timber either: the foot ring,
+  // the pin that locates the seat, and the plate the seat bolts down onto.
+  "ringRail",
+  "supportPin",
+  "seatPlate",
+];
+
+// NOTE: ringRail, supportPin and seatPlate still have entries in ROUND and CAP_AXIS below.
+// Those are now dead for these parts — the metal branch in the shader returns before either
+// is read. Left in place because they are correct descriptions of the geometry, and they
+// come straight back into use the moment a part is moved back to wood.
 
 // ── ink palette (LINEAR, not sRGB — Filament parameters are linear) ──────────
 /** The painted grain map. Multiplied by baseColor, so keep baseColor near white or the
@@ -65,10 +101,63 @@ const SIDE_DARKEN = 0.12;
  *  underside are panel, its four edges are timber. A leg has NO cap: it is solid stock on
  *  every face, so a zero vector puts timber everywhere. */
 const CAP_AXIS: Record<string, Vec3> = {
+  // LACK
   tableTop: [0, 0, 1],
   leg: [0, 0, 0],
+  // DALFRED — every round part's flat faces are its caps, so cap axis = round axis.
+  seat: [0, 0, 1],
+  seatPlate: [0, 0, 1],
+  ringRail: [0, 0, 1],
+  circleUpp: [0, 0, 1],
+  circleDown: [0, 0, 1],
+  supportPin: [0, 0, 1],
+  pole: [0, 0, 1],
 };
 const CAP_AXIS_DEFAULT: Vec3 = [0, 0, 0];
+
+/**
+ * ROUND parts: symmetry axis, radius, and which way the grain runs on the rim.
+ *
+ * Triplanar is a BOX projection — it blends three planar samples by how squarely the normal
+ * faces each axis. On a curved rim the normal sweeps through every direction, so the blend
+ * sweeps with it and the grain smears and swirls. No threshold fixes that; a cylinder is
+ * simply not three planes. These parts get projected in their own coordinates instead:
+ * angle around the axis, distance along it.
+ *
+ * Axes and radii read off the meshes' own bounding boxes — all of DALFRED's round parts are
+ * symmetric about object Z:
+ *   seat        0.294 x 0.295 x 0.025   → disc,     r 0.147
+ *   ringRail    0.334 x 0.334 x 0.018   → ring,     r 0.167
+ *   seatPlate   0.150 x 0.150 x 0.029   → disc,     r 0.075
+ *   circleDown  0.169 x 0.169 x 0.021   → disc,     r 0.085
+ *   circleUpp   0.123 x 0.123 x 0.021   → disc,     r 0.062
+ *   pole        0.032 x 0.032 x 0.284   → CYLINDER, r 0.016
+ *   supportPin  0.080 x 0.062 x 0.100   → stub,     r 0.040
+ *
+ * DALFRED's LEGS are left alone: they are 0.035 x 0.028 x 0.603 — near-rectangular stock,
+ * and triplanar already reads correctly on them.
+ */
+interface RoundPart {
+  /** Object-space symmetry axis. */
+  axis: Vec3;
+  /** Metres. Needed so the map wraps an INTEGER number of times around, or the +PI/-PI
+   *  wrap leaves a seam. */
+  radius: number;
+  /** true = grain wraps AROUND the rim (a disc's edge, like bent edge-banding).
+   *  false = grain runs ALONG the axis — a pole's grain runs down its length; it does not
+   *  spiral around it. */
+  around: boolean;
+}
+const ROUND: Record<string, RoundPart> = {
+  seat: { axis: [0, 0, 1], radius: 0.147, around: true },
+  ringRail: { axis: [0, 0, 1], radius: 0.167, around: true },
+  seatPlate: { axis: [0, 0, 1], radius: 0.075, around: true },
+  circleDown: { axis: [0, 0, 1], radius: 0.085, around: true },
+  circleUpp: { axis: [0, 0, 1], radius: 0.062, around: true },
+  supportPin: { axis: [0, 0, 1], radius: 0.04, around: true },
+  pole: { axis: [0, 0, 1], radius: 0.016, around: false },
+};
+const NOT_ROUND: Vec3 = [0, 0, 0];
 
 /** Set false to fall back to the shader's procedural planks (no texture, no render-thread
  *  upload). The material supports both; this flips the `useTexture` uniform. */
@@ -203,7 +292,7 @@ const SOURCES: Record<Exclude<ShaderStyleId, "off">, number> = {
   // setParameter for a name a material doesn't have, so a new shaders.ts against an old
   // .filamat renders with no edges and no error — which is a miserable thing to debug.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  ink: require("@/src/assets/materials/ink_v3.filamat"),
+  ink: require("@/src/assets/materials/ink_v5.filamat"),
 };
 
 /**
@@ -246,11 +335,16 @@ function paramsFor(
       },
     };
   }
+  const metal = METAL_GROUPS.includes(def.group);
+
   return {
     float3: {
-      baseColor:
-        override?.baseColor ?? (USE_TEXTURE ? INK_BASE : INK_BASE_PROCEDURAL),
-      shadeColor: INK_SHADE,
+      baseColor: metal
+        ? METAL_BASE
+        : (override?.baseColor ?? (USE_TEXTURE ? INK_BASE : INK_BASE_PROCEDURAL)),
+      // Steel's shadow is COLD; wood's is warm. Swapping this one colour is most of what
+      // separates the two materials — more than the texture does.
+      shadeColor: metal ? METAL_SHADE : INK_SHADE,
       inkColor: INK_LINE,
       highlightColor: INK_HIGHLIGHT,
       keyDir: KEY_TO_LIGHT,
@@ -259,6 +353,8 @@ function paramsFor(
       // top and underside are panel and the four edges are timber. Leg → zero: solid stock
       // on every face.
       capAxis: CAP_AXIS[def.group] ?? CAP_AXIS_DEFAULT,
+      // A zero axis means "not round" — keep the box (triplanar) path.
+      roundAxis: ROUND[def.group]?.axis ?? NOT_ROUND,
     },
     float: {
       // wood — the panel map, the timber map, and the procedural fallback's knobs
@@ -267,6 +363,15 @@ function paramsFor(
       grainPhase: GRAIN_PHASE,
       sideTiles: SIDE_TILES,
       sideDarken: SIDE_DARKEN,
+      // metal
+      isMetal: metal ? 1 : 0,
+      metalTiles: METAL_TILES,
+      // The glint. Cel shading throws Filament's specular away, so steel has to grow its
+      // own — without a highlight it is just grey plastic.
+      metalSpec: metal ? 0.55 : 0,
+      metalSpecPower: 28,
+      roundRadius: ROUND[def.group]?.radius ?? 0,
+      rimAround: ROUND[def.group]?.around ? 1 : 0,
       // A crisp changeover, so panel gives way to timber ON the rounded corner — which is
       // exactly where a real edge-banded top changes material.
       capSharp: 8,
@@ -365,10 +470,12 @@ function ensureMaterial(
   buffer: any,
   grain: any,
   side: any,
+  metal: any,
 ): Promise<any> {
   const existing = materialPromises.get(style);
   if (existing) return existing;
 
+  const metalTex = metal;
   const needsTexture = style === "ink" && USE_TEXTURE;
 
   // runAsync returns a worklets-core THENABLE, not a real Promise: it has .then but no
@@ -385,6 +492,7 @@ function ensureMaterial(
         // WrapMode::REPEAT, which is what makes the triplanar tiling work.
         material.setDefaultTextureParameter(renderableManager, "grainMap", grain, "sRGB");
         material.setDefaultTextureParameter(renderableManager, "sideMap", side, "sRGB");
+        material.setDefaultTextureParameter(renderableManager, "metalMap", metalTex, "sRGB");
       }
       return material;
     }),
@@ -439,6 +547,7 @@ export function useShaderOverride(
   });
   const grain = useBuffer({ source: GRAIN_MAP, releaseOnUnmount: false });
   const side = useBuffer({ source: SIDE_MAP, releaseOnUnmount: false });
+  const metalTex = useBuffer({ source: METAL_MAP, releaseOnUnmount: false });
 
   // The material resolves ASYNCHRONOUSLY (it is built on the render thread), so this
   // state is what re-runs the apply-effect once it lands. Until then the part keeps its
@@ -449,9 +558,18 @@ export function useShaderOverride(
     // BOTH maps must be uploaded before any instance is built: an instance copies the
     // material's defaults AT CREATION, so one made before a sampler is bound reads black
     // forever.
-    if (style === "ink" && USE_TEXTURE && (!grain || !side)) return;
+    if (style === "ink" && USE_TEXTURE && (!grain || !side || !metalTex)) return;
     let live = true;
-    ensureMaterial(style, engine, renderableManager, workletContext, buffer, grain, side)
+    ensureMaterial(
+      style,
+      engine,
+      renderableManager,
+      workletContext,
+      buffer,
+      grain,
+      side,
+      metalTex,
+    )
       .then((m) => {
         if (live) setMaterial(m);
       })
@@ -462,7 +580,7 @@ export function useShaderOverride(
     return () => {
       live = false;
     };
-  }, [style, engine, renderableManager, workletContext, buffer, grain, side]);
+  }, [style, engine, renderableManager, workletContext, buffer, grain, side, metalTex]);
 
   useEffect(() => {
     if (!entity || !engine || !renderableManager) return;
@@ -477,10 +595,9 @@ export function useShaderOverride(
       );
     }
 
-    const skip = style !== "off" && METAL_GROUPS.includes(def.group);
-
-    // Shader-free look (or a group that opts out) → put the GLB's materials back.
-    if (style === "off" || skip) {
+    // Metal groups are no longer skipped: they render through the same material with the
+    // metal map and a cold shadow. Only a shader-free LOOK falls back to the GLB.
+    if (style === "off") {
       slots.original.forEach((mi, i) =>
         renderableManager.setMaterialInstanceAt(entity, i, mi),
       );
@@ -510,7 +627,12 @@ export function useShaderOverride(
       instances.forEach((mi, i) =>
         renderableManager.setMaterialInstanceAt(entity, i, mi),
       );
-      if (__DEV__) console.log(`[shader:${style}] ${def.meshName}: ${count} prim(s)`);
+      if (__DEV__) {
+        const kind = METAL_GROUPS.includes(def.group) ? "METAL" : "wood";
+        console.log(
+          `[shader:${style}] ${def.meshName} (${def.group}) → ${kind}, ${count} prim(s)`,
+        );
+      }
     } catch (e) {
       // The part keeps its GLB material rather than disappearing.
       if (__DEV__) console.log(`[shader:${style}] failed ${def.meshName}`, e);

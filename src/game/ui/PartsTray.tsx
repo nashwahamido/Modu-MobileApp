@@ -75,10 +75,12 @@ const makeStyles = (t: Theme) =>
   StyleSheet.create({
   column: {
     position: "absolute",
-    right: 10,
+    right: 14,
     top: 70,
     bottom: 70,
-    width: 124,
+    // The Auto-View button's actual width: controlHeightSm padding (SPACE.md each side, 24)
+    // + the "Auto-View" label (~62 at 12px bold) ≈ 86. The rail is now one column.
+    width: 86,
     gap: 8,
   },
   scroll: { flexShrink: 1 },
@@ -88,13 +90,13 @@ const makeStyles = (t: Theme) =>
     borderRadius: 12,
     borderWidth: 1,
     borderColor: t.border,
-    paddingVertical: 7,
-    paddingHorizontal: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
     alignItems: "center",
-    gap: 4,
+    gap: 3,
   },
   cardDisabled: { opacity: 0.35 },
-  thumb: { width: 44, height: 44 },
+  thumb: { width: 36, height: 36 },
   label: {
     fontSize: 11,
     fontWeight: "600",

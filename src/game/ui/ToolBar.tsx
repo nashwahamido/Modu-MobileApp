@@ -78,8 +78,9 @@ const makeStyles = (t: Theme) =>
     gap: 8,
   },
   toggle: {
-    width: 46,
-    height: 46,
+    // 36 to match the auto button (controlHeightSm), down from 46.
+    width: 36,
+    height: 36,
     borderRadius: 12,
     backgroundColor: t.surface,
     borderWidth: 2,
@@ -89,8 +90,8 @@ const makeStyles = (t: Theme) =>
   },
   toggleOpen: { backgroundColor: t.surfaceRaised },
   slot: {
-    width: 46,
-    height: 46,
+    width: 36,
+    height: 36,
     borderRadius: 12,
     backgroundColor: t.surface,
     borderWidth: 2,
@@ -102,6 +103,6 @@ const makeStyles = (t: Theme) =>
   // completed step.
   slotActive: { borderColor: t.accent, backgroundColor: t.surfaceRaised },
   slotWanted: { borderColor: t.accent },
-  icon: { width: 34, height: 34 },
+  icon: { width: 26, height: 26 },
   prompt: { fontSize: 11, fontWeight: "700", color: t.textDim, marginRight: 2 },
   });

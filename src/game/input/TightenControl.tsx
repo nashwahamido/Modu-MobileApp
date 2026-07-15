@@ -1,7 +1,8 @@
 import * as Haptics from "expo-haptics";
 import { useEffect, useRef } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Svg, { Circle, G, Path } from "react-native-svg";
 import { looseDelta } from "@/src/game/core/geometry/staging";
 import { engageAxis } from "@/src/game/core/evaluation/engagement";
 import { quatFromAxisAngle, quatMultiply } from "@/src/game/core/geometry/math";
@@ -9,7 +10,20 @@ import { AssemblyAction } from "@/src/game/core/type";
 import { TIGHTEN_TOTAL_DEG, useGameStore } from "@/src/game/core/store";
 import type { OffsetDriver } from "../scene/offsetDriver";
 
-const SIZE = 120;
+const RING = 92; // outer diameter of the ring (smaller than before)
+const STROKE = 13;
+const PAD = 16; // breathing room so the arrow never clips the canvas edge
+const SIZE = RING + PAD * 2; // the actual SVG / view box
+const C = SIZE / 2; // centre of everything
+const R = (RING - STROKE) / 2; // radius of the stroke's centre line
+const CIRC = 2 * Math.PI * R;
+
+const TRACK = "rgba(60,50,40,0.16)";
+const FILL = "#8D7BA8"; // the progress arc — interactive lavender
+const CENTER = "#F5EADD"; // solid cream hub (matches the joystick dial)
+const CENTER_EDGE = "rgba(60,50,40,0.22)";
+const ARROW = "#8D7BA8";      // lavender, matches the arc
+const ARROW_EDGE = "#ffffff"; // white rim so it reads on the cream hub
 
 interface Props {
   action: AssemblyAction;
@@ -17,7 +31,14 @@ interface Props {
   sinkDriver: OffsetDriver;
 }
 
-/** Circular tighten gesture (user-designed): trace the rotate sign clockwise; rotation accumulates with haptic ticks per quarter-turn until the fastener sits flush (2 full turns). */
+/**
+ * Circular tighten gesture: drag clockwise around the ring; rotation accumulates with
+ * haptic ticks per quarter-turn until the fastener sits flush (2 full turns).
+ *
+ * A track ring, a lavender arc growing clockwise from the top, and an ARROW head riding the
+ * arc's leading end that points the way to drag. The canvas is padded past the ring so the
+ * arrow never clips. The hub is solid cream — no transparent centre.
+ */
 export function TightenControl({ action, sinkDriver }: Props) {
   const deg = useGameStore((s) => s.tightenDeg[action.actionId] ?? 0);
   const lastAngle = useRef<number | null>(null);
@@ -31,7 +52,7 @@ export function TightenControl({ action, sinkDriver }: Props) {
   const pan = Gesture.Pan()
     .runOnJS(true)
     .onUpdate((e) => {
-      const a = (Math.atan2(e.y - SIZE / 2, e.x - SIZE / 2) * 180) / Math.PI;
+      const a = (Math.atan2(e.y - C, e.x - C) * 180) / Math.PI;
       if (lastAngle.current !== null) {
         let d = a - lastAngle.current;
         if (d > 180) d -= 360;
@@ -41,7 +62,9 @@ export function TightenControl({ action, sinkDriver }: Props) {
           store.addTightenDeg(action.actionId, d);
           const total = store.tightenDeg[action.actionId] ?? 0;
           const p = Math.min(1, total / TIGHTEN_TOTAL_DEG);
-          const part = action.partId ? useGameStore.getState().furniture?.parts[action.partId] : undefined;
+          const part = action.partId
+            ? useGameStore.getState().furniture?.parts[action.partId]
+            : undefined;
           if (part) {
             const axis = engageAxis(part, new Set(store.completed));
             const ld = looseDelta(part, axis);
@@ -66,21 +89,51 @@ export function TightenControl({ action, sinkDriver }: Props) {
 
   const progress = Math.min(1, deg / TIGHTEN_TOTAL_DEG);
 
+  // Arrow head at the arc's leading end: −90° start, clockwise.
+  const angDeg = -90 + progress * 360;
+  const ang = angDeg * (Math.PI / 180);
+  const hx = C + R * Math.cos(ang);
+  const hy = C + R * Math.sin(ang);
+  // A small triangle, rotated to point ALONG the ring (tangent = angle + 90°).
+  const s = 9; // arrow half-size
+  const tan = angDeg + 180; // apex points ALONG the ring (clockwise), not outward
+
   return (
     <View style={styles.wrap} pointerEvents="box-none">
       <GestureDetector gesture={pan}>
         <View style={styles.dial}>
-          <View style={[styles.fill, { height: SIZE * progress }]} />
-          <Text
-            style={[styles.arrow, { transform: [{ rotate: `${deg}deg` }] }]}
-          >
-            ↻
-          </Text>
+          <Svg width={SIZE} height={SIZE}>
+            {/* solid hub */}
+            <Circle cx={C} cy={C} r={R - STROKE / 2} fill={CENTER} stroke={CENTER_EDGE} strokeWidth={1} />
+            {/* track */}
+            <Circle cx={C} cy={C} r={R} stroke={TRACK} strokeWidth={STROKE} fill="none" />
+            {/* progress arc — 12 o'clock, clockwise */}
+            <G transform={`rotate(-90 ${C} ${C})`}>
+              <Circle
+                cx={C}
+                cy={C}
+                r={R}
+                stroke={FILL}
+                strokeWidth={STROKE}
+                fill="none"
+                strokeLinecap="round"
+                strokeDasharray={CIRC}
+                strokeDashoffset={CIRC * (1 - progress)}
+              />
+            </G>
+            {/* arrow head riding the arc's end, pointing the drag direction */}
+            <G transform={`rotate(${tan} ${hx} ${hy})`}>
+              <Path
+                d={`M ${hx} ${hy - s} L ${hx + s} ${hy + s} L ${hx - s} ${hy + s} Z`}
+                fill={ARROW}
+                stroke={ARROW_EDGE}
+                strokeWidth={2.5}
+                strokeLinejoin="round"
+              />
+            </G>
+          </Svg>
         </View>
       </GestureDetector>
-      <Text style={styles.hint}>
-        Trace the circle to tighten · {Math.round(progress * 100)}%
-      </Text>
     </View>
   );
 }
@@ -88,29 +141,21 @@ export function TightenControl({ action, sinkDriver }: Props) {
 const styles = StyleSheet.create({
   wrap: {
     position: "absolute",
-    right: 160,
-    bottom: 36,
+    right: 220,
+    bottom: 120,
     alignItems: "center",
-    gap: 8,
   },
   dial: {
     width: SIZE,
     height: SIZE,
-    borderRadius: SIZE / 2,
-    borderWidth: 4,
-    borderColor: "#e8842c",
-    backgroundColor: "rgba(255,255,255,0.7)",
     alignItems: "center",
     justifyContent: "center",
-    overflow: "hidden",
+    // No `elevation` — on Android that casts a big grey halo around a circular View. The
+    // ring's own outline (drawn in SVG below via the hub/track) is enough to separate it
+    // from the scene; a faint iOS shadow is kept for depth without the blob.
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
   },
-  fill: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "rgba(55, 200, 113, 0.25)",
-  },
-  arrow: { fontSize: 44, color: "#2e2a24" },
-  hint: { fontSize: 12, color: "#6b6257", fontWeight: "600" },
 });

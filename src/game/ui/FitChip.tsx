@@ -9,11 +9,19 @@ import { Theme, useStyles, useTheme } from "@/src/game/ui/theme";
  *    success = this is right, let go
  *    danger  = this is not the place
  *  The LABEL carries the nuance; the colour carries only the verdict. */
+// Fit feedback has its OWN three-step scale, distinct from the UI's accent/success tokens:
+//   getting close (blue)  →  almost (light green)  →  drop it (green).
+// It reads as a progression toward the goal, which is why it doesn't reuse the interface
+// colours — a chip going blue → green is "you're getting there", not "interactive → done".
+const FIT_DONE = "#8FA876"; // Drop it! — the part is home
+const FIT_ALMOST = "#BACCA8"; // Almost — a lighter shade of done: nearly there
+const FIT_CLOSE = "#A9BFD9"; // Getting close — a step further out
+
 const lookFor = (t: Theme): Record<FitState, { color: string; label: string } | null> => ({
   idle: null,
-  held: { color: t.accent, label: "Find the spot" },
-  nearCorrect: { color: t.success, label: "Drop it!" },
-  nearRotation: { color: t.accent, label: "Almost — drop to settle" },
+  held: { color: FIT_CLOSE, label: "Find the spot" },
+  nearCorrect: { color: FIT_DONE, label: "Drop it!" },
+  nearRotation: { color: FIT_ALMOST, label: "Almost — drop to settle" },
   wrongTarget: { color: t.danger, label: "Belongs elsewhere" },
 });
 

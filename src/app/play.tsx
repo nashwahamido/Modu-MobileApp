@@ -57,7 +57,7 @@ import { ToggleChips } from "@/src/game/ui/ToggleChips";
 import { ClusterFocusControl } from "@/src/game/ui/ClusterFocusControl";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 import { Button, ProgressBar } from "@/src/game/ui/Button";
-import { ELEVATION, RADIUS, SPACE, SIZE, Theme, TYPE, useTheme } from "@/src/game/ui/theme";
+import { ELEVATION, RADIUS, SPACE, Theme, TYPE, useTheme } from "@/src/game/ui/theme";
 import {
   currentStageForClusterFocus,
   requiresClusterFocus,
@@ -194,9 +194,10 @@ function GameScreen() {
   );
 
   const selectedTool = useGameStore((s) => s.selectedTool);
-  const neededTool = settings.manualTools
-    ? (sceneState.activeTighten?.tool ?? driveAction?.tool ?? null)
-    : null;
+  const rawTool = sceneState.activeTighten?.tool ?? driveAction?.tool ?? null;
+  // "hand" is not equippable, so it is not NEEDED — otherwise the step would sit there
+  // waiting for a tool the player has no way to pick up.
+  const neededTool = settings.manualTools ? rawTool : null;
   const toolReady = !neededTool || selectedTool === neededTool;
 
   // Scene gestures are MEMOIZED: the screen re-renders constantly mid-drag (fit-state churn), and handing GestureDetector fresh gesture instances reattaches native handlers — eating the first re-grab attempt and stuttering active drags (same lesson as the joystick).
@@ -336,37 +337,45 @@ function GameScreen() {
               Stage {stage} · {objective} · {completedCount}/{totalCount}
             </Text>
           ) : null}
-          {/* Fills in the ACCENT and only turns green at 100% — a half-built table is not
-              done, and green is the one signal reserved for done. */}
-          <ProgressBar
-            value={completedCount}
-            total={totalCount}
-            style={settings.showInstructions ? styles.progressGap : undefined}
-          />
-        </View>
-        {focus ? null : (
-          <View style={styles.pointsChip} pointerEvents="none">
-            <Text style={styles.pointsText}>
-              ★ {completedCount * furniture.xpPerStep}
+          {/* [★ star] [progress track] [XP label] — the badge sits ON the bar's left,
+              the way the reference integrates the level star into the track. */}
+          <View style={[styles.progressRow, settings.showInstructions && styles.progressGap]}>
+            <View style={styles.xpStar} pointerEvents="none">
+              <Text style={styles.xpStarGlyph}>★</Text>
+            </View>
+            {/* Fills in the ACCENT and only turns green at 100% — a half-built table is not
+                done, and green is the one signal reserved for done. */}
+            <ProgressBar
+              value={completedCount}
+              total={totalCount}
+              style={styles.xpTrack}
+            />
+            <Text style={styles.xpLabel}>
+              {completedCount * furniture.xpPerStep} XP
             </Text>
           </View>
-        )}
+        </View>
         <CenterDropRing />
         <FitChip />
         <HintToast />
-        <UndoButton />
+        {/* Focus mode clears the workbench: everything below is chrome the task doesn't
+            need. What survives is the shortlist — joystick, the next part (PartsTray), the
+            progress bar, and Settings — plus the Focus toggle itself, since hiding it would
+            trap the player in focus mode. */}
+        {focus ? null : <UndoButton />}
         <GameSettings />
-        {/* Bottom-right toggles row (her togglesRow): dev auto + Focus/Auto-View. */}
         <View style={styles.togglesRow}>
-          <DevAutoStep heldDriver={heldDriver} sinkDriver={sinkDriver} />
+          {focus ? null : (
+            <DevAutoStep heldDriver={heldDriver} sinkDriver={sinkDriver} />
+          )}
           <ToggleChips />
         </View>
-        {mode !== "strict" ? <ClusterFocusControl /> : null}
+        {!focus && mode !== "strict" ? <ClusterFocusControl /> : null}
         <PartsTray
           items={sceneState.trayItems}
           gestureFor={gestureFor}
           thumbs={furniture.thumbs}
-          header={<ClusterTray clusterDriver={clusterDriver} />}
+          header={focus ? undefined : <ClusterTray clusterDriver={clusterDriver} />}
         />
         <ToolBar neededTool={neededTool} />
         {mode === "free" && !focus ? (
@@ -426,12 +435,14 @@ function GameScreen() {
             dark={dark}
           />
         </View>
-        <Button
-          label="⟲ Recenter"
-          small
-          style={styles.recenterButton}
-          onPress={resetCamera}
-        />
+        {focus ? null : (
+          <Button
+            label="⟲ Recenter"
+            small
+            style={styles.recenterButton}
+            onPress={resetCamera}
+          />
+        )}
 
       {heldActionId && settings.releaseBehavior === "float" ? (
           // Float mode: a released part stays where it was set down; this is the way back to the tray. (In autoReturn mode a miss returns by itself.)
@@ -470,45 +481,53 @@ const makeStyles = (t: Theme) =>
       position: "absolute",
       top: 10,
       alignSelf: "center",
-      backgroundColor: t.surface,
-      borderColor: t.border,
-      borderWidth: StyleSheet.hairlineWidth * 2,
-      paddingHorizontal: SPACE.lg,
-      paddingVertical: SPACE.sm,
-      borderRadius: RADIUS.panel,
-      ...ELEVATION.card,
-    },
-    // Instructions hidden: a fixed-width pill, so the bar doesn't collapse without its text.
-    objectiveBarSlim: { width: 260, paddingVertical: SPACE.sm },
-    objectiveText: { ...TYPE.body, color: t.text },
-    progressGap: { marginTop: SPACE.sm },
-
-    // Fixed size, so the row never shifts whether the score is 0 or 300.
-    pointsChip: {
-      position: "absolute",
-      top: 8,
-      left: 14,
-      width: 76,
-      height: SIZE.controlHeightSm,
-      alignItems: "center",
       justifyContent: "center",
       backgroundColor: t.surface,
       borderColor: t.border,
       borderWidth: StyleSheet.hairlineWidth * 2,
-      borderRadius: RADIUS.control,
+      paddingHorizontal: SPACE.lg,
+      // With the objective sentence shown the bar needs two rows, so it sizes to content.
+      paddingVertical: 6,
+      borderRadius: RADIUS.panel,
       ...ELEVATION.card,
     },
-    // GOLD: earned, not pressable. The one place this colour appears.
-    pointsText: { ...TYPE.numeric, color: t.gold },
+    // Instructions hidden — just the XP row. FIXED to the cluster panel's height (its
+    // paddingTop 6 + chip 32 + paddingBottom 8 = 46); both sit at top:10, so their bottom
+    // edges line up at y=56. No vertical padding: the 46 is the whole height.
+    objectiveBarSlim: { width: 260, height: 46, paddingVertical: 0 },
+    objectiveText: { ...TYPE.body, color: t.text, fontSize: 13, lineHeight: 15 },
+    progressGap: { marginTop: SPACE.sm },
+
+    // The XP badge sits INSIDE the bar, on the progress track's left — a star that overlaps
+    // the track's start, with the running total beside it. (There is no level system in the
+    // data — just xpPerStep — so this shows the honest running total, not a fake N/500.)
+    progressRow: { flexDirection: "row", alignItems: "center", gap: SPACE.sm },
+    xpStar: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      backgroundColor: t.accent,
+      alignItems: "center",
+      justifyContent: "center",
+      // Pull it left so it straddles the track's start, as in the reference.
+      marginRight: -2,
+      ...ELEVATION.card,
+    },
+    xpStarGlyph: { color: t.onAccent, fontSize: 13, fontWeight: "800" },
+    xpTrack: { flex: 1 },
+    xpLabel: { ...TYPE.numeric, color: t.gold },
 
     // Same line as the points chip and the gear.
-    hintButton: { position: "absolute", left: 148, top: 8, minWidth: 42 },
+    // On the top row beside the gear (gear is 42 wide at left:14 → sits at left:64).
+    hintButton: { position: "absolute", left: 64, top: 8, minWidth: 42 },
     recenterButton: { position: "absolute", left: 14, top: 102 },
     // The way back to the tray in float mode. PRIMARY: while a part is in the air, this is
     // the one thing the player might need, so it is the one thing that carries the accent.
     putBackButton: { position: "absolute", left: 14, top: 150 },
 
-    joystickZone: { position: "absolute", left: 28, bottom: 28 },
+    // Left edge aligned with Recenter and the gear (all left:14); bottom aligned with the
+    // toolbar row (bottom:16) so the left column and the bottom row share their corner.
+    joystickZone: { position: "absolute", left: 14, bottom: 16 },
     togglesRow: {
       position: "absolute",
       right: 14,

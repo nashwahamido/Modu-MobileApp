@@ -49,12 +49,19 @@ function fillFor(t: Theme, variant: ButtonVariant, pressed: boolean): string {
   if (variant === "primary") return pressed ? t.accentPressed : t.accent;
   if (variant === "success") return t.success;
   if (variant === "ghost") return pressed ? t.surfaceRaised : "transparent";
-  return pressed ? t.surfaceRaised : t.surface;
+  // A pressed ACTION button takes the accent, not a slightly darker paper. The press is the
+  // moment the control is live, and "live" is the one thing the accent means.
+  return pressed ? t.accentPressed : t.surface;
 }
 
-function textFor(t: Theme, variant: ButtonVariant): string {
+/** The label has to follow the FILL. A pressed action button turns accent, so its dark text
+ *  would sink into it — the text flips to `onAccent` for exactly as long as the press lasts.
+ *  (This is also why button text can't simply be set to the light linen: at rest a button
+ *  sits on near-white paper, and linen on paper is invisible.) */
+function textFor(t: Theme, variant: ButtonVariant, pressed: boolean): string {
   if (variant === "primary") return t.onAccent;
   if (variant === "success") return t.onSuccess;
+  if (variant === "secondary" && pressed) return t.onAccent;
   return t.text;
 }
 
@@ -98,23 +105,31 @@ export function Button({
         style,
       ]}
     >
-      {icon}
-      {label ? (
-        <Text
-          style={[
-            small ? TYPE.labelSm : TYPE.label,
-            { color: disabled ? t.textFaint : textFor(t, variant) },
-            icon ? { marginLeft: SPACE.sm } : null,
-          ]}
-        >
-          {label}
-        </Text>
-      ) : null}
-      {badge != null ? (
-        <View style={[styles.badge, { backgroundColor: t.accent }]}>
-          <Text style={[TYPE.labelSm, { color: t.onAccent }]}>{badge}</Text>
-        </View>
-      ) : null}
+      {({ pressed }) => (
+        <>
+          {icon}
+          {label ? (
+            <Text
+              style={[
+                small ? TYPE.labelSm : TYPE.label,
+                {
+                  color: disabled
+                    ? t.textFaint
+                    : textFor(t, variant, pressed && !disabled),
+                },
+                icon ? { marginLeft: SPACE.sm } : null,
+              ]}
+            >
+              {label}
+            </Text>
+          ) : null}
+          {badge != null ? (
+            <View style={[styles.badge, { backgroundColor: t.accent }]}>
+              <Text style={[TYPE.labelSm, { color: t.onAccent }]}>{badge}</Text>
+            </View>
+          ) : null}
+        </>
+      )}
     </Pressable>
   );
 }
@@ -157,7 +172,11 @@ export function IconButton({
           height: size,
           paddingHorizontal: 0,
           borderRadius: RADIUS.control,
-          backgroundColor: fillFor(t, variant, pressed && !disabled),
+          // No label to flip, so an icon button keeps the quieter raised press.
+          backgroundColor:
+            pressed && !disabled && variant === "secondary"
+              ? t.surfaceRaised
+              : fillFor(t, variant, pressed && !disabled),
           borderColor: t.border,
           borderWidth: StyleSheet.hairlineWidth * 2,
         },

@@ -90,5 +90,5 @@ const makeStyles = (t: Theme) =>
     justifyContent: "center",
   },
   btnBusy: { opacity: 0.4 },
-  text: { color: t.text, fontSize: 13, fontWeight: "700" },
+  text: { color: t.onAccent, fontSize: 13, fontWeight: "700" },
   });

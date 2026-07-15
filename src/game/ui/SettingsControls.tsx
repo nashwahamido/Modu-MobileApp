@@ -189,8 +189,9 @@ function Row({
       <Switch
         value={value}
         onValueChange={onValueChange}
-        trackColor={{ false: t.surfaceInset, true: t.success }}
-        thumbColor={t.text}
+        trackColor={{ false: t.surfaceInset, true: t.accent }}
+        thumbColor={value ? t.onAccent : t.surface}
+        ios_backgroundColor={t.surfaceInset}
       />
     </View>
   );
@@ -449,11 +450,13 @@ const makeStyles = (t: Theme) =>
     justifyContent: "center",
     paddingHorizontal: 6,
   },
-  segBtnActive: { backgroundColor: t.success, borderColor: t.success },
+  // Active segment = ACCENT, not success green. Green means a step is DONE; a chosen
+  // setting is a live selection, which is what the accent means.
+  segBtnActive: { backgroundColor: t.accent, borderColor: t.accent },
   segText: { fontSize: 12.5, fontWeight: "700", color: t.textDim, textAlign: "center" },
-  segTextActive: { color: t.text },
+  segTextActive: { color: t.onAccent },
   arrow: { paddingHorizontal: 12, paddingVertical: 6 },
-  arrowText: { fontSize: 20, fontWeight: "700", color: t.success, lineHeight: 22 },
+  arrowText: { fontSize: 20, fontWeight: "700", color: t.accent, lineHeight: 22 },
   stepperValue: {
     minWidth: 92,
     textAlign: "center",

@@ -67,9 +67,41 @@ material {
         // legs are solid TIMBER (coarse, wide stock). One map on everything is the tell
         // that a thing was textured rather than built.
         { type : sampler2d, name : sideMap },
+        // ── METAL ────────────────────────────────────────────────────────────
+        // Screws, caps, pins. Previously these were SKIPPED by the shader entirely and
+        // kept their GLB material — which is why they turned up looking like wood the
+        // moment a group wasn't listed as metal. Now they are rendered, deliberately.
+        { type : sampler2d, name : metalMap },
+        { type : float,  name : metalTiles },
+        // 1 = this part is metal. Uniform per part, so the branch is coherent and free.
+        { type : float,  name : isMetal },
+        // Metal needs a GLINT. This material's cel shading throws Filament's specular away,
+        // so without one, steel reads as grey plastic — the highlight is most of what tells
+        // you a thing is metal at all. Quantised, to stay in the look.
+        { type : float,  name : metalSpec },
+        { type : float,  name : metalSpecPower },
         // Repeats per metre for the side map. Its planks are ~120 mm — deliberately wider
         // than a 49 mm leg, so no seam can ever run down one.
         { type : float,  name : sideTiles },
+        // ── ROUND parts ──────────────────────────────────────────────────────
+        // Object-space symmetry axis of a part that is a disc or a cylinder. ZERO for a
+        // box, which keeps the triplanar path.
+        //
+        // Triplanar is a BOX projection: it blends three planar samples by how squarely the
+        // normal faces each axis. On a curved rim the normal sweeps through every direction,
+        // so the blend sweeps with it and the grain smears and swirls around the curve.
+        // There is no threshold that fixes this — a cylinder is simply not three planes.
+        // The fix is to project in the surface's own coordinates: ANGLE around the axis,
+        // and DISTANCE along it.
+        { type : float3, name : roundAxis },
+        // The part's radius, in metres. Needed so the map can be wrapped an INTEGER number
+        // of times around the circumference — otherwise the wrap leaves a visible seam
+        // where the angle jumps from +PI to -PI.
+        { type : float,  name : roundRadius },
+        // 1 = the grain wraps AROUND the rim (a disc's edge, like bent edge-banding).
+        // 0 = the grain runs ALONG the axis (a pole: timber grain runs down its length,
+        // it does not spiral around it).
+        { type : float,  name : rimAround },
         // Object-space axis whose faces are CAPS, i.e. get the panel map. For the table top
         // that is the thickness axis, so its top and underside are panel and its four edges
         // are timber. A ZERO vector means "no caps" — every face is timber, which is what a
@@ -294,7 +326,71 @@ fragment {
         return c * (1.0 - materialParams.sideDarken);
     }
 
+    /** A disc or a cylinder, projected in its OWN coordinates rather than as a box.
+     *
+     *  The flat faces (square-on to the axis) are PANEL, projected planar — a seat is cut
+     *  from a board, and its grain should run straight across, not radiate from the centre.
+     *  The rim is TIMBER, projected cylindrically: angle around the axis, distance along it.
+     *
+     *  The angle is scaled to an INTEGER number of map repeats around the circumference, so
+     *  the +PI/-PI wrap lands exactly on a tile boundary and leaves no seam. */
+    vec3 roundWood(vec3 p, vec3 n) {
+        vec3 ax = normalize(materialParams.roundAxis);
+        vec3 up = abs(ax.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+        vec3 e1 = normalize(cross(ax, up));
+        vec3 e2 = cross(ax, e1);
+
+        float phase = materialParams.grainPhase;
+        float along = dot(p, ax);
+        float ang = atan(dot(p, e2), dot(p, e1));          // -PI .. PI
+        float turns = ang / 6.2831853;                     // -0.5 .. 0.5
+
+        // Integer repeats around: no seam at the wrap.
+        float circumference = 6.2831853 * max(materialParams.roundRadius, 1e-4);
+        float reps = max(1.0, floor(circumference * materialParams.sideTiles + 0.5));
+
+        // The rim. Which way the grain runs depends on WHAT the part is.
+        vec2 rimUV = materialParams.rimAround > 0.5
+            // A disc's edge: grain wraps around it, seams run across the thickness.
+            ? vec2(along * materialParams.sideTiles + phase, turns * reps)
+            // A pole: grain runs DOWN it. The seams are what wrap around.
+            : vec2(turns * reps + phase, along * materialParams.sideTiles);
+        vec3 rim = texture(materialParams_sideMap, rimUV).rgb
+                 * (1.0 - materialParams.sideDarken);
+
+        // The flat faces: panel, projected straight through the axis.
+        float tiles = materialParams.textureTiles;
+        vec2 capUV = vec2(dot(p, e1) * tiles + phase, dot(p, e2) * tiles);
+        vec3 cap = texture(materialParams_grainMap, capUV).rgb;
+
+        float capW = pow(abs(dot(n, ax)), materialParams.capSharp);
+        return mix(rim, cap, capW);
+    }
+
+    /** Brushed steel. One map, triplanar, no panel/timber split — a screw is not made of
+     *  boards, so it has no grain direction to respect and no seams to place. */
+    vec3 metalSurface(vec3 p, vec3 bw, vec3 a, vec3 u, vec3 w) {
+        float t = materialParams.metalTiles;
+        float pa = dot(p, a) * t;
+        float pu = dot(p, u) * t;
+        float pw = dot(p, w) * t;
+
+        return texture(materialParams_metalMap, vec2(pw, pa)).rgb * bw.x
+             + texture(materialParams_metalMap, vec2(pu, pa)).rgb * bw.y
+             + texture(materialParams_metalMap, vec2(pu, pw)).rgb * bw.z;
+    }
+
     vec3 texturedWood(vec3 p, vec3 n, vec3 a, vec3 u, vec3 w) {
+        if (materialParams.isMetal > 0.5) {
+            return metalSurface(p, triWeights(n, a, u, w), a, u, w)
+                 * materialParams.baseColor;
+        }
+
+        // A round part is not three planes. Project it in its own coordinates instead.
+        if (length(materialParams.roundAxis) > 1e-4) {
+            return roundWood(p, n) * materialParams.baseColor;
+        }
+
         vec3 bw = triWeights(n, a, u, w);
 
         // Which board is this face cut from? A face square-on to capAxis is PANEL; anything
@@ -493,10 +589,23 @@ fragment {
         float lit = mix(materialParams.ambientLift, 1.0,
                         ramp * lightData.attenuation * shadow);
 
+        // ── the metal glint ──────────────────────────────────────────────────
+        // Custom surface shading discards Filament's specular, so metal has to grow its
+        // own. Without it, steel is just grey plastic — the highlight is most of what tells
+        // you a surface is metal. Quantised with a hard step, to stay inside the look.
+        vec3 vDir = normalize(getWorldViewVector());
+        vec3 h = normalize(lightData.l + vDir);
+        float spec = pow(clamp(dot(nGeom, h), 0.0, 1.0), materialParams.metalSpecPower);
+        float aaS = fwidth(spec) * 0.5 + 1e-5;
+        float glint = smoothstep(0.5 - aaS, 0.5 + aaS, spec)
+                    * materialParams.metalSpec * materialParams.isMetal
+                    * step(0.001, NoL);
+
         // Hue-shifting shadow: the BAND is carried by the colour, not by a second
         // brightness multiply. Multiplying by `lit` again here is what turned the
         // bands back into a gradient in the first pass.
         vec3 tone = mix(materialParams.shadeColor, shadingData.diffuseColor, lit);
+        tone = mix(tone, vec3(1.0), glint);
 
         // Filament's Lambert diffuse is baseColor/PI · NoL · light. Omitting the 1/PI
         // runs the material ~3x hot against the same rig every other look uses, which

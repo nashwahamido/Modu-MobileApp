@@ -97,7 +97,9 @@ const makeStyles = (t: Theme) =>
   gear: {
     position: "absolute",
     top: 8,
-    left: 92,
+    // Top-left corner, above the undo button (top:54) and clear of the centred objective
+    // bar. The XP that used to sit here now lives on the progress bar itself.
+    left: 14,
     width: 42,
     height: 36,
     borderRadius: 12,
@@ -135,10 +137,12 @@ const makeStyles = (t: Theme) =>
   },
   homeText: { fontSize: 14, fontWeight: "700", color: t.textDim },
   done: {
-    backgroundColor: t.success,
+    // Purple, not green: Done is an ACTION, and every action in this palette is the accent.
+    // Green is reserved for a COMPLETED step.
+    backgroundColor: t.accent,
     borderRadius: 12,
     paddingHorizontal: 18,
     paddingVertical: 9,
   },
-  doneText: { color: t.text, fontWeight: "700", fontSize: 14 },
+  doneText: { color: t.onAccent, fontWeight: "700", fontSize: 14 },
   });

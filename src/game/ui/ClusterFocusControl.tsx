@@ -176,7 +176,8 @@ const makeStyles = (t: Theme) =>
   optionMetaLocked: { color: t.textFaint },
 
   switcher: {
-    // Top-right, in the strip above the parts tray (tray starts at top:70). Kicker dropped so the compact chip row fits.
+    // Top-right, above the parts tray. right:14 matches the tray's right edge so the two
+    // right-hand panels share a vertical line.
     position: "absolute",
     right: 14,
     top: 10,
@@ -211,7 +212,8 @@ const makeStyles = (t: Theme) =>
   chipFinished: { backgroundColor: t.success, borderColor: t.success },
   chipDisabled: { opacity: 0.42 },
   chipText: { color: t.text, fontSize: 12, fontWeight: "800" },
-  chipTextSelected: { color: t.text },
+  // Selected chip is filled with the accent, so its label follows the fill.
+  chipTextSelected: { color: t.onAccent },
   chipTextFinished: { color: t.success },
 
   textLight: { color: t.text },
