@@ -8,7 +8,7 @@ import type { ModeId } from "@/src/onboarding/questionnaire";
 import { VoiceButton } from "@/src/game/ui/VoiceButton";
 import { useGameStore } from "@/src/game/core/store";
 import type { ProfileId } from "@/src/game/core/profile";
-import { useTutorialStore } from "@/src/legacyTutorial/tutorial/store";
+import { useTutorialStore } from "@/src/game/tutorial/store";
 import { saveSelectedAvatarMode } from "@/src/services/onboarding";
 
 const mascot = require("../assets/mascot/mascot.png");

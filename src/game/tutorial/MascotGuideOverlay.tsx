@@ -9,18 +9,17 @@ import {
 } from './steps';
 import { useTutorialStore } from './store';
 import { useTutorialTargets, type TutorialFrame } from './targetRegistry';
-import { useGameStore } from '../game/store';
-
-const mascotImage = require('../assets/mascot/mascot.png');
+const mascotImage = require('../../assets/mascot/mascot.png');
 const PADDING = 0;
 
 interface Props {
   activeToolKind: ToolTutorialKind | null;
   onClaimReward: () => void;
   onContinueToAssembly?: () => void;
+  blocked?: boolean;
 }
 
-export function MascotGuideOverlay({ activeToolKind, onClaimReward, onContinueToAssembly }: Props) {
+export function MascotGuideOverlay({ activeToolKind, onClaimReward, onContinueToAssembly, blocked = false }: Props) {
   const overlayRef = useRef<View>(null);
   const windowSize = useWindowDimensions();
   const [overlaySize, setOverlaySize] = useState<{ width: number; height: number } | null>(null);
@@ -39,7 +38,6 @@ export function MascotGuideOverlay({ activeToolKind, onClaimReward, onContinueTo
   const frames = useTutorialTargets((s) => s.frames);
   const nodes = useTutorialTargets((s) => s.nodes);
   const setFrame = useTutorialTargets((s) => s.setFrame);
-  const missedDropPromptVisible = useGameStore((s) => s.missedDropPromptVisible);
 
   const handleLayout = (event: LayoutChangeEvent) => {
     const { width: nextWidth, height: nextHeight } = event.nativeEvent.layout;
@@ -87,7 +85,7 @@ export function MascotGuideOverlay({ activeToolKind, onClaimReward, onContinueTo
     return () => clearTimeout(retry);
   }, [completed, currentIndex, nodes, overlaySize, rewardReady, setFrame, skipped]);
 
-  if (skipped || missedDropPromptVisible) return null;
+  if (skipped || blocked) return null;
 
   if (rewardReady) {
     return (

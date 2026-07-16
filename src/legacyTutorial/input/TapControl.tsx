@@ -6,8 +6,8 @@ import { MALLET_TAPS, TIGHTEN_TOTAL_DEG, useGameStore } from '../game/store';
 import { looseDelta } from '../game/staging';
 import type { AssemblyAction } from '../game/assembly';
 import type { OffsetDriver } from '../scene/offsetDriver';
-import { TutorialTarget } from '../tutorial/TutorialTarget';
-import { useTutorialStore } from '../tutorial/store';
+import { TutorialTarget } from '@/src/game/tutorial/TutorialTarget';
+import { useTutorialStore } from '@/src/game/tutorial/store';
 
 const SIZE = 120;
 const DEG_PER_TAP = TIGHTEN_TOTAL_DEG / MALLET_TAPS;

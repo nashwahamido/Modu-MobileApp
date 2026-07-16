@@ -15,7 +15,7 @@ import { screenPointOnPlane } from '../game/math';
 import { ACTION_BY_ID, type AssemblyAction } from '../game/assembly';
 import type { OrbitManipulator } from '../scene/AssemblyScene';
 import type { Vec3 } from '../game/math';
-import { useTutorialStore } from '../tutorial/store';
+import { useTutorialStore } from '@/src/game/tutorial/store';
 
 type Float3 = [number, number, number];
 

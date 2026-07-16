@@ -4,7 +4,7 @@ import { GestureDetector, GestureType, ScrollView } from 'react-native-gesture-h
 import type { AssemblyAction } from '../game/assembly';
 import { THUMBS } from '../game/thumbs';
 import type { TrayItem } from '../scene/useSceneState';
-import { TutorialTarget } from '../tutorial/TutorialTarget';
+import { TutorialTarget } from '@/src/game/tutorial/TutorialTarget';
 
 interface Props {
   items: TrayItem[];

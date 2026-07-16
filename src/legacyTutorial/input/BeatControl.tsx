@@ -4,8 +4,8 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 import { useGameStore } from '../game/store';
 import type { AssemblyAction } from '../game/assembly';
-import { TutorialTarget } from '../tutorial/TutorialTarget';
-import { useTutorialStore } from '../tutorial/store';
+import { TutorialTarget } from '@/src/game/tutorial/TutorialTarget';
+import { useTutorialStore } from '@/src/game/tutorial/store';
 
 /** How far (px) the swipe must travel in the beat's direction. */
 const SWIPE_PX = 80;

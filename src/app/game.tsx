@@ -22,10 +22,10 @@ import { BaseStashControl } from '../legacyTutorial/game/ui/BaseStashControl';
 import { ResetButton } from '../legacyTutorial/game/ui/ResetButton';
 import { DevAutoStep } from '../legacyTutorial/game/ui/DevAutoStep';
 import { MissedDropPromptOverlay } from '../legacyTutorial/game/ui/MissedDropPromptOverlay';
-import { TutorialTarget } from '../legacyTutorial/tutorial/TutorialTarget';
-import { MascotGuideOverlay } from '../legacyTutorial/tutorial/MascotGuideOverlay';
-import { useTutorialStore } from '../legacyTutorial/tutorial/store';
-import { TUTORIAL_REWARD_TOKENS, type ToolTutorialKind } from '../legacyTutorial/tutorial/steps';
+import { TutorialTarget } from '@/src/game/tutorial/TutorialTarget';
+import { MascotGuideOverlay } from '@/src/game/tutorial/MascotGuideOverlay';
+import { useTutorialStore } from '@/src/game/tutorial/store';
+import { TUTORIAL_REWARD_TOKENS, type ToolTutorialKind } from '@/src/game/tutorial/steps';
 
 const TRAINING_GRID_ROWS = Array.from({ length: 12 }, (_, index) => index);
 const TRAINING_GRID_COLUMNS = Array.from({ length: 18 }, (_, index) => index);
