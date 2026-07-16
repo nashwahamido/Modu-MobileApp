@@ -71,12 +71,19 @@ function RoomModel({
     transformManager,
   } = useFilamentContext();
   const unitTransform = useRef<Mat4 | null>(null);
+  const controlsRef = useRef({ rotationY, zoom });
+  controlsRef.current = { rotationY, zoom };
 
   useEffect(() => {
     if (model.state !== "loaded") return;
 
     transformManager.transformToUnitCube(model.rootEntity, model.boundingBox);
     unitTransform.current = transformManager.getTransform(model.rootEntity);
+    const initialControls = controlsRef.current;
+    const initialTransform = unitTransform.current
+      .rotate(initialControls.rotationY, [0, 1, 0])
+      .scaling([initialControls.zoom, initialControls.zoom, initialControls.zoom]);
+    transformManager.setTransform(model.rootEntity, initialTransform);
 
     // The optimized GLB intentionally has no texture payload and most
     // materials omit a base color. Keep Filament's native glTF shading while
@@ -104,10 +111,9 @@ function RoomModel({
 
   useEffect(() => {
     if (model.state !== "loaded" || !unitTransform.current) return;
-    const scale = 1 / zoom;
     const transform = unitTransform.current
       .rotate(rotationY, [0, 1, 0])
-      .scaling([scale, scale, scale]);
+      .scaling([zoom, zoom, zoom]);
     transformManager.setTransform(model.rootEntity, transform);
   }, [model, rotationY, transformManager, zoom]);
 

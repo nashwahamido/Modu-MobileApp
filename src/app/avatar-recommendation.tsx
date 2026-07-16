@@ -31,20 +31,14 @@ const modes = avatarModes.map((mode) => ({
 }));
 
 export default function AvatarRecommendationScreen() {
-  const params = useLocalSearchParams<{ mode?: string; secondary?: string }>();
+  const params = useLocalSearchParams<{ mode?: string }>();
   const initialModeId = modes.some((mode) => mode.id === params.mode) ? (params.mode as ModeId) : "momentum";
-  const secondaryModeId = modes.some((mode) => mode.id === params.secondary)
-    ? (params.secondary as ModeId)
-    : (modes.find((mode) => mode.id !== initialModeId)?.id as ModeId | undefined);
-  const recommendedModeIds = [initialModeId, secondaryModeId].filter(Boolean) as ModeId[];
   const [selectedModeId, setSelectedModeId] = useState<ModeId>(initialModeId);
-  const [showOtherModes, setShowOtherModes] = useState(false);
   const [showModeTip, setShowModeTip] = useState(false);
   const [savingChoice, setSavingChoice] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const modeTipAnim = useRef(new Animated.Value(0)).current;
   const selectedMode = modes.find((mode) => mode.id === selectedModeId) ?? modes[0];
-  const otherModes = modes.filter((mode) => recommendedModeIds.includes(mode.id as ModeId) && mode.id !== selectedModeId);
 
   useEffect(() => {
     return () => {
@@ -54,7 +48,7 @@ export default function AvatarRecommendationScreen() {
 
   useEffect(() => {
     Speech.stop();
-  }, [selectedModeId, showModeTip, showOtherModes]);
+  }, [selectedModeId, showModeTip]);
 
   useEffect(() => {
     if (!showModeTip) {
@@ -125,85 +119,77 @@ export default function AvatarRecommendationScreen() {
         </Pressable>
       </View>
 
-      {!showOtherModes ? (
-        <View style={styles.recommendationLayout}>
-          <VoiceButton onPress={speakSelectedMode} style={styles.audioButton} />
-          <View style={styles.modeCard}>
-            <View style={[styles.avatarCircle, { backgroundColor: selectedMode.color }]}>
-              <Image source={selectedMode.image} style={styles.avatarImage} />
-            </View>
-            <Text style={styles.modeTitle}>{selectedMode.title}</Text>
-            <Text style={styles.avatarName}>{selectedMode.avatarName}</Text>
-          </View>
+      <View style={styles.recommendationLayout}>
+        <VoiceButton onPress={speakSelectedMode} style={styles.audioButton} />
 
-          <View style={styles.recommendationCopy}>
-            <Text style={styles.title}>Based on your choices, I recommend...</Text>
-            <Text style={styles.avatarLine}>Avatar: {selectedMode.avatarName}</Text>
-            <Text style={styles.personalityLine}>{selectedMode.personality}</Text>
-            <Text style={styles.sloganLine}>“{selectedMode.slogan}”</Text>
-            <Text style={styles.explanation}>{selectedMode.explanation}</Text>
-            <View style={styles.bulletList}>
-              {selectedMode.bullets.map((bullet) => (
-                <View key={bullet} style={styles.bulletRow}>
-                  <View style={styles.bulletDot} />
-                  <Text style={styles.bulletText}>{bullet}</Text>
-                </View>
-              ))}
+        <View style={[styles.modeCard, selectedMode.id === initialModeId && styles.modeCardRecommended]}>
+          {selectedMode.id === initialModeId ? (
+            <View style={styles.recommendedBadge}>
+              <Text style={styles.recommendedBadgeText}>Recommended</Text>
             </View>
-            <Pressable
-              onPress={() => {
-                Speech.stop();
-                setShowOtherModes(true);
-              }}
-            >
-              <Text style={styles.otherModesLink}>Other recommended avatars</Text>
-            </Pressable>
-            {saveError ? <Text style={styles.saveErrorText}>{saveError}</Text> : null}
-            <Pressable
-              onPress={confirmAvatar}
-              style={[styles.confirmButton, savingChoice && styles.disabledButton]}
-            >
-              <Text style={styles.confirmButtonText}>
-                {savingChoice ? "Saving..." : "Confirm this avatar"}
-              </Text>
-            </Pressable>
+          ) : null}
+          <View style={[styles.avatarCircle, { backgroundColor: selectedMode.color }]}>
+            <Image source={selectedMode.image} style={styles.avatarImage} />
           </View>
+          <Text style={styles.modeTitle}>{selectedMode.title}</Text>
+          <Text style={styles.avatarName}>{selectedMode.avatarName}</Text>
         </View>
-      ) : (
-        <View style={styles.otherModesLayout}>
-          <Text style={styles.otherModesTitle}>Other recommended avatar...</Text>
-          <View style={styles.otherModesGrid}>
-            {otherModes.map((mode) => (
-              <Pressable
-                key={mode.id}
-                onPress={() => {
-                  Speech.stop();
-                  setSelectedModeId(mode.id as ModeId);
-                  setShowOtherModes(false);
-                  setShowModeTip(false);
-                }}
-                style={styles.otherModeCard}
-              >
-                <View style={[styles.otherAvatarCircle, { backgroundColor: mode.color }]}>
-                  <Image source={mode.image} style={styles.otherAvatarImage} />
-                </View>
-                <View style={styles.otherModeCopy}>
-                  <Text style={styles.otherModeTitle}>{mode.title}</Text>
-                  <Text style={styles.otherAvatarName}>{mode.avatarName}</Text>
-                  {mode.bullets.map((bullet) => (
-                    <View key={bullet} style={styles.otherBulletRow}>
-                      <View style={styles.otherBulletDot} />
-                      <Text style={styles.otherBulletText}>{bullet}</Text>
-                    </View>
-                  ))}
-                </View>
-              </Pressable>
+
+        <View style={styles.recommendationCopy}>
+          <Text style={styles.title}>
+            {selectedMode.id === initialModeId
+              ? "Based on your choices, I recommend..."
+              : "Other available mode"}
+          </Text>
+          <Text style={styles.avatarLine}>Avatar: {selectedMode.avatarName}</Text>
+          <Text style={styles.personalityLine}>{selectedMode.personality}</Text>
+          <Text style={styles.sloganLine}>“{selectedMode.slogan}”</Text>
+          <Text style={styles.explanation}>{selectedMode.explanation}</Text>
+          <View style={styles.bulletList}>
+            {selectedMode.bullets.map((bullet) => (
+              <View key={bullet} style={styles.bulletRow}>
+                <View style={styles.bulletDot} />
+                <Text style={styles.bulletText}>{bullet}</Text>
+              </View>
             ))}
           </View>
+          {saveError ? <Text style={styles.saveErrorText}>{saveError}</Text> : null}
+          <Pressable
+            onPress={confirmAvatar}
+            style={[styles.confirmButton, savingChoice && styles.disabledButton]}
+          >
+            <Text style={styles.confirmButtonText}>
+              {savingChoice ? "Saving..." : "Confirm this avatar"}
+            </Text>
+          </Pressable>
         </View>
-      )}
+      </View>
 
-      {showModeTip && !showOtherModes && (
+      <View style={styles.modeTabs}>
+        {modes.map((mode) => {
+          const isSelected = mode.id === selectedModeId;
+          const isRecommended = mode.id === initialModeId;
+          return (
+            <Pressable
+              key={mode.id}
+              onPress={() => {
+                Speech.stop();
+                setSelectedModeId(mode.id as ModeId);
+                setShowModeTip(false);
+                setSaveError(null);
+              }}
+              style={[styles.modeTab, isSelected && styles.modeTabSelected]}
+            >
+              <Text style={[styles.modeTabText, isSelected && styles.modeTabTextSelected]}>
+                {mode.title}
+              </Text>
+              {isRecommended ? <Text style={styles.modeTabRecommended}>Recommended</Text> : null}
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {showModeTip && (
         <View style={styles.dimOverlay}>
           <Animated.View
             style={[
@@ -249,8 +235,8 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: "#F3ECE0",
-    paddingHorizontal: 46,
-    paddingVertical: 24,
+    paddingHorizontal: 38,
+    paddingVertical: 18,
   },
   header: {
     position: "absolute",
@@ -276,112 +262,169 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 44,
+    gap: 34,
+    paddingBottom: 66,
+    paddingRight: 54,
   },
   audioButton: {
     alignSelf: "flex-start",
-    marginTop: 62,
+    flexShrink: 0,
+    marginTop: 42,
   },
   modeCard: {
     width: 190,
-    height: 252,
+    height: 260,
     alignItems: "center",
     justifyContent: "center",
-    borderColor: "#d8cdbb",
-    borderRadius: 32,
+    borderColor: "#D8CDBB",
+    borderRadius: 8,
     borderWidth: 2,
     backgroundColor: "#FBF8F3",
-    gap: 9,
+    gap: 8,
+    padding: 14,
+  },
+  modeCardRecommended: {
+    borderColor: "#4AAE78",
+    borderWidth: 3,
+    backgroundColor: "#EDF6EF",
   },
   avatarCircle: {
-    width: 118,
-    height: 118,
+    width: 112,
+    height: 112,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 59,
+    borderRadius: 56,
   },
   avatarImage: {
-    width: 86,
-    height: 86,
-    borderRadius: 24,
+    width: 82,
+    height: 82,
+    borderRadius: 22,
+  },
+  recommendedBadge: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    borderRadius: 8,
+    backgroundColor: "#4AAE78",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  recommendedBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "900",
   },
   modeTitle: {
     color: "#231F20",
-    fontSize: 23,
+    fontSize: 21,
     fontWeight: "900",
     textAlign: "center",
   },
   avatarName: {
     color: "#665f55",
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "800",
     textAlign: "center",
   },
   recommendationCopy: {
     flex: 1,
-    gap: 8,
+    minWidth: 0,
+    gap: 7,
   },
   title: {
     color: "#231F20",
-    fontSize: 28,
-    fontWeight: "800",
-    lineHeight: 34,
-  },
-  explanation: {
-    color: "#665f55",
-    fontSize: 17,
-    fontWeight: "700",
-    lineHeight: 23,
+    fontSize: 26,
+    fontWeight: "900",
+    lineHeight: 31,
   },
   avatarLine: {
     color: "#231F20",
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "900",
   },
   personalityLine: {
     color: "#231F20",
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "800",
+  },
+  explanation: {
+    color: "#665f55",
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18,
   },
   sloganLine: {
     color: "#8FA876",
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "800",
-    lineHeight: 20,
+    lineHeight: 18,
   },
   bulletList: {
-    gap: 8,
+    gap: 5,
   },
   bulletRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 9,
   },
   bulletDot: {
-    width: 13,
-    height: 13,
-    borderRadius: 7,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
     backgroundColor: "#231F20",
   },
   bulletText: {
+    flex: 1,
     color: "#231F20",
-    fontSize: 17,
+    fontSize: 13,
     fontWeight: "700",
   },
-  otherModesLink: {
-    color: "#665f55",
-    fontSize: 15,
-    fontWeight: "800",
-    textDecorationLine: "underline",
+  modeTabs: {
+    position: "absolute",
+    left: 38,
+    right: 38,
+    bottom: 18,
+    height: 56,
+    flexDirection: "row",
+    gap: 8,
+  },
+  modeTab: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    borderColor: "#D8CDBB",
+    borderRadius: 8,
+    borderWidth: 2,
+    backgroundColor: "#FBF8F3",
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  modeTabSelected: {
+    borderColor: "#4AAE78",
+    borderWidth: 3,
+    backgroundColor: "#EDF6EF",
+  },
+  modeTabText: {
+    color: "#231F20",
+    fontSize: 14,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  modeTabTextSelected: {
+    color: "#26734B",
+  },
+  modeTabRecommended: {
+    color: "#4AAE78",
+    fontSize: 9,
+    fontWeight: "900",
+    marginTop: 1,
   },
   confirmButton: {
-    alignSelf: "flex-start",
     alignItems: "center",
-    borderRadius: 24,
+    borderRadius: 8,
     backgroundColor: "#2D2A26",
     paddingHorizontal: 24,
     paddingVertical: 12,
-    marginTop: 2,
   },
   disabledButton: {
     opacity: 0.58,
@@ -485,75 +528,5 @@ const styles = StyleSheet.create({
     width: 62,
     height: 62,
     borderRadius: 18,
-  },
-  otherModesLayout: {
-    flex: 1,
-    justifyContent: "center",
-    gap: 26,
-  },
-  otherModesTitle: {
-    color: "#231F20",
-    fontSize: 27,
-    fontWeight: "800",
-  },
-  otherModesGrid: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 18,
-  },
-  otherModeCard: {
-    flex: 1,
-    maxWidth: 360,
-    minHeight: 236,
-    borderColor: "#d8cdbb",
-    borderRadius: 28,
-    borderWidth: 2,
-    backgroundColor: "#FBF8F3",
-    padding: 18,
-    gap: 14,
-  },
-  otherAvatarCircle: {
-    width: 86,
-    height: 86,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 43,
-  },
-  otherAvatarImage: {
-    width: 62,
-    height: 62,
-    borderRadius: 18,
-  },
-  otherModeCopy: {
-    gap: 8,
-  },
-  otherModeTitle: {
-    color: "#231F20",
-    fontSize: 20,
-    fontWeight: "900",
-  },
-  otherAvatarName: {
-    color: "#665f55",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  otherBulletRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-  },
-  otherBulletDot: {
-    width: 11,
-    height: 11,
-    borderColor: "#231F20",
-    borderRadius: 6,
-    borderWidth: 2,
-  },
-  otherBulletText: {
-    flex: 1,
-    color: "#231F20",
-    fontSize: 13,
-    fontWeight: "700",
-    lineHeight: 17,
   },
 });

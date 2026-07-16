@@ -194,9 +194,7 @@ function GameScreen() {
   );
 
   useEffect(() => {
-    if (taskComplete) {
-      setShowRoomPrompt(true);
-    }
+    setShowRoomPrompt(taskComplete);
   }, [taskComplete]);
 
   const selectedTool = useGameStore((s) => s.selectedTool);

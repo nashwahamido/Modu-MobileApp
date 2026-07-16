@@ -39,6 +39,7 @@ const HOME_EYE: [number, number, number] = [1.0, 0.85, 1.0];
 const QUARTER_TURN_PX = Math.PI / 2 / 0.005;
 const AUTOVIEW_MIN_MOVE_M = 0.12;
 const AUTOVIEW_SETTLE_MS = 450;
+const NO_PLACED_PARTS = new Set<string>();
 
 /** Camera orbit pivot for a stage: the vertical centre of what's visible. When a cluster is focused, frame that sub-assembly; otherwise frame everything built up to and including the stage. */
 function pivotFor(
@@ -69,7 +70,9 @@ function pivotFor(
  *
  * The orbit pivot tracks the centre of the assembly built so far (per stage). Filament manipulators take their target at construction, so a pivot change recreates the manipulator; the current eye position is carried over so only the gaze re-aims.
  */
-export function useOrbitCamera() {
+export function useOrbitCamera(
+  { stableFraming = false }: { stableFraming?: boolean } = {},
+) {
   const stage = useGameStore((s) => s.stage());
   const activeCluster = useGameStore((s) => s.activeCluster);
   const examine = useGameStore((s) => s.examine);
@@ -109,8 +112,10 @@ export function useOrbitCamera() {
       );
     return a?.partId ?? null;
   });
+  const effectiveAutoView = autoView && !stableFraming;
   const focusPartId =
-    examinePartId ?? (autoView && !heldActionId ? nextTargetPartId : null);
+    examinePartId ??
+    (effectiveAutoView && !heldActionId ? nextTargetPartId : null);
   const combiningCluster = useGameStore((s) => s.combiningCluster);
   const framingCluster = combiningCluster ? null : activeCluster;
 
@@ -136,11 +141,20 @@ export function useOrbitCamera() {
       cluster: string | null,
     ): [number, number, number] => {
       const p = furniture
-        ? pivotFor(furniture.parts, partStage, st, cl, point, partId, cluster, placedRef.current)
+        ? pivotFor(
+            furniture.parts,
+            partStage,
+            st,
+            cl,
+            point,
+            partId,
+            cluster,
+            stableFraming ? NO_PLACED_PARTS : placedRef.current,
+          )
         : ([0, 0, 0] as Vec3);
       return [p[0], p[1], p[2]];
     },
-    [furniture, partStage],
+    [furniture, partStage, stableFraming],
   );
 
   const eyeRef = useRef<[number, number, number]>(HOME_EYE);
@@ -165,6 +179,10 @@ export function useOrbitCamera() {
 
   useEffect(() => {
     if (useGameStore.getState().heldActionId) return;
+    // In the tutorial, the first pickup aims the camera at the real drop point.
+    // Keep that exact target after placement so the centre ring stays aligned
+    // and the newly placed part does not jump when held state is cleared.
+    if (stableFraming && framedHasPlaced) return;
     const nextTarget = pivot(stage, framingCluster, null, focusPartId, focusCluster);
     const apply = () =>
       setHome((h) =>
@@ -172,7 +190,8 @@ export function useOrbitCamera() {
           ? h
           : { eye: eyeRef.current, target: nextTarget },
       );
-    const autoDriven = autoView && !examinePartId && focusPartId != null;
+    const autoDriven =
+      effectiveAutoView && !examinePartId && focusPartId != null;
     if (autoDriven) {
       const cur = targetRef.current;
       const dist = Math.hypot(
@@ -185,7 +204,17 @@ export function useOrbitCamera() {
       return () => clearTimeout(id);
     }
     apply();
-  }, [stage, framingCluster, focusPartId, focusCluster, framedHasPlaced, pivot, autoView, examinePartId]);
+  }, [
+    stage,
+    framingCluster,
+    focusPartId,
+    focusCluster,
+    framedHasPlaced,
+    pivot,
+    effectiveAutoView,
+    examinePartId,
+    stableFraming,
+  ]);
 
   useEffect(() => {
     if (!furniture || !heldActionId || framedHasPlaced) return;

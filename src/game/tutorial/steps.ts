@@ -28,7 +28,7 @@ export type TutorialEvent =
   | "hint_requested"
   | "tool_used";
 
-export type ToolTutorialKind = "tighten" | "tap" | "beat";
+export type ToolTutorialKind = "tighten" | "tap" | "beat" | "press";
 export type TutorialAudioSource = number | { uri: string };
 
 export interface TutorialContext {
@@ -85,18 +85,9 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     event: "pinch_zoomed",
   },
   {
-    id: "control-toolbar",
-    targetId: "toolbar",
-    message:
-      "Before tightening, open the toolbox at the bottom of the assembly screen and equip the highlighted tool.",
-    event: "toolbar_used",
-    when: ({ profile, mode, manualTools }) =>
-      profile === "control" && mode === "free" && manualTools,
-  },
-  {
     id: "secure-with-tool",
     targetId: "tool",
-    message: "Use the tool control to secure the connector.",
+    message: "Use the highlighted control to secure the part.",
     event: "tool_used",
   },
 ];
@@ -200,6 +191,8 @@ export const settingsTutorialStepsFor = (
   SETTINGS_TUTORIAL_STEPS.filter((step) => !step.when || step.when(context));
 
 export function messageForToolStep(kind: ToolTutorialKind | null) {
+  if (kind === "press")
+    return "Tap the hand four times to press the panel into place.";
   if (kind === "tap") return "Tap repeatedly to drive it in.";
   if (kind === "beat") return "Swipe up or down to continue.";
   return "Trace the circle clockwise to tighten the connector.";

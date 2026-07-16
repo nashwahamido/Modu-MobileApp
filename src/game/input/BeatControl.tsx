@@ -61,8 +61,10 @@ export function BeatControl({ action }: { action: AssemblyAction }) {
 const styles = StyleSheet.create({
   wrap: {
     ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: "flex-end",
+    justifyContent: "flex-end",
+    paddingRight: 56,
+    paddingBottom: 54,
   },
   card: {
     backgroundColor: "rgba(255,255,255,0.92)",

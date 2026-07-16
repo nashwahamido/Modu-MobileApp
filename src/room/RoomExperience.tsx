@@ -22,7 +22,7 @@ export function RoomExperience() {
   const [roomZoom, setRoomZoom] = useState(1);
   const roomRotationRef = useRef(roomRotation);
   const roomZoomRef = useRef(roomZoom);
-  const zoomPercent = Math.round((1 / roomZoom) * 100);
+  const zoomPercent = Math.round(roomZoom * 100);
   const rotationDegrees = Math.round(((roomRotation * 180) / Math.PI) % 360);
   const position = useRef(new Animated.ValueXY({ x: width * .47, y: height * .46 })).current;
   const dragStart = useRef({ x: 0, y: 0 });
@@ -56,7 +56,7 @@ export function RoomExperience() {
     applyRoomControls(roomRotationRef.current + direction * Math.PI / 6, roomZoomRef.current);
   };
   const zoomRoom = (direction: 'in' | 'out') => {
-    const nextZoom = Math.max(.58, Math.min(1.58, roomZoomRef.current + (direction === 'in' ? -.2 : .2)));
+    const nextZoom = Math.max(.5, Math.min(1.5, roomZoomRef.current + (direction === 'in' ? .1 : -.1)));
     applyRoomControls(roomRotationRef.current, nextZoom);
   };
   const handleRoomRotationChange = (nextRotation: number) => {

@@ -14,16 +14,22 @@ const PADDING = 0;
 
 interface Props {
   activeToolKind: ToolTutorialKind | null;
+  assemblyComplete: boolean;
+  assemblyStepCount: number;
   onClaimReward: () => void;
   onContinueToAssembly?: () => void;
+  onSimulatePinch?: () => void;
   blocked?: boolean;
   audioEnabled?: boolean;
 }
 
 export function MascotGuideOverlay({
   activeToolKind,
+  assemblyComplete,
+  assemblyStepCount,
   onClaimReward,
   onContinueToAssembly,
+  onSimulatePinch,
   blocked = false,
   audioEnabled = false,
 }: Props) {
@@ -41,10 +47,8 @@ export function MascotGuideOverlay({
   const settingsReady = useTutorialStore((s) => s.settingsReady);
   const stepRewardReady = useTutorialStore((s) => s.stepRewardReady);
   const lastCompletedStepLabel = useTutorialStore((s) => s.lastCompletedStepLabel);
-  const skip = useTutorialStore((s) => s.skip);
   const beginSettingsTutorial = useTutorialStore((s) => s.beginSettingsTutorial);
   const skipSettingsTutorial = useTutorialStore((s) => s.skipSettingsTutorial);
-  const completeCurrentStep = useTutorialStore((s) => s.completeCurrentStep);
   const dismissStepReward = useTutorialStore((s) => s.dismissStepReward);
   const dismissReward = useTutorialStore((s) => s.dismissReward);
   const frames = useTutorialTargets((s) => s.frames);
@@ -128,7 +132,11 @@ export function MascotGuideOverlay({
     );
   }
 
-  if (rewardReady) {
+  if (rewardReady && !assemblyComplete) {
+    return null;
+  }
+
+  if (rewardReady && assemblyComplete) {
     return (
       <View style={styles.rewardLayer} pointerEvents="box-none" onLayout={handleLayout}>
         <View style={styles.rewardCard} pointerEvents="auto">
@@ -139,6 +147,8 @@ export function MascotGuideOverlay({
             <Pressable
               style={styles.primaryButton}
               onPress={() => {
+                const tutorial = useTutorialStore.getState();
+                if (!tutorial.completed || tutorial.currentIndex !== tutorial.steps.length - 1) return;
                 onClaimReward();
                 dismissReward();
                 onContinueToAssembly?.();
@@ -197,18 +207,21 @@ export function MascotGuideOverlay({
         <Image source={mascotImage} style={styles.mascot} resizeMode="contain" />
         <View style={styles.copy} pointerEvents="box-none">
           <Text style={styles.stepText}>
-            {phase === 'settings' ? 'SETTINGS · ' : ''}{currentIndex + 1}/{steps.length}
+            {phase === 'settings' ? 'SETTINGS · ' : ''}{currentIndex + 1}/{phase === 'core' ? steps.length + assemblyStepCount : steps.length}
           </Text>
           <Text style={styles.message}>{message}</Text>
-          <View style={styles.actions} pointerEvents="auto">
-            {!waitingForTool ? (
-              <Pressable onPress={completeCurrentStep} hitSlop={8}>
-                <Text style={styles.continueText}>Continue</Text>
+          <View
+            style={styles.actions}
+            pointerEvents={step.id === 'pinch-to-zoom' && onSimulatePinch ? 'auto' : 'none'}
+          >
+            <Text style={styles.actionHint}>
+              {waitingForTool ? 'Finish this assembly step to reveal the tool.' : 'Complete the highlighted action to continue.'}
+            </Text>
+            {step.id === 'pinch-to-zoom' && onSimulatePinch ? (
+              <Pressable style={styles.simulatorButton} onPress={onSimulatePinch} hitSlop={8}>
+                <Text style={styles.simulatorButtonText}>Computer: test zoom</Text>
               </Pressable>
             ) : null}
-            <Pressable onPress={skip} hitSlop={8}>
-              <Text style={styles.skipText}>Skip</Text>
-            </Pressable>
           </View>
         </View>
       </View>
@@ -297,9 +310,18 @@ const styles = StyleSheet.create({
   },
   stepText: { color: '#8FA876', fontSize: 11, fontWeight: '800', marginBottom: 4 },
   message: { color: '#231F20', fontSize: 14, lineHeight: 19, fontWeight: '700' },
-  actions: { marginTop: 8, flexDirection: 'row', gap: 14, alignItems: 'center' },
+  actions: { marginTop: 8, gap: 7, alignItems: 'flex-start' },
   settingsActions: { marginTop: 12, gap: 10, alignItems: 'flex-start' },
-  continueText: { color: '#8FA876', fontSize: 12, fontWeight: '800' },
+  actionHint: { color: '#665f55', fontSize: 11, lineHeight: 15, fontWeight: '700' },
+  simulatorButton: {
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: '#8FA876',
+    backgroundColor: '#F4F8EF',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  simulatorButtonText: { color: '#587047', fontSize: 11, fontWeight: '800' },
   skipText: { color: '#665f55', fontSize: 12, fontWeight: '700' },
   stepRewardToast: {
     position: 'absolute',

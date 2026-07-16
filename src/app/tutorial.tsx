@@ -61,7 +61,10 @@ import { availableInMode } from "@/src/game/core/evaluation/availability";
 import { TutorialTarget } from "@/src/game/tutorial/TutorialTarget";
 import { MascotGuideOverlay } from "@/src/game/tutorial/MascotGuideOverlay";
 import { useTutorialStore } from "@/src/game/tutorial/store";
-import type { ToolTutorialKind } from "@/src/game/tutorial/steps";
+import {
+  TUTORIAL_STEP_REWARD_TOKENS,
+  type ToolTutorialKind,
+} from "@/src/game/tutorial/steps";
 
 // Per-backdrop images (from the on-release engine's set), each with a dark variant. The Background setting picks the key; Dark mode picks the variant.
 const BACKDROPS: Record<string, { light: number; dark: number }> = {
@@ -94,7 +97,7 @@ function TutorialScreen() {
     onPanEnd,
     resetCamera,
     getFocusPoint,
-  } = useOrbitCamera();
+  } = useOrbitCamera({ stableFraming: true });
   const lastScale = useRef(1);
   const joystickTutorialStartedAt = useRef<number | null>(null);
   const oneFingerPanStartedAt = useRef<{ x: number; y: number } | null>(null);
@@ -144,7 +147,11 @@ function TutorialScreen() {
               (candidate) => candidate.actionId === id,
             );
             if (action?.type === "placePart") {
-              tutorial.completeEvent("part_snapped");
+              if (previous.driveActionId === id) {
+                tutorial.completeEvent("tool_used");
+              } else {
+                tutorial.completeEvent("part_snapped");
+              }
             }
             if (action?.type === "tightenFastener") {
               tutorial.completeEvent("tool_used");
@@ -206,8 +213,16 @@ function TutorialScreen() {
       ?.actionId;
   });
   const completedCount = useGameStore((s) => s.completed.length);
+  const guideCompleted = useTutorialStore((s) => s.completed);
+  const guideStepCount = useTutorialStore((s) => s.steps.length);
   const orientationActionId = useGameStore((s) => s.orientationActionId);
   const totalCount = furniture?.actions.length ?? 0;
+  const displayedCompletedCount = guideCompleted
+    ? guideStepCount + completedCount
+    : completedCount;
+  const displayedTotalCount = guideCompleted
+    ? guideStepCount + totalCount
+    : totalCount;
   const objectiveFontSize = Math.round(14 * settings.fontScale);
   const orientationAction = orientationActionId
     ? furniture?.actions.find((a) => a.actionId === orientationActionId)
@@ -264,13 +279,16 @@ function TutorialScreen() {
     ? (sceneState.activeTighten?.tool ?? driveAction?.tool ?? null)
     : null;
   const toolReady = !neededTool || selectedTool === neededTool;
-  const activeToolKind: ToolTutorialKind | null = sceneState.activeTighten
-    ? sceneState.activeTighten.tool === "mallet"
-      ? "tap"
-      : "tighten"
-    : sceneState.activeBeat
-      ? "beat"
-      : null;
+  const activeToolKind: ToolTutorialKind | null =
+    driveKind === "press"
+      ? "press"
+      : sceneState.activeTighten
+        ? sceneState.activeTighten.tool === "mallet"
+          ? "tap"
+          : "tighten"
+        : sceneState.activeBeat
+          ? "beat"
+          : null;
   // Scene gestures are MEMOIZED: the screen re-renders constantly mid-drag (fit-state churn), and handing GestureDetector fresh gesture instances reattaches native handlers — eating the first re-grab attempt and stuttering active drags (same lesson as the joystick).
   const pinch = useMemo(
     () =>
@@ -424,7 +442,9 @@ function TutorialScreen() {
         >
           {settings.showInstructions ? (
             <Text style={[styles.objectiveText, dark && styles.objectiveTextDark, { fontSize: objectiveFontSize }]}>
-              Stage {stage} · {objective} · {completedCount}/{totalCount}
+              {guideCompleted
+                ? `Finish the tutorial cabinet · ${displayedCompletedCount}/${displayedTotalCount}`
+                : `Stage ${stage} · ${objective} · ${completedCount}/${totalCount}`}
             </Text>
           ) : null}
           <View
@@ -439,7 +459,7 @@ function TutorialScreen() {
                 styles.progressFill,
                 !settings.showInstructions && styles.progressFillSlim,
                 {
-                  width: `${totalCount ? (completedCount / totalCount) * 100 : 0}%`,
+                  width: `${displayedTotalCount ? (displayedCompletedCount / displayedTotalCount) * 100 : 0}%`,
                 },
               ]}
             />
@@ -600,9 +620,29 @@ function TutorialScreen() {
       <GreenFlash trigger={completedCount} />
       <MascotGuideOverlay
         activeToolKind={activeToolKind}
+        assemblyComplete={totalCount > 0 && completedCount >= totalCount}
+        assemblyStepCount={totalCount}
         audioEnabled={settings.audio}
         onClaimReward={() => {}}
-        onContinueToAssembly={() => router.replace("/play" as Href)}
+        onSimulatePinch={() => {
+          if (!manipulator) return;
+          onZoomDelta(0.18);
+          useTutorialStore.getState().completeEvent("pinch_zoomed");
+        }}
+        onContinueToAssembly={() => {
+          const tutorial = useTutorialStore.getState();
+          const finishedAllSteps =
+            tutorial.completed &&
+            tutorial.currentIndex === tutorial.steps.length - 1 &&
+            tutorial.stepRewardsClaimed >=
+              tutorial.steps.length * TUTORIAL_STEP_REWARD_TOKENS;
+          const game = useGameStore.getState();
+          const requiredActions = game.furniture?.actions.length ?? 0;
+          const finishedAssembly =
+            requiredActions > 0 && game.completed.length >= requiredActions;
+          if (!finishedAllSteps || !finishedAssembly) return;
+          router.replace("/play" as Href);
+        }}
       />
     </View>
   );

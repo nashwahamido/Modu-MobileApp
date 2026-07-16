@@ -134,7 +134,8 @@ export const useTutorialStore = create<TutorialState>()((set, get) => ({
         if (state.phase === "core") {
           set({
             completed: true,
-            settingsReady: true,
+            settingsReady: false,
+            rewardReady: true,
             pendingAdvanceStepId: null,
           });
         } else {

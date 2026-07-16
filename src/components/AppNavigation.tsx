@@ -3,9 +3,7 @@ import type { Href } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useGameStore } from "@/src/game/core/store";
-
-export type AppNavigationTab = "home" | "tasks" | "build" | "room" | "settings";
+export type AppNavigationTab = "home" | "tasks" | "room" | "settings";
 
 const TABS: {
   id: AppNavigationTab;
@@ -15,14 +13,12 @@ const TABS: {
 }[] = [
   { id: "home", label: "Home", icon: "⌂", route: "/home" as Href },
   { id: "tasks", label: "Tasks", icon: "☷", route: "/catalogue" as Href },
-  { id: "build", label: "Build", icon: "✦", route: "/play" as Href },
   { id: "room", label: "Room", icon: "▣", route: "/room" as Href },
   { id: "settings", label: "Settings", icon: "⚙", route: "/settings" as Href },
 ];
 
 export function AppNavigation({ active }: { active: AppNavigationTab }) {
   const insets = useSafeAreaInsets();
-  const currentFurnitureId = useGameStore((state) => state.furniture?.meta.id);
 
   return (
     <View
@@ -47,10 +43,6 @@ export function AppNavigation({ active }: { active: AppNavigationTab }) {
               accessibilityState={{ selected }}
               onPress={() => {
                 if (selected) return;
-                if (tab.id === "build" && currentFurnitureId) {
-                  router.replace({ pathname: "/play", params: { id: currentFurnitureId } });
-                  return;
-                }
                 router.replace(tab.route);
               }}
               style={({ pressed }) => [
