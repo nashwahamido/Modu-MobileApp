@@ -44,3 +44,16 @@ export async function saveSelectedAvatarMode(_modeId: ModeId) {
   // Keep this as a no-op so the prototype confirmation flow remains intact.
   return { skipped: false as const };
 }
+
+export async function getLatestOnboardingMode(userId: string) {
+  const { data, error } = await supabase
+    .from("onboarding_results")
+    .select("primary_mode")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data?.primary_mode as ModeId | null | undefined;
+}

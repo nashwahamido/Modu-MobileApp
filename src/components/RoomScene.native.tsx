@@ -2,11 +2,12 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber/native';
 import { Asset } from 'expo-asset';
 import { File } from 'expo-file-system';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, PanResponder, StyleSheet, Text, View } from 'react-native';
 import { Box3, BufferAttribute, BufferGeometry, Matrix4, Quaternion, Vector3 } from 'three';
 
 const roomModule = require('../assets/models/homepageroom-runtime.glb');
+
 const roomVertexShader = `
   precision highp float;
   attribute vec3 position;
@@ -46,13 +47,23 @@ function roomFragmentShader(color: string) {
   `;
 }
 
-function CameraAim({ zoom }: { zoom: number }) {
+type RoomTransformTarget = { rotationY: number; zoom: number };
+let currentRoomTransform: RoomTransformTarget = { rotationY: 0, zoom: 1 };
+
+export function setRoomCameraTarget(target: RoomTransformTarget) {
+  currentRoomTransform = target;
+}
+
+function CameraAim() {
   const camera = useThree((state) => state.camera);
-  useLayoutEffect(() => {
-    camera.position.set(11 * zoom, 8 * zoom, -12 * zoom);
+  const invalidate = useThree((state) => state.invalidate);
+  useFrame(() => {
+    camera.position.set(11, 8, -12);
     camera.lookAt(0, -0.3, 0);
+    camera.updateProjectionMatrix();
     camera.updateMatrixWorld(true);
-  }, [camera, zoom]);
+    invalidate();
+  });
   return null;
 }
 
@@ -102,6 +113,8 @@ function factorColor(factor: number[] | undefined, fallbackName: string) {
 type IndexArray = Uint8Array | Uint16Array | Uint32Array;
 type RoomPart = { positions: Float32Array; normals: Float32Array; indices: IndexArray | null; color: string; roughness: number; metalness: number };
 type PreparedRoom = { parts: RoomPart[]; position: [number, number, number]; scale: number; center: number[]; size: number[] };
+let cachedPreparedRoom: PreparedRoom | null = null;
+let preparedRoomPromise: Promise<PreparedRoom> | null = null;
 
 function parseRoom(data: ArrayBuffer): PreparedRoom {
   const view = new DataView(data);
@@ -190,16 +203,28 @@ function parseRoom(data: ArrayBuffer): PreparedRoom {
   };
 }
 
-function RoomModel({ onReady, onError, rotationY }: { onReady: (ready: boolean) => void; onError: (message: string) => void; rotationY: number }) {
+function loadPreparedRoom() {
+  if (cachedPreparedRoom) return Promise.resolve(cachedPreparedRoom);
+  if (!preparedRoomPromise) {
+    preparedRoomPromise = Asset.loadAsync(roomModule).then(async ([asset]) => {
+      const uri = asset.localUri ?? asset.uri;
+      const data = await new File(uri).arrayBuffer();
+      const room = parseRoom(data);
+      cachedPreparedRoom = room;
+      return room;
+    });
+  }
+  return preparedRoomPromise;
+}
+
+function RoomModel({ onReady, onError }: { onReady: (ready: boolean) => void; onError: (message: string) => void }) {
   const [preparedRoom, setPreparedRoom] = useState<PreparedRoom | null>(null);
+  const modelRef = useRef<any>(null);
 
   useEffect(() => {
     let active = true;
-    Asset.loadAsync(roomModule)
-      .then(async ([asset]) => {
-        const uri = asset.localUri ?? asset.uri;
-        const data = await new File(uri).arrayBuffer();
-        const room = parseRoom(data);
+    loadPreparedRoom()
+      .then((room) => {
         if (!active) return;
         console.log('Direct GLB parse complete');
         console.log('Scene meshes:', room.parts.length);
@@ -214,8 +239,16 @@ function RoomModel({ onReady, onError, rotationY }: { onReady: (ready: boolean) 
     return () => { active = false; };
   }, [onError, onReady]);
 
+  useFrame(() => {
+    if (!modelRef.current || !preparedRoom) return;
+    const visualScale = preparedRoom.scale / currentRoomTransform.zoom;
+    modelRef.current.rotation.y = currentRoomTransform.rotationY;
+    modelRef.current.scale.setScalar(visualScale);
+    modelRef.current.updateMatrixWorld(true);
+  });
+
   return preparedRoom ? (
-    <group position={preparedRoom.position} scale={preparedRoom.scale} rotation={[0, rotationY, 0]}>
+    <group ref={modelRef} position={preparedRoom.position} scale={preparedRoom.scale}>
       {preparedRoom.parts.map((part, index) => (
         <mesh key={index} frustumCulled={false}>
           <bufferGeometry>
@@ -248,6 +281,9 @@ export function RoomScene({ rotationY, zoom, onRotationChange }: RoomSceneProps)
   const rotationStart = useRef(0);
   const rotationRef = useRef(0);
   rotationRef.current = rotationY;
+  useEffect(() => {
+    setRoomCameraTarget({ rotationY, zoom });
+  }, [rotationY, zoom]);
   const panResponder = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dx) > 2,
@@ -257,13 +293,13 @@ export function RoomScene({ rotationY, zoom, onRotationChange }: RoomSceneProps)
   return (
     <View style={styles.container}>
       <Canvas style={styles.canvas} gl={{ alpha: true }} camera={{ position: [11, 8, -12], fov: 32, near: 0.1, far: 100 }}>
-        <CameraAim zoom={zoom} />
+        <CameraAim />
         <SceneDiagnostics enabled={loaded} />
         <ambientLight intensity={0.9} />
         <hemisphereLight args={['#fffaf0', '#9aa7ad', 1.55]} />
         <directionalLight position={[-5, 10, -7]} intensity={2.25} />
         <directionalLight position={[6, 5, 6]} intensity={0.85} />
-        <RoomModel onReady={setLoaded} onError={setLoadError} rotationY={rotationY} />
+        <RoomModel onReady={setLoaded} onError={setLoadError} />
       </Canvas>
       <View accessibilityLabel="Drag horizontally to rotate room" style={styles.gestureLayer} {...panResponder.panHandlers} />
       {!loaded ? <View style={styles.loading}>{!loadError ? <ActivityIndicator color="#666"/> : null}<Text style={styles.loadingText}>{loadError || 'Loading room model...'}</Text></View> : null}

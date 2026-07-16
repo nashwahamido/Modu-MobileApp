@@ -4,10 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { Animated, Image, StyleSheet, Text, View } from "react-native";
 import { getCurrentSession } from "@/src/services/auth";
 import { createProfileIfMissing } from "@/src/services/profile";
+import { getLatestOnboardingMode } from "@/src/services/onboarding";
+import { useGameStore } from "@/src/game/core/store";
+import type { ProfileId } from "@/src/game/core/profile";
 
 const mascot = require("../assets/mascot/mascot.png");
 const questionnaireRoute = "/onboarding-questionnaire" as Href;
 const mainRoute = "/play" as Href;
+const profileIds = new Set<ProfileId>(["visual", "momentum", "clearPath", "control"]);
 
 export default function LoadingScreen() {
   const progress = useRef(new Animated.Value(0)).current;
@@ -37,7 +41,16 @@ export default function LoadingScreen() {
         }
 
         const profile = await createProfileIfMissing(user.id, user.email);
-        router.replace(profile.onboarding_completed ? mainRoute : questionnaireRoute);
+        if (!profile.onboarding_completed) {
+          router.replace(questionnaireRoute);
+          return;
+        }
+
+        const latestMode = await getLatestOnboardingMode(user.id);
+        if (latestMode && profileIds.has(latestMode as ProfileId)) {
+          useGameStore.getState().applyProfile(latestMode as ProfileId);
+        }
+        router.replace(mainRoute);
       } catch (error) {
         router.replace(questionnaireRoute);
       }

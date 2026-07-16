@@ -1,1 +1,1 @@
-export { RoomScene } from "./RoomScene.native";
+export { RoomScene, setRoomCameraTarget } from "./RoomScene.native";
