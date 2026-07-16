@@ -13,7 +13,6 @@ const DEFAULT_CONTEXT: TutorialContext = {
   mode: "free",
   manualTools: true,
   softHints: true,
-  releaseBehavior: "autoReturn",
   oneFingerPanEnabled: false,
 };
 

@@ -36,7 +36,6 @@ export interface TutorialContext {
   mode: "free" | "guide" | "strict";
   manualTools: boolean;
   softHints: boolean;
-  releaseBehavior: "float" | "autoReturn";
   oneFingerPanEnabled: boolean;
 }
 
