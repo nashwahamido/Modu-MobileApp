@@ -1,21 +1,32 @@
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
-const RADIUS = 56;
-const THUMB = 44;
+const RADIUS = 46;      // travel radius of the knob
+const THUMB = 52;       // the knob itself — bigger than the travel, as in the reference
+const BASE = 124;       // the cream dial the arrows sit on
+
+// Sampled from the reference.
+const KNOB = '#8B73A3';
+const KNOB_EDGE = '#6f5a87';   // a darker rim, so the knob reads as raised
+const KNOB_TOP = '#9c85b4';    // a lighter cap, for the gloss
+const ARROW = '#a796b4';
+// 75% opaque, so the workbench shows faintly through the dial.
+const CREAM = 'rgba(245,234,221,0.75)';
+const CREAM_EDGE = 'rgba(120,100,80,0.18)';
 
 interface Props {
   onStart: () => void;
   onMove: (x: number, y: number) => void;
   onEnd: () => void;
-  /** Lighten the joystick for dark backdrops (ported from the on-release engine). */
+  /** Kept for call-site compatibility; the dial now looks the same in both themes. */
   dark?: boolean;
 }
 
-/** Fixed virtual joystick: stable base circle, spring-back thumb. */
-export function Joystick({ onStart, onMove, onEnd, dark }: Props) {
+/** Fixed virtual joystick: a cream dial with four direction arrows and a raised, glossy
+ *  knob that springs back on release. */
+export function Joystick({ onStart, onMove, onEnd }: Props) {
   const tx = useSharedValue(0);
   const ty = useSharedValue(0);
 
@@ -42,8 +53,15 @@ export function Joystick({ onStart, onMove, onEnd, dark }: Props) {
 
   return (
     <GestureDetector gesture={pan}>
-      <View style={[styles.base, dark && styles.baseDark]}>
-        <Animated.View style={[styles.thumb, dark && styles.thumbDark, thumbStyle]} />
+      <View style={styles.base}>
+        <Text style={[styles.arrow, styles.arrowUp]}>▲</Text>
+        <Text style={[styles.arrow, styles.arrowDown]}>▼</Text>
+        <Text style={[styles.arrow, styles.arrowLeft]}>◀</Text>
+        <Text style={[styles.arrow, styles.arrowRight]}>▶</Text>
+        <Animated.View style={[styles.thumb, thumbStyle]}>
+          {/* A lighter cap over the top half reads as a gloss highlight. */}
+          <View style={styles.thumbGloss} />
+        </Animated.View>
       </View>
     </GestureDetector>
   );
@@ -51,26 +69,54 @@ export function Joystick({ onStart, onMove, onEnd, dark }: Props) {
 
 const styles = StyleSheet.create({
   base: {
-    width: RADIUS * 2,
-    height: RADIUS * 2,
-    borderRadius: RADIUS,
-    backgroundColor: 'rgba(60, 50, 40, 0.12)',
-    borderWidth: 2,
-    borderColor: 'rgba(60, 50, 40, 0.25)',
+    width: BASE,
+    height: BASE,
+    borderRadius: BASE / 2,
+    backgroundColor: CREAM,
+    borderWidth: 1,
+    borderColor: CREAM_EDGE,
     alignItems: 'center',
     justifyContent: 'center',
+    // The dial itself sits slightly off the backdrop.
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
   },
+  arrow: {
+    position: 'absolute',
+    color: ARROW,
+    fontSize: 16,
+  },
+  arrowUp: { top: 8 },
+  arrowDown: { bottom: 8 },
+  arrowLeft: { left: 10 },
+  arrowRight: { right: 10 },
   thumb: {
     width: THUMB,
     height: THUMB,
     borderRadius: THUMB / 2,
-    backgroundColor: 'rgba(60, 50, 40, 0.45)',
+    backgroundColor: KNOB,
+    borderWidth: 1.5,
+    borderColor: KNOB_EDGE,
+    overflow: 'hidden',
+    // The drop shadow you asked for — soft, offset down, so the knob floats above the dial.
+    shadowColor: '#3a2f4a',
+    shadowOpacity: 0.45,
+    shadowRadius: 7,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 8,
   },
-  baseDark: {
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    borderColor: 'rgba(255, 255, 255, 0.35)',
-  },
-  thumbDark: {
-    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+  thumbGloss: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: THUMB * 0.5,
+    backgroundColor: KNOB_TOP,
+    opacity: 0.55,
+    borderTopLeftRadius: THUMB / 2,
+    borderTopRightRadius: THUMB / 2,
   },
 });

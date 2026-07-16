@@ -1,36 +1,44 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
+import { IconButton } from "@/src/game/ui/Button";
+import { SPACE, TYPE, useTheme } from "@/src/game/ui/theme";
 
-/** Top-left ctrl row (Nashwa placement — under the points chip): back one step (↶) and forward again (↷). Forward is only available after an undo — any new completion clears the redo stack (store.undoneActions). Nashwa's ctrl-button treatment: glyph in a bordered 42×36 chip, theme-aware. */
+/** Back one step (↶) and forward again (↷). Forward is only available after an undo — any
+ *  new completion clears the redo stack (store.undoneActions).
+ *
+ *  Both are glyph-only utilities, so they take the SQUARE treatment: in this palette the
+ *  circle is reserved for the primary action, and shape alone should tell you which
+ *  control matters. Unavailable ones dim rather than disappear — "not yet", not "gone". */
 export function UndoButton() {
   const completedCount = useGameStore((s) => s.completed.length);
   const undoneCount = useGameStore((s) => s.undoneActions.length);
   const undoLastAction = useGameStore((s) => s.undoLastAction);
   const redoLastAction = useGameStore((s) => s.redoLastAction);
-  const dark = useGameStore((s) => s.theme === "dark");
+  const t = useTheme();
+
+  const glyph = (g: string, disabled: boolean) => (
+    <Text style={[TYPE.title, { color: disabled ? t.textFaint : t.text }]}>{g}</Text>
+  );
 
   const undoDisabled = completedCount === 0;
   const redoDisabled = undoneCount === 0;
+
   return (
     <View style={styles.row}>
-      <Pressable
-        style={[styles.btn, dark && styles.btnDark, undoDisabled && styles.btnIdle]}
+      <IconButton
+        icon={glyph("↶", undoDisabled)}
         onPress={undoLastAction}
         disabled={undoDisabled}
-        hitSlop={8}
+        small
         accessibilityLabel="Back one step"
-      >
-        <Text style={[styles.text, dark && styles.textDark]}>↶</Text>
-      </Pressable>
-      <Pressable
-        style={[styles.btn, dark && styles.btnDark, redoDisabled && styles.btnIdle]}
+      />
+      <IconButton
+        icon={glyph("↷", redoDisabled)}
         onPress={redoLastAction}
         disabled={redoDisabled}
-        hitSlop={8}
+        small
         accessibilityLabel="Forward one step"
-      >
-        <Text style={[styles.text, dark && styles.textDark]}>↷</Text>
-      </Pressable>
+      />
     </View>
   );
 }
@@ -41,23 +49,6 @@ const styles = StyleSheet.create({
     top: 54,
     left: 14,
     flexDirection: "row",
-    gap: 8,
+    gap: SPACE.sm,
   },
-  btn: {
-    width: 42,
-    height: 36,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.85)",
-    borderWidth: 1,
-    borderColor: "rgba(60,50,40,0.15)",
-  },
-  btnDark: {
-    backgroundColor: "rgba(22,30,44,0.86)",
-    borderColor: "rgba(255,255,255,0.18)",
-  },
-  btnIdle: { opacity: 0.4 },
-  text: { fontSize: 18, fontWeight: "700", color: "#2e2a24" },
-  textDark: { color: "#eef1f6" },
 });

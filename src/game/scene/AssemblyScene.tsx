@@ -10,12 +10,14 @@ import {
 import { useGameStore } from "@/src/game/core/store";
 import type { PartId } from "@/src/game/core/type";
 import { FOCAL_LENGTH_MM } from "./cameraConfig";
-import { getLightRig, IBL_INTENSITY } from "./lighting";
+import { CEL_IBL_INTENSITY, getLightRig, IBL_INTENSITY } from "./lighting";
 import type { ClusterDriver, OffsetDriver } from "./offsetDriver";
 import { PartModel } from "./PartModel";
 import { ShadowPlane } from "./ShadowPlane";
 import { ToolModel } from "./ToolModel";
 import { SceneState } from "./useSceneState";
+import { useShaderStyle } from "./shaders";
+
 
 export type OrbitManipulator = ReturnType<typeof useCameraManipulator>;
 
@@ -44,9 +46,25 @@ export function AssemblyScene({
   const manualTools = useGameStore((s) => s.settings.manualTools);
   const lightingPreset = useGameStore((s) => s.settings.lightingPreset);
   const dark = useGameStore((s) => s.theme) === "dark";
+  // The blob shadow only reads correctly on the plain ("clear") backdrop — on the
+  // illustrated backdrops it sits on artwork it doesn't belong to.
+  const backdrop = useGameStore((s) => s.backdrop);
   const rig = getLightRig(renderStyle, dark, lightingPreset);
+
+  /**
+   * A cel look must be lit by ONE light.
+   *
+   * The custom surface shader runs once per light and the results are SUMMED, so
+   * banding the key, the fill and the rim gives three staggered ramps from three
+   * directions that add back up to a smooth gradient — the banding cancels itself
+   * out, and the combined 169 000 lux blows the exposure badly enough to wash the
+   * ink contours away with it. Drop the fill and the rim; the IBL (lowered to
+   * CEL_IBL_INTENSITY) is the only fill a cel look wants.
+   */
+  const celLook = useShaderStyle() !== "off";
   const selectedTool = useGameStore((s) => s.selectedTool);
   const driveActionId = useGameStore((s) => s.driveActionId);
+
 
   const { modes, heldAction, activeTighten } = sceneState;
   if (!furniture) return null;
@@ -67,7 +85,7 @@ export function AssemblyScene({
       />
       <EnvironmentalLight
         source={{ uri: "RNF_default_env_ibl.ktx" }}
-        intensity={IBL_INTENSITY}
+        intensity={celLook ? CEL_IBL_INTENSITY : IBL_INTENSITY}
       />
       <Light
         type="directional"
@@ -76,19 +94,23 @@ export function AssemblyScene({
         direction={rig.key.direction}
         castShadows
       />
-      <Light
-        type="directional"
-        colorKelvin={rig.fill.colorKelvin}
-        intensity={rig.fill.intensity}
-        direction={rig.fill.direction}
-      />
-      <Light
-        type="directional"
-        colorKelvin={rig.rim.colorKelvin}
-        intensity={rig.rim.intensity}
-        direction={rig.rim.direction}
-      />
-      {furniture.shadow && anySeated ? (
+      {celLook ? null : (
+        <>
+          <Light
+            type="directional"
+            colorKelvin={rig.fill.colorKelvin}
+            intensity={rig.fill.intensity}
+            direction={rig.fill.direction}
+          />
+          <Light
+            type="directional"
+            colorKelvin={rig.rim.colorKelvin}
+            intensity={rig.rim.intensity}
+            direction={rig.rim.direction}
+          />
+        </>
+      )}
+      {furniture.shadow && anySeated && backdrop === "clear" ? (
         <ShadowPlane source={furniture.shadow} />
       ) : null}
       {(Object.keys(furniture.parts) as PartId[]).map((id) => (

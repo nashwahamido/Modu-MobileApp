@@ -1,3 +1,4 @@
+import { Theme, useStyles } from "@/src/game/ui/theme";
 import type { ReactNode } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 import {
@@ -21,6 +22,7 @@ interface Props {
 
 /** Inventory column (right edge): everything the current stage uses, grouped with remaining counts. Long-press an enabled card to take one in hand and drag it into the scene; locked cards are waiting on other steps. */
 export function PartsTray({ items, gestureFor, header, thumbs }: Props) {
+  const styles = useStyles(makeStyles);
   const theme = useColorScheme() === "dark" ? "dark" : "light";
   if (items.length === 0 && !header) return null;
   return (
@@ -69,43 +71,46 @@ export function PartsTray({ items, gestureFor, header, thumbs }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) =>
+  StyleSheet.create({
   column: {
     position: "absolute",
-    right: 10,
+    right: 14,
     top: 70,
     bottom: 70,
-    width: 124,
+    // The Auto-View button's actual width: controlHeightSm padding (SPACE.md each side, 24)
+    // + the "Auto-View" label (~62 at 12px bold) ≈ 86. The rail is now one column.
+    width: 86,
     gap: 8,
   },
   scroll: { flexShrink: 1 },
   list: { gap: 8, paddingVertical: 4 },
   card: {
-    backgroundColor: "rgba(255,255,255,0.85)",
+    backgroundColor: t.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "rgba(60,50,40,0.15)",
-    paddingVertical: 7,
-    paddingHorizontal: 8,
+    borderColor: t.border,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
     alignItems: "center",
-    gap: 4,
+    gap: 3,
   },
   cardDisabled: { opacity: 0.35 },
-  thumb: { width: 44, height: 44 },
+  thumb: { width: 36, height: 36 },
   label: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#2e2a24",
+    color: t.text,
     textAlign: "center",
   },
   badge: {
     position: "absolute",
     top: 6,
     right: 6,
-    backgroundColor: "#c06c84",
+    backgroundColor: t.danger,
     borderRadius: 9,
     paddingHorizontal: 5,
     paddingVertical: 1,
   },
-  badgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
-});
+  badgeText: { color: t.text, fontSize: 11, fontWeight: "700" },
+  });

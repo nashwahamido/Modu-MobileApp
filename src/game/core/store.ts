@@ -4,7 +4,14 @@ import {
   availableInMode,
   currentStage,
 } from "@/src/game/core/evaluation/availability";
+// Setting TYPES live in accessibility.ts; their defaults + the profiles in profile.ts.
+import { AccessibilitySettings } from "@/src/game/core/accessibility";
 import { actionCluster } from "@/src/game/core/evaluation/clusters";
+import {
+  PROFILE_MODE,
+  ProfileId,
+  settingsForProfile,
+} from "@/src/game/core/profile";
 import { FitState } from "@/src/game/core/geometry/fit";
 import {
   ActionId,
@@ -31,13 +38,6 @@ export const ORIENTATION_TOTAL_DEG = 180;
 /** Taps to press a push-fit part home (PressControl). */
 export const PRESS_TAPS = 4;
 
-// Setting types live in accessibility.ts; defaults + profiles in profile.ts.
-import { AccessibilitySettings } from "@/src/game/core/accessibility";
-import {
-  PROFILE_MODE,
-  ProfileId,
-  settingsForProfile,
-} from "@/src/game/core/profile";
 export type { AccessibilitySettings } from "@/src/game/core/accessibility";
 
 /** What the player is inspecting via single-tap (look only, no assembly). */
@@ -170,6 +170,11 @@ export const useGameStore = create<GameState>()((set, get) => ({
   mode: "free",
   renderStyle: "realistic",
   backdrop: "studio",
+  // Light by default. The palette (ui/theme.ts) was designed against the dark reference,
+  // but light is the safer default for a study: it survives a bright room, a projector,
+  // and a participant's own phone brightness, none of which we control. Dark and
+  // high-contrast are the SAME product in different light — same three accent hues, same
+  // meanings — so switching costs nothing but the setting.
   theme: "light",
 
   loadFurniture: (f) =>

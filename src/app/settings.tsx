@@ -3,8 +3,11 @@ import { router } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SettingsControls } from "@/src/game/ui/SettingsControls";
+import { SPACE, Theme, TYPE, useStyles} from "@/src/game/ui/theme";
+
 
 export default function SettingsScreen() {
+  const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   // Landscape: the notch / home-indicator sit on the sides, so left/right insets matter as much as top. Pad the header and scroll content by them.
   const padL = Math.max(insets.left, 16);
@@ -36,18 +39,21 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#f7f3ea" },
+const makeStyles = (t: Theme) =>
+  StyleSheet.create({
+  root: { flex: 1, backgroundColor: t.bg },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(60,50,40,0.1)",
+    paddingBottom: SPACE.md,
+    borderBottomWidth: StyleSheet.hairlineWidth * 2,
+    borderBottomColor: t.border,
   },
   back: { minWidth: 64 },
-  backText: { fontSize: 16, fontWeight: "700", color: "#6f8a68" },
-  title: { fontSize: 18, fontWeight: "800", color: "#2e2a24" },
-  scroll: { paddingTop: 8 },
-});
+  // The back affordance is the only pressable thing in the header, so it carries the
+  // accent — nothing else here should look tappable.
+  backText: { ...TYPE.label, fontSize: 16, color: t.accent },
+  title: { ...TYPE.title, color: t.text },
+  scroll: { paddingTop: SPACE.sm },
+  });

@@ -1,0 +1,126 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// toon_v2.mat — the POSTERISED cel look: flat bands, hard edges, quantised glints.
+//
+//   matc -a all -p mobile -o src/assets/materials/toon_v2.filamat materials/toon_v2.mat
+//   (matc from Filament v1.68.0 — MATERIAL_VERSION 68. See ink.mat.)
+//
+// What separates this from the old soft-ramp toon, and from the "illustrated" look:
+//
+//   HARD EDGES. The tone snaps between bands. The only softening is a single pixel of
+//   antialiasing derived from fwidth — enough to stop the boundary crawling, not enough
+//   to read as a gradient. A smoothstep wide enough to "look nice" destroys the effect:
+//   the whole point of a poster is that it has no in-between values.
+//
+//   THE SHADOW SHIFTS HUE. It is not the base colour multiplied down — it is a deeper,
+//   MORE SATURATED tint of it. Multiplying toward black gives you grey mud; mixing toward
+//   a saturated shadow tint is what makes it look painted rather than rendered.
+//
+//   THE SPECULAR IS QUANTISED TOO. The bright glints are flat blobs with hard edges, not
+//   a soft highlight. This is the detail people miss, and it is the one that makes the
+//   surface read as glossy vinyl rather than matte plastic. Filament's own specular is
+//   thrown away with customSurfaceShading, so it is computed here from scratch.
+//
+// A cel look needs ONE light: surfaceShading runs per light and the results are SUMMED,
+// so three staggered band-ramps add back up to a gradient. AssemblyScene already drops
+// the fill and rim for any shader look, and lowers the IBL. Do not re-add them.
+// ─────────────────────────────────────────────────────────────────────────────
+
+material {
+    name : toon,
+
+    shadingModel : lit,
+    customSurfaceShading : true,
+    blending : opaque,
+    culling : back,
+
+    parameters : [
+        // FOUR AUTHORED TONES, not one colour plus arithmetic.
+        //
+        // Measured off the reference: base #4194c3 → deep #15345d. The hue rotates 202°
+        // toward navy and the SATURATION CLIMBS from 66% to 86% — it gets more colourful
+        // as it gets darker. And the highlight #8ad2e7 cannot be reached by mixing the
+        // base toward white at all (it needs 22% white in red but 56% in blue).
+        //
+        // These are painted colours, chosen by an eye. A shader cannot derive them from a
+        // single value, and pretending otherwise is what produces the washed-out
+        // lighten/darken cel look that everybody recognises as cheap.
+        { type : float3, name : deepColor },
+        { type : float3, name : midColor },
+        { type : float3, name : baseColor },
+        { type : float3, name : liftColor },
+        // The glint. Near-white, very slightly tinted by the light.
+        { type : float3, name : specColor },
+
+        // Band edges on N·L, low to high. Three edges = FOUR flat tones.
+        { type : float3, name : bandEdges },
+
+        // Quantised specular.
+        { type : float,  name : specPower },     // tightness of the blob (32–128)
+        { type : float,  name : specThreshold }, // where the blob's hard edge falls
+        { type : float,  name : specStrength },  // 0 = matte, 1 = glossy vinyl
+
+        { type : float,  name : lightScale },
+        // 0 ignores the shadow map. A hard band ramp turns shadow-map noise into a
+        // hard-edged dark PATCH rather than a soft smudge, so this stays low by default.
+        { type : float,  name : shadowStrength }
+    ]
+}
+
+fragment {
+
+    /** One hard edge, antialiased across exactly one pixel. `fwidth` gives the rate the
+     *  value changes on screen, so the transition is a pixel wide however close the camera
+     *  gets — a fixed epsilon would smear when zoomed in and alias when zoomed out. */
+    float hardStep(float edge, float x) {
+        float aa = fwidth(x) * 0.5 + 1e-5;
+        return smoothstep(edge - aa, edge + aa, x);
+    }
+
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor.rgb = materialParams.baseColor;
+        material.metallic  = 0.0;
+        material.roughness = 0.35;
+    }
+
+    vec3 surfaceShading(const MaterialInputs materialInputs, const ShadingData shadingData,
+            const LightData lightData) {
+
+        vec3 n = getWorldGeometricNormalVector();
+        vec3 v = normalize(getWorldViewVector());
+        vec3 l = lightData.l;
+
+        float shadow = mix(1.0, lightData.visibility, materialParams.shadowStrength);
+        float NoL = clamp(dot(n, l), 0.0, 1.0) * lightData.attenuation * shadow;
+
+        // ── four flat, AUTHORED tones ────────────────────────────────────────
+        // Snap, don't ramp. Each band is a hard step, so the surface is posterised into
+        // flat regions with no in-between values anywhere.
+        vec3 tone = materialParams.deepColor;
+        tone = mix(tone, materialParams.midColor,  hardStep(materialParams.bandEdges.x, NoL));
+        tone = mix(tone, materialParams.baseColor, hardStep(materialParams.bandEdges.y, NoL));
+        tone = mix(tone, materialParams.liftColor, hardStep(materialParams.bandEdges.z, NoL));
+
+        // ── the glint ────────────────────────────────────────────────────────
+        // Blinn-Phong, then THRESHOLDED into a flat blob. customSurfaceShading discards
+        // Filament's own specular, so this is built from scratch — and being able to
+        // quantise it is precisely why we want it that way.
+        vec3 h = normalize(l + v);
+        float spec = pow(clamp(dot(n, h), 0.0, 1.0), materialParams.specPower);
+        float glint = hardStep(materialParams.specThreshold, spec)
+                    * materialParams.specStrength
+                    * step(0.001, NoL);   // no glint on a surface facing away from the key
+        tone = mix(tone, materialParams.specColor, glint);
+
+        // No brightness floor is needed: the darkest band is a COLOUR (deep), not an
+        // absence of light, so the shadow side can never crush to a hole. That is the
+        // advantage of posterising the tone instead of the luminance. Filament's IBL still
+        // runs underneath and adds its own ambient on top.
+        //
+        // The 1/PI matches Filament's own Lambert — omit it and this look is exposed ~3x
+        // hotter than every other material under the same rig, and lightScale becomes a
+        // fudge factor instead of a 1.0-is-neutral trim.
+        return tone * lightData.colorIntensity.rgb * lightData.colorIntensity.w
+                * 0.3183098862 * materialParams.lightScale;
+    }
+}

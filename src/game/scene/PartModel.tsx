@@ -28,6 +28,7 @@ import {
 import { styleFor } from "@/src/game/core/presentation/labels";
 import { buildPartActions } from "@/src/game/core/scene/targets";
 import type { ClusterDriver, OffsetDriver } from "./offsetDriver";
+import { useShaderOverride, useShaderStyle } from "./shaders";
 import type { PartMode } from "./useSceneState";
 
 // dev-setting
@@ -353,6 +354,7 @@ function DrivenEntity({
   const { transformManager, renderableManager, scene } = useFilamentContext();
   const entity = useInstanceEntity(model, def.meshName, 0);
   const material = usePartMaterial(def);
+  const shaderStyle = useShaderStyle();
 
   useEffect(() => {
     if (!entity) return;
@@ -383,6 +385,9 @@ function DrivenEntity({
     if (entity) applyThemeMaterial(renderableManager, entity, material);
   }, [entity, renderableManager, material]);
 
+  // Declared AFTER the theme-material effect so the shader swap wins.
+  useShaderOverride(entity, def, shaderStyle, material);
+
   return null;
 }
 
@@ -399,6 +404,7 @@ function ClusterDrivenEntity({
   const { transformManager, renderableManager, scene } = useFilamentContext();
   const entity = useInstanceEntity(model, def.meshName, 0);
   const material = usePartMaterial(def);
+  const shaderStyle = useShaderStyle();
 
   useEffect(() => {
     if (!entity) return;
@@ -423,6 +429,9 @@ function ClusterDrivenEntity({
     if (entity) applyThemeMaterial(renderableManager, entity, material);
   }, [entity, renderableManager, material]);
 
+  // Declared AFTER the theme-material effect so the shader swap wins.
+  useShaderOverride(entity, def, shaderStyle, material);
+
   return null;
 }
 
@@ -442,6 +451,7 @@ function StaticEntity({
   const { transformManager, renderableManager, scene } = useFilamentContext();
   const entity = useInstanceEntity(model, def.meshName, 0);
   const material = usePartMaterial(def);
+  const shaderStyle = useShaderStyle();
 
   useEffect(() => {
     if (!entity) return;
@@ -466,6 +476,9 @@ function StaticEntity({
   useEffect(() => {
     if (entity) applyThemeMaterial(renderableManager, entity, material);
   }, [entity, renderableManager, material]);
+
+  // Declared AFTER the theme-material effect so the shader swap wins.
+  useShaderOverride(entity, def, shaderStyle, material);
 
   return null;
 }

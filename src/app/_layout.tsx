@@ -1,4 +1,7 @@
 // This is the root router, where initialization code sits controlling orientation & safeArea view
+import { useEffect } from "react";
+import { Platform } from "react-native";
+import * as NavigationBar from "expo-navigation-bar";
 import { Stack } from "expo-router";
 import { OrientationLock } from "expo-screen-orientation";
 import { StatusBar } from "expo-status-bar";
@@ -10,6 +13,15 @@ import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-loc
 
 export default function RootLayout() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
+
+  // Hide Android's system navigation bar (the gesture/3-button handles that were overlapping
+  // the joystick). "inset-swipe" = the bar stays gone and slides back only on an edge swipe,
+  // then auto-hides again — the standard game/immersive behaviour. No-op on iOS.
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    NavigationBar.setVisibilityAsync("hidden");
+    NavigationBar.setBehaviorAsync("inset-swipe");
+  }, []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

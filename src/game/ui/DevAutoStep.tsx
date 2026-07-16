@@ -1,3 +1,4 @@
+import { Theme, useStyles } from "@/src/game/ui/theme";
 import { Pressable, StyleSheet, Text } from "react-native";
 import { targetPositionForAction } from "@/src/game/core/scene/targets";
 import { HOVER_LIFT_M, looseDelta, spawnDelta } from "@/src/game/core/geometry/staging";
@@ -11,6 +12,7 @@ interface Props {
 
 /** DEV-only: performs the next assembly action through the real store/scene pipeline (pickup → glide → snap, or tighten). Lets the whole game be stepped through on an emulator where touch-gesture injection is flaky; also doubles as a demo mode. Ported from the on-release engine; `snapPart` → game's `placePart`, and the done set is passed to game's targetPositionForAction. Parts that need a follow-up (screw park / slide-press drive) complete on the NEXT press, since their tighten/drive is a separate available action. */
 export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
+  const styles = useStyles(makeStyles);
   const heldActionId = useGameStore((s) => s.heldActionId);
 
   const step = () => {
@@ -77,15 +79,16 @@ export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) =>
+  StyleSheet.create({
   btn: {
     // Flows inside play.tsx's bottom-right togglesRow (her placement).
-    backgroundColor: "rgba(60,50,40,0.65)",
+    backgroundColor: t.scrim,
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 14,
     justifyContent: "center",
   },
   btnBusy: { opacity: 0.4 },
-  text: { color: "#fff", fontSize: 13, fontWeight: "700" },
-});
+  text: { color: t.onAccent, fontSize: 13, fontWeight: "700" },
+  });

@@ -1,3 +1,4 @@
+import { Theme, useStyles } from "@/src/game/ui/theme";
 import * as Haptics from "expo-haptics";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export function QuickOrbitControls({ onOrbitBy, onRotateQuarter }: Props) {
+  const styles = useStyles(makeStyles);
   const press = (fn: () => void) => {
     fn();
     Haptics.selectionAsync();
@@ -72,7 +74,8 @@ export function QuickOrbitControls({ onOrbitBy, onRotateQuarter }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) =>
+  StyleSheet.create({
   pad: {
     position: "absolute",
     bottom: 16,
@@ -86,13 +89,13 @@ const styles = StyleSheet.create({
     minHeight: 34,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "rgba(60,50,40,0.16)",
-    backgroundColor: "rgba(255,255,255,0.86)",
+    borderColor: t.borderStrong,
+    backgroundColor: t.surface,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 9,
   },
-  turnText: { color: "#2e2a24", fontSize: 12, fontWeight: "800" },
+  turnText: { color: t.text, fontSize: 12, fontWeight: "800" },
   dpad: { gap: 4 },
   dpadRow: { flexDirection: "row", gap: 4, justifyContent: "center" },
   spacer: { width: 42, height: 34 },
@@ -101,10 +104,10 @@ const styles = StyleSheet.create({
     height: 34,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "rgba(60,50,40,0.16)",
-    backgroundColor: "rgba(255,255,255,0.86)",
+    borderColor: t.borderStrong,
+    backgroundColor: t.surface,
     alignItems: "center",
     justifyContent: "center",
   },
-  arrowText: { color: "#2e2a24", fontSize: 18, fontWeight: "900" },
-});
+  arrowText: { color: t.text, fontSize: 18, fontWeight: "900" },
+  });

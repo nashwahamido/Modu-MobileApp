@@ -3,6 +3,7 @@
 // Visual language adopted from the on-release engine: a compact arrow Stepper (‹ Value ›) for multi-choice settings, Switch rows for booleans.
 import { Alert, Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
+import { Theme, useStyles, useTheme } from "@/src/game/ui/theme";
 import type {
   DragPlane,
   GhostStyle,
@@ -48,9 +49,12 @@ const MODES: { value: AssemblyMode; label: string }[] = [
   { value: "strict", label: "Strict" },
 ];
 const STYLES: { value: RenderStyleId; label: string }[] = [
+  // The first three swap the GLB; the last two swap the MATERIAL (scene/shaders.ts).
   { value: "realistic", label: "Realistic" },
   { value: "cozy", label: "Cozy" },
   { value: "cartoon", label: "Cartoon" },
+  { value: "toon", label: "Toon" },
+  { value: "illustrated", label: "Illustrated" },
 ];
 const BACKDROPS: { value: BackdropId; label: string }[] = [
   { value: "studio", label: "Studio" },
@@ -84,6 +88,7 @@ function Stepper<T extends string>({
   options: { value: T; label: string }[];
   onChange: (v: T) => void;
 }) {
+  const styles = useStyles(makeStyles);
   const idx = Math.max(0, options.findIndex((o) => o.value === value));
   const go = (dir: number) =>
     onChange(options[(idx + dir + options.length) % options.length].value);
@@ -122,6 +127,7 @@ function Segmented<T extends string>({
   options: { value: T; label: string }[];
   onChange: (v: T) => void;
 }) {
+  const styles = useStyles(makeStyles);
   return (
     <View style={styles.segBlock}>
       <Text style={styles.rowLabel}>{label}</Text>
@@ -172,6 +178,8 @@ function Row({
   value: boolean;
   onValueChange: (v: boolean) => void;
 }) {
+  const styles = useStyles(makeStyles);
+  const t = useTheme();
   return (
     <View style={styles.switchRow}>
       <View style={styles.rowText}>
@@ -181,19 +189,22 @@ function Row({
       <Switch
         value={value}
         onValueChange={onValueChange}
-        trackColor={{ false: "#c9c2b4", true: "#6f8a68" }}
-        thumbColor="#fff"
+        trackColor={{ false: t.surfaceInset, true: t.accent }}
+        thumbColor={value ? t.onAccent : t.surface}
+        ios_backgroundColor={t.surfaceInset}
       />
     </View>
   );
 }
 
 function SectionHeader({ children }: { children: string }) {
+  const styles = useStyles(makeStyles);
   return <Text style={styles.section}>{children}</Text>;
 }
 
 // ── the shared controls ──────────────────────────────────────────────────────
 export function SettingsControls() {
+  const styles = useStyles(makeStyles);
   const settings = useGameStore((s) => s.settings);
   const profile = useGameStore((s) => s.profile);
   const applyProfile = useGameStore((s) => s.applyProfile);
@@ -383,14 +394,15 @@ export function SettingsControls() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t: Theme) =>
+  StyleSheet.create({
   list: { gap: 2 },
   section: {
     fontSize: 12,
     fontWeight: "800",
     letterSpacing: 0.5,
     textTransform: "uppercase",
-    color: "#a08d6a",
+    color: t.gold,
     marginTop: 16,
     marginBottom: 4,
   },
@@ -400,7 +412,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: "rgba(60,50,40,0.08)",
+    borderTopColor: t.border,
   },
   stepperRow: {
     flexDirection: "row",
@@ -408,67 +420,69 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: "rgba(60,50,40,0.08)",
+    borderTopColor: t.border,
   },
   rowText: { flex: 1, paddingRight: 12 },
-  rowLabel: { fontSize: 15, fontWeight: "700", color: "#2e2a24" },
-  rowDesc: { fontSize: 12, color: "#7a7163", marginTop: 2 },
+  rowLabel: { fontSize: 15, fontWeight: "700", color: t.text },
+  rowDesc: { fontSize: 12, color: t.textDim, marginTop: 2 },
   stepper: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#ece6d8",
+    backgroundColor: t.surfaceRaised,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "rgba(60,50,40,0.12)",
+    borderColor: t.border,
   },
   segBlock: {
     paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: "rgba(60,50,40,0.08)",
+    borderTopColor: t.border,
   },
   segRow: { flexDirection: "row", gap: 6, marginTop: 8 },
   segBtn: {
     flex: 1,
     minHeight: 40,
     borderRadius: 10,
-    backgroundColor: "#ece6d8",
+    backgroundColor: t.surfaceRaised,
     borderWidth: 1,
-    borderColor: "rgba(60,50,40,0.12)",
+    borderColor: t.border,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 6,
   },
-  segBtnActive: { backgroundColor: "#6f8a68", borderColor: "#6f8a68" },
-  segText: { fontSize: 12.5, fontWeight: "700", color: "#5a5346", textAlign: "center" },
-  segTextActive: { color: "#fff" },
+  // Active segment = ACCENT, not success green. Green means a step is DONE; a chosen
+  // setting is a live selection, which is what the accent means.
+  segBtnActive: { backgroundColor: t.accent, borderColor: t.accent },
+  segText: { fontSize: 12.5, fontWeight: "700", color: t.textDim, textAlign: "center" },
+  segTextActive: { color: t.onAccent },
   arrow: { paddingHorizontal: 12, paddingVertical: 6 },
-  arrowText: { fontSize: 20, fontWeight: "700", color: "#6f8a68", lineHeight: 22 },
+  arrowText: { fontSize: 20, fontWeight: "700", color: t.accent, lineHeight: 22 },
   stepperValue: {
     minWidth: 92,
     textAlign: "center",
     fontSize: 13,
     fontWeight: "700",
-    color: "#3a352c",
+    color: t.text,
   },
   fontStepper: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#ece6d8",
+    backgroundColor: t.surfaceRaised,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "rgba(60,50,40,0.12)",
+    borderColor: t.border,
   },
   fontBtn: { paddingHorizontal: 12, paddingVertical: 6 },
   resetRow: {
-    backgroundColor: "#ece6d8",
+    backgroundColor: t.surfaceRaised,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "rgba(60,50,40,0.12)",
+    borderColor: t.border,
     paddingHorizontal: 14,
     paddingVertical: 10,
     marginTop: 4,
   },
   resetRowIdle: { opacity: 0.45 },
-  resetText: { fontSize: 15, fontWeight: "700", color: "#a3402f" },
-  resetDesc: { fontSize: 12, color: "#7a7163", marginTop: 2 },
-});
+  resetText: { fontSize: 15, fontWeight: "700", color: t.danger },
+  resetDesc: { fontSize: 12, color: t.textDim, marginTop: 2 },
+  });
