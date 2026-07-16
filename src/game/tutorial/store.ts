@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import {
   TUTORIAL_STEP_REWARD_TOKENS,
+  settingsTutorialStepsFor,
   tutorialStepsFor,
   type TutorialContext,
   type TutorialEvent,
@@ -19,16 +20,20 @@ const DEFAULT_CONTEXT: TutorialContext = {
 interface TutorialState {
   steps: TutorialStep[];
   context: TutorialContext;
+  phase: "core" | "settings";
   currentIndex: number;
   skipped: boolean;
   completed: boolean;
   rewardReady: boolean;
+  settingsReady: boolean;
   stepRewardReady: boolean;
   lastCompletedStepLabel: string | null;
   stepRewardsClaimed: number;
   acceptsEventsAfter: number;
   pendingAdvanceStepId: string | null;
   configureTutorial: (context: TutorialContext) => void;
+  beginSettingsTutorial: () => void;
+  skipSettingsTutorial: () => void;
   completeEvent: (event: TutorialEvent) => void;
   completeCurrentStep: () => void;
   skip: () => void;
@@ -40,10 +45,12 @@ interface TutorialState {
 const resetState = (context: TutorialContext) => ({
   steps: tutorialStepsFor(context),
   context,
+  phase: "core" as const,
   currentIndex: 0,
   skipped: false,
   completed: false,
   rewardReady: false,
+  settingsReady: false,
   stepRewardReady: false,
   lastCompletedStepLabel: null,
   stepRewardsClaimed: 0,
@@ -54,6 +61,29 @@ const resetState = (context: TutorialContext) => ({
 export const useTutorialStore = create<TutorialState>()((set, get) => ({
   ...resetState(DEFAULT_CONTEXT),
   configureTutorial: (context) => set(resetState(context)),
+  beginSettingsTutorial: () => {
+    const { context } = get();
+    const steps = settingsTutorialStepsFor(context);
+    if (!steps.length) {
+      set({ settingsReady: false, rewardReady: true });
+      return;
+    }
+    set({
+      steps,
+      phase: "settings",
+      currentIndex: 0,
+      skipped: false,
+      completed: false,
+      rewardReady: false,
+      settingsReady: false,
+      stepRewardReady: false,
+      lastCompletedStepLabel: null,
+      acceptsEventsAfter: Date.now() + 400,
+      pendingAdvanceStepId: null,
+    });
+  },
+  skipSettingsTutorial: () =>
+    set({ settingsReady: false, rewardReady: true }),
   completeEvent: (event) => {
     const {
       steps,
@@ -102,7 +132,19 @@ export const useTutorialStore = create<TutorialState>()((set, get) => ({
         return;
       const nextIndex = completedIndex + 1;
       if (nextIndex >= state.steps.length) {
-        set({ completed: true, rewardReady: true, pendingAdvanceStepId: null });
+        if (state.phase === "core") {
+          set({
+            completed: true,
+            settingsReady: true,
+            pendingAdvanceStepId: null,
+          });
+        } else {
+          set({
+            completed: true,
+            rewardReady: true,
+            pendingAdvanceStepId: null,
+          });
+        }
       } else {
         set({ currentIndex: nextIndex, pendingAdvanceStepId: null });
       }

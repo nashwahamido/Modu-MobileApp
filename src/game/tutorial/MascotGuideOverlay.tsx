@@ -34,12 +34,16 @@ export function MascotGuideOverlay({
   const height = overlaySize?.height ?? windowSize.height;
   const currentIndex = useTutorialStore((s) => s.currentIndex);
   const steps = useTutorialStore((s) => s.steps);
+  const phase = useTutorialStore((s) => s.phase);
   const skipped = useTutorialStore((s) => s.skipped);
   const completed = useTutorialStore((s) => s.completed);
   const rewardReady = useTutorialStore((s) => s.rewardReady);
+  const settingsReady = useTutorialStore((s) => s.settingsReady);
   const stepRewardReady = useTutorialStore((s) => s.stepRewardReady);
   const lastCompletedStepLabel = useTutorialStore((s) => s.lastCompletedStepLabel);
   const skip = useTutorialStore((s) => s.skip);
+  const beginSettingsTutorial = useTutorialStore((s) => s.beginSettingsTutorial);
+  const skipSettingsTutorial = useTutorialStore((s) => s.skipSettingsTutorial);
   const completeCurrentStep = useTutorialStore((s) => s.completeCurrentStep);
   const dismissStepReward = useTutorialStore((s) => s.dismissStepReward);
   const dismissReward = useTutorialStore((s) => s.dismissReward);
@@ -99,6 +103,30 @@ export function MascotGuideOverlay({
   }, [completed, currentIndex, nodes, overlaySize, rewardReady, setFrame, skipped, steps]);
 
   if (skipped || blocked) return null;
+
+  if (settingsReady) {
+    return (
+      <View style={styles.rewardLayer} pointerEvents="box-none" onLayout={handleLayout}>
+        <View style={styles.rewardCard} pointerEvents="auto">
+          <Image source={mascotImage} style={styles.rewardMascot} resizeMode="contain" />
+          <View style={styles.rewardCopy}>
+            <Text style={styles.rewardTitle}>Core skills complete!</Text>
+            <Text style={styles.rewardMessage}>
+              Want a quick tour of model look, part return, instructions, Focus mode, and Auto-view?
+            </Text>
+            <View style={styles.settingsActions}>
+              <Pressable style={styles.primaryButton} onPress={beginSettingsTutorial}>
+                <Text style={styles.primaryButtonText}>Personalize settings</Text>
+              </Pressable>
+              <Pressable onPress={skipSettingsTutorial} hitSlop={8}>
+                <Text style={styles.skipText}>Maybe later</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   if (rewardReady) {
     return (
@@ -169,7 +197,7 @@ export function MascotGuideOverlay({
         <Image source={mascotImage} style={styles.mascot} resizeMode="contain" />
         <View style={styles.copy} pointerEvents="box-none">
           <Text style={styles.stepText}>
-            {currentIndex + 1}/{steps.length}
+            {phase === 'settings' ? 'SETTINGS · ' : ''}{currentIndex + 1}/{steps.length}
           </Text>
           <Text style={styles.message}>{message}</Text>
           <View style={styles.actions} pointerEvents="auto">
@@ -270,6 +298,7 @@ const styles = StyleSheet.create({
   stepText: { color: '#8FA876', fontSize: 11, fontWeight: '800', marginBottom: 4 },
   message: { color: '#231F20', fontSize: 14, lineHeight: 19, fontWeight: '700' },
   actions: { marginTop: 8, flexDirection: 'row', gap: 14, alignItems: 'center' },
+  settingsActions: { marginTop: 12, gap: 10, alignItems: 'flex-start' },
   continueText: { color: '#8FA876', fontSize: 12, fontWeight: '800' },
   skipText: { color: '#665f55', fontSize: 12, fontWeight: '700' },
   stepRewardToast: {

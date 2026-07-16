@@ -19,6 +19,9 @@ export type TutorialEvent =
   | "part_snapped"
   | "step_undone"
   | "step_redone"
+  | "render_style_changed"
+  | "release_behavior_changed"
+  | "instruction_preferences_changed"
   | "auto_view_toggled"
   | "focus_mode_toggled"
   | "toolbar_used"
@@ -132,37 +135,70 @@ export const CONTEXTUAL_TUTORIAL_STEPS: TutorialStep[] = [
     message: "Use Forward one step to restore the step you just returned from.",
     event: "step_redone",
   },
+];
+
+/** Optional preference walkthrough offered after the short core tutorial. */
+export const SETTINGS_TUTORIAL_STEPS: TutorialStep[] = [
   {
-    id: "auto-view-settings",
+    id: "model-look-settings",
     targetId: "settings",
     message:
-      "Open Settings and switch on Auto-view to frame the next open socket automatically.",
-    event: "auto_view_toggled",
+      "Open Settings and choose Model look: Realistic, Cozy, or Cartoon. Pick the view that feels clearest to you.",
+    event: "render_style_changed",
+  },
+  {
+    id: "release-behavior-settings",
+    targetId: "settings",
+    message:
+      "When a part misses its target, what should happen? In Settings, choose Released part: Auto-return or Float.",
+    event: "release_behavior_changed",
+  },
+  {
+    id: "guided-instructions-settings",
+    targetId: "settings",
+    message:
+      "In Settings, choose Instructions: Standard or Simple. Show instructions can also hide or restore the step text.",
+    event: "instruction_preferences_changed",
+    when: ({ mode }) => mode === "guide",
   },
   {
     id: "focus-mode-settings",
     targetId: "settings",
     message:
-      "Open Settings and switch on Focus mode to show only the current part or action and hide extra controls.",
+      "In Settings, Focus mode shows only the current part or action and hides extra controls.",
     event: "focus_mode_toggled",
+  },
+  {
+    id: "auto-view-settings",
+    targetId: "settings",
+    message:
+      "In Settings, Auto-view frames the next open socket automatically.",
+    event: "auto_view_toggled",
   },
 ];
 
 export const FUTURE_TUTORIAL_REQUIREMENTS = {
   saveProgress: "Future requirement — do not implement yet.",
-  renderStyleGuidance:
-    "Open product question — decide whether to teach model look in Settings.",
-  guidedInstructionStyle:
-    "Open product question — decide whether this means instruction detail, showing step text, or both.",
   floatPushBack:
     "Blocked on the final push-back control or gesture; keep it out of user-facing copy.",
-  contextualPlacement:
-    "Open product question — decide the exact opening-versus-later lesson split.",
+} as const;
+
+export const TUTORIAL_CONTENT_DECISIONS = {
+  renderStyle: "Teach Model look in the post-core Settings walkthrough.",
+  guidedInstructions:
+    "Teach Standard/Simple as the primary choice and mention Show instructions.",
+  sequencing:
+    "Keep the opening to the core loop; teach preferences in a separate post-core walkthrough.",
 } as const;
 
 export const tutorialStepsFor = (context: TutorialContext): TutorialStep[] => {
   return TUTORIAL_STEPS.filter((step) => !step.when || step.when(context));
 };
+
+export const settingsTutorialStepsFor = (
+  context: TutorialContext,
+): TutorialStep[] =>
+  SETTINGS_TUTORIAL_STEPS.filter((step) => !step.when || step.when(context));
 
 export function messageForToolStep(kind: ToolTutorialKind | null) {
   if (kind === "tap") return "Tap repeatedly to drive it in.";

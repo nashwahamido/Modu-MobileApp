@@ -162,6 +162,22 @@ function TutorialScreen() {
         ) {
           tutorial.completeEvent("focus_mode_toggled");
         }
+        if (state.renderStyle !== previous.renderStyle) {
+          tutorial.completeEvent("render_style_changed");
+        }
+        if (
+          state.settings.releaseBehavior !==
+          previous.settings.releaseBehavior
+        ) {
+          tutorial.completeEvent("release_behavior_changed");
+        }
+        if (
+          state.settings.textLevel !== previous.settings.textLevel ||
+          state.settings.showInstructions !==
+            previous.settings.showInstructions
+        ) {
+          tutorial.completeEvent("instruction_preferences_changed");
+        }
         if (!previous.selectedTool && state.selectedTool) {
           tutorial.completeEvent("toolbar_used");
         }
