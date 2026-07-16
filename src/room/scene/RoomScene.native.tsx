@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, PanResponder, StyleSheet, Text, View } from 'react-native';
 import { Box3, BufferAttribute, BufferGeometry, Matrix4, Quaternion, Vector3 } from 'three';
 
-const roomModule = require('../assets/models/homepageroom-runtime.glb');
+const roomModule = require('../../assets/models/homepageroom-runtime.glb');
 
 const roomVertexShader = `
   precision highp float;

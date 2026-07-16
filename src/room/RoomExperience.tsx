@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, PanResponder, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { CartIcon, CheckIcon, ChevronIcon, CloseIcon, CoinMedalIcon, FriendsIcon, InventoryIcon, LevelStarIcon, RotateLeftIcon, RotateRightIcon, SettingsIcon, ToolsIcon, TrashIcon } from './Icons';
-import { RoomScene, setRoomCameraTarget } from './RoomScene';
+import { CartIcon, CheckIcon, ChevronIcon, CloseIcon, CoinMedalIcon, FriendsIcon, InventoryIcon, LevelStarIcon, RotateLeftIcon, RotateRightIcon, SettingsIcon, ToolsIcon, TrashIcon } from '../components/Icons';
+import { RoomScene, setRoomCameraTarget } from './scene/RoomScene';
 
 const products = ['Wooden Shelving Unit', 'Bed Slattum', 'Table', 'Chair', 'Shelves', 'Kids Desk', 'Stool', 'Sofa'];
 

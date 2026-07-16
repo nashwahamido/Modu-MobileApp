@@ -1,7 +1,6 @@
 import { StatusBar } from "expo-status-bar";
-import { Component } from "react";
+import { Component, useEffect, useState } from "react";
 import type { ComponentType, ErrorInfo, ReactNode } from "react";
-import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 type RoomExperienceComponent = ComponentType;
@@ -42,7 +41,7 @@ export default function RoomRoute() {
     try {
       // Load the 3D room only after this route is opened, so Three.js cannot block app startup.
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const module = require("@/src/components/RoomExperience") as { RoomExperience: RoomExperienceComponent };
+      const module = require("@/src/room/RoomExperience") as { RoomExperience: RoomExperienceComponent };
       setRoomExperience(() => module.RoomExperience);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Room could not be loaded.");
