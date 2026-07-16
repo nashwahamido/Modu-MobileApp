@@ -8,10 +8,12 @@ import {
 } from "./steps";
 
 const DEFAULT_CONTEXT: TutorialContext = {
-  audience: "control",
+  profile: "control",
+  mode: "free",
+  manualTools: true,
+  softHints: true,
   releaseBehavior: "autoReturn",
   oneFingerPanEnabled: false,
-  focusMode: false,
 };
 
 interface TutorialState {

@@ -1,5 +1,3 @@
-// TODO: settle down the part marked as dev-setting (float mode vs auto return)
-
 import { useEffect, useMemo, useRef } from "react";
 import { router } from "expo-router";
 import type { Href } from "expo-router";
@@ -53,8 +51,6 @@ import { PartsTray } from "@/src/game/ui/PartsTray";
 import { ClusterTray } from "@/src/game/ui/ClusterTray";
 import { UndoButton } from "@/src/game/ui/UndoButton";
 import { GameSettings } from "@/src/game/ui/GameSettings";
-import { DevAutoStep } from "@/src/game/ui/DevAutoStep";
-import { ToggleChips } from "@/src/game/ui/ToggleChips";
 import { ClusterFocusControl } from "@/src/game/ui/ClusterFocusControl";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 import {
@@ -111,10 +107,12 @@ function TutorialScreen() {
     let active = true;
     const state = useGameStore.getState();
     useTutorialStore.getState().configureTutorial({
-      audience: state.profile === "control" ? "control" : "guided",
+      profile: state.profile,
+      mode: state.mode,
+      manualTools: state.settings.manualTools,
+      softHints: state.settings.softHints,
       releaseBehavior: state.settings.releaseBehavior,
       oneFingerPanEnabled: state.settings.canvasStrafe,
-      focusMode: state.settings.focusMode,
     });
     loadFurnitureById("TUTORIAL").then((f) => {
       if (active) useGameStore.getState().loadFurniture(f);
@@ -131,12 +129,14 @@ function TutorialScreen() {
         if (!previous.heldActionId && state.heldActionId) {
           tutorial.completeEvent("part_picked_up");
         }
+        if (state.completed.length < previous.completed.length) {
+          tutorial.completeEvent("step_undone");
+        }
         if (
-          previous.heldActionId &&
-          !state.heldActionId &&
-          state.completed.length === previous.completed.length
+          state.completed.length > previous.completed.length &&
+          state.undoneActions.length < previous.undoneActions.length
         ) {
-          tutorial.completeEvent("part_returned");
+          tutorial.completeEvent("step_redone");
         }
         if (state.completed.length > previous.completed.length) {
           const added = state.completed.slice(previous.completed.length);
@@ -177,8 +177,6 @@ function TutorialScreen() {
       : 1;
   });
   const settings = useGameStore((s) => s.settings);
-  // Dev-setting: float mode vs auto return
-  const heldActionId = useGameStore((s) => s.heldActionId);
   const renderStyle = useGameStore((s) => s.renderStyle);
   const backdrop = useGameStore((s) => s.backdrop);
   const theme = useGameStore((s) => s.theme);
@@ -258,10 +256,6 @@ function TutorialScreen() {
     : sceneState.activeBeat
       ? "beat"
       : null;
-  const tutorialStep = useTutorialStore(
-    (state) => state.steps[state.currentIndex],
-  );
-
   // Scene gestures are MEMOIZED: the screen re-renders constantly mid-drag (fit-state churn), and handing GestureDetector fresh gesture instances reattaches native handlers — eating the first re-grab attempt and stuttering active drags (same lesson as the joystick).
   const pinch = useMemo(
     () =>
@@ -447,12 +441,17 @@ function TutorialScreen() {
         <FitChip />
         <HintToast />
         <UndoButton />
+        <TutorialTarget
+          id="undo"
+          style={styles.undoTarget}
+          pointerEvents="none"
+        />
         <GameSettings />
-        {/* Bottom-right toggles row (her togglesRow): dev auto + Focus/Auto-View. */}
-        <TutorialTarget id="toggles" style={styles.togglesRow}>
-          <DevAutoStep heldDriver={heldDriver} sinkDriver={sinkDriver} />
-          <ToggleChips />
-        </TutorialTarget>
+        <TutorialTarget
+          id="settings"
+          style={styles.settingsTarget}
+          pointerEvents="none"
+        />
         {mode !== "strict" ? <ClusterFocusControl /> : null}
         <PartsTray
           items={sceneState.trayItems}
@@ -483,34 +482,6 @@ function TutorialScreen() {
             >
               <Text style={styles.hintButtonText}>?</Text>
             </Pressable>
-          </TutorialTarget>
-        ) : null}
-        {tutorialStep?.targetId === "instructionStyle" ? (
-          <TutorialTarget
-            id="instructionStyle"
-            style={styles.instructionStyle}
-          >
-            <Text style={styles.instructionStyleLabel}>Instructions</Text>
-            {(["standard", "simple"] as const).map((level) => (
-              <Pressable
-                key={level}
-                style={[
-                  styles.instructionStyleChoice,
-                  settings.textLevel === level &&
-                    styles.instructionStyleChoiceActive,
-                ]}
-                onPress={() => {
-                  useGameStore.getState().setSettings({ textLevel: level });
-                  useTutorialStore
-                    .getState()
-                    .completeEvent("instruction_style_selected");
-                }}
-              >
-                <Text style={styles.instructionStyleChoiceText}>
-                  {level === "standard" ? "Detailed" : "Simple"}
-                </Text>
-              </Pressable>
-            ))}
           </TutorialTarget>
         ) : null}
         {activeToolKind ? (
@@ -609,18 +580,6 @@ function TutorialScreen() {
           </Pressable>
         </TutorialTarget>
 
-        {heldActionId && settings.releaseBehavior === "float" ? (
-          // Float mode: a released part stays where it was set down; this is the way back to the tray. (In autoReturn mode a miss returns by itself.)
-          <TutorialTarget id="return" style={styles.putBackButton}>
-            <Pressable
-              style={styles.targetFill}
-              onPress={() => useGameStore.getState().cancelHeld()}
-              hitSlop={8}
-            >
-              <Text style={styles.putBackText}>↩ Put back</Text>
-            </Pressable>
-          </TutorialTarget>
-        ) : null}
       </View>
       {ringOverlay}
       <GreenFlash trigger={completedCount} />
@@ -732,34 +691,19 @@ const styles = StyleSheet.create({
     width: 140,
     height: 160,
   },
-  instructionStyle: {
+  undoTarget: {
     position: "absolute",
-    alignSelf: "center",
-    top: 64,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.92)",
+    top: 54,
+    left: 14,
+    width: 92,
+    height: 36,
   },
-  instructionStyleLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#6b6257",
-  },
-  instructionStyleChoice: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 9,
-    backgroundColor: "#ece6db",
-  },
-  instructionStyleChoiceActive: { backgroundColor: "#6f8a68" },
-  instructionStyleChoiceText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#2e2a24",
+  settingsTarget: {
+    position: "absolute",
+    top: 8,
+    left: 92,
+    width: 42,
+    height: 36,
   },
   recenterButton: {
     position: "absolute",
@@ -784,28 +728,6 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.18)",
   },
   recenterTextDark: { color: "#eef1f6" },
-  // Dev-Setting: complimentary function for float mode
-  putBackButton: {
-    position: "absolute",
-    left: 14,
-    top: 150,
-    backgroundColor: "rgba(232,132,44,0.92)",
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderWidth: 1,
-    borderColor: "rgba(60,50,40,0.15)",
-  },
-  putBackText: { fontSize: 12, fontWeight: "700", color: "#fff" },
-  togglesRow: {
-    position: "absolute",
-    right: 14,
-    bottom: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    zIndex: 15,
-  },
   roomPromptLayer: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 80,
