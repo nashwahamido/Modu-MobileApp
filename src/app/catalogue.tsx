@@ -12,6 +12,7 @@ import {
 import { FURNITURE_METAS } from "@/src/game/data/furnitures/furnitures";
 import { brandFor } from "@/src/game/data/brands";
 import type { FurnitureMeta } from "@/src/game/core/type";
+import { AppNavigation } from "@/src/components/AppNavigation";
 
 const DIFFICULTY: Record<1 | 2 | 3, string> = { 1: "Easy", 2: "Medium", 3: "Hard" };
 
@@ -38,6 +39,7 @@ export default function CatalogueScreen() {
           ))}
         </View>
       </ScrollView>
+      <AppNavigation active="tasks" />
     </View>
   );
 }
@@ -77,7 +79,7 @@ function FurnitureCard({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#16162a" },
-  content: { padding: 20, paddingTop: 64 },
+  content: { padding: 20, paddingTop: 36, paddingBottom: 92 },
   title: { color: "white", fontSize: 26, fontWeight: "700" },
   subtitle: { color: "rgba(255,255,255,0.5)", fontSize: 14, marginTop: 4, marginBottom: 20 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 14 },

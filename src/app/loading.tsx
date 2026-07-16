@@ -10,7 +10,7 @@ import type { ProfileId } from "@/src/game/core/profile";
 
 const mascot = require("../assets/mascot/mascot.png");
 const questionnaireRoute = "/onboarding-questionnaire" as Href;
-const mainRoute = "/play" as Href;
+const mainRoute = "/home" as Href;
 const profileIds = new Set<ProfileId>(["visual", "momentum", "clearPath", "control"]);
 
 export default function LoadingScreen() {
@@ -51,7 +51,7 @@ export default function LoadingScreen() {
           useGameStore.getState().applyProfile(latestMode as ProfileId);
         }
         router.replace(mainRoute);
-      } catch (error) {
+      } catch {
         router.replace(questionnaireRoute);
       }
     });

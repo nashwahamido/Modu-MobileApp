@@ -10,7 +10,8 @@ type GmTarget = {
 };
 
 const targets: GmTarget[] = [
-  { label: "Home", route: "/" as Href, note: "Landing screen" },
+  { label: "Welcome", route: "/" as Href, note: "Landing screen" },
+  { label: "Home", route: "/home" as Href, note: "Main navigation" },
   { label: "Onboarding", route: "/onboarding-questionnaire" as Href, note: "Questionnaire" },
   {
     label: "Avatar",

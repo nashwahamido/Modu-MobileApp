@@ -3,6 +3,7 @@ import { router } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SettingsControls } from "@/src/game/ui/SettingsControls";
+import { AppNavigation } from "@/src/components/AppNavigation";
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
@@ -26,12 +27,13 @@ export default function SettingsScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingLeft: padL + 4, paddingRight: padR + 4, paddingBottom: insets.bottom + 32 },
+          { paddingLeft: padL + 4, paddingRight: padR + 4, paddingBottom: insets.bottom + 96 },
         ]}
         showsVerticalScrollIndicator={false}
       >
         <SettingsControls />
       </ScrollView>
+      <AppNavigation active="settings" />
     </View>
   );
 }

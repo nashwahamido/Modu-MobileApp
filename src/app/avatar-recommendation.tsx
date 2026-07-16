@@ -16,7 +16,7 @@ const lumiAvatar = require("../assets/avatars/lumi.jpg");
 const sparkyAvatar = require("../assets/avatars/sparky.jpg");
 const ciaraAvatar = require("../assets/avatars/ciara.jpg");
 const felixAvatar = require("../assets/avatars/felix.jpg");
-const homeRoute = "/" as Href;
+const homeRoute = "/home" as Href;
 
 const avatarImages = {
   visual: lumiAvatar,

@@ -3,6 +3,7 @@ import { Component } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { RoomExperience } from "@/src/room/RoomExperience";
+import { AppNavigation } from "@/src/components/AppNavigation";
 
 class RoomErrorBoundary extends Component<
   { children: ReactNode },
@@ -38,6 +39,7 @@ export default function RoomRoute() {
       <RoomErrorBoundary>
         <RoomExperience />
       </RoomErrorBoundary>
+      <AppNavigation active="room" />
       <StatusBar style="dark" />
     </>
   );

@@ -449,6 +449,14 @@ function GameScreen() {
         >
           <Text style={[styles.recenterText, dark && styles.recenterTextDark]}>⟲ Recenter</Text>
         </Pressable>
+        <Pressable
+          accessibilityLabel="Return to Home"
+          style={[styles.homeButton, dark && styles.recenterButtonDark]}
+          onPress={() => router.replace("/home" as Href)}
+          hitSlop={8}
+        >
+          <Text style={[styles.recenterText, dark && styles.recenterTextDark]}>⌂ Home</Text>
+        </Pressable>
 
       {heldActionId && settings.releaseBehavior === "float" ? (
           // Float mode: a released part stays where it was set down; this is the way back to the tray. (In autoReturn mode a miss returns by itself.)
@@ -568,6 +576,19 @@ const styles = StyleSheet.create({
     borderColor: "rgba(60,50,40,0.15)",
   },
   recenterText: { fontSize: 12, fontWeight: "700", color: "#2e2a24" },
+  homeButton: {
+    position: "absolute",
+    zIndex: 25,
+    elevation: 25,
+    left: 14,
+    top: 150,
+    backgroundColor: "rgba(255,255,255,0.85)",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: "rgba(60,50,40,0.15)",
+  },
   // Dark-mode chrome (on-release engine's palette): dark translucent surfaces, light text, warm points accent.
   objectiveBarDark: { backgroundColor: "rgba(22,30,44,0.82)" },
   objectiveTextDark: { color: "#eef1f6" },
@@ -583,7 +604,7 @@ const styles = StyleSheet.create({
   putBackButton: {
     position: "absolute",
     left: 14,
-    top: 150,
+    top: 190,
     backgroundColor: "rgba(232,132,44,0.92)",
     borderRadius: 14,
     paddingHorizontal: 12,
