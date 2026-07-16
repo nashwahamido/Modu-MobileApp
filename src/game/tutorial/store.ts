@@ -1,7 +1,22 @@
-import { create } from 'zustand';
-import { TUTORIAL_STEP_REWARD_TOKENS, TUTORIAL_STEPS, type TutorialEvent } from './steps';
+import { create } from "zustand";
+import {
+  TUTORIAL_STEP_REWARD_TOKENS,
+  tutorialStepsFor,
+  type TutorialContext,
+  type TutorialEvent,
+  type TutorialStep,
+} from "./steps";
+
+const DEFAULT_CONTEXT: TutorialContext = {
+  audience: "control",
+  releaseBehavior: "autoReturn",
+  oneFingerPanEnabled: false,
+  focusMode: false,
+};
 
 interface TutorialState {
+  steps: TutorialStep[];
+  context: TutorialContext;
   currentIndex: number;
   skipped: boolean;
   completed: boolean;
@@ -11,6 +26,7 @@ interface TutorialState {
   stepRewardsClaimed: number;
   acceptsEventsAfter: number;
   pendingAdvanceStepId: string | null;
+  configureTutorial: (context: TutorialContext) => void;
   completeEvent: (event: TutorialEvent) => void;
   completeCurrentStep: () => void;
   skip: () => void;
@@ -19,7 +35,9 @@ interface TutorialState {
   resetTutorial: () => void;
 }
 
-export const useTutorialStore = create<TutorialState>()((set, get) => ({
+const resetState = (context: TutorialContext) => ({
+  steps: tutorialStepsFor(context),
+  context,
   currentIndex: 0,
   skipped: false,
   completed: false,
@@ -29,56 +47,73 @@ export const useTutorialStore = create<TutorialState>()((set, get) => ({
   stepRewardsClaimed: 0,
   acceptsEventsAfter: 0,
   pendingAdvanceStepId: null,
+});
+
+export const useTutorialStore = create<TutorialState>()((set, get) => ({
+  ...resetState(DEFAULT_CONTEXT),
+  configureTutorial: (context) => set(resetState(context)),
   completeEvent: (event) => {
-    const { currentIndex, skipped, completed, acceptsEventsAfter, pendingAdvanceStepId } = get();
-    if (skipped || completed) return;
-    if (pendingAdvanceStepId) return;
+    const {
+      steps,
+      currentIndex,
+      skipped,
+      completed,
+      acceptsEventsAfter,
+      pendingAdvanceStepId,
+    } = get();
+    if (skipped || completed || pendingAdvanceStepId) return;
     if (Date.now() < acceptsEventsAfter) return;
-    const step = TUTORIAL_STEPS[currentIndex];
+    const step = steps[currentIndex];
     if (!step || step.event !== event) return;
     get().completeCurrentStep();
   },
   completeCurrentStep: () => {
-    const { currentIndex, skipped, completed, acceptsEventsAfter, pendingAdvanceStepId } = get();
-    if (skipped || completed) return;
-    if (pendingAdvanceStepId) return;
+    const {
+      steps,
+      currentIndex,
+      skipped,
+      completed,
+      acceptsEventsAfter,
+      pendingAdvanceStepId,
+    } = get();
+    if (skipped || completed || pendingAdvanceStepId) return;
     if (Date.now() < acceptsEventsAfter) return;
-    const step = TUTORIAL_STEPS[currentIndex];
+    const step = steps[currentIndex];
     if (!step) return;
-    const label = `${currentIndex + 1}/${TUTORIAL_STEPS.length}`;
+    const label = `${currentIndex + 1}/${steps.length}`;
     const completedIndex = currentIndex;
     set({
       stepRewardReady: true,
       lastCompletedStepLabel: label,
-      stepRewardsClaimed: get().stepRewardsClaimed + TUTORIAL_STEP_REWARD_TOKENS,
+      stepRewardsClaimed:
+        get().stepRewardsClaimed + TUTORIAL_STEP_REWARD_TOKENS,
       acceptsEventsAfter: Date.now() + 1600,
       pendingAdvanceStepId: step.id,
     });
     setTimeout(() => {
       const state = get();
       if (state.skipped || state.completed) return;
-      if (state.pendingAdvanceStepId !== step.id || state.currentIndex !== completedIndex) return;
+      if (
+        state.pendingAdvanceStepId !== step.id ||
+        state.currentIndex !== completedIndex
+      )
+        return;
       const nextIndex = completedIndex + 1;
-      if (nextIndex >= TUTORIAL_STEPS.length) {
+      if (nextIndex >= state.steps.length) {
         set({ completed: true, rewardReady: true, pendingAdvanceStepId: null });
       } else {
         set({ currentIndex: nextIndex, pendingAdvanceStepId: null });
       }
     }, 1200);
   },
-  skip: () => set({ skipped: true, rewardReady: false, stepRewardReady: false, pendingAdvanceStepId: null }),
-  dismissStepReward: () => set({ stepRewardReady: false }),
-  dismissReward: () => set({ rewardReady: false }),
-  resetTutorial: () =>
+  skip: () =>
     set({
-      currentIndex: 0,
-      skipped: false,
-      completed: false,
+      skipped: true,
       rewardReady: false,
       stepRewardReady: false,
-      lastCompletedStepLabel: null,
-      stepRewardsClaimed: 0,
-      acceptsEventsAfter: 0,
       pendingAdvanceStepId: null,
     }),
+  dismissStepReward: () => set({ stepRewardReady: false }),
+  dismissReward: () => set({ rewardReady: false }),
+  resetTutorial: () => set(resetState(get().context)),
 }));

@@ -75,7 +75,7 @@ export default function AvatarRecommendationScreen() {
     gameStore.applyProfile(selectedMode.id as ProfileId);
     useTutorialStore.getState().resetTutorial();
     setShowModeTip(false);
-    router.replace("/game" as Href);
+    router.replace("/tutorial" as Href);
   };
 
   const goHome = () => {

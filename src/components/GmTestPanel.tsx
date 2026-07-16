@@ -17,7 +17,7 @@ const targets: GmTarget[] = [
     route: "/avatar-recommendation?mode=momentum&secondary=visual" as Href,
     note: "Recommendation result",
   },
-  { label: "Tutorial", route: "/game" as Href, note: "Mascot guide task" },
+  { label: "Tutorial", route: "/tutorial" as Href, note: "Mascot guide task" },
   { label: "Task", route: "/play" as Href, note: "Assembly task" },
   { label: "Room", route: "/room" as Href, note: "Virtual room" },
 ];

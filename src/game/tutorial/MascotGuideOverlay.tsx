@@ -3,12 +3,12 @@ import { findNodeHandle, Image, Pressable, StyleSheet, Text, useWindowDimensions
 import {
   TUTORIAL_REWARD_TOKENS,
   TUTORIAL_STEP_REWARD_TOKENS,
-  TUTORIAL_STEPS,
   messageForToolStep,
   type ToolTutorialKind,
 } from './steps';
 import { useTutorialStore } from './store';
 import { useTutorialTargets, type TutorialFrame } from './targetRegistry';
+import { useTutorialAudio } from './useTutorialAudio';
 const mascotImage = require('../../assets/mascot/mascot.png');
 const PADDING = 0;
 
@@ -17,15 +17,23 @@ interface Props {
   onClaimReward: () => void;
   onContinueToAssembly?: () => void;
   blocked?: boolean;
+  audioEnabled?: boolean;
 }
 
-export function MascotGuideOverlay({ activeToolKind, onClaimReward, onContinueToAssembly, blocked = false }: Props) {
+export function MascotGuideOverlay({
+  activeToolKind,
+  onClaimReward,
+  onContinueToAssembly,
+  blocked = false,
+  audioEnabled = false,
+}: Props) {
   const overlayRef = useRef<View>(null);
   const windowSize = useWindowDimensions();
   const [overlaySize, setOverlaySize] = useState<{ width: number; height: number } | null>(null);
   const width = overlaySize?.width ?? windowSize.width;
   const height = overlaySize?.height ?? windowSize.height;
   const currentIndex = useTutorialStore((s) => s.currentIndex);
+  const steps = useTutorialStore((s) => s.steps);
   const skipped = useTutorialStore((s) => s.skipped);
   const completed = useTutorialStore((s) => s.completed);
   const rewardReady = useTutorialStore((s) => s.rewardReady);
@@ -38,6 +46,11 @@ export function MascotGuideOverlay({ activeToolKind, onClaimReward, onContinueTo
   const frames = useTutorialTargets((s) => s.frames);
   const nodes = useTutorialTargets((s) => s.nodes);
   const setFrame = useTutorialTargets((s) => s.setFrame);
+  const step = steps[currentIndex];
+  useTutorialAudio(
+    step?.audio,
+    audioEnabled && !blocked && !skipped && !completed && !rewardReady,
+  );
 
   const handleLayout = (event: LayoutChangeEvent) => {
     const { width: nextWidth, height: nextHeight } = event.nativeEvent.layout;
@@ -57,7 +70,7 @@ export function MascotGuideOverlay({ activeToolKind, onClaimReward, onContinueTo
 
   useEffect(() => {
     if (!overlaySize || skipped || completed || rewardReady) return;
-    const step = TUTORIAL_STEPS[currentIndex];
+    const step = steps[currentIndex];
     const targetNode = step ? nodes[step.targetId] : null;
     const overlayNode = findNodeHandle(overlayRef.current);
     if (!step || !overlayNode || !targetNode) return;
@@ -83,7 +96,7 @@ export function MascotGuideOverlay({ activeToolKind, onClaimReward, onContinueTo
     measureTarget();
     const retry = setTimeout(measureTarget, 80);
     return () => clearTimeout(retry);
-  }, [completed, currentIndex, nodes, overlaySize, rewardReady, setFrame, skipped]);
+  }, [completed, currentIndex, nodes, overlaySize, rewardReady, setFrame, skipped, steps]);
 
   if (skipped || blocked) return null;
 
@@ -113,7 +126,6 @@ export function MascotGuideOverlay({ activeToolKind, onClaimReward, onContinueTo
 
   if (completed) return null;
 
-  const step = TUTORIAL_STEPS[currentIndex];
   if (!step) return null;
   if (!overlaySize) return <View ref={overlayRef} style={styles.layer} pointerEvents="none" onLayout={handleLayout} />;
 
@@ -157,7 +169,7 @@ export function MascotGuideOverlay({ activeToolKind, onClaimReward, onContinueTo
         <Image source={mascotImage} style={styles.mascot} resizeMode="contain" />
         <View style={styles.copy} pointerEvents="box-none">
           <Text style={styles.stepText}>
-            {currentIndex + 1}/{TUTORIAL_STEPS.length}
+            {currentIndex + 1}/{steps.length}
           </Text>
           <Text style={styles.message}>{message}</Text>
           <View style={styles.actions} pointerEvents="auto">
