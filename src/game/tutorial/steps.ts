@@ -19,7 +19,7 @@ export type TutorialEvent =
   | "part_snapped"
   | "step_undone"
   | "step_redone"
-  | "render_style_changed"
+  | "display_preferences_confirmed"
   | "release_behavior_changed"
   | "instruction_preferences_changed"
   | "auto_view_toggled"
@@ -65,6 +65,13 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     message:
       "Keep holding and drag the panel into the cabinet frame. Release when it lines up to snap.",
     event: "part_snapped",
+  },
+  {
+    id: "choose-display-settings",
+    targetId: "settings",
+    message:
+      "Open Settings, preview Background and Lighting, then confirm your choices.",
+    event: "display_preferences_confirmed",
   },
   {
     id: "rotate-with-joystick",
@@ -130,13 +137,6 @@ export const CONTEXTUAL_TUTORIAL_STEPS: TutorialStep[] = [
 /** Optional preference walkthrough offered after the short core tutorial. */
 export const SETTINGS_TUTORIAL_STEPS: TutorialStep[] = [
   {
-    id: "model-look-settings",
-    targetId: "settings",
-    message:
-      "Open Settings and choose Model look: Realistic, Cozy, or Cartoon. Pick the view that feels clearest to you.",
-    event: "render_style_changed",
-  },
-  {
     id: "release-behavior-settings",
     targetId: "settings",
     message:
@@ -174,7 +174,8 @@ export const FUTURE_TUTORIAL_REQUIREMENTS = {
 } as const;
 
 export const TUTORIAL_CONTENT_DECISIONS = {
-  renderStyle: "Teach Model look in the post-core Settings walkthrough.",
+  display:
+    "Teach Background and Lighting through the real Settings panel after the first placed part.",
   guidedInstructions:
     "Teach Standard/Simple as the primary choice and mention Show instructions.",
   sequencing:

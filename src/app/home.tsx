@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppNavigation } from "@/src/components/AppNavigation";
+import { furnitureForProfile } from "@/src/game/core/profile";
 import { useGameStore } from "@/src/game/core/store";
 
 const actions: {
@@ -37,6 +38,7 @@ const actions: {
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const currentFurnitureId = useGameStore((state) => state.furniture?.meta.id);
+  const profile = useGameStore((state) => state.profile);
 
   return (
     <View
@@ -65,8 +67,12 @@ export default function HomeScreen() {
           <Pressable
             key={item.title}
             onPress={() => {
-              if (item.resume && currentFurnitureId) {
-                router.replace({ pathname: "/play", params: { id: currentFurnitureId } });
+              if (item.resume) {
+                const furnitureId =
+                  currentFurnitureId && currentFurnitureId !== "TUTORIAL"
+                    ? currentFurnitureId
+                    : furnitureForProfile(profile);
+                router.replace({ pathname: "/play", params: { id: furnitureId } });
                 return;
               }
               router.replace(item.route);

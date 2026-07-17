@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
 import { router } from "expo-router";
-import type { Href } from "expo-router";
 import { OrientationLock } from "expo-screen-orientation";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -61,6 +60,7 @@ import { availableInMode } from "@/src/game/core/evaluation/availability";
 import { TutorialTarget } from "@/src/game/tutorial/TutorialTarget";
 import { MascotGuideOverlay } from "@/src/game/tutorial/MascotGuideOverlay";
 import { useTutorialStore } from "@/src/game/tutorial/store";
+import { furnitureForProfile } from "@/src/game/core/profile";
 import {
   TUTORIAL_STEP_REWARD_TOKENS,
   type ToolTutorialKind,
@@ -167,9 +167,6 @@ function TutorialScreen() {
           state.settings.focusMode !== previous.settings.focusMode
         ) {
           tutorial.completeEvent("focus_mode_toggled");
-        }
-        if (state.renderStyle !== previous.renderStyle) {
-          tutorial.completeEvent("render_style_changed");
         }
         if (
           state.settings.releaseBehavior !==
@@ -641,7 +638,10 @@ function TutorialScreen() {
           const finishedAssembly =
             requiredActions > 0 && game.completed.length >= requiredActions;
           if (!finishedAllSteps || !finishedAssembly) return;
-          router.replace("/play" as Href);
+          router.replace({
+            pathname: "/play",
+            params: { id: furnitureForProfile(game.profile) },
+          });
         }}
       />
     </View>

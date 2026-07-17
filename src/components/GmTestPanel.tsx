@@ -2,6 +2,8 @@ import { router } from "expo-router";
 import type { Href } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { furnitureForProfile } from "@/src/game/core/profile";
+import { useGameStore } from "@/src/game/core/store";
 
 type GmTarget = {
   label: string;
@@ -28,6 +30,11 @@ export function GmTestPanel() {
 
   const jumpTo = (route: Href) => {
     setOpen(false);
+    if (route === "/play") {
+      const profile = useGameStore.getState().profile;
+      router.replace({ pathname: "/play", params: { id: furnitureForProfile(profile) } });
+      return;
+    }
     router.replace(route);
   };
 

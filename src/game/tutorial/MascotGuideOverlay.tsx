@@ -116,7 +116,7 @@ export function MascotGuideOverlay({
           <View style={styles.rewardCopy}>
             <Text style={styles.rewardTitle}>Core skills complete!</Text>
             <Text style={styles.rewardMessage}>
-              Want a quick tour of model look, part return, instructions, Focus mode, and Auto-view?
+              Want a quick tour of part return, instructions, Focus mode, and Auto-view?
             </Text>
             <View style={styles.settingsActions}>
               <Pressable style={styles.primaryButton} onPress={beginSettingsTutorial}>
@@ -165,6 +165,7 @@ export function MascotGuideOverlay({
   if (completed) return null;
 
   if (!step) return null;
+
   if (!overlaySize) return <View ref={overlayRef} style={styles.layer} pointerEvents="none" onLayout={handleLayout} />;
 
   const rawFrame = frames[step.targetId];
@@ -258,6 +259,12 @@ function bubblePosition(targetId: string, frame: TutorialFrame, screenW: number,
   }
   if (targetId === 'recenter') {
     return { left: Math.min(screenW - bubbleW - edge, frame.x + frame.width + 18), bottom: 156 };
+  }
+  if (targetId === 'settings') {
+    return {
+      left: Math.min(screenW - bubbleW - edge, frame.x + frame.width + 18),
+      top: Math.max(20, frame.y),
+    };
   }
   if (targetId === 'assemblyArea' || targetCoversMostScreen) {
     return { left: edge, top: 92 };
