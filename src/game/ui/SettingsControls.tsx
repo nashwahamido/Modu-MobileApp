@@ -192,14 +192,45 @@ function SectionHeader({ children }: { children: string }) {
   return <Text style={styles.section}>{children}</Text>;
 }
 
-// ── the shared controls ──────────────────────────────────────────────────────
-export function SettingsControls({
-  displayTutorialOnly = false,
-  onDisplayPreferencePreview,
+export function SceneAppearanceControls({
+  onPreferenceChange,
 }: {
-  displayTutorialOnly?: boolean;
-  onDisplayPreferencePreview?: (preference: "background" | "lighting") => void;
-}) {
+  onPreferenceChange?: (preference: "background" | "lighting") => void;
+} = {}) {
+  const settings = useGameStore((s) => s.settings);
+  const backdrop = useGameStore((s) => s.backdrop);
+  const setSettings = useGameStore((s) => s.setSettings);
+  const setBackdrop = useGameStore((s) => s.setBackdrop);
+
+  return (
+    <View style={styles.list}>
+      <SectionHeader>Scene appearance</SectionHeader>
+      <Choice
+        label="Background"
+        desc="Preview the scene behind your furniture"
+        value={backdrop}
+        options={BACKDROPS}
+        onChange={(value) => {
+          setBackdrop(value);
+          onPreferenceChange?.("background");
+        }}
+      />
+      <Choice
+        label="Lighting"
+        desc="Preview how the furniture is lit"
+        value={settings.lightingPreset}
+        options={LIGHTING}
+        onChange={(value) => {
+          setSettings({ lightingPreset: value });
+          onPreferenceChange?.("lighting");
+        }}
+      />
+    </View>
+  );
+}
+
+// ── the shared controls ──────────────────────────────────────────────────────
+export function SettingsControls() {
   const settings = useGameStore((s) => s.settings);
   const profile = useGameStore((s) => s.profile);
   const applyProfile = useGameStore((s) => s.applyProfile);
@@ -227,37 +258,6 @@ export function SettingsControls({
       { text: "Reset", style: "destructive", onPress: reset },
     ]);
   };
-
-  if (displayTutorialOnly) {
-    return (
-      <View style={styles.list}>
-        <SectionHeader>Scene appearance</SectionHeader>
-        <Choice
-          label="Background"
-          desc="Preview the scene behind your furniture"
-          value={backdrop}
-          options={BACKDROPS}
-          onChange={(value) => {
-            setBackdrop(value);
-            onDisplayPreferencePreview?.("background");
-          }}
-        />
-        <Choice
-          label="Lighting"
-          desc="Preview how the furniture is lit"
-          value={settings.lightingPreset}
-          options={LIGHTING}
-          onChange={(value) => {
-            setSettings({ lightingPreset: value });
-            onDisplayPreferencePreview?.("lighting");
-          }}
-        />
-        <Text style={styles.tutorialNote}>
-          Try the arrows to preview each option. You can change these again later.
-        </Text>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.list}>
@@ -508,11 +508,4 @@ const styles = StyleSheet.create({
   resetRowIdle: { opacity: 0.45 },
   resetText: { fontSize: 15, fontWeight: "700", color: "#a3402f" },
   resetDesc: { fontSize: 12, color: "#7a7163", marginTop: 2 },
-  tutorialNote: {
-    marginTop: 10,
-    color: "#7a7163",
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: "600",
-  },
 });

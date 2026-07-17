@@ -1,6 +1,7 @@
 // In-game settings: a gear button that opens the shared SettingsControls in a cream modal card. Same controls as the homepage /settings screen — one source of truth, one look (adopted from the on-release engine).
 import { router } from "expo-router";
 import { useState } from "react";
+import type { ReactNode } from "react";
 import {
   Image,
   Modal,
@@ -13,37 +14,32 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useGameStore } from "@/src/game/core/store";
-import { useTutorialStore } from "@/src/game/tutorial/store";
 import { SettingsControls } from "@/src/game/ui/SettingsControls";
 
 const SETTINGS_ICON = require("@/src/assets/images/ui/setting_icon.png");
-const MASCOT_IMAGE = require("@/src/assets/mascot/mascot.png");
 
-export function GameSettings() {
+interface GameSettingsProps {
+  headerContent?: ReactNode;
+  controls?: ReactNode;
+  confirmLabel?: string;
+  confirmDisabled?: boolean;
+  onConfirm?: () => void;
+}
+
+export function GameSettings({
+  headerContent,
+  controls,
+  confirmLabel = "Done",
+  confirmDisabled = false,
+  onConfirm,
+}: GameSettingsProps = {}) {
   const [open, setOpen] = useState(false);
-  const [previewedBackground, setPreviewedBackground] = useState(false);
-  const [previewedLighting, setPreviewedLighting] = useState(false);
   const { height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const cardMaxHeight = winH - insets.top - insets.bottom - 32;
   const dark = useGameStore((s) => s.theme === "dark");
-  const tutorialStep = useTutorialStore((s) => s.steps[s.currentIndex]);
-  const tutorialCompleted = useTutorialStore((s) => s.completed);
-  const tutorialSkipped = useTutorialStore((s) => s.skipped);
-  const completeTutorialEvent = useTutorialStore((s) => s.completeEvent);
-  const isDisplayTutorial =
-    tutorialStep?.id === "choose-display-settings" &&
-    !tutorialCompleted &&
-    !tutorialSkipped;
-  const displayPreviewComplete = previewedBackground && previewedLighting;
 
-  const closeSettings = (confirmTutorial = false) => {
-    if (confirmTutorial && isDisplayTutorial && !displayPreviewComplete) return;
-    if (confirmTutorial && isDisplayTutorial) {
-      completeTutorialEvent("display_preferences_confirmed");
-    }
-    setOpen(false);
-  };
+  const closeSettings = () => setOpen(false);
 
   return (
     <>
@@ -72,37 +68,21 @@ export function GameSettings() {
           "landscape-right",
           "portrait",
         ]}
-        onRequestClose={() => closeSettings(false)}
+        onRequestClose={closeSettings}
       >
         <View style={styles.backdrop} pointerEvents="box-none">
           <Pressable
             style={StyleSheet.absoluteFill}
-            onPress={() => closeSettings(false)}
+            onPress={closeSettings}
           />
           <View style={[styles.card, { maxHeight: cardMaxHeight }]}>
             <Text style={styles.title}>Settings</Text>
-            {isDisplayTutorial ? (
-              <View style={styles.tutorialCallout}>
-                <Image source={MASCOT_IMAGE} style={styles.tutorialMascot} resizeMode="contain" />
-                <View style={styles.tutorialCopy}>
-                  <Text style={styles.tutorialTitle}>Choose your scene look</Text>
-                  <Text style={styles.tutorialMessage}>
-                    Preview a Background and Lighting setup, then confirm your choices.
-                  </Text>
-                </View>
-              </View>
-            ) : null}
+            {headerContent}
             <ScrollView
               contentContainerStyle={styles.cardScroll}
               showsVerticalScrollIndicator={false}
             >
-              <SettingsControls
-                displayTutorialOnly={isDisplayTutorial}
-                onDisplayPreferencePreview={(preference) => {
-                  if (preference === "background") setPreviewedBackground(true);
-                  if (preference === "lighting") setPreviewedLighting(true);
-                }}
-              />
+              {controls ?? <SettingsControls />}
             </ScrollView>
             <View style={styles.footer}>
               <Pressable
@@ -116,17 +96,16 @@ export function GameSettings() {
                 <Text style={styles.homeText}>⌂ Home</Text>
               </Pressable>
               <Pressable
-                style={[
-                  styles.done,
-                  isDisplayTutorial && !displayPreviewComplete && styles.doneDisabled,
-                ]}
-                onPress={() => closeSettings(true)}
+                style={[styles.done, confirmDisabled && styles.doneDisabled]}
+                onPress={() => {
+                  if (confirmDisabled) return;
+                  onConfirm?.();
+                  closeSettings();
+                }}
                 hitSlop={8}
-                disabled={isDisplayTutorial && !displayPreviewComplete}
+                disabled={confirmDisabled}
               >
-                <Text style={styles.doneText}>
-                  {isDisplayTutorial ? "Confirm choices" : "Done"}
-                </Text>
+                <Text style={styles.doneText}>{confirmLabel}</Text>
               </Pressable>
             </View>
           </View>
@@ -171,33 +150,6 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   title: { fontSize: 17, fontWeight: "800", color: "#2e2a24", marginBottom: 2 },
-  tutorialCallout: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginTop: 8,
-    marginBottom: 2,
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: "#f4f8ef",
-    borderWidth: 1,
-    borderColor: "#b7c9a7",
-  },
-  tutorialMascot: {
-    width: 54,
-    height: 48,
-    borderRadius: 10,
-    backgroundColor: "#fbf8f3",
-  },
-  tutorialCopy: { flex: 1 },
-  tutorialTitle: { fontSize: 14, fontWeight: "800", color: "#2e2a24" },
-  tutorialMessage: {
-    marginTop: 2,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: "600",
-    color: "#665f55",
-  },
   cardScroll: { paddingBottom: 4 },
   footer: {
     flexDirection: "row",

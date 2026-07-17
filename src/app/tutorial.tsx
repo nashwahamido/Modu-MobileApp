@@ -49,7 +49,7 @@ import { FitChip } from "@/src/game/ui/FitChip";
 import { PartsTray } from "@/src/game/ui/PartsTray";
 import { ClusterTray } from "@/src/game/ui/ClusterTray";
 import { UndoButton } from "@/src/game/ui/UndoButton";
-import { GameSettings } from "@/src/game/ui/GameSettings";
+import { TutorialGameSettings } from "@/src/game/tutorial/TutorialGameSettings";
 import { ClusterFocusControl } from "@/src/game/ui/ClusterFocusControl";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 import {
@@ -478,7 +478,7 @@ function TutorialScreen() {
           style={styles.undoTarget}
           pointerEvents="none"
         />
-        <GameSettings />
+        <TutorialGameSettings />
         <TutorialTarget
           id="settings"
           style={styles.settingsTarget}
