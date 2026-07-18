@@ -1,0 +1,660 @@
+{
+  "_how": [
+    "Copy this file to review/ANSWERS.json and edit — EVERY field is prefilled with the draft's guess.",
+    "seeds / unstable: true|false per part (seed = may start its cluster; unstable = falls out until secured).",
+    "joints: kind = directJoins | slideJoins | screwJoins | none (+ mover = the moving part, for slide/screw).",
+    "driveSteps: a part TAPPED/PRESSED home gets a tool (e.g. \"mallet\") and optionally placeDir [x,y,z]; leave null = plain drop.",
+    "stages: align the numbers to the manual's steps. requires: extra ordering — \"tighten-group:<group>\" = after every fastener in that group is tight.",
+    "beats: combine/finishing wording + reorients [{cluster, stage, id?}]. Then run apply-review.mjs (see dev/draft.gen.json header)."
+  ],
+  "meta": {
+    "name": "Eket",
+    "brand": "IKEA",
+    "category": null,
+    "difficulty": 3,
+    "duration": 65,
+    "link": null
+  },
+  "seeds": {
+    "backPanel": false,
+    "suspBracket_1": false,
+    "suspCover_1": false,
+    "suspCap_1": false,
+    "suspKnob_2": false,
+    "suspBracket_2": false,
+    "suspCover_2": false,
+    "suspCap_2": false,
+    "suspKnob_1": false,
+    "stabilizerRod_1": false,
+    "runnerClip_1": false,
+    "runnerClip_2": false,
+    "runnerClip_3": false,
+    "runnerClip_4": false,
+    "runnerLatchR_1": false,
+    "runnerRailR_1": false,
+    "runnerRailR_2": false,
+    "runnerLatchR_2": false,
+    "runnerRailL_1": false,
+    "runnerLatchL_1": false,
+    "runnerRailL_2": false,
+    "runnerLatchL_2": false,
+    "stabilizerRod_2": false,
+    "runnerFixLA": false,
+    "runnerMidL_1": false,
+    "runnerInnerL_1": false,
+    "runnerFixLB": false,
+    "runnerMidL_2": false,
+    "runnerInnerL_2": false,
+    "runnerFixRA": false,
+    "runnerMidR_1": false,
+    "runnerInnerR_1": false,
+    "runnerFixRB": false,
+    "runnerMidR_2": false,
+    "runnerInnerR_2": false,
+    "sidePanelL": false,
+    "topPanel": true,
+    "bottomPanel": false,
+    "sidePanelR": false,
+    "runnerBracketR_1": false,
+    "runnerBracketL_1": false,
+    "drawerBack_1": false,
+    "drawerSideR_1": false,
+    "drawerSideL_1": false,
+    "drawerBottom_1": true,
+    "drawerFront_1": false,
+    "runnerBracketR_2": false,
+    "runnerBracketL_2": false,
+    "drawerBack_2": false,
+    "drawerSideR_2": false,
+    "drawerSideL_2": false,
+    "drawerBottom_2": true,
+    "drawerFront_2": false
+  },
+  "unstable": {
+    "backPanel": true,
+    "suspBracket_1": false,
+    "suspCover_1": false,
+    "suspCap_1": false,
+    "suspKnob_2": false,
+    "suspBracket_2": false,
+    "suspCover_2": false,
+    "suspCap_2": false,
+    "suspKnob_1": false,
+    "stabilizerRod_1": false,
+    "runnerClip_1": false,
+    "runnerClip_2": false,
+    "runnerClip_3": false,
+    "runnerClip_4": false,
+    "runnerLatchR_1": false,
+    "runnerRailR_1": false,
+    "runnerRailR_2": false,
+    "runnerLatchR_2": false,
+    "runnerRailL_1": false,
+    "runnerLatchL_1": false,
+    "runnerRailL_2": false,
+    "runnerLatchL_2": false,
+    "stabilizerRod_2": false,
+    "runnerFixLA": false,
+    "runnerMidL_1": false,
+    "runnerInnerL_1": false,
+    "runnerFixLB": false,
+    "runnerMidL_2": false,
+    "runnerInnerL_2": false,
+    "runnerFixRA": false,
+    "runnerMidR_1": false,
+    "runnerInnerR_1": false,
+    "runnerFixRB": false,
+    "runnerMidR_2": false,
+    "runnerInnerR_2": false,
+    "sidePanelL": false,
+    "topPanel": false,
+    "bottomPanel": false,
+    "sidePanelR": false,
+    "runnerBracketR_1": false,
+    "runnerBracketL_1": false,
+    "drawerBack_1": true,
+    "drawerSideR_1": true,
+    "drawerSideL_1": true,
+    "drawerBottom_1": false,
+    "drawerFront_1": false,
+    "runnerBracketR_2": false,
+    "runnerBracketL_2": false,
+    "drawerBack_2": true,
+    "drawerSideR_2": true,
+    "drawerSideL_2": true,
+    "drawerBottom_2": false,
+    "drawerFront_2": false
+  },
+  "joints": {
+    "suspBracket_1__suspCover_1": {
+      "kind": "directJoins",
+      "mover": "suspCover_1",
+      "_hint": "press | slide | screw | none?"
+    },
+    "suspBracket_1__suspKnob_2": {
+      "kind": "directJoins",
+      "mover": "suspBracket_1",
+      "_hint": "press | slide | screw | none?"
+    },
+    "sidePanelR__suspBracket_1": {
+      "kind": "directJoins",
+      "mover": "sidePanelR",
+      "_hint": "press | slide | screw | none?"
+    },
+    "suspCap_1__suspCover_1": {
+      "kind": "directJoins",
+      "mover": "suspCap_1",
+      "_hint": "press | slide | screw | none?"
+    },
+    "suspBracket_2__suspCover_2": {
+      "kind": "directJoins",
+      "mover": "suspCover_2",
+      "_hint": "press | slide | screw | none?"
+    },
+    "suspBracket_2__suspKnob_1": {
+      "kind": "directJoins",
+      "mover": "suspBracket_2",
+      "_hint": "press | slide | screw | none?"
+    },
+    "sidePanelL__suspBracket_2": {
+      "kind": "directJoins",
+      "mover": "sidePanelL",
+      "_hint": "press | slide | screw | none?"
+    },
+    "suspCap_2__suspCover_2": {
+      "kind": "directJoins",
+      "mover": "suspCap_2",
+      "_hint": "press | slide | screw | none?"
+    },
+    "runnerClip_1__runnerInnerL_1": {
+      "kind": "directJoins",
+      "mover": "runnerInnerL_1",
+      "_hint": "press | slide | screw | none?"
+    },
+    "runnerClip_2__runnerInnerL_2": {
+      "kind": "directJoins",
+      "mover": "runnerInnerL_2",
+      "_hint": "press | slide | screw | none?"
+    },
+    "runnerClip_3__runnerInnerR_1": {
+      "kind": "directJoins",
+      "mover": "runnerInnerR_1",
+      "_hint": "press | slide | screw | none?"
+    },
+    "runnerClip_4__runnerInnerR_2": {
+      "kind": "directJoins",
+      "mover": "runnerInnerR_2",
+      "_hint": "press | slide | screw | none?"
+    },
+    "runnerLatchR_1__runnerMidR_1": {
+      "kind": "directJoins",
+      "mover": "runnerMidR_1",
+      "_hint": "press | slide | screw | none?"
+    },
+    "runnerInnerR_1__runnerLatchR_1": {
+      "kind": "directJoins",
+      "mover": "runnerInnerR_1",
+      "_hint": "press | slide | screw | none?"
+    },
+    "runnerFixRA__runnerRailR_1": {
+      "kind": "directJoins",
+      "mover": "runnerRailR_1",
+      "_hint": "CROSS-CLUSTER — almost certainly screwJoins (realized by the combine step)"
+    },
+    "runnerFixRB__runnerRailR_2": {
+      "kind": "directJoins",
+      "mover": "runnerRailR_2",
+      "_hint": "CROSS-CLUSTER — almost certainly screwJoins (realized by the combine step)"
+    },
+    "runnerLatchR_2__runnerMidR_2": {
+      "kind": "directJoins",
+      "mover": "runnerMidR_2",
+      "_hint": "press | slide | screw | none?"
+    },
+    "runnerInnerR_2__runnerLatchR_2": {
+      "kind": "directJoins",
+      "mover": "runnerInnerR_2",
+      "_hint": "press | slide | screw | none?"
+    },
+    "runnerFixLA__runnerRailL_1": {
+      "kind": "directJoins",
+      "mover": "runnerRailL_1",
+      "_hint": "CROSS-CLUSTER — almost certainly screwJoins (realized by the combine step)"
+    },
+    "runnerLatchL_1__runnerMidL_1": {
+      "kind": "directJoins",
+      "mover": "runnerMidL_1",
+      "_hint": "press | slide | screw | none?"
+    },
+    "runnerInnerL_1__runnerLatchL_1": {
+      "kind": "directJoins",
+      "mover": "runnerInnerL_1",
+      "_hint": "press | slide | screw | none?"
+    },
+    "runnerFixLB__runnerRailL_2": {
+      "kind": "directJoins",
+      "mover": "runnerRailL_2",
+      "_hint": "CROSS-CLUSTER — almost certainly screwJoins (realized by the combine step)"
+    },
+    "runnerLatchL_2__runnerMidL_2": {
+      "kind": "directJoins",
+      "mover": "runnerMidL_2",
+      "_hint": "press | slide | screw | none?"
+    },
+    "runnerInnerL_2__runnerLatchL_2": {
+      "kind": "directJoins",
+      "mover": "runnerInnerL_2",
+      "_hint": "press | slide | screw | none?"
+    },
+    "sidePanelL__topPanel": {
+      "kind": "directJoins",
+      "mover": "topPanel",
+      "_hint": "press | slide | screw | none?"
+    },
+    "bottomPanel__sidePanelL": {
+      "kind": "directJoins",
+      "mover": "sidePanelL",
+      "_hint": "press | slide | screw | none?"
+    },
+    "sidePanelR__topPanel": {
+      "kind": "directJoins",
+      "mover": "topPanel",
+      "_hint": "press | slide | screw | none?"
+    },
+    "bottomPanel__sidePanelR": {
+      "kind": "directJoins",
+      "mover": "sidePanelR",
+      "_hint": "press | slide | screw | none?"
+    },
+    "drawerFront_1__runnerBracketR_1": {
+      "kind": "directJoins",
+      "mover": "drawerFront_1",
+      "_hint": "press | slide | screw | none?"
+    },
+    "drawerFront_1__runnerBracketL_1": {
+      "kind": "directJoins",
+      "mover": "drawerFront_1",
+      "_hint": "press | slide | screw | none?"
+    },
+    "drawerFront_2__runnerBracketR_2": {
+      "kind": "directJoins",
+      "mover": "drawerFront_2",
+      "_hint": "press | slide | screw | none?"
+    },
+    "drawerFront_2__runnerBracketL_2": {
+      "kind": "directJoins",
+      "mover": "drawerFront_2",
+      "_hint": "press | slide | screw | none?"
+    }
+  },
+  "driveSteps": {
+    "suspBracket_1": {
+      "tool": null,
+      "placeDir": null
+    },
+    "suspCover_1": {
+      "tool": null,
+      "placeDir": null
+    },
+    "suspCap_1": {
+      "tool": null,
+      "placeDir": null
+    },
+    "suspKnob_2": {
+      "tool": null,
+      "placeDir": null
+    },
+    "suspBracket_2": {
+      "tool": null,
+      "placeDir": null
+    },
+    "suspCover_2": {
+      "tool": null,
+      "placeDir": null
+    },
+    "suspCap_2": {
+      "tool": null,
+      "placeDir": null
+    },
+    "suspKnob_1": {
+      "tool": null,
+      "placeDir": null
+    },
+    "runnerClip_1": {
+      "tool": null,
+      "placeDir": null
+    },
+    "runnerClip_2": {
+      "tool": null,
+      "placeDir": null
+    },
+    "runnerClip_3": {
+      "tool": null,
+      "placeDir": null
+    },
+    "runnerClip_4": {
+      "tool": null,
+      "placeDir": null
+    },
+    "runnerLatchR_1": {
+      "tool": null,
+      "placeDir": null
+    },
+    "runnerRailR_1": {
+      "tool": null,
+      "placeDir": null
+    },
+    "runnerRailR_2": {
+      "tool": null,
+      "placeDir": null
+    },
+    "runnerLatchR_2": {
+      "tool": null,
+      "placeDir": null
+    },
+    "runnerRailL_1": {
+      "tool": null,
+      "placeDir": null
+    },
+    "runnerLatchL_1": {
+      "tool": null,
+      "placeDir": null
+    },
+    "runnerRailL_2": {
+      "tool": null,
+      "placeDir": null
+    },
+    "runnerLatchL_2": {
+      "tool": null,
+      "placeDir": null
+    },
+    "runnerMidL_1": {
+      "tool": null,
+      "placeDir": null
+    },
+    "runnerInnerL_1": {
+      "tool": null,
+      "placeDir": null
+    },
+    "runnerMidL_2": {
+      "tool": null,
+      "placeDir": null
+    },
+    "runnerInnerL_2": {
+      "tool": null,
+      "placeDir": null
+    },
+    "runnerMidR_1": {
+      "tool": null,
+      "placeDir": null
+    },
+    "runnerInnerR_1": {
+      "tool": null,
+      "placeDir": null
+    },
+    "runnerMidR_2": {
+      "tool": null,
+      "placeDir": null
+    },
+    "runnerInnerR_2": {
+      "tool": null,
+      "placeDir": null
+    }
+  },
+  "stages": {
+    "place_runnerFixRB": 3,
+    "place_runnerFixLB": 3,
+    "place_runnerFixRA": 3,
+    "place_runnerFixLA": 3,
+    "place_suspKnob_2": 4,
+    "place_suspBracket_1": 3,
+    "place_suspKnob_1": 4,
+    "place_suspBracket_2": 3,
+    "place_suspCover_2": 4,
+    "place_suspCover_1": 4,
+    "place_suspCap_2": 5,
+    "place_suspCap_1": 5,
+    "place_backPanel": 2,
+    "place_bottomPanel": 3,
+    "place_sidePanelR": 2,
+    "place_sidePanelL": 2,
+    "place_topPanel": 1,
+    "place_runnerLatchL_1": 1,
+    "place_runnerMidL_1": 1,
+    "place_runnerBracketR_1": 1,
+    "place_runnerClip_1": 1,
+    "place_runnerInnerL_1": 1,
+    "place_runnerRailL_1": 1,
+    "place_runnerLatchR_1": 1,
+    "place_runnerMidR_1": 1,
+    "place_runnerRailR_1": 1,
+    "place_runnerBracketL_1": 1,
+    "place_runnerClip_3": 1,
+    "place_runnerInnerR_1": 1,
+    "place_drawerBottom_1": 1,
+    "place_drawerSideL_1": 1,
+    "place_drawerSideR_1": 1,
+    "place_stabilizerRod_1": 1,
+    "place_drawerBack_1": 1,
+    "place_drawerFront_1": 1,
+    "place_runnerLatchL_2": 1,
+    "place_runnerMidL_2": 1,
+    "place_runnerBracketR_2": 1,
+    "place_runnerClip_2": 1,
+    "place_runnerInnerL_2": 1,
+    "place_runnerRailL_2": 1,
+    "place_runnerLatchR_2": 1,
+    "place_runnerMidR_2": 1,
+    "place_runnerRailR_2": 1,
+    "place_runnerBracketL_2": 1,
+    "place_runnerClip_4": 1,
+    "place_runnerInnerR_2": 1,
+    "place_drawerBottom_2": 1,
+    "place_drawerSideL_2": 1,
+    "place_drawerSideR_2": 1,
+    "place_stabilizerRod_2": 1,
+    "place_drawerBack_2": 1,
+    "place_drawerFront_2": 1,
+    "rule_cam139434": 3,
+    "rule_dowel139435": 3,
+    "rule_screw100349": 3,
+    "rule_dowel145572": 1,
+    "rule_screw109041": 1,
+    "rule_screw110519": 1,
+    "rule_bolt128918": 1
+  },
+  "requires": {
+    "place_runnerFixRB": [],
+    "place_runnerFixLB": [],
+    "place_runnerFixRA": [],
+    "place_runnerFixLA": [],
+    "place_suspKnob_2": [],
+    "place_suspBracket_1": [],
+    "place_suspKnob_1": [],
+    "place_suspBracket_2": [],
+    "place_suspCover_2": [],
+    "place_suspCover_1": [],
+    "place_suspCap_2": [],
+    "place_suspCap_1": [],
+    "place_backPanel": [],
+    "place_bottomPanel": [],
+    "place_sidePanelR": [],
+    "place_sidePanelL": [],
+    "place_topPanel": [],
+    "place_runnerLatchL_1": [],
+    "place_runnerMidL_1": [],
+    "place_runnerBracketR_1": [],
+    "place_runnerClip_1": [],
+    "place_runnerInnerL_1": [],
+    "place_runnerRailL_1": [],
+    "place_runnerLatchR_1": [],
+    "place_runnerMidR_1": [],
+    "place_runnerRailR_1": [],
+    "place_runnerBracketL_1": [],
+    "place_runnerClip_3": [],
+    "place_runnerInnerR_1": [],
+    "place_drawerBottom_1": [],
+    "place_drawerSideL_1": [],
+    "place_drawerSideR_1": [],
+    "place_stabilizerRod_1": [],
+    "place_drawerBack_1": [],
+    "place_drawerFront_1": [],
+    "place_runnerLatchL_2": [],
+    "place_runnerMidL_2": [],
+    "place_runnerBracketR_2": [],
+    "place_runnerClip_2": [],
+    "place_runnerInnerL_2": [],
+    "place_runnerRailL_2": [],
+    "place_runnerLatchR_2": [],
+    "place_runnerMidR_2": [],
+    "place_runnerRailR_2": [],
+    "place_runnerBracketL_2": [],
+    "place_runnerClip_4": [],
+    "place_runnerInnerR_2": [],
+    "place_drawerBottom_2": [],
+    "place_drawerSideL_2": [],
+    "place_drawerSideR_2": [],
+    "place_stabilizerRod_2": [],
+    "place_drawerBack_2": [],
+    "place_drawerFront_2": []
+  },
+  "beats": {
+    "combine": {
+      "cluster": "drawerB",
+      "stage": 5,
+      "text": null,
+      "simpleText": null
+    },
+    "finishing": {
+      "stage": 5,
+      "requires": [
+        "combine_assemblies"
+      ],
+      "text": null,
+      "simpleText": null
+    },
+    "reorients": []
+  },
+  "labels": {
+    "backPanel": {
+      "standard": "Back panel",
+      "simple": null
+    },
+    "suspBracket": {
+      "standard": "Susp bracket",
+      "simple": null
+    },
+    "suspCover": {
+      "standard": "Susp cover",
+      "simple": null
+    },
+    "suspCap": {
+      "standard": "Susp cap",
+      "simple": null
+    },
+    "suspKnob": {
+      "standard": "Susp knob",
+      "simple": null
+    },
+    "stabilizerRod": {
+      "standard": "Stabilizer rod",
+      "simple": null
+    },
+    "runnerClip": {
+      "standard": "Runner clip",
+      "simple": null
+    },
+    "runnerLatchR": {
+      "standard": "Runner latch r",
+      "simple": null
+    },
+    "runnerRailR": {
+      "standard": "Runner rail r",
+      "simple": null
+    },
+    "runnerRailL": {
+      "standard": "Runner rail l",
+      "simple": null
+    },
+    "runnerLatchL": {
+      "standard": "Runner latch l",
+      "simple": null
+    },
+    "runnerFixLA": {
+      "standard": "Runner fix la",
+      "simple": null
+    },
+    "runnerMidL": {
+      "standard": "Runner mid l",
+      "simple": null
+    },
+    "runnerInnerL": {
+      "standard": "Runner inner l",
+      "simple": null
+    },
+    "runnerFixLB": {
+      "standard": "Runner fix lb",
+      "simple": null
+    },
+    "runnerFixRA": {
+      "standard": "Runner fix ra",
+      "simple": null
+    },
+    "runnerMidR": {
+      "standard": "Runner mid r",
+      "simple": null
+    },
+    "runnerInnerR": {
+      "standard": "Runner inner r",
+      "simple": null
+    },
+    "runnerFixRB": {
+      "standard": "Runner fix rb",
+      "simple": null
+    },
+    "sidePanelL": {
+      "standard": "Side panel l",
+      "simple": null
+    },
+    "topPanel": {
+      "standard": "Top panel",
+      "simple": null
+    },
+    "bottomPanel": {
+      "standard": "Bottom panel",
+      "simple": null
+    },
+    "sidePanelR": {
+      "standard": "Side panel r",
+      "simple": null
+    },
+    "runnerBracketR": {
+      "standard": "Runner bracket r",
+      "simple": null
+    },
+    "runnerBracketL": {
+      "standard": "Runner bracket l",
+      "simple": null
+    },
+    "drawerBack": {
+      "standard": "Drawer back",
+      "simple": null
+    },
+    "drawerSideR": {
+      "standard": "Drawer side r",
+      "simple": null
+    },
+    "drawerSideL": {
+      "standard": "Drawer side l",
+      "simple": null
+    },
+    "drawerBottom": {
+      "standard": "Drawer bottom",
+      "simple": null
+    },
+    "drawerFront": {
+      "standard": "Drawer front",
+      "simple": null
+    }
+  }
+}

@@ -65,6 +65,42 @@ const HARDWARE_RAW = {
     label: { standard: "Guide screw", simple: "Screw" },
     note: "centre guide screw",
   },
+  // ── EKET cabinet w/2 drawers (AA-1914748 / AA-2345060) ──
+  cam139434: {
+    tool: "hand",
+    motion: "strike",
+    label: { standard: "Cam lock", simple: "Lock" },
+    note: "back-panel cam lock —  pin (139435)",
+  },
+  dowel139435: {
+    tool: "hand",
+    motion: "strike",
+    label: { standard: "Cam pin", simple: "Pin" },
+    note: "cam pin pushed into the frame; the cam (139434) locks onto it",
+  },
+  screw100349: {
+    tool: "screwdriver",
+    label: { standard: "Runner screw", simple: "Screw" },
+    note: "fixes the drawer runner rail to the side panel",
+  },
+  screw109041: {
+    tool: "screwdriver",
+    label: { standard: "Bracket screw", simple: "Screw" },
+    note: "fixes the rear runner bracket to the drawer box",
+  },
+  bolt128918: {
+    tool: "hand",
+    motion: "strike",
+    label: { standard: "Front bolt", simple: "Bolt" },
+    note: "keyhole bolt — SCREWED fully into the drawer side's front edge; the front panel then presses down over the heads (that press is the front's placement, not a bolt action)",
+  },
+  // screw110519 (drawer-back screw) is already defined above — shared article number
+  dowel145572: {
+    tool: "hand",
+    motion: "strike",
+    label: { standard: "Dowel", simple: "Peg" },
+    note: "wooden dowel pressed into the drawer front",
+  },
 } satisfies Record<string, HardwareInfo>;
 
 export const HARDWARE = HARDWARE_RAW as Partial<Record<GroupId, HardwareInfo>>;
