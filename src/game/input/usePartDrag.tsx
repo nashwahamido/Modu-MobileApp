@@ -25,10 +25,12 @@ import {
 import { computeFit } from "@/src/game/core/geometry/fit";
 import { quatSlerp, screenPointOnPlane } from "@/src/game/core/geometry/math";
 import { ActionId, AssemblyAction, Quat, Vec3 } from "@/src/game/core/type";
+import { workspaceActionFilter, workspaceOf } from "@/src/game/core/evaluation/workspace";
 import { selectFirstDrop, useGameStore } from "@/src/game/core/store";
 import type { OrbitManipulator } from "../scene/AssemblyScene";
 import { FOV_Y_DEG } from "../scene/cameraConfig";
 import { animateDriver, OffsetDriver } from "../scene/offsetDriver";
+import { dragPerf } from "../scene/dragPerf";
 
 type Float3 = [number, number, number];
 
@@ -74,6 +76,8 @@ interface DragSession {
   planeY: number;
   /** The action's own target height — the drag plane's resting height. */
   basePlaneY: number;
+  /** "aim" mode: world point whose VIEW DEPTH the held part rides at while no socket is matched (the session target's visual center). With a match the depth comes from the matched socket instead — the switch is invisible on screen because the part stays under the finger by construction. */
+  aimAnchor: Vec3;
   matchedActionId: ActionId | null;
   /** Current hover lift (m) applied to the held part — eased in as it nears a  socket; subtracted back out when computing the true pose for fit. */
   hoverLift: number;
@@ -91,6 +95,13 @@ export function usePartDrag({
   onPanEnd,
 }: Params) {
   const session = useRef<DragSession | null>(null);
+  // TEMPORARY drag-stutter diagnostics — remove with dragPerf.ts. Tracks the wall-clock gap
+  // between consecutive onUpdate calls; a starved JS thread shows gaps far above ~16ms.
+  const perf = useRef({ t0: 0, last: 0, n: 0, sumGap: 0, maxGap: 0 });
+
+  // LIVE camera access: the manipulator object is RECREATED when the orbit pivot changes (e.g. the held-part re-aim right after park-at-pickup), but an in-flight gesture keeps running the closures it captured at touch-down. Unprojecting through this ref instead of the captured prop keeps the finger→world mapping locked to the camera actually on screen — otherwise the whole drag runs on the pre-swing camera and the part trails the finger by a constant offset equal to the swing.
+  const manipulatorRef = useRef(manipulator);
+  manipulatorRef.current = manipulator;
 
   const ringX = useSharedValue(0);
   const ringY = useSharedValue(0);
@@ -98,8 +109,14 @@ export function usePartDrag({
   const { width: winW, height: winH } = useWindowDimensions();
 
   const fingerOnCameraPlaneAt = useCallback(
-    (absX: number, absY: number, anchor: Vec3): Float3 | null => {
-      const la = manipulator?.getLookAt();
+    (
+      absX: number,
+      absY: number,
+      anchor: Vec3,
+      /** Bench-rim clamp is a PLANE-mode concept (keep parts near the bench). AIM mode must pass false: at real socket depths the finger's world point routinely exceeds the rim, and clamping pins the part there — it reads as frozen until a socket match yanks it free. The part is bounded by the screen in aim mode anyway. */
+      clampToBench = true,
+    ): Float3 | null => {
+      const la = manipulatorRef.current?.getLookAt();
       if (!la) return null;
       const [eye, center, up] = la;
       const f: Vec3 = [
@@ -130,31 +147,39 @@ export function usePartDrag({
       const tanH = tanV * (winW / winH);
       const ndcX = (2 * absX) / winW - 1;
       const ndcY = 1 - (2 * (absY - FINGER_LIFT_DP)) / winH;
+      // Base on the VIEW AXIS at the anchor's depth — only the anchor's depth matters, never its lateral position. Basing at the anchor itself double-counts its own off-centre offset (an off-screen socket then maps the finger outside the bench radius → clamped → the part reads as frozen at the rim). For an on-axis anchor (the focus-point fallback) the two bases coincide, so legacy behavior is unchanged.
+      const axial: Vec3 = [
+        eye[0] + fwd[0] * dist,
+        eye[1] + fwd[1] * dist,
+        eye[2] + fwd[2] * dist,
+      ];
       const p: Float3 = [
-        anchor[0] +
+        axial[0] +
           right[0] * ndcX * tanH * dist +
           camUp[0] * ndcY * tanV * dist,
-        anchor[1] +
+        axial[1] +
           right[1] * ndcX * tanH * dist +
           camUp[1] * ndcY * tanV * dist,
-        anchor[2] +
+        axial[2] +
           right[2] * ndcX * tanH * dist +
           camUp[2] * ndcY * tanV * dist,
       ];
-      const radius = Math.hypot(p[0], p[2]);
-      if (radius > BENCH_RADIUS_M) {
-        p[0] *= BENCH_RADIUS_M / radius;
-        p[2] *= BENCH_RADIUS_M / radius;
+      if (clampToBench) {
+        const radius = Math.hypot(p[0], p[2]);
+        if (radius > BENCH_RADIUS_M) {
+          p[0] *= BENCH_RADIUS_M / radius;
+          p[2] *= BENCH_RADIUS_M / radius;
+        }
       }
       return p;
     },
-    [manipulator, winW, winH],
+    [winW, winH],
   );
 
   /** World point on the work plane under (just above) the finger, or null at the horizon. */
   const fingerOnPlane = useCallback(
     (absX: number, absY: number, planeY: number): Float3 | null => {
-      const la = manipulator?.getLookAt();
+      const la = manipulatorRef.current?.getLookAt();
       if (!la) return null;
       const [eye, center, up] = la;
       const p = screenPointOnPlane(
@@ -174,12 +199,12 @@ export function usePartDrag({
       }
       return p;
     },
-    [manipulator, winW, winH],
+    [winW, winH],
   );
 
   const fingerOnCameraPlane = useCallback(
     (absX: number, absY: number, s: DragSession): Float3 | null => {
-      const la = manipulator?.getLookAt();
+      const la = manipulatorRef.current?.getLookAt();
       if (!la) return null;
       const [eye, center, up] = la;
       const anchor: Vec3 = [
@@ -227,13 +252,13 @@ export function usePartDrag({
       }
       return p;
     },
-    [manipulator, winH],
+    [winH],
   );
 
   /** Projects a world point to screen pixels (+ axial depth along the view axis). Used to match candidates by where the finger AIMS on screen. */
   const worldToScreen = useCallback(
     (w: Vec3): { x: number; y: number; depth: number } | null => {
-      const la = manipulator?.getLookAt();
+      const la = manipulatorRef.current?.getLookAt();
       if (!la) return null;
       const [eye, center, up] = la;
       const f: Vec3 = [center[0] - eye[0], center[1] - eye[1], center[2] - eye[2]];
@@ -260,7 +285,7 @@ export function usePartDrag({
       const ndcY = (d[0] * camUp[0] + d[1] * camUp[1] + d[2] * camUp[2]) / (depth * tanV);
       return { x: ((ndcX + 1) / 2) * winW, y: ((1 - ndcY) / 2) * winH, depth };
     },
-    [manipulator, winW, winH],
+    [winW, winH],
   );
 
   /** A part is "floating": float releaseBehavior is ON (the canvas re-grab has no separate toggle — it comes with float mode), the part is held with no live drag session, and it isn't in a post-release park/snap phase that owns the driver (this also keeps re-grab out of auto-return's recover animation window). */
@@ -337,8 +362,15 @@ export function usePartDrag({
           const grabOffset = part.visualCenterOffset ?? [0, 0, 0];
           // The plane pins the part's VISUAL CENTER (what the finger holds), so anchor it at the socket's visual-center height — origin height alone left tall parts (DALFRED legs: +0.27m center offset) vertically unreachable in level mode.
           const planeY = ownTarget[1] + grabOffset[1];
+          const aimAnchor: Vec3 = [
+            ownTarget[0] + grabOffset[0],
+            ownTarget[1] + grabOffset[1],
+            ownTarget[2] + grabOffset[2],
+          ];
           const visualStart =
-            fingerOnPlane(e.absoluteX, e.absoluteY, planeY) ??
+            (store.settings.dragPlane === "aim"
+              ? fingerOnCameraPlaneAt(e.absoluteX, e.absoluteY, aimAnchor, false)
+              : fingerOnPlane(e.absoluteX, e.absoluteY, planeY)) ??
             fingerOnCameraPlaneAt(e.absoluteX, e.absoluteY, focus) ??
             focus;
           const base: Float3 = [
@@ -353,11 +385,16 @@ export function usePartDrag({
           if (!canvas) ringProgress.value = withTiming(0, { duration: 120 });
 
           const nextStore = useGameStore.getState();
+          // Targeting availability: never offer sockets anchored on carded islands (workspace.ts) — their ghosts would float in mid-air over hidden geometry.
+          const inWs = workspaceActionFilter(
+            furniture,
+            workspaceOf(furniture, nextStore.completed, nextStore.parkedIslands),
+          );
           const avail = actionsForClusterFocus(
             furniture,
             nextStore.available(),
             nextStore.activeCluster,
-          );
+          ).filter(inWs);
           const doneSet = new Set(nextStore.completed);
           const allCandidates = groupCandidates(
             avail,
@@ -386,11 +423,17 @@ export function usePartDrag({
             grabOffset,
             planeY,
             basePlaneY: planeY,
+            aimAnchor,
             matchedActionId: null,
             hoverLift: 0,
             startX: e.absoluteX,
             startY: e.absoluteY,
           };
+          if (__DEV__) {
+            dragPerf.reset();
+            const t = Date.now();
+            perf.current = { t0: t, last: t, n: 0, sumGap: 0, maxGap: 0 };
+          }
         })
         .onUpdate((e) => {
           if (canvas && canvasStrafing) {
@@ -402,14 +445,25 @@ export function usePartDrag({
           const furniture = store.furniture;
           if (!s || !furniture || store.heldActionId !== action.actionId)
             return;
-          // Exact per-frame projection onto the (dynamic) horizontal drag plane — absolute mapping, so the part cannot drift from the finger. Camera-plane delta math kept only as a horizon fallback.
-          const p =
-            fingerOnPlane(e.absoluteX, e.absoluteY, s.planeY) ??
-            fingerOnCameraPlane(e.absoluteX, e.absoluteY, s);
+          if (__DEV__) {
+            const now = Date.now();
+            const gap = now - perf.current.last;
+            perf.current.last = now;
+            perf.current.n++;
+            perf.current.sumGap += gap;
+            if (gap > perf.current.maxGap) perf.current.maxGap = gap;
+          }
+          // Exact per-frame projection onto the (dynamic) horizontal drag plane — absolute mapping, so the part cannot drift from the finger. Camera-plane delta math kept only as a horizon fallback. "aim" mode has no plane: its point is computed AFTER matching, on the finger's view ray at the matched socket's depth.
+          const dragMode = store.settings.dragPlane;
+          let p =
+            dragMode === "aim"
+              ? null
+              : (fingerOnPlane(e.absoluteX, e.absoluteY, s.planeY) ??
+                fingerOnCameraPlane(e.absoluteX, e.absoluteY, s));
           let nearest = s.candidates[0];
           let bestD = Infinity;
           let target: GroupCandidate | null = null;
-          if (store.settings.dragPlane === "level") {
+          if (dragMode === "level") {
             // "level" — the on-release engine's mechanism, kept for comparison/demo: plane FIXED at the session target's height, candidates matched by TRUE 3D distance, no hysteresis. Depth can hide a socket here — the multi-height blind spot (wool stool two-height legs, DALFRED screw105251) is intentional to demonstrate.
             s.planeY = s.basePlaneY;
             const offB = heldDriver.value;
@@ -462,11 +516,23 @@ export function usePartDrag({
               target = nearest;
             }
             s.matchedActionId = target?.action.actionId ?? null;
-            // Ease the drag plane toward the matched socket's height (multi-height groups); slides the part ALONG the finger's view ray, so it is invisible on screen. Same visual-center anchoring as the session plane.
-            const wantY = target
-              ? target.position[1] + s.grabOffset[1]
-              : s.basePlaneY;
-            s.planeY += (wantY - s.planeY) * 0.25;
+            // Ease the drag plane toward the matched socket's height (multi-height groups); slides the part ALONG the finger's view ray, so it is invisible on screen. Same visual-center anchoring as the session plane. ("aim" has no plane — skip.)
+            if (dragMode !== "aim") {
+              const wantY = target
+                ? target.position[1] + s.grabOffset[1]
+                : s.basePlaneY;
+              s.planeY += (wantY - s.planeY) * 0.25;
+            }
+          }
+          if (dragMode === "aim") {
+            // The part rides the finger's view ray at the aimed socket's depth (session anchor when nothing is matched). Depth changes on a match switch are invisible: the point stays under the finger on screen by construction — the aim-mode version of the plane model's along-the-ray height ease.
+            p =
+              fingerOnCameraPlaneAt(
+                e.absoluteX,
+                e.absoluteY,
+                target ? target.visualPosition : s.aimAnchor,
+                false,
+              ) ?? fingerOnCameraPlane(e.absoluteX, e.absoluteY, s);
           }
 
           // Per-profile acceptance radius; also the magnet's full-strength point so "looks seated" and "is accepted" stay the same distance.
@@ -555,6 +621,13 @@ export function usePartDrag({
           const store = useGameStore.getState();
           if (store.heldActionId !== action.actionId) return;
           const s = session.current;
+          if (__DEV__ && s) {
+            const p = perf.current;
+            const avg = p.n ? (p.sumGap / p.n).toFixed(1) : "0";
+            console.log(
+              `[dragPerf] dur=${Date.now() - p.t0}ms updates=${p.n} avgGap=${avg}ms maxGap=${p.maxGap}ms | ghostRenders=${dragPerf.ghostRenders} hintRenders=${dragPerf.hintRenders} setDragFit=${dragPerf.setDragFitCalls}`,
+            );
+          }
           session.current = null;
           if (!s) {
             // Card only: a tap/failed long-press on the held part's card puts it back. A canvas touch that never activated must NOT put it back.
@@ -609,7 +682,7 @@ export function usePartDrag({
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           } else {
             // complimentary function for FLOAT: AUTO-RETURN: the part flies to a recover spot in front of the camera and returns to the tray.
-            const la = manipulator?.getLookAt();
+            const la = manipulatorRef.current?.getLookAt();
             const off = heldDriver.value;
             let dest: Float3 = s.base;
             if (la) {
@@ -633,8 +706,8 @@ export function usePartDrag({
         });
       return g;
     },
+    // No `manipulator` dep anywhere in this chain: every camera read goes through manipulatorRef, so gesture identities SURVIVE camera re-aims — recreating them mid-touch reattaches native handlers, eats the first re-grab and stutters active drags (the jank spike on every park-at-pickup / island-pull re-aim).
     [
-      manipulator,
       heldDriver,
       getFocusPoint,
       fingerOnCameraPlaneAt,

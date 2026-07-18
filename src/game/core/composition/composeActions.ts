@@ -33,6 +33,8 @@ interface ActionInput {
   motion?: DriveMotion;
   requires?: readonly string[];
   requiresAny?: readonly string[];
+  /** Named exceptional rule, resolved via Furniture.gates at evaluation time. */
+  gate?: string;
 }
 
 /** Build one DraftAction from plain strings, branding every id field. */
@@ -59,6 +61,7 @@ export const action = (a: ActionInput): DraftAction => {
     ...(a.cluster ? { cluster: asClusterId(a.cluster) } : {}),
     ...(a.tool ? { tool: a.tool } : {}),
     ...(a.motion ? { motion: a.motion } : {}),
+    ...(a.gate ? { gate: a.gate } : {}),
     requires: (a.requires ?? []).map(asActionId),
     ...(a.requiresAny ? { requiresAny: a.requiresAny.map(asActionId) } : {}),
   };

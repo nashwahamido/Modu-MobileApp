@@ -18,8 +18,11 @@ export type GhostStyle = "movingGhost" | "staticSockets";
 export type ReleaseBehavior = "float" | "autoReturn";
 /** Lighting rig: "auto" = each render style's natural rig; the rest force a mood. */
 export type LightingPreset = "auto" | "studio" | "warm" | "soft" | "golden";
-/** Held-part drag mechanism: "adaptive" = this engine's model — screen-space candidate matching + the drag plane eases to the matched socket's height (handles multi-height groups); "level" = the on-release engine's model, kept for comparison/demo — plane FIXED at the session target's height, candidates matched by true 3D distance, so depth can hide a socket (visible on multi-height groups like the wool stool's two-height legs or DALFRED's screw105251). */
-export type DragPlane = "adaptive" | "level";
+/** Held-part drag mechanism: 
+ * "aim" = screen-space — the part rides under the finger at the aimed socket's depth (no work plane at all), candidates matched on screen; stable at every camera angle. 
+ * "adaptive" = the plane model — screen-space candidate matching + a horizontal drag plane that eases to the matched socket's height (handles multi-height groups). 
+ * "level" = the on-release engine's model, kept for comparison/demo — plane FIXED at the session target's height, candidates matched by true 3D distance, so depth can hide a socket (visible on multi-height groups like the wool stool's two-height legs or DALFRED's screw105251). */
+export type DragPlane = "aim" | "adaptive" | "level";
 
 // ===============  The settings =================
 export interface AccessibilitySettings {

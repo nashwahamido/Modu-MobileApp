@@ -68,12 +68,6 @@ export function availableActions(
     }
   }
 
-  const clusterStarted = (clusterId: ClusterId): boolean => {
-    for (const partId of placed) {
-      if (f.parts[partId]?.cluster === clusterId) return true;
-    }
-    return false;
-  };
   return f.actions.filter((a) => {
     if (done.has(a.actionId)) return false;
     if (!a.requires.every((r) => done.has(r))) return false;
@@ -86,11 +80,12 @@ export function availableActions(
       const part = f.parts[a.partId];
       const andTargets = andFrontierTargets(liaisons, f.parts, a.partId);
       if (andTargets.some((t) => !placed.has(t))) return false;
-      const startsEmptyCluster =
-        !!part?.seed && !clusterStarted(part.cluster);
+      // A seed bypasses the snap frontier entirely: it may start its cluster
+      // OR a parallel island of it (EKET preps both side panels flat and
+      // independently before the box joins them into one component).
       if (
         part?.type === "structural" &&
-        !isReachable(a.partId, placed, neighbours, startsEmptyCluster)
+        !isReachable(a.partId, placed, neighbours, !!part?.seed)
       ) {
         return false;
       }

@@ -26,7 +26,7 @@ export const DEFAULT_SETTINGS: AccessibilitySettings = {
   // On everywhere. A one-finger drag on empty scene panning the camera is the
   // behaviour people expect from a 3D view; having it off made the canvas feel dead.
   canvasStrafe: true,
-  dragPlane: "adaptive",
+  dragPlane: "aim",
 };
 
 export type ProfileId = "visual" | "momentum" | "clearPath" | "control";
@@ -41,6 +41,7 @@ export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>>
     manualTools: true,
     // dev-setting
     snapStyle: "magnetic",
+    canvasStrafe: true,
     ghostStyle: "movingGhost",
     releaseBehavior: "autoReturn",
   },

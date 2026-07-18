@@ -1,6 +1,6 @@
 // TODO: settle down the part marked as dev-setting (float mode vs auto return)
 
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalSearchParams } from "expo-router";
 import { OrientationLock } from "expo-screen-orientation";
 import { ImageBackground, StyleSheet, Text, View } from "react-native";
@@ -10,8 +10,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FilamentScene } from "react-native-filament";
 
 import { AssemblyScene } from "@/src/game/scene/AssemblyScene";
+import { LoadingScreen } from "@/src/game/ui/LoadingScreen";
 import {
   createClusterDriver,
+  createIslandDriverRegistry,
   createOffsetDriver,
 } from "@/src/game/scene/offsetDriver";
 import { useSceneState } from "@/src/game/scene/useSceneState";
@@ -50,6 +52,7 @@ import { CenterDropRing } from "@/src/game/ui/CenterDropRing";
 import { FitChip } from "@/src/game/ui/FitChip";
 import { PartsTray } from "@/src/game/ui/PartsTray";
 import { ClusterTray } from "@/src/game/ui/ClusterTray";
+import { IslandTray } from "@/src/game/ui/IslandTray";
 import { UndoButton } from "@/src/game/ui/UndoButton";
 import { GameSettings } from "@/src/game/ui/GameSettings";
 import { DevAutoStep } from "@/src/game/ui/DevAutoStep";
@@ -102,6 +105,8 @@ function GameScreen() {
   const heldDriver = useRef(createOffsetDriver()).current;
   const sinkDriver = useRef(createOffsetDriver()).current;
   const clusterDriver = useRef(createClusterDriver()).current;
+  const islandDrivers = useRef(createIslandDriverRegistry()).current;
+  const pushDrivers = useRef(createIslandDriverRegistry()).current;
 
   const { id } = useLocalSearchParams<{ id?: string }>();
   useEffect(() => {
@@ -125,9 +130,23 @@ function GameScreen() {
   // Dev-setting: float mode vs auto return
   const heldActionId = useGameStore((s) => s.heldActionId);
   const renderStyle = useGameStore((s) => s.renderStyle);
+  // Loading overlay: AssemblyScene owns the useModel (it only mounts once furniture exists)
+  // and reports its GLB load state up through this stable callback. Starts true so the
+  // spinner is up on the very first frame; reset to true on a render-style swap because that
+  // remounts the scene and reloads the asset.
+  const [sceneLoading, setSceneLoading] = useState(true);
+  const onLoadingChange = useCallback((loading: boolean) => {
+    setSceneLoading(loading);
+  }, []);
+  useEffect(() => {
+    setSceneLoading(true);
+  }, [renderStyle]);
   const backdrop = useGameStore((s) => s.backdrop);
   const theme = useGameStore((s) => s.theme);
   const activeCluster = useGameStore((s) => s.activeCluster);
+  // Parked islands live in the TRAY (parts hidden) — no scene staging needed.
+  // Their drivers only run while a card is dragged out (IslandTray owns that).
+
   const mode = useGameStore((s) => s.mode);
   const focus = settings.focusMode;
   const dark = theme === "dark";
@@ -281,7 +300,7 @@ function GameScreen() {
     return Gesture.Race(pinch, pan);
   }, [heldAction, floatOn, canvasStrafeOn, pinch, pan, strafePan, canvasGestureFor]);
 
-  if (!furniture) return <View style={styles.root} />;
+  if (!furniture) return <LoadingScreen />;
 
   return (
     <ImageBackground
@@ -308,6 +327,9 @@ function GameScreen() {
             heldDriver={heldDriver}
             sinkDriver={sinkDriver}
             clusterDriver={clusterDriver}
+            islandDrivers={islandDrivers}
+            pushDrivers={pushDrivers}
+            onLoadingChange={onLoadingChange}
           />
         </View>
       </GestureDetector>
@@ -375,7 +397,12 @@ function GameScreen() {
           items={sceneState.trayItems}
           gestureFor={gestureFor}
           thumbs={furniture.thumbs}
-          header={focus ? undefined : <ClusterTray clusterDriver={clusterDriver} />}
+          header={
+            <>
+              {focus ? null : <ClusterTray clusterDriver={clusterDriver} />}
+              <IslandTray islandDrivers={islandDrivers} />
+            </>
+          }
         />
         <ToolBar neededTool={neededTool} />
         {mode === "free" && !focus ? (
@@ -425,7 +452,7 @@ function GameScreen() {
         !sceneState.activeTighten &&
         !orientationAction &&
         !driveAction ? (
-          <BeatControl action={sceneState.activeBeat} />
+          <BeatControl action={sceneState.activeBeat} pushDrivers={pushDrivers} />
         ) : null}
         <View style={styles.joystickZone}>
           <Joystick
@@ -457,6 +484,7 @@ function GameScreen() {
       </View>
       {ringOverlay}
       <GreenFlash trigger={completedCount} />
+      {sceneLoading ? <LoadingScreen /> : null}
     </ImageBackground>
   );
 }

@@ -40,6 +40,7 @@ const RELEASE: { value: ReleaseBehavior; label: string }[] = [
   { value: "float", label: "Float" },
 ];
 const DRAG_PLANE: { value: DragPlane; label: string }[] = [
+  { value: "aim", label: "Aim" },
   { value: "adaptive", label: "Adaptive" },
   { value: "level", label: "Level" },
 ];
@@ -281,7 +282,7 @@ export function SettingsControls() {
       />
       <Choice
         label="Drag mechanism"
-        desc="Adaptive matches sockets on screen and follows their height; Level fixes the plane at one height (comparison mode — struggles on multi-height sockets)"
+        desc="Aim keeps the part under your finger on screen (no drag plane — steadiest at any camera angle); Adaptive drags on a plane that follows the matched socket's height; Level fixes the plane at one height (comparison mode — struggles on multi-height sockets)"
         value={settings.dragPlane}
         options={DRAG_PLANE}
         onChange={(v) => setSettings({ dragPlane: v })}

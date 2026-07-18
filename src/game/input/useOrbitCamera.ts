@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { InteractionManager, useWindowDimensions } from "react-native";
 import { useCameraManipulator, useFilamentContext } from "react-native-filament";
 import { buildPartStage } from "@/src/game/core/scene/targets";
+import { neighboursOf, workspaceActionFilter, workspaceOf } from "@/src/game/core/evaluation/workspace";
 import { clusterPivot } from "@/src/game/core/geometry/staging";
 import { PartDef, Vec3 } from "@/src/game/core/type";
 import { useGameStore } from "@/src/game/core/store";
@@ -81,15 +82,15 @@ export function useOrbitCamera() {
     () => (furniture ? buildPartStage(furniture.actions) : {}),
     [furniture],
   );
-  const placed = useMemo(() => {
-    const set = new Set<string>();
-    if (!furniture) return set;
-    const done = new Set(completed);
-    for (const a of furniture.actions) {
-      if (a.type === "placePart" && a.partId && done.has(a.actionId)) set.add(a.partId);
-    }
-    return set;
-  }, [furniture, completed]);
+  const parkedIslands = useGameStore((s) => s.parkedIslands);
+  // The camera frames the WORKSPACE (workspace.ts): carded parts must not anchor the pivot or count as "placed in frame" — otherwise the held-part re-aim (below) never fires after a park-at-pickup and the fresh island's seat stays off-screen.
+  const placed = useMemo<ReadonlySet<string>>(
+    () =>
+      furniture
+        ? workspaceOf(furniture, completed, parkedIslands).inScene
+        : new Set<string>(),
+    [furniture, completed, parkedIslands],
+  );
   const heldFocusPoint = useMemo<Vec3 | null>(() => {
     if (!furniture || !heldActionId) return null;
     const action = furniture.actions.find((a) => a.actionId === heldActionId);
@@ -101,11 +102,18 @@ export function useOrbitCamera() {
   const autoView = useGameStore((s) => s.settings.autoView);
   const nextTargetPartId = useGameStore((s) => {
     if (!s.settings.autoView || !s.furniture) return null;
+    // Auto-view must not aim at carded work (workspace.ts) — the camera would frame empty space where a parked island's part belongs.
+    const inWs = workspaceActionFilter(
+      s.furniture,
+      workspaceOf(s.furniture, s.completed, s.parkedIslands),
+    );
     const a = s
       .availableForMode()
       .find(
         (x) =>
-          x.partId && (x.type === "placePart" || x.type === "insertFastener"),
+          x.partId &&
+          (x.type === "placePart" || x.type === "insertFastener") &&
+          inWs(x),
       );
     return a?.partId ?? null;
   });
@@ -158,10 +166,14 @@ export function useOrbitCamera() {
 
   const manipulator = useStableOrbitManipulator(home.eye, home.target);
 
+  // Handlers read the LIVE manipulator through this ref so their identities (and every gesture built on them downstream) survive recreation — fresh gesture instances mid-touch reattach native handlers and stutter active drags.
+  const manipRef = useRef(manipulator);
+  manipRef.current = manipulator;
+
   const captureEye = useCallback(() => {
-    const la = manipulator?.getLookAt();
+    const la = manipRef.current?.getLookAt();
     if (la) eyeRef.current = [la[0][0], la[0][1], la[0][2]];
-  }, [manipulator]);
+  }, []);
 
   useEffect(() => {
     if (useGameStore.getState().heldActionId) return;
@@ -188,22 +200,49 @@ export function useOrbitCamera() {
   }, [stage, framingCluster, focusPartId, focusCluster, framedHasPlaced, pivot, autoView, examinePartId]);
 
   useEffect(() => {
-    if (!furniture || !heldActionId || framedHasPlaced) return;
+    if (!furniture || !heldActionId) return;
     const action = furniture.actions.find((a) => a.actionId === heldActionId);
     const part = action?.partId ? furniture.parts[action.partId] : null;
-    if (!part) return;
+    if (!part || action?.type !== "placePart") return;
+    // Re-aim only for FRESH-ISLAND work — same condition as selectFirstDrop's centre ring: the held part has no in-scene joint neighbour, so its seat is likely outside the current frame. A part joining the active island aims at a visible socket; don't fight the player's camera then.
+    const ws = workspaceOf(furniture, completed, useGameStore.getState().parkedIslands);
+    for (const n of neighboursOf(furniture)[part.partId] ?? []) {
+      if (ws.inScene.has(n)) return;
+    }
     const c = clusterPivot([part]);
     setHome((h) =>
       h.target.every((v, i) => Math.abs(v - c[i]) < 1e-5)
         ? h
         : { eye: eyeRef.current, target: [c[0], c[1], c[2]] },
     );
-  }, [furniture, heldActionId, framedHasPlaced]);
+  }, [furniture, heldActionId, completed, parkedIslands]);
+
+  // Island card drag-out: the RETURNING island glides to its baked seat, which may be nowhere near the current frame (the camera was on the island it swaps with) — re-aim at the incoming island's centroid the moment the drag starts. Covers both outcomes: merge (glides home into frame) and swap (it becomes the active island the camera should hold).
+  const returningIslandId = useGameStore((s) => s.returningIslandId);
+  useEffect(() => {
+    if (!furniture || !returningIslandId) return;
+    const entry = useGameStore
+      .getState()
+      .parkedIslands.find((p) => p.id === returningIslandId);
+    const parts = (entry?.members ?? [returningIslandId])
+      .map((m) => furniture.parts[m])
+      .filter((p): p is PartDef => !!p);
+    if (!parts.length) return;
+    const c = clusterPivot(parts);
+    setHome((h) =>
+      h.target.every((v, i) => Math.abs(v - c[i]) < 1e-5)
+        ? h
+        : { eye: eyeRef.current, target: [c[0], c[1], c[2]] },
+    );
+  }, [furniture, returningIslandId]);
 
   const stick = useRef({ x: 0, y: 0 });
   const grab = useRef({ active: false, x: 0, y: 0 });
 
   useEffect(() => {
+    // The manipulator was RECREATED (pivot change — e.g. the park-at-pickup re-aim): any grab/pan session belonged to the OLD object and its end-callback may never fire (gesture instances are rebuilt mid-touch). Stale `panning` would gate the joystick loop forever — the classic "joystick is dead" failure.
+    panning.current = false;
+    grab.current.active = false;
     const tick = setInterval(() => {
       const g = grab.current;
       if (!g.active || !manipulator || panning.current) return;
@@ -215,9 +254,11 @@ export function useOrbitCamera() {
   }, [manipulator]);
 
   const onStickStart = useCallback(() => {
+    // A fresh stick grab preempts any stale canvas-strafe pan (same orphaned-session class as above).
+    panning.current = false;
     grab.current = { active: true, x: 0, y: 0 };
-    manipulator?.grabBegin(0, 0, false);
-  }, [manipulator]);
+    manipRef.current?.grabBegin(0, 0, false);
+  }, []);
 
   const onStickMove = useCallback((x: number, y: number) => {
     stick.current = { x, y };
@@ -226,49 +267,50 @@ export function useOrbitCamera() {
   const onStickEnd = useCallback(() => {
     grab.current.active = false;
     stick.current = { x: 0, y: 0 };
-    manipulator?.grabEnd();
+    manipRef.current?.grabEnd();
     captureEye();
-  }, [manipulator, captureEye]);
+  }, [captureEye]);
 
   const orbitBy = useCallback(
     (dx: number, dy: number) => {
-      if (!manipulator) return;
-      manipulator.grabBegin(0, 0, false);
-      manipulator.grabUpdate(dx, dy);
-      manipulator.grabEnd();
+      const m = manipRef.current;
+      if (!m) return;
+      m.grabBegin(0, 0, false);
+      m.grabUpdate(dx, dy);
+      m.grabEnd();
       captureEye();
     },
-    [manipulator, captureEye],
+    [captureEye],
   );
 
   const onZoomDelta = useCallback(
     (scaleDelta: number) => {
-      manipulator?.scroll(0, 0, -scaleDelta * ZOOM_RATE);
+      manipRef.current?.scroll(0, 0, -scaleDelta * ZOOM_RATE);
       captureEye();
     },
-    [manipulator, captureEye],
+    [captureEye],
   );
 
   const onPanStart = useCallback(
     (x: number, y: number) => {
       if (grab.current.active) return;
       panning.current = true;
-      manipulator?.grabBegin(x, winH - y, true);
+      manipRef.current?.grabBegin(x, winH - y, true);
     },
-    [manipulator, winH],
+    [winH],
   );
   const onPanMove = useCallback(
     (x: number, y: number) => {
-      if (panning.current) manipulator?.grabUpdate(x, winH - y);
+      if (panning.current) manipRef.current?.grabUpdate(x, winH - y);
     },
-    [manipulator, winH],
+    [winH],
   );
   const onPanEnd = useCallback(() => {
     if (!panning.current) return;
     panning.current = false;
-    manipulator?.grabEnd();
+    manipRef.current?.grabEnd();
     captureEye();
-  }, [manipulator, captureEye]);
+  }, [captureEye]);
 
   const resetCamera = useCallback(() => {
     resetTick.current += 1;

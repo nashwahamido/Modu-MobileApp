@@ -43,9 +43,11 @@ export type StructureOverlay = Record<
       | "slideJoins"
       | "screwJoins"
       | "seed"
+      | "islandRoot"
       | "unstable"
       | "tool"
       | "placeDir"
+      | "fastenerKind"
     >
   >
 >;

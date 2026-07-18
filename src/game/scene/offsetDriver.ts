@@ -162,3 +162,29 @@ export function animateClusterDriver(
   };
   requestAnimationFrame(step);
 }
+
+/** A lazily-populated map of per-island ClusterDrivers, so each parked island
+ *  can be staged and animated independently in the shared scene. */
+export interface IslandDriverRegistry {
+  /** The driver for `id`, created on first access. */
+  get(id: string): ClusterDriver;
+  /** Ids that have a driver so far. */
+  ids(): string[];
+}
+
+export function createIslandDriverRegistry(): IslandDriverRegistry {
+  const map = new Map<string, ClusterDriver>();
+  return {
+    get(id) {
+      let d = map.get(id);
+      if (!d) {
+        d = createClusterDriver();
+        map.set(id, d);
+      }
+      return d;
+    },
+    ids() {
+      return [...map.keys()];
+    },
+  };
+}

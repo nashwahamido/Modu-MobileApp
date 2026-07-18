@@ -30,7 +30,9 @@ const MALLET_SWING_M = 0.07;
 /** The active tool, rendered at the fastener being tightened. Transform is rebuilt imperatively each update (same plain-array transformManager path as OffsetDriver — SharedValues don't cross into filament): alignment rotation (replace), spin about the fastener axis (multiply), then translation to the sinking fastener head (multiply). */
 export function ToolModel({ action }: { action: AssemblyAction }) {
   const tool = action.tool!;
-  const strike = (action.motion ?? (tool === "mallet" ? "strike" : "spin")) === "strike";
+  const motion = action.motion ?? (tool === "mallet" ? "strike" : "spin");
+  const strike = motion === "strike";
+  const press = motion === "press";
   const furniture = useGameStore((s) => s.furniture);
   const toolAsset = furniture?.tools?.[tool]?.asset;
   const model = useModel(toolAsset ?? 0);
@@ -66,7 +68,8 @@ export function ToolModel({ action }: { action: AssemblyAction }) {
     const place = (gap: number) => {
       const head = LOOSE_OFFSET_M * (1 - p) + gap;
       transformManager.setEntityRotation(root, align.angleRad, align.axis, false);
-      if (!strike) {
+      // press sinks straight in (no spin); strike swings; spin/turn rotate.
+      if (!strike && !press) {
         transformManager.setEntityRotation(root, (-deg * Math.PI) / 180, axis, true);
       }
       transformManager.setEntityPosition(

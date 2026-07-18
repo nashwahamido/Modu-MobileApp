@@ -30,6 +30,7 @@ import { buildPartActions } from "@/src/game/core/scene/targets";
 import type { ClusterDriver, OffsetDriver } from "./offsetDriver";
 import { useShaderOverride, useShaderStyle } from "./shaders";
 import type { PartMode } from "./useSceneState";
+import { dragPerf } from "./dragPerf";
 
 // dev-setting
 /** Ghost colors follow the PDD color language; emissive glow is used because the DALFRED materials are opaque near-black glTF — runtime alpha is ignored and base-color tints are swallowed by the dark albedo. */
@@ -134,6 +135,10 @@ interface Props {
   sinkDriver: OffsetDriver;
   /** Drives the whole moving cluster's offset while it's combined in (owned by ClusterTray). */
   clusterDriver: ClusterDriver;
+  /** Drives this part's parked island's shelf offset (when mode === "parked"). */
+  parkedDriver?: ClusterDriver;
+  /** Drives this part's telescoping group during the push-open beat. A flush part with a pushDriver registers against it (offset 0 = identical to static) so the beat can travel the group without remounting anything. */
+  pushDriver?: ClusterDriver;
   /** True when this fastener's tighten gesture is active. */
   tightening?: boolean;
   /** Ghost drop target is the loose pose (inserts) instead of the baked pose. */
@@ -184,6 +189,7 @@ function Ghost({
   /** Subtle goal ghost: rendered at 50% opacity (MaterialInstance.changeAlpha) so the REAL part stays readable as it converges into the ghost. Glow stays at full strength. */
   dim?: boolean;
 }) {
+  if (__DEV__) dragPerf.ghostRenders++;
   const { renderableManager, transformManager, scene } = useFilamentContext();
   const storeFitState = useGameStore((s) => s.fitState);
   const completed = useGameStore((s) => s.completed);
@@ -314,6 +320,7 @@ function SocketHintGhost({
   >;
   atLoosePose?: boolean;
 }) {
+  if (__DEV__) dragPerf.hintRenders++;
   const matchedActionId = useGameStore((s) => s.matchedActionId);
   const ghostStyle = useGameStore((s) => s.settings.ghostStyle);
   const firstDrop = useGameStore(selectFirstDrop);
@@ -501,6 +508,8 @@ export function PartModel({
   heldDriver,
   sinkDriver,
   clusterDriver,
+  parkedDriver,
+  pushDriver,
   tightening,
   ghostAtLoosePose,
 }: Props) {
@@ -544,7 +553,15 @@ export function PartModel({
         <HiddenEntity key={`${def.partId}-hidden`} model={model} def={def} />
       );
     case "flush":
-      return (
+      // A telescoping-group member registers with its push driver (offset 0 renders exactly like static); the transient screw-spin pose keeps the static path since it needs its own offset/rotation.
+      return pushDriver && !flushScrew ? (
+        <ClusterDrivenEntity
+          key={`${def.partId}-flush-push`}
+          model={model}
+          def={def}
+          driver={pushDriver}
+        />
+      ) : (
         <StaticEntity
           key={`${def.partId}-flush`}
           model={model}
@@ -564,6 +581,22 @@ export function PartModel({
           />
           <Ghost model={model} def={def} atLoosePose={false} />
         </>
+      );
+    case "parked":
+      return parkedDriver ? (
+        <ClusterDrivenEntity
+          key={`${def.partId}-parked`}
+          model={model}
+          def={def}
+          driver={parkedDriver}
+        />
+      ) : (
+        <StaticEntity
+          key={`${def.partId}-parked-static`}
+          model={model}
+          def={def}
+          offset={[0, 0, 0]}
+        />
       );
     case "loose":
       return tightening ? (

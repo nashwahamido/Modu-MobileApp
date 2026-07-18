@@ -6,7 +6,18 @@ import {
 } from "@/src/game/core/evaluation/availability";
 // Setting TYPES live in accessibility.ts; their defaults + the profiles in profile.ts.
 import { AccessibilitySettings } from "@/src/game/core/accessibility";
-import { actionCluster } from "@/src/game/core/evaluation/clusters";
+import {
+  degradeLoneIslands,
+  isLoneIsland,
+  isMergeable,
+  islandsOf,
+  parkTriggeredBy,
+  unparkAfterUndo,
+  type ParkedIsland,
+} from "@/src/game/core/evaluation/islands";
+import { neighboursOf, workspaceActionFilter, workspaceOf } from "@/src/game/core/evaluation/workspace";
+import { dragPerf } from "@/src/game/scene/dragPerf";
+import { placeId } from "@/src/game/core/ids";
 import {
   PROFILE_MODE,
   ProfileId,
@@ -58,6 +69,10 @@ interface GameState {
   activeCluster: ClusterId | null;
   /** Cluster being dragged from the tray to combine onto the in-scene one (null = none). */
   combiningCluster: ClusterId | null;
+  /** Islands the player has parked to the TRAY (frozen membership; their parts are hidden from the scene). The only non-derived island state. */
+  parkedIslands: ParkedIsland[];
+  /** Island whose card is being dragged OUT right now — its parts render (gliding home) while every other parked island stays hidden. */
+  returningIslandId: PartId | null;
   /** Live snap feedback while dragging a held part. */
   fitState: FitState;
   /** Nearest interchangeable socket the held part would snap to. */
@@ -136,6 +151,10 @@ interface GameState {
   clearExamine: () => void;
   setActiveCluster: (cluster: ClusterId | null) => void;
   setCombiningCluster: (cluster: ClusterId | null) => void;
+  /** Mark an island card as being dragged out (null = none). */
+  setReturningIsland: (id: PartId | null) => void;
+  /** Pull a parked island out of the tray. Bridged → it merges into the active assembly. Un-bridged → it BECOMES the active island and the same-cluster active island(s) return to the tray instead (swap). */
+  bringIslandHome: (id: PartId) => void;
 
   setSettings: (patch: Partial<AccessibilitySettings>) => void;
   /** Reset settings to a profile's defaults (onboarding / avatar change). */
@@ -150,6 +169,16 @@ const CLEARED = {
   hint: null,
 };
 
+/** Undo a PICKUP-TIME park when its hold is aborted (released unseated / cancelled): drop islands keyed to the aborted action — unless that action somehow completed, then the park is placement-owned and stays. */
+const unparkAborted = (
+  parked: readonly ParkedIsland[],
+  trigger: ActionId | null,
+  completed: readonly ActionId[],
+): ParkedIsland[] =>
+  trigger && !completed.includes(trigger)
+    ? parked.filter((p) => p.trigger !== trigger)
+    : [...parked];
+
 export const useGameStore = create<GameState>()((set, get) => ({
   furniture: null,
   completed: [],
@@ -157,6 +186,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
   ...CLEARED,
   activeCluster: null,
   combiningCluster: null,
+  parkedIslands: [],
+  returningIslandId: null,
   tightenDeg: {},
   orientationActionId: null,
   orientationDeg: {},
@@ -184,6 +215,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
       undoneActions: [],
       activeCluster: null,
       combiningCluster: null,
+      parkedIslands: [],
+      returningIslandId: null,
       tightenDeg: {},
       orientationActionId: null,
       orientationDeg: {},
@@ -199,6 +232,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
       undoneActions: [],
       activeCluster: null,
       combiningCluster: null,
+      parkedIslands: [],
+      returningIslandId: null,
       tightenDeg: {},
       orientationActionId: null,
       orientationDeg: {},
@@ -241,13 +276,29 @@ export const useGameStore = create<GameState>()((set, get) => ({
     const s = get();
     if (s.completed.includes(id)) return;
     if (!s.available().some((a) => a.actionId === id)) return;
-    set({ completed: [...s.completed, id], undoneActions: [] });
+    const f = s.furniture;
+    const parkedIslands = f
+      ? parkTriggeredBy(f, s.completed, id, s.parkedIslands)
+      : s.parkedIslands;
+    let completed: ActionId[] = [...s.completed, id];
+    // Displacement COMMITS with the successful placement: a same-cluster LONE part (no realized connection) can't coexist with new unconnected work and can't card — it returns to the tray as a plain part.
+    if (f) {
+      const a = f.actions.find((x) => x.actionId === id);
+      if (a?.type === "placePart" && a.partId) {
+        completed = degradeLoneIslands(f, completed, parkedIslands, a.partId);
+      }
+    }
+    set({ completed, undoneActions: [], parkedIslands });
   },
   undoLastAction: () => {
     const completed = get().completed;
     if (completed.length === 0) return;
 
     const lastActionId = completed[completed.length - 1];
+    const f = get().furniture;
+    const parkedIslands = f
+      ? unparkAfterUndo(f, completed.slice(0, -1), lastActionId, get().parkedIslands)
+      : get().parkedIslands;
     const tightenDeg = { ...get().tightenDeg };
     const orientationDeg = { ...get().orientationDeg };
     const driveProgress = { ...get().driveProgress };
@@ -261,6 +312,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
       tightenDeg,
       orientationDeg,
       driveProgress,
+      parkedIslands,
       orientationActionId:
         get().orientationActionId === lastActionId
           ? null
@@ -277,9 +329,14 @@ export const useGameStore = create<GameState>()((set, get) => ({
     const next = s.undoneActions[s.undoneActions.length - 1];
     // only re-apply if it is legal again (its prerequisites still hold)
     if (!s.available().some((a) => a.actionId === next)) return;
+    const f = s.furniture;
+    const parkedIslands = f
+      ? parkTriggeredBy(f, s.completed, next, s.parkedIslands)
+      : s.parkedIslands;
     set({
       completed: [...s.completed, next],
       undoneActions: s.undoneActions.slice(0, -1),
+      parkedIslands,
       ...CLEARED,
     });
   },
@@ -354,7 +411,12 @@ export const useGameStore = create<GameState>()((set, get) => ({
   suggestNext: () => {
     const s = get();
     if (!s.furniture) return;
-    const next = s.availableForMode()[0];
+    // Suggest only in-workspace steps (workspace.ts) — never "insert the runner screw" while that runner sits carded in the tray.
+    const inWs = workspaceActionFilter(
+      s.furniture,
+      workspaceOf(s.furniture, s.completed, s.parkedIslands),
+    );
+    const next = s.availableForMode().find(inWs);
     if (!next) {
       set({ hint: "This area is done — switch focus." });
       return;
@@ -377,15 +439,38 @@ export const useGameStore = create<GameState>()((set, get) => ({
     if (s.completed.includes(actionId)) return;
     const legal = s.available().some((x) => x.actionId === actionId);
     if (!legal && s.mode !== "free") return;
-    set({ ...CLEARED, heldActionId: actionId, fitState: "held" });
+    // Park-at-PICKUP: lifting an islandRoot that starts a new disconnected same-cluster component cards the active island at the moment of commitment, so two loose sub-assemblies never share the workspace. completeAction's parkTriggeredBy is then a no-op (already parked, same trigger); aborting the hold unparks (unparkAborted).
+    const parkedIslands = s.furniture
+      ? parkTriggeredBy(s.furniture, s.completed, actionId, s.parkedIslands)
+      : s.parkedIslands;
+    set({ ...CLEARED, heldActionId: actionId, fitState: "held", parkedIslands });
   },
-  setDragFit: (fitState, matchedActionId) => set({ fitState, matchedActionId }),
+  setDragFit: (fitState, matchedActionId) => {
+    if (__DEV__) dragPerf.setDragFitCalls++;
+    set({ fitState, matchedActionId });
+  },
   releaseHeld: () => {
     const { heldActionId, fitState, matchedActionId } = get();
     if (!heldActionId) return "recover";
     const ok = fitState === "nearCorrect";
-    if (ok) get().completeAction(matchedActionId ?? heldActionId);
-    set({ ...CLEARED });
+    if (ok) {
+      const target = matchedActionId ?? heldActionId;
+      get().completeAction(target);
+      // Pickup-time park is keyed to the HELD action; if the drop matched a different same-group socket, re-key it so undoing THAT placement unparks.
+      if (target !== heldActionId) {
+        set({
+          parkedIslands: get().parkedIslands.map((p) =>
+            p.trigger === heldActionId ? { ...p, trigger: target } : p,
+          ),
+        });
+      }
+      set({ ...CLEARED });
+    } else {
+      set({
+        ...CLEARED,
+        parkedIslands: unparkAborted(get().parkedIslands, heldActionId, get().completed),
+      });
+    }
     return ok ? "snap" : "recover";
   },
   cancelHeld: () =>
@@ -396,6 +481,11 @@ export const useGameStore = create<GameState>()((set, get) => ({
       driveKind: null,
       driveProgress: {},
       ...CLEARED,
+      parkedIslands: unparkAborted(
+        get().parkedIslands,
+        get().heldActionId,
+        get().completed,
+      ),
     }),
 
   examinePart: (partId) =>
@@ -405,6 +495,42 @@ export const useGameStore = create<GameState>()((set, get) => ({
   clearExamine: () => set({ examine: null }),
   setActiveCluster: (cluster) => set({ activeCluster: cluster }),
   setCombiningCluster: (cluster) => set({ combiningCluster: cluster }),
+  setReturningIsland: (id) => set({ returningIslandId: id }),
+  bringIslandHome: (id) => {
+    const f = get().furniture;
+    const entry = get().parkedIslands.find((p) => p.id === id);
+    let next = get().parkedIslands.filter((p) => p.id !== id);
+    let completed = get().completed;
+    if (f && entry && !isMergeable(f, completed, entry.members)) {
+      // Un-bridged pull-out = a SWAP: the pulled island becomes the active one, so every other same-cluster component still in the scene returns to the tray — real islands as CARDS, a LONE connectionless part as a plain tray part (its placement is removed). Components fully covered by still-parked cards stay as they are; a bridged remainder is carded WITHOUT the members already owned by another card (no part may live on two cards).
+      const cluster = f.parts[entry.id]?.cluster;
+      const carded = new Set(next.flatMap((p) => p.members));
+      const done = new Set(completed);
+      const removePlace = new Set<ActionId>();
+      for (const isl of islandsOf(f, completed)) {
+        if (isl.members.some((m) => entry.members.includes(m))) continue;
+        if (isl.cluster !== cluster) continue;
+        const members = isl.members.filter((m) => !carded.has(m));
+        if (members.length === 0) continue;
+        if (isLoneIsland(f, done, { members })) {
+          const placeAction = f.actions.find(
+            (a) => a.type === "placePart" && a.partId === members[0],
+          );
+          if (placeAction) removePlace.add(placeAction.actionId);
+          continue;
+        }
+        const seed =
+          members.find((m) => f.parts[m]?.islandRoot) ??
+          members.find((m) => f.parts[m]?.seed) ??
+          [...members].sort()[0];
+        next = [...next, { id: seed, members, trigger: placeId(seed) }];
+      }
+      if (removePlace.size) {
+        completed = completed.filter((cid) => !removePlace.has(cid));
+      }
+    }
+    set({ parkedIslands: next, returningIslandId: null, completed });
+  },
 
   setSettings: (patch) => set({ settings: { ...get().settings, ...patch } }),
   applyProfile: (profile) =>
@@ -415,20 +541,15 @@ export const useGameStore = create<GameState>()((set, get) => ({
     }),
 }));
 
-/** The "first part" case: a part is held AND the cluster it belongs to has no structural part placed yet. The very first drop gets a simplified UX — drop on a centre ring instead of aiming at a socket ghost. Shared by the scene, the drag, and the centre-ring overlay so they agree. */
+/** The "fresh work" case: a held placePart with NO in-scene joint neighbour — the very first part, a new island while others are carded, or new work beside a LONE part (which will degrade to the tray when this placement commits). Such a part has no socket to aim at, so it gets the simplified centre-ring drop. A part with an in-scene neighbour aims at its socket as usual. Shared by the scene, the drag, and the centre-ring overlay so they agree. */
 export const selectFirstDrop = (s: GameState): boolean => {
   const f = s.furniture;
   if (!f || !s.heldActionId) return false;
   const held = f.actions.find((a) => a.actionId === s.heldActionId);
-  const cluster =
-    s.activeCluster ??
-    (held?.partId ? (f.parts[held.partId]?.cluster ?? null) : null);
-  const done = new Set(s.completed);
-  return !f.actions.some(
-    (a) =>
-      a.type === "placePart" &&
-      a.partId &&
-      done.has(a.actionId) &&
-      (cluster == null || actionCluster(f, a) === cluster),
-  );
+  if (held?.type !== "placePart" || !held.partId) return false;
+  const { inScene } = workspaceOf(f, s.completed, s.parkedIslands);
+  for (const n of neighboursOf(f)[held.partId] ?? []) {
+    if (inScene.has(n)) return false;
+  }
+  return true;
 };

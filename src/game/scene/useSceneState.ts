@@ -18,6 +18,8 @@ import {
   PartType,
 } from "@/src/game/core/type";
 import { useGameStore } from "@/src/game/core/store";
+import type { ParkedIsland } from "@/src/game/core/evaluation/islands";
+import { neighboursOf, workspaceActionFilter, workspaceOf } from "@/src/game/core/evaluation/workspace";
 
 /** socket_hint: an unplaced part whose snap or insert socket is currently reachable (same group as the held part). Renders as a glowing ghost at its target position so the player can see all valid drop targets at once. */
 export type PartMode =
@@ -26,7 +28,8 @@ export type PartMode =
   | "loose"
   | "held"
   | "socket_hint"
-  | "combining";
+  | "combining"
+  | "parked";
 
 export interface TrayItem {
   label: string;
@@ -51,6 +54,8 @@ export interface SceneState {
   activeTighten: AssemblyAction | null;
   /** Reorient/combine beat currently awaiting the player's swipe. */
   activeBeat: AssemblyAction | null;
+  /** Placed part → the parked island id it belongs to (for shelf staging). */
+  parkedIslandOf: Record<PartId, PartId>;
 }
 
 export function deriveSceneState(
@@ -64,14 +69,23 @@ export function deriveSceneState(
   focusMode = false,
   /** Static-socket ghosts: hint EVERY available same-group socket, not just the proximity-matched one (the ghost component colors matched vs unmatched). */
   showAllGroupSockets = false,
+  parkedIslands: ParkedIsland[] = [],
+  /** Island whose card is mid-drag: its members render ("parked", driver-driven) while every other parked island stays hidden — parked islands live in the TRAY, not on a shelf. */
+  returningIslandId: PartId | null = null,
 ): SceneState {
   const done = new Set(completed);
+  // Carded membership (incl. the island's fasteners) comes from THE partition in workspace.ts — never re-derived here.
+  const ws = workspaceOf(furniture, completed, parkedIslands);
+  const parkedIslandOf = ws.cardedIslandOf as Record<PartId, PartId>;
   const actionById = new Map(furniture.actions.map((a) => [a.actionId, a]));
   const partActions = buildPartActions(furniture.actions);
 
   const heldAction = heldActionId ? (actionById.get(heldActionId) ?? null) : null;
   const focusRequired = requiresClusterFocus(furniture);
-  const available = availableInMode(furniture, done, mode, activeCluster);
+  // PRESENTATION availability: legal actions minus ones anchored on carded islands (workspace.ts) — the tray, socket ghosts and the tighten gesture must never offer work on invisible geometry (the island card is the affordance for that work).
+  const available = availableInMode(furniture, done, mode, activeCluster).filter(
+    workspaceActionFilter(furniture, ws),
+  );
   const effectiveCluster =
     mode === "strict" && available[0]
       ? (actionCluster(furniture, available[0]) ?? activeCluster)
@@ -159,7 +173,10 @@ export function deriveSceneState(
       !showAllClusters &&
       (!effectiveCluster || furniture.parts[id].cluster !== effectiveCluster);
 
-    if (combiningCluster && furniture.parts[id].cluster === combiningCluster) {
+    if (parkedIslandOf[id]) {
+      // Carded parts stay in the tray, full stop — a held bridge part is guided by its OWN target ghost (socket_hint), never by materializing the carded island (user decision after trying a silhouette variant).
+      modes[id] = parkedIslandOf[id] === returningIslandId ? "parked" : "hidden";
+    } else if (combiningCluster && furniture.parts[id].cluster === combiningCluster) {
       modes[id] = "combining";
     } else if (heldAction?.partId === id) modes[id] = "held";
     else if (outsideFocus) modes[id] = "hidden";
@@ -180,7 +197,7 @@ export function deriveSceneState(
     else if (acts.tighten && !done.has(acts.tighten)) modes[id] = "loose";
     else modes[id] = "flush";
   }
-  return { modes, heldAction, trayItems, activeTighten, activeBeat };
+  return { modes, heldAction, trayItems, activeTighten, activeBeat, parkedIslandOf };
 }
 
 export function useSceneState(): SceneState {
@@ -193,11 +210,13 @@ export function useSceneState(): SceneState {
   const combiningCluster = useGameStore((s) => s.combiningCluster);
   const focusMode = useGameStore((s) => s.settings.focusMode);
   const staticSockets = useGameStore((s) => s.settings.ghostStyle === "staticSockets");
+  const parkedIslands = useGameStore((s) => s.parkedIslands);
+  const returningIslandId = useGameStore((s) => s.returningIslandId);
   return useMemo(
     () =>
       furniture
-        ? deriveSceneState(furniture, completed, heldActionId, activeCluster, matchedActionId, mode, combiningCluster, focusMode, staticSockets)
-        : { modes: {}, heldAction: null, trayItems: [], activeTighten: null, activeBeat: null },
-    [furniture, completed, heldActionId, activeCluster, matchedActionId, mode, combiningCluster, focusMode, staticSockets],
+        ? deriveSceneState(furniture, completed, heldActionId, activeCluster, matchedActionId, mode, combiningCluster, focusMode, staticSockets, parkedIslands, returningIslandId)
+        : { modes: {}, heldAction: null, trayItems: [], activeTighten: null, activeBeat: null, parkedIslandOf: {} },
+    [furniture, completed, heldActionId, activeCluster, matchedActionId, mode, combiningCluster, focusMode, staticSockets, parkedIslands, returningIslandId],
   );
 }

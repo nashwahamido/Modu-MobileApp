@@ -16,7 +16,7 @@ export type ActionId = string & Brand<"ActionId">;
 export type ClusterId = string & Brand<"ClusterId">;
 export type LiaisonId = string & Brand<"LiaisonId">;
 
-export type FurnitureId = "DALFRED" | "LACK" | "MALM";
+export type FurnitureId = "DALFRED" | "LACK" | "MALM" | "EKET";
 export type BrandId = "IKEA" | "Others";
 export type ToolId = "allenkey" | "mallet" | "hammer" | "screwdriver" | "hand";
 
@@ -81,6 +81,8 @@ export interface StructuralFields {
   slideJoins?: readonly PartId[];
   screwJoins?: readonly PartId[];
   seed?: boolean;
+  /** Marks a part as a PARKABLE sub-assembly root (distinct from `seed`, which only bypasses the snap frontier). Only islandRoot parts trigger island parking. */
+  islandRoot?: boolean;
   unstable?: boolean;
   placeDir?: Vec3;
 }
@@ -135,7 +137,8 @@ export type ActionType =
   | "combineClusters"
   | "verify";
 
-export type DriveMotion = "spin" | "turn" | "strike";
+/** How a tighten LOOKS. Resolved from HARDWARE.motion ?? the kind default. */
+export type DriveMotion = "spin" | "turn" | "strike" | "press";
 
 export interface AssemblyAction {
   actionId: ActionId;
@@ -205,6 +208,21 @@ export interface FurnitureMeta {
   /** No GLB yet: playable in the engine-test harness, hidden from the 3D picker. */
   engineOnly?: boolean;
 }
+/** One rigid group of a telescoping mechanism and how far it travels, as a fraction of the full pull-out (frame 0 — omitted; middle ½; carriage, clip and the drawer box 1). Levels animate one after another. */
+export interface PushOpenGroup {
+  level: string;
+  ratio: number;
+  parts: readonly PartId[];
+}
+/** The push-to-open finishing beat: which parts telescope, along which world axis, how far — played when the `beatActionId` beat's gesture fires. */
+export interface PushOpenSpec {
+  axis: Vec3;
+  /** Full open travel of the drawer, in meters. */
+  distance: number;
+  beatActionId: string;
+  groups: readonly PushOpenGroup[];
+}
+
 export interface Furniture {
   meta: FurnitureMeta;
   model: AssetSrc;
@@ -222,6 +240,8 @@ export interface Furniture {
   tools?: Partial<ToolMap>;
   instructions: InstructionSet;
   labels: LabelMap;
+  /** Telescoping drawer beat (EKET); absent = the beat stays symbolic. */
+  pushOpen?: PushOpenSpec;
   xpPerStep: number;
   xpBonusOnComplete: number;
 }

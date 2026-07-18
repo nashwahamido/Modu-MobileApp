@@ -1,3 +1,4 @@
+import { useEffect, useMemo } from "react";
 import { StyleSheet } from "react-native";
 import {
   Camera,
@@ -11,8 +12,13 @@ import { useGameStore } from "@/src/game/core/store";
 import type { PartId } from "@/src/game/core/type";
 import { FOCAL_LENGTH_MM } from "./cameraConfig";
 import { CEL_IBL_INTENSITY, getLightRig, IBL_INTENSITY } from "./lighting";
-import type { ClusterDriver, OffsetDriver } from "./offsetDriver";
+import type {
+  ClusterDriver,
+  IslandDriverRegistry,
+  OffsetDriver,
+} from "./offsetDriver";
 import { PartModel } from "./PartModel";
+import { buildPushDriverMap } from "./pushOpen";
 import { ShadowPlane } from "./ShadowPlane";
 import { ToolModel } from "./ToolModel";
 import { SceneState } from "./useSceneState";
@@ -27,6 +33,11 @@ interface Props {
   heldDriver: OffsetDriver;
   sinkDriver: OffsetDriver;
   clusterDriver: ClusterDriver;
+  islandDrivers: IslandDriverRegistry;
+  /** Telescoping-group drivers for the push-open beat (shared with BeatControl). */
+  pushDrivers: IslandDriverRegistry;
+  /** Reports the GLB's load state up so the screen can show a loading overlay. Called with `true` while the (large) asset streams in, `false` once Filament has it. */
+  onLoadingChange: (loading: boolean) => void;
 }
 
 /** The 3D workbench: camera, lights, and every part rendered by its game-state mode. */
@@ -36,13 +47,22 @@ export function AssemblyScene({
   heldDriver,
   sinkDriver,
   clusterDriver,
+  islandDrivers,
+  pushDrivers,
+  onLoadingChange,
 }: Props) {
   const furniture = useGameStore((s) => s.furniture);
   const renderStyle = useGameStore((s) => s.renderStyle);
+  // Loaded here (not lifted to GameScreen) because this component only mounts once furniture
+  // exists — so the source is always a valid require() id. Lifting it hit the null-furniture
+  // first render, where useBuffer throws on the `0` fallback source.
   const model = useModel(
     furniture?.styleModels?.[renderStyle] ?? furniture?.model ?? 0,
     { instanceCount: 2, addToScene: false },
   );
+  useEffect(() => {
+    onLoadingChange(model.state !== "loaded");
+  }, [model.state, onLoadingChange]);
   const manualTools = useGameStore((s) => s.settings.manualTools);
   const lightingPreset = useGameStore((s) => s.settings.lightingPreset);
   const dark = useGameStore((s) => s.theme) === "dark";
@@ -53,13 +73,7 @@ export function AssemblyScene({
 
   /**
    * A cel look must be lit by ONE light.
-   *
-   * The custom surface shader runs once per light and the results are SUMMED, so
-   * banding the key, the fill and the rim gives three staggered ramps from three
-   * directions that add back up to a smooth gradient — the banding cancels itself
-   * out, and the combined 169 000 lux blows the exposure badly enough to wash the
-   * ink contours away with it. Drop the fill and the rim; the IBL (lowered to
-   * CEL_IBL_INTENSITY) is the only fill a cel look wants.
+   * The custom surface shader runs once per light and the results are SUMMED, so banding the key, the fill and the rim gives three staggered ramps from three directions that add back up to a smooth gradient — the banding cancels itself out, and the combined 169 000 lux blows the exposure badly enough to wash the ink contours away with it. Drop the fill and the rim; the IBL (lowered to CEL_IBL_INTENSITY) is the only fill a cel look wants.
    */
   const celLook = useShaderStyle() !== "off";
   const selectedTool = useGameStore((s) => s.selectedTool);
@@ -67,6 +81,13 @@ export function AssemblyScene({
 
 
   const { modes, heldAction, activeTighten } = sceneState;
+  const pushMap = useMemo(
+    () =>
+      furniture?.pushOpen
+        ? buildPushDriverMap(furniture.pushOpen, pushDrivers)
+        : {},
+    [furniture, pushDrivers],
+  );
   if (!furniture) return null;
   const driveAction = driveActionId
     ? furniture.actions.find((a) => a.actionId === driveActionId) ?? null
@@ -113,19 +134,24 @@ export function AssemblyScene({
       {furniture.shadow && anySeated && backdrop === "clear" ? (
         <ShadowPlane source={furniture.shadow} />
       ) : null}
-      {(Object.keys(furniture.parts) as PartId[]).map((id) => (
-        <PartModel
-          key={id}
-          def={furniture.parts[id]}
-          mode={modes[id] ?? "hidden"}
-          model={model}
-          heldDriver={heldDriver}
-          sinkDriver={sinkDriver}
-          clusterDriver={clusterDriver}
-          tightening={activeTighten?.partId === id}
-          ghostAtLoosePose={heldAction?.type === "insertFastener"}
-        />
-      ))}
+      {(Object.keys(furniture.parts) as PartId[]).map((id) => {
+        const parkedId = sceneState.parkedIslandOf[id];
+        return (
+          <PartModel
+            key={id}
+            def={furniture.parts[id]}
+            mode={modes[id] ?? "hidden"}
+            model={model}
+            heldDriver={heldDriver}
+            sinkDriver={sinkDriver}
+            clusterDriver={clusterDriver}
+            parkedDriver={parkedId ? islandDrivers.get(parkedId) : undefined}
+            pushDriver={pushMap[id]}
+            tightening={activeTighten?.partId === id}
+            ghostAtLoosePose={heldAction?.type === "insertFastener"}
+          />
+        );
+      })}
       {activeTighten?.tool &&
       activeTighten.partId &&
       toolEquipped(activeTighten.tool) &&
