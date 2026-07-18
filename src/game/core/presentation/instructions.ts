@@ -38,7 +38,10 @@ export function buildInstructions(
     const group = a.partId ? parts[a.partId]?.group : undefined;
     const std = group ? labelFor(labels, group, "standard") : "part";
     const sim = group ? labelFor(labels, group, "simple") : "part";
-    const tool = a.tool ? (TOOL_NAME[a.tool] ?? a.tool) : "the tool";
+    const withTool =
+      a.tool === "hand" ? "by hand"
+      : a.tool ? `with the ${TOOL_NAME[a.tool] ?? a.tool}`
+      : "with the tool";
 
     switch (a.type) {
       case "placePart":
@@ -51,16 +54,23 @@ export function buildInstructions(
           text: `Push the ${std} into its hole by hand.`,
           simpleText: `Start the ${sim} by hand.`,
         };
-      case "tightenFastener":
-        return a.tool === "mallet"
-          ? {
-              text: `Tap the ${std} fully in with the ${tool}.`,
-              simpleText: `Tap the ${sim} in.`,
-            }
-          : {
-              text: `Tighten the ${std} with the ${tool}.`,
-              simpleText: `Tighten the ${sim}.`,
-            };
+      case "tightenFastener": {
+        const m = a.motion ?? (a.tool === "mallet" ? "strike" : "spin");
+        if (m === "press")
+          return {
+            text: `Press the ${std} down until it seats.`,
+            simpleText: `Press the ${sim} in.`,
+          };
+        if (m === "strike")
+          return {
+            text: `Tap the ${std} fully in ${withTool}.`,
+            simpleText: `Tap the ${sim} in.`,
+          };
+        return {
+          text: `Tighten the ${std} ${withTool}.`,
+          simpleText: `Tighten the ${sim}.`,
+        };
+      }
       case "reorient":
         return a.cluster
           ? {
