@@ -14,7 +14,8 @@ export function deriveTopoOrder(f: Furniture): {
   const done = new Set<ActionId>();
   const order: ActionId[] = [];
   for (let round = 0; round <= f.actions.length; round++) {
-    const avail = availableActions(f, done).sort(batchOrder);
+    // Copy before sorting — availableActions returns a cached array that must stay in engine order.
+    const avail = [...availableActions(f, done)].sort(batchOrder);
     if (avail.length === 0) break;
     for (const a of avail) {
       order.push(a.actionId);

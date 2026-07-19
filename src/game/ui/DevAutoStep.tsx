@@ -1,5 +1,6 @@
 import { Theme, useStyles } from "@/src/game/ui/theme";
 import { Pressable, StyleSheet, Text } from "react-native";
+import { actionCluster } from "@/src/game/core/evaluation/clusters";
 import { targetPositionForAction } from "@/src/game/core/scene/targets";
 import { HOVER_LIFT_M, looseDelta, spawnDelta } from "@/src/game/core/geometry/staging";
 import { TIGHTEN_TOTAL_DEG, useGameStore } from "@/src/game/core/store";
@@ -19,7 +20,11 @@ export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
     const store = useGameStore.getState();
     const furniture = store.furniture;
     if (!furniture || store.heldActionId) return;
-    const action = store.available()[0];
+    // Auto drives only the FOCUSED cluster: available() lets cluster-less actions (combineClusters, finishing beats) through no matter what is focused, and stepping those would assemble work that isn't the section on screen. With a focus set, auto goes quiet once that cluster is done rather than running ahead.
+    const legal = store.available();
+    const action = store.activeCluster
+      ? legal.find((a) => actionCluster(furniture, a) === store.activeCluster)
+      : legal[0];
     if (!action) return;
     const done = new Set(store.completed);
 

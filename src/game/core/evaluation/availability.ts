@@ -20,7 +20,8 @@ import {
   isReachable,
   neighbourMap,
 } from "../model/liaisons";
-import { stabilityAllows } from "./stability";
+import { isNonLeadBody } from "../model/components";
+import { buildStabilityLocks, stabilityAllowsFrom } from "./stability";
 
 /** Suggested focus stage: the earliest stage with incomplete work. This is a UI SCAFFOLD only (a gentle "where to look next"), NOT a hard gate — clusters can be built in any order, so availability does not depend on it. */
 export function currentStage(
@@ -58,7 +59,27 @@ export function availableActions(
   f: Furniture,
   done: ReadonlySet<ActionId>,
 ): AssemblyAction[] {
+  // Memoized per completion state: the play screen recomputes availability from several independent subscribers on EVERY store update (drag fit-state churn included), and the stability scan is the priciest thing in the engine — EKET's loose-runner phase measured ~2ms/call on desktop, i.e. frame-eating on a phone. The key is the sorted done-set, so every caller's freshly-built Set of the same completed list hits, in any order (undo/redo included). Callers must treat the result as read-only.
+  const key = [...done].sort().join("\n");
+  const hit = availabilityCache.get(f);
+  if (hit && hit.key === key) return hit.result;
+  const result = computeAvailableActions(f, done);
+  availabilityCache.set(f, { key, result });
+  return result;
+}
+
+const availabilityCache = new WeakMap<
+  Furniture,
+  { key: string; result: AssemblyAction[] }
+>();
+
+function computeAvailableActions(
+  f: Furniture,
+  done: ReadonlySet<ActionId>,
+): AssemblyAction[] {
   const liaisons = f.liaisons ?? buildLiaisons(f.parts);
+  // The lock list is action-independent — building it per action (the old stabilityAllows call) made this scan O(actions²) in the loose-unstable phases.
+  const stabilityLocks = buildStabilityLocks(f, done);
   const neighbours = neighbourMap(liaisons);
 
   const placed = new Set<PartId>();
@@ -75,6 +96,7 @@ export function availableActions(
     return false;
   };
   return f.actions.filter((a) => {
+    if (a.partId && isNonLeadBody(f.components, a.partId)) return false;
     if (done.has(a.actionId)) return false;
     if (!a.requires.every((r) => done.has(r))) return false;
     if (a.requiresAny?.length && !a.requiresAny.some((r) => done.has(r))) return false;
@@ -98,7 +120,7 @@ export function availableActions(
 
     if (a.type === "combineClusters" && !combineReady(f, done)) return false;
 
-    if (!stabilityAllows(f, a, done)) return false;
+    if (!stabilityAllowsFrom(stabilityLocks, f, a)) return false;
 
     if (a.type === "reorient" && a.cluster && !clusterComplete(f, a.cluster, done)) {
       return false;

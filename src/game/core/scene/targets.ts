@@ -9,6 +9,7 @@ import {
 } from "@/src/game/core/type";
 import { loosePosition } from "@/src/game/core/geometry/fastenerPose";
 import { engageAxis } from "../evaluation/engagement";
+import { stageShiftFor } from "../model/staging";
 
 type Parts = Record<PartId, PartDef>;
 
@@ -61,9 +62,22 @@ export function targetPositionForAction(
   done?: ReadonlySet<ActionId>,
 ): Vec3 {
   const part = parts[action.partId!];
-  if (action.type !== "insertFastener") return part.pose.position;
+  const shift = stagingShiftFor(action, parts);
+  if (action.type !== "insertFastener") {
+    return shift ? add3(part.pose.position, shift) : part.pose.position;
+  }
   const axis = done ? engageAxis(part, done) : (part.engageDir ?? [0, 0, 0]);
-  return loosePosition(part.pose, axis);
+  const loose = loosePosition(part.pose, axis);
+  return shift ? add3(loose, shift) : loose;
+}
+
+const add3 = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+
+/** How far this action's drop target moves because a sub-assembly is out of the furniture. Delegates the displacement itself to model/staging.ts so the ghost and this target cannot drift apart; the only thing decided here is the ACTION-level exemption — seating the finished sub-assembly aims at the real socket, because that gesture is precisely the journey home. */
+function stagingShiftFor(action: AssemblyAction, parts: Parts): Vec3 | undefined {
+  if (action.type === "placePart" || !action.partId) return undefined;
+  const part = parts[action.partId];
+  return part ? stageShiftFor(part, parts) : undefined;
 }
 
 export function targetRotationForAction(

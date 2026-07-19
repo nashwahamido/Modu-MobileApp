@@ -5,6 +5,9 @@ import {
   requiresClusterFocus,
 } from "@/src/game/core/evaluation/clusters";
 import { availableInMode, currentStage } from "@/src/game/core/evaluation/availability";
+import { isNonLeadBody } from "@/src/game/core/model/components";
+import { isStaged, stagedCarriers, stagedMembers } from "@/src/game/core/model/staging";
+import { isPickupType } from "@/src/game/core/ids";
 import { buildPartActions } from "@/src/game/core/scene/targets";
 import { labelFor } from "@/src/game/core/presentation/labels";
 import {
@@ -26,7 +29,10 @@ export type PartMode =
   | "loose"
   | "held"
   | "socket_hint"
-  | "combining";
+  | "combining"
+  | "riding"
+  /** Out on the canvas at its sub-assembly rest pose: a staged carrier the player has taken out, and each piece of hardware already pressed into it. Rendered at `stageOffset` from the baked pose until the whole group is carried home. */
+  | "staged";
 
 export interface TrayItem {
   label: string;
@@ -88,12 +94,17 @@ export function deriveSceneState(
     }
     if (!a.partId || done.has(a.actionId)) continue;
     if (mode !== "free" && a.stage !== stage) continue;
-    if (a.type !== "placePart" && a.type !== "insertFastener") continue;
+    // stagePart earns a card of its own (fetching the carrier out of the box). A staged carrier then keeps its card for the SEATING gesture too: the part is out on the canvas by then, but the canvas re-grab path only re-takes a part that is still logically held, so the card is what makes "pick the finished sub-assembly back up" work through the proven pickup path rather than a second, untested one. Its prompt (presentation/instructions.ts) says pick it back up, not take a new one out.
+    if (!isPickupType(a.type)) continue;
     const part = furniture.parts[a.partId];
+    // a non-lead component body never gets its own card — the lead's card stands for the whole component
+    if (isNonLeadBody(furniture.components, a.partId)) continue;
+    const comp = furniture.components?.byBody[a.partId];
+    const compLabel = comp ? furniture.components!.label[comp] : undefined;
     const pickable = !heldAction && availableIds.has(a.actionId);
     const draggable = pickable || (!heldAction && mode === "free");
     const isHeld = heldAction?.actionId === a.actionId;
-    const label = labelFor(furniture.labels, part.group);
+    const label = compLabel ? compLabel.standard : labelFor(furniture.labels, part.group);
     const g = groups.get(part.group);
     if (g) {
       g.remaining += 1;
@@ -140,11 +151,26 @@ export function deriveSceneState(
     combineDone || (activeBeat ? actionCluster(furniture, activeBeat) == null : false);
 
   const heldGroup =
-    heldAction?.partId &&
-    (heldAction.type === "placePart" || heldAction.type === "insertFastener")
+    heldAction?.partId && isPickupType(heldAction.type)
       ? furniture.parts[heldAction.partId].group
       : null;
   const heldIsInsert = heldAction?.type === "insertFastener";
+  // When the held part is a multi-body component's LEAD, its unplaced sibling bodies ride along with it (see PartModel's "riding" case) instead of popping in only on release; already-placed siblings (a re-drag after undo) fall through to their normal placed modes below.
+  const heldComponentId = heldAction?.partId ? furniture.components?.byBody[heldAction.partId] : undefined;
+  const ridingComponent =
+    heldComponentId && furniture.components?.lead[heldComponentId] === heldAction?.partId
+      ? heldComponentId
+      : undefined;
+  // Carrying a finished sub-assembly home: the hardware already pressed into it rides the same live drag offset, exactly as a component's sibling bodies do. One riding set covers both, so a staged part that ALSO leads a component needs no extra case.
+  const ridingStaged = new Set<PartId>(
+    heldAction?.type === "placePart" && heldAction.partId && isStaged(furniture.parts[heldAction.partId])
+      ? stagedMembers(furniture, heldAction.partId, done)
+      : [],
+  );
+  // Everything currently resting at a staging offset, whoever it belongs to.
+  const stagedOut = new Set<PartId>(
+    stagedCarriers(furniture.parts).flatMap((c) => stagedMembers(furniture, c, done)),
+  );
 
   const modes: Record<string, PartMode> = {};
   for (const id of Object.keys(furniture.parts) as PartId[]) {
@@ -162,6 +188,9 @@ export function deriveSceneState(
     if (combiningCluster && furniture.parts[id].cluster === combiningCluster) {
       modes[id] = "combining";
     } else if (heldAction?.partId === id) modes[id] = "held";
+    else if (ridingComponent && furniture.components?.byBody[id] === ridingComponent && !placed) modes[id] = "riding";
+    else if (ridingStaged.has(id)) modes[id] = "riding";
+    else if (stagedOut.has(id)) modes[id] = "staged";
     else if (outsideFocus) modes[id] = "hidden";
     else if (!placed) {
       const hintActionId = heldIsInsert ? acts.insert : acts.snap;

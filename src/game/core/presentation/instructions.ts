@@ -12,6 +12,7 @@ import {
   TextLevel,
 } from "@/src/game/core/type";
 import { labelFor } from "./labels";
+import { stagedCarrierOf } from "@/src/game/core/model/staging";
 
 export const TOOL_NAME: Record<string, string> = {
   allenkey: "allen key",
@@ -44,16 +45,40 @@ export function buildInstructions(
       : "with the tool";
 
     switch (a.type) {
+      case "stagePart":
+        return {
+          text: `Take out the ${std} and set it down in front of you — you will fit its hardware before it goes in.`,
+          simpleText: `Take out the ${sim}.`,
+        };
       case "placePart":
-        return {
-          text: `Place the ${std} into position.`,
-          simpleText: `Add the ${sim}.`,
-        };
-      case "insertFastener":
-        return {
-          text: `Push the ${std} into its hole by hand.`,
-          simpleText: `Start the ${sim} by hand.`,
-        };
+        // a staged carrier is already out on the canvas when its placement comes up, so its prompt has to send the player back to the part rather than to a tray card
+        return parts[a.partId ?? ""]?.stageOffset
+          ? {
+              text: `Pick the assembled ${std} back up and fit it into position.`,
+              simpleText: `Put the ${sim} in.`,
+            }
+          : {
+              text: `Place the ${std} into position.`,
+              simpleText: `Add the ${sim}.`,
+            };
+      case "insertFastener": {
+        // hardware fitted to a staged sub-assembly is pressed into THAT part while it rests out in front of the player, so name it rather than saying "its hole"
+        const carrier = a.partId
+          ? stagedCarrierOf(parts[a.partId], parts as Record<string, PartDef>)
+          : undefined;
+        const carrierLabel = carrier
+          ? labelFor(labels, parts[carrier]?.group ?? "", "standard")
+          : "";
+        return carrier
+          ? {
+              text: `Press the ${std} into the end of the ${carrierLabel}.`,
+              simpleText: `Press the ${sim} in.`,
+            }
+          : {
+              text: `Push the ${std} into its hole by hand.`,
+              simpleText: `Start the ${sim} by hand.`,
+            };
+      }
       case "tightenFastener": {
         const m = a.motion ?? (a.tool === "mallet" ? "strike" : "spin");
         if (m === "press")
@@ -65,6 +90,11 @@ export function buildInstructions(
           return {
             text: `Tap the ${std} fully in ${withTool}.`,
             simpleText: `Tap the ${sim} in.`,
+          };
+        if (m === "turn")
+          return {
+            text: `Rotate the ${std} a quarter turn to lock it.`,
+            simpleText: `Turn the ${sim} to lock.`,
           };
         return {
           text: `Tighten the ${std} ${withTool}.`,

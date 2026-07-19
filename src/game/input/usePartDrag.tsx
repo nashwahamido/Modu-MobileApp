@@ -23,12 +23,26 @@ import {
   slideParkInfo,
 } from "@/src/game/core/evaluation/engagement";
 import { computeFit } from "@/src/game/core/geometry/fit";
+import { isStaged } from "@/src/game/core/model/staging";
+import { isPickupType } from "@/src/game/core/ids";
 import { quatSlerp, screenPointOnPlane } from "@/src/game/core/geometry/math";
-import { ActionId, AssemblyAction, Quat, Vec3 } from "@/src/game/core/type";
+import {
+  ActionId,
+  AssemblyAction,
+  Furniture,
+  PartId,
+  Quat,
+  Vec3,
+} from "@/src/game/core/type";
 import { selectFirstDrop, useGameStore } from "@/src/game/core/store";
 import type { OrbitManipulator } from "../scene/AssemblyScene";
 import { FOV_Y_DEG } from "../scene/cameraConfig";
-import { animateDriver, OffsetDriver } from "../scene/offsetDriver";
+import {
+  animateClusterDriver,
+  animateDriver,
+  ClusterDriver,
+  OffsetDriver,
+} from "../scene/offsetDriver";
 
 type Float3 = [number, number, number];
 
@@ -49,9 +63,19 @@ const SNAP_DIST_MIN = 0.06;
 const SNAP_DIST_MAX = 0.2;
 const RING = 64;
 
+/** True when dragging `partId` carries other bodies with it on slideDriver (PartModel's "riding" mode / useSceneState's riding set): the LEAD of a multi-body component, or the carrier of a staged sub-assembly bringing its fitted hardware home. One predicate for both, so a part that is somehow both needs no extra case. */
+function hasRidingBodies(furniture: Furniture | null | undefined, partId: PartId | null | undefined): boolean {
+  if (!furniture || !partId) return false;
+  if (isStaged(furniture.parts[partId])) return true;
+  const comp = furniture.components?.byBody[partId];
+  return !!comp && furniture.components!.lead[comp] === partId;
+}
+
 interface Params {
   manipulator: OrbitManipulator;
   heldDriver: OffsetDriver;
+  /** Drives a component's non-lead bodies while the lead is held/dragged, so they track the same live offset ("riding" mode). */
+  slideDriver: ClusterDriver;
   getFocusPoint: () => Vec3;
   /** Camera strafe callbacks — the canvas gesture falls back to these when the one-finger drag isn't re-grabbing a floating part (settings.canvasStrafe). */
   onPanStart?: (x: number, y: number) => void;
@@ -85,6 +109,7 @@ interface DragSession {
 export function usePartDrag({
   manipulator,
   heldDriver,
+  slideDriver,
   getFocusPoint,
   onPanStart,
   onPanMove,
@@ -347,6 +372,8 @@ export function usePartDrag({
             visualStart[2] - grabOffset[2] - part.pose.position[2],
           ];
           heldDriver.set(base);
+          // A component lead's siblings start riding from the same offset the instant it's picked up, so there's no pop between grab and the first drag frame.
+          if (hasRidingBodies(furniture, action.partId)) slideDriver.set(base);
           store.beginPickup(action.actionId);
           if (useGameStore.getState().heldActionId !== action.actionId) return;
           Haptics.selectionAsync();
@@ -371,10 +398,7 @@ export function usePartDrag({
           const groupIds = new Set(candidates.map((c) => c.action.actionId));
           const otherSockets = avail
             .filter(
-              (a) =>
-                a.partId &&
-                (a.type === "placePart" || a.type === "insertFastener") &&
-                !groupIds.has(a.actionId),
+              (a) => a.partId && isPickupType(a.type) && !groupIds.has(a.actionId),
             )
             .map((a) => targetPositionForAction(a, furniture.parts, doneSet));
           session.current = {
@@ -510,14 +534,16 @@ export function usePartDrag({
             const sock = target?.position ?? fingerW;
             // No hover-lift: the part eases straight to the socket so there's no vertical "drop" on release — it just moves to where it should rest (the loose state for screws/legs is still applied on release).
             s.hoverLift = 0;
-            heldDriver.set([
-              fingerW[0] + (sock[0] - fingerW[0]) * posT - s.bakedPos[0],
-              fingerW[1] + (sock[1] - fingerW[1]) * posT - s.bakedPos[1],
-              fingerW[2] + (sock[2] - fingerW[2]) * posT - s.bakedPos[2],
-            ]);
-            heldDriver.setRotation(
+            heldDriver.setPose(
+              [
+                fingerW[0] + (sock[0] - fingerW[0]) * posT - s.bakedPos[0],
+                fingerW[1] + (sock[1] - fingerW[1]) * posT - s.bakedPos[1],
+                fingerW[2] + (sock[2] - fingerW[2]) * posT - s.bakedPos[2],
+              ],
               target ? quatSlerp(s.bakedRot, target.rotation, rotT) : s.bakedRot,
             );
+            // Mirror the held lead's live world-space offset onto its riding siblings every drag frame, so the whole slide moves as one object in hand.
+            if (hasRidingBodies(furniture, action.partId)) slideDriver.set(heldDriver.value);
           }
           const off = heldDriver.value;
           const held: Vec3 = [
@@ -557,8 +583,11 @@ export function usePartDrag({
           const s = session.current;
           session.current = null;
           if (!s) {
-            // Card only: a tap/failed long-press on the held part's card puts it back. A canvas touch that never activated must NOT put it back.
-            if (!canvas) store.cancelHeld();
+            // Card only: a tap/failed long-press on the held part's card puts it back. A canvas touch that never activated must NOT put it back. No live session ever ran here, but a prior drag could have left slideDriver at a floated offset — clear it so a stale value can't leak into the next lead pickup.
+            if (!canvas) {
+              if (hasRidingBodies(store.furniture, action.partId)) slideDriver.set([0, 0, 0]);
+              store.cancelHeld();
+            }
             return;
           }
           const ready = store.fitState === "nearCorrect";
@@ -568,6 +597,8 @@ export function usePartDrag({
               (c) => c.action.actionId === store.matchedActionId,
             ) ?? s.candidates[0];
           if ((ready || needsRotation) && matched) {
+            // Committing to the socket: siblings drop the ride and revert to their normal (pop-in) placed presentation right away — the frame still eases into the socket over the animation below, unchanged from before this phase.
+            if (hasRidingBodies(store.furniture, action.partId)) slideDriver.set([0, 0, 0]);
             const st = useGameStore.getState();
             const doneSet = new Set(st.completed);
             const eng =
@@ -605,7 +636,7 @@ export function usePartDrag({
               }
             });
           } else if (store.settings.releaseBehavior === "float") {
-            // FLOAT: leave the part exactly where it was set down. heldActionId stays set (we don't cancelHeld), so the driver keeps its offset and the part renders in place — drag it again on the canvas or use the tray Put-back to return it. Ported from the on-release engine.
+            // FLOAT: leave the part exactly where it was set down. heldActionId stays set (we don't cancelHeld), so the driver keeps its offset and the part renders in place — drag it again on the canvas or use the tray Put-back to return it. Ported from the on-release engine. slideDriver is intentionally left as-is (not zeroed): the lead is still logically held, just parked, so its siblings should keep riding at the same offset until the next drag frame or an explicit cancel.
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           } else {
             // complimentary function for FLOAT: AUTO-RETURN: the part flies to a recover spot in front of the camera and returns to the tray.
@@ -623,9 +654,14 @@ export function usePartDrag({
                 off[2] + (fx / fl) * 0.55,
               ];
             }
+            // A held lead's riding siblings fly back WITH it as one coherent object (heldActionId stays set through the whole tween, so they render in "riding" mode the entire flight — an immediate zero here would pop them to their assembled pose at the empty socket while the frame visibly recovers).
+            const lead = hasRidingBodies(store.furniture, action.partId);
+            if (lead) animateClusterDriver(slideDriver, dest, 220);
             animateDriver(heldDriver, dest, 220, () => {
               const st = useGameStore.getState();
               st.cancelHeld();
+              // cancelHeld FIRST (clears heldActionId → riding parts unmount), THEN zero the driver so it's clean for the next lead pickup and nothing ever renders the transient reset.
+              if (lead) slideDriver.set([0, 0, 0]);
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               st.noteBlocked(action.actionId);
             });
@@ -636,6 +672,7 @@ export function usePartDrag({
     [
       manipulator,
       heldDriver,
+      slideDriver,
       getFocusPoint,
       fingerOnCameraPlaneAt,
       fingerOnPlane,

@@ -46,6 +46,7 @@ export type StructureOverlay = Record<
       | "unstable"
       | "tool"
       | "placeDir"
+      | "parkBackoff"
     >
   >
 >;

@@ -178,7 +178,7 @@ export function slideParkInfo(
   if (!isSlider(gammaOf(f), action.partId)) return null;
   const part = f.parts[action.partId]!;
   const owners = joinedByKind(f, action.partId, "slide", done);
-  return parkInfo(travelAxis(part, owners), SLIDE_BACKOFF_M);
+  return parkInfo(travelAxis(part, owners), part.parkBackoff ?? SLIDE_BACKOFF_M);
 }
 
 /** Staging for a PRESS placement: the push axis and the backed-off park offset.  Null when `action` isn't a push-fit against a placed partner. */
@@ -191,7 +191,7 @@ export function pressParkInfo(
   const partners = joinedByKind(f, action.partId, "press", done);
   if (!partners.length) return null;
   const part = f.parts[action.partId]!;
-  return parkInfo(travelAxis(part, partners), PRESS_BACKOFF_M);
+  return parkInfo(travelAxis(part, partners), part.parkBackoff ?? PRESS_BACKOFF_M);
 }
 
 /** SIGNED engage axis for a fastener — points from its seat toward the side it backs out of (= toward the MISSING endpoint). The baked `engageDir` assumes the fastener drives into `attached[0]`; when the OTHER endpoint is the one placed (the reverse path: bolt into the LEG instead of the table), the fastener enters from the opposite side, so the axis flips. */

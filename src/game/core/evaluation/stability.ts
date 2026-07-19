@@ -1,6 +1,7 @@
 import { insertId, placeId, tightenId } from "@/src/game/core/ids";
 import { actionCluster } from "./clusters";
 import { fastenerKindOf, isConnector } from "../model/liaisons";
+import { isStaged } from "../model/staging";
 import {
   ActionId,
   AssemblyAction,
@@ -9,7 +10,7 @@ import {
   PartId,
 } from "@/src/game/core/type";
 
-interface StabilityLock {
+export interface StabilityLock {
   cluster: ClusterId | undefined;
   allowed: Set<ActionId>;
 }
@@ -138,6 +139,8 @@ function preloadConnectorLocks(
     if (aPlaced === bPlaced) continue;
 
     const missing = aPlaced ? b : a;
+    // A STAGED endpoint is not a half-made joint waiting to be locked: the sub-assembly is deliberately built away from the furniture and installed late, so its connector must not preload-lock the cluster the moment the OTHER endpoint lands (the EKET runner frames go down in stage 1, the rod arrives in stage 3 — a lock here would freeze the whole cabinet in between).
+    if (isStaged(f.parts[missing])) continue;
     const key = [a, b].sort().join("__");
     const group =
       joints.get(key) ??
@@ -192,12 +195,12 @@ export function looseUnstableParts(
     .map((p) => p.partId);
 }
 
-function applicableLocks(
+/** Every stability lock active in `done` — independent of the action being tested, so a caller sweeping many actions (availableActions) builds this ONCE instead of rebuilding the loose-part/connector scan per action. */
+export function buildStabilityLocks(
   f: Furniture,
-  action: AssemblyAction,
   done: ReadonlySet<ActionId>,
 ): StabilityLock[] {
-  const locks: StabilityLock[] = looseUnstableParts(f, done)
+  return looseUnstableParts(f, done)
     .map(
       (partId): StabilityLock => ({
         cluster: f.parts[partId]?.cluster,
@@ -206,11 +209,30 @@ function applicableLocks(
     )
     .concat(preloadConnectorLocks(f, done))
     .filter((lock) => lock.allowed.size > 0);
+}
 
+function locksApplicableTo(
+  f: Furniture,
+  locks: readonly StabilityLock[],
+  action: AssemblyAction,
+): StabilityLock[] {
   const cluster = actionCluster(f, action);
   return cluster == null
-    ? locks
+    ? [...locks]
     : locks.filter((l) => l.cluster == null || l.cluster === cluster);
+}
+
+/** stabilityAllows against a prebuilt lock list (see buildStabilityLocks). */
+export function stabilityAllowsFrom(
+  locks: readonly StabilityLock[],
+  f: Furniture,
+  action: AssemblyAction,
+): boolean {
+  if (action.type === "tightenFastener") return true;
+
+  const applicable = locksApplicableTo(f, locks, action);
+  if (applicable.length === 0) return true;
+  return applicable.some((l) => l.allowed.has(action.actionId));
 }
 
 export function stabilityAllows(
@@ -219,10 +241,7 @@ export function stabilityAllows(
   done: ReadonlySet<ActionId>,
 ): boolean {
   if (action.type === "tightenFastener") return true;
-
-  const applicable = applicableLocks(f, action, done);
-  if (applicable.length === 0) return true;
-  return applicable.some((l) => l.allowed.has(action.actionId));
+  return stabilityAllowsFrom(buildStabilityLocks(f, done), f, action);
 }
 
 /** When a lock blocks `action`: everything the locks WOULD allow instead —  hint material ("insert the cam bolt first"). Empty when nothing blocks. */
@@ -231,7 +250,7 @@ export function stabilityNextSteps(
   action: AssemblyAction,
   done: ReadonlySet<ActionId>,
 ): Set<ActionId> {
-  const applicable = applicableLocks(f, action, done);
+  const applicable = locksApplicableTo(f, buildStabilityLocks(f, done), action);
   if (
     applicable.length === 0 ||
     applicable.some((l) => l.allowed.has(action.actionId))

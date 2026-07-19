@@ -21,6 +21,8 @@ export interface OffsetDriver {
   set(offset: Float3): void;
   /** Set the absolute rotation (xyzw). Defaults to the baked rotation. */
   setRotation(rotation: Quat): void;
+  /** Set offset AND rotation together in a single apply — the drag hot path calls this every frame, where separate set+setRotation would push the entity's transform twice. */
+  setPose(offset: Float3, rotation: Quat): void;
   detach(): void;
   readonly value: Float3;
 }
@@ -63,6 +65,11 @@ export function createOffsetDriver(): OffsetDriver {
     },
     setRotation(next) {
       rotation = next;
+      apply();
+    },
+    setPose(nextOffset, nextRotation) {
+      offset = [...nextOffset];
+      rotation = nextRotation;
       apply();
     },
     detach() {
@@ -161,4 +168,29 @@ export function animateClusterDriver(
     else onDone?.();
   };
   requestAnimationFrame(step);
+}
+
+/** A lazily-populated map of ClusterDrivers, so independent moving groups (each parked stage, or each telescoping push-open group) can be staged and animated separately in the shared scene. */
+export interface DriverRegistry {
+  /** The driver for `id`, created on first access. */
+  get(id: string): ClusterDriver;
+  /** Ids that have a driver so far. */
+  ids(): string[];
+}
+
+export function createDriverRegistry(): DriverRegistry {
+  const map = new Map<string, ClusterDriver>();
+  return {
+    get(id) {
+      let d = map.get(id);
+      if (!d) {
+        d = createClusterDriver();
+        map.set(id, d);
+      }
+      return d;
+    },
+    ids() {
+      return [...map.keys()];
+    },
+  };
 }

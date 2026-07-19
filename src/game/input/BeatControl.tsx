@@ -1,10 +1,12 @@
 import * as Haptics from "expo-haptics";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { instructionText } from "@/src/game/core/presentation/instructions";
 import { AssemblyAction } from "@/src/game/core/type";
 import { useGameStore } from "@/src/game/core/store";
+import type { DriverRegistry } from "@/src/game/scene/offsetDriver";
+import { runPushOpen } from "@/src/game/scene/pushOpen";
 
 /** How far (px) the swipe must travel in the beat's direction. */
 const SWIPE_PX = 80;
@@ -21,24 +23,46 @@ const HINTS: Record<"up" | "down", { arrow: string; verb: string }> = {
   down: { arrow: "↓", verb: "Swipe down" },
 };
 
-/** Player-facing control for reorient/combine beats: a card the player swipes in the indicated direction. Beats are symbolic (parts stay at their baked poses; the free camera makes a literal flip unnecessary — user decision). */
-export function BeatControl({ action }: { action: AssemblyAction }) {
+/** Player-facing control for reorient/combine beats: a card the player swipes in the indicated direction. Beats are symbolic (parts stay at their baked poses; the free camera makes a literal flip unnecessary — user decision) — EXCEPT the push-open beat: when the furniture authors a PushOpenSpec matching this action, the swipe plays the telescoping open/close of each drawer before completing. */
+export function BeatControl({
+  action,
+  pushDrivers,
+}: {
+  action: AssemblyAction;
+  pushDrivers?: DriverRegistry;
+}) {
   const direction = BEAT_DIRECTION[action.actionId] ?? "up";
   const fired = useRef(false);
+  const [playing, setPlaying] = useState(false);
   const settings = useGameStore((s) => s.settings);
   const furniture = useGameStore((s) => s.furniture);
   const title = furniture ? instructionText(furniture.instructions, action.actionId, settings.textLevel) : "";
+  const pushOpen =
+    furniture?.pushOpen && furniture.pushOpen.beatActionId === action.actionId && pushDrivers
+      ? furniture.pushOpen
+      : null;
 
   const pan = Gesture.Pan()
     .runOnJS(true)
     .onBegin(() => {
-      fired.current = false;
+      if (!playing) fired.current = false;
     })
     .onUpdate((e) => {
-      if (fired.current) return;
+      if (fired.current || playing) return;
       const travel = direction === "up" ? -e.translationY : e.translationY;
       if (travel >= SWIPE_PX) {
         fired.current = true;
+        if (pushOpen && pushDrivers) {
+          setPlaying(true);
+          runPushOpen(pushOpen, pushDrivers, () =>
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium),
+          ).then(() => {
+            setPlaying(false);
+            useGameStore.getState().completeAction(action.actionId);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          });
+          return;
+        }
         useGameStore.getState().completeAction(action.actionId);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
@@ -48,10 +72,12 @@ export function BeatControl({ action }: { action: AssemblyAction }) {
   return (
     <View style={styles.wrap} pointerEvents="box-none">
       <GestureDetector gesture={pan}>
-        <View style={styles.card}>
-          <Text style={styles.arrow}>{hint.arrow}</Text>
+        <View style={[styles.card, playing && styles.cardPlaying]}>
+          <Text style={styles.arrow}>{playing ? "⇆" : hint.arrow}</Text>
           <Text style={styles.title}>{title}</Text>
-          <Text style={styles.hint}>{hint.verb} to continue</Text>
+          <Text style={styles.hint}>
+            {playing ? "checking the drawers…" : `${hint.verb} to continue`}
+          </Text>
         </View>
       </GestureDetector>
     </View>
@@ -75,6 +101,7 @@ const styles = StyleSheet.create({
     gap: 6,
     maxWidth: 320,
   },
+  cardPlaying: { borderColor: "#37c871" },
   arrow: { fontSize: 36, color: "#e8842c", fontWeight: "700" },
   title: {
     fontSize: 15,
