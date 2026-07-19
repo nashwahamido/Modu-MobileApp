@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { isPickupType } from "@/src/game/core/ids";
 import {
   availableActions,
   availableInMode,
@@ -28,6 +29,7 @@ import {
 import { blockReason } from "@/src/game/core/evaluation/blockReason";
 import { hintText } from "@/src/game/core/presentation/hintText";
 import { instructionText } from "@/src/game/core/presentation/instructions";
+import { memberPlaceIdsForLead, componentBlockAtTail } from "@/src/game/core/model/components";
 
 /** Total clockwise rotation to fully tighten a fastener, in degrees. */
 export const TIGHTEN_TOTAL_DEG = 720;
@@ -241,33 +243,40 @@ export const useGameStore = create<GameState>()((set, get) => ({
     const s = get();
     if (s.completed.includes(id)) return;
     if (!s.available().some((a) => a.actionId === id)) return;
-    set({ completed: [...s.completed, id], undoneActions: [] });
+    // a component lead drags its sibling bodies in with it (one gesture, one card = one placement)
+    const members = memberPlaceIdsForLead(s.furniture?.components, id);
+    set({ completed: [...s.completed, id, ...members], undoneActions: [] });
   },
   undoLastAction: () => {
-    const completed = get().completed;
+    const s = get();
+    const completed = s.completed;
     if (completed.length === 0) return;
 
-    const lastActionId = completed[completed.length - 1];
-    const tightenDeg = { ...get().tightenDeg };
-    const orientationDeg = { ...get().orientationDeg };
-    const driveProgress = { ...get().driveProgress };
-    delete tightenDeg[lastActionId];
-    delete orientationDeg[lastActionId];
-    delete driveProgress[lastActionId];
+    const block = s.furniture
+      ? componentBlockAtTail(s.furniture.components, s.furniture.actions, completed)
+      : null;
+    const dropCount = block ? block.count : 1;
+    const removed = completed.slice(completed.length - dropCount);
+    const rememberForRedo = block ? block.leadActionId : removed[0];
+
+    const tightenDeg = { ...s.tightenDeg };
+    const orientationDeg = { ...s.orientationDeg };
+    const driveProgress = { ...s.driveProgress };
+    for (const rid of removed) {
+      delete tightenDeg[rid];
+      delete orientationDeg[rid];
+      delete driveProgress[rid];
+    }
 
     set({
-      completed: completed.slice(0, -1),
-      undoneActions: [...get().undoneActions, lastActionId],
+      completed: completed.slice(0, completed.length - dropCount),
+      undoneActions: [...s.undoneActions, rememberForRedo],
       tightenDeg,
       orientationDeg,
       driveProgress,
-      orientationActionId:
-        get().orientationActionId === lastActionId
-          ? null
-          : get().orientationActionId,
-      driveActionId:
-        get().driveActionId === lastActionId ? null : get().driveActionId,
-      driveKind: get().driveActionId === lastActionId ? null : get().driveKind,
+      orientationActionId: removed.includes(s.orientationActionId as ActionId) ? null : s.orientationActionId,
+      driveActionId: removed.includes(s.driveActionId as ActionId) ? null : s.driveActionId,
+      driveKind: removed.includes(s.driveActionId as ActionId) ? null : s.driveKind,
       ...CLEARED,
     });
   },
@@ -275,10 +284,11 @@ export const useGameStore = create<GameState>()((set, get) => ({
     const s = get();
     if (s.undoneActions.length === 0) return;
     const next = s.undoneActions[s.undoneActions.length - 1];
-    // only re-apply if it is legal again (its prerequisites still hold)
     if (!s.available().some((a) => a.actionId === next)) return;
+    // re-cascade: redoing a component lead re-adds its siblings too
+    const members = memberPlaceIdsForLead(s.furniture?.components, next);
     set({
-      completed: [...s.completed, next],
+      completed: [...s.completed, next, ...members],
       undoneActions: s.undoneActions.slice(0, -1),
       ...CLEARED,
     });
@@ -373,7 +383,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
   beginPickup: (actionId) => {
     const s = get();
     const a = s.furniture?.actions.find((x) => x.actionId === actionId);
-    if (!a || (a.type !== "placePart" && a.type !== "insertFastener")) return;
+    // stagePart is a tray pickup like the other two — taking a sub-assembly carrier out of the box is the same gesture as placing it, just with a different resting target
+    if (!a || !isPickupType(a.type)) return;
     if (s.completed.includes(actionId)) return;
     const legal = s.available().some((x) => x.actionId === actionId);
     if (!legal && s.mode !== "free") return;
