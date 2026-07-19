@@ -1,7 +1,7 @@
 // TODO: settle down the part marked as dev-setting (float mode vs auto return)
 
-import { useEffect, useMemo, useRef } from "react";
-import { useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { OrientationLock } from "expo-screen-orientation";
 import { ImageBackground, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -12,6 +12,7 @@ import { FilamentScene } from "react-native-filament";
 import { AssemblyScene } from "@/src/game/scene/AssemblyScene";
 import {
   createClusterDriver,
+  createDriverRegistry,
   createOffsetDriver,
 } from "@/src/game/scene/offsetDriver";
 import { useSceneState } from "@/src/game/scene/useSceneState";
@@ -64,6 +65,8 @@ import {
 } from "@/src/game/core/evaluation/clusters";
 import { availableInMode } from "@/src/game/core/evaluation/availability";
 import type { FurnitureId } from "@/src/game/core/type";
+import { LoadingOverlay } from "@/src/game/ui/LoadingOverlay";
+import type { Milestone } from "@/src/game/ui/loadingProgress";
 
 // Per-backdrop images (from the on-release engine's set), each with a dark variant. The Background setting picks the key; Dark mode picks the variant.
 const BACKDROPS: Record<string, { light: number; dark: number }> = {
@@ -102,19 +105,41 @@ function GameScreen() {
   const heldDriver = useRef(createOffsetDriver()).current;
   const sinkDriver = useRef(createOffsetDriver()).current;
   const clusterDriver = useRef(createClusterDriver()).current;
+  const pushDrivers = useRef(createDriverRegistry()).current;
+  const slideDriver = useRef(createClusterDriver()).current;
 
   const { id } = useLocalSearchParams<{ id?: string }>();
+  const router = useRouter();
+  // Loading overlay state: covers the scene from target change until data + model are ready (spec: 2026-07-18-loading-screen-design.md). retryKey remounts AssemblyScene to restart a failed GLB load.
+  const [modelReady, setModelReady] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [loaderVisible, setLoaderVisible] = useState(true);
+  const [retryKey, setRetryKey] = useState(0);
+
+  const target: FurnitureId = isPlayable(id as FurnitureId)
+    ? (id as FurnitureId)
+    : "DALFRED";
   useEffect(() => {
-    const target: FurnitureId = isPlayable(id as FurnitureId)
-      ? (id as FurnitureId)
-      : "DALFRED";
+    setModelReady(false);
+    setLoadError(false);
+    setLoaderVisible(true);
     if (useGameStore.getState().furniture?.meta.id === target) return;
-    loadFurnitureById(target).then((f) => {
-      useGameStore.getState().loadFurniture(f);
-    });
-  }, [id]);
+    loadFurnitureById(target)
+      .then((f) => {
+        useGameStore.getState().loadFurniture(f);
+      })
+      .catch(() => setLoadError(true));
+  }, [target, retryKey]);
 
   const furniture = useGameStore((s) => s.furniture);
+  const furnitureMatches = furniture?.meta.id === target;
+  const milestone: Milestone = !furnitureMatches ? 0 : modelReady ? 1 : 0.35;
+  // RNF's useModel has NO error state — a failed GLB just stays "loading" forever — so a stuck model is only detectable by time. 45 s is generous for the 66 MB EKET streaming from Metro in dev.
+  useEffect(() => {
+    if (!loaderVisible || loadError || modelReady) return;
+    const watchdog = setTimeout(() => setLoadError(true), 45000);
+    return () => clearTimeout(watchdog);
+  }, [loaderVisible, loadError, modelReady, retryKey]);
   const stage = useGameStore((s) => {
     const f = s.furniture;
     return f
@@ -258,16 +283,19 @@ function GameScreen() {
     [onPanStart, onPanMove, onPanEnd],
   );
 
-  const { gestureFor, canvasGestureFor, ringOverlay } = usePartDrag({
+  const handleModelReady = useCallback(() => setModelReady(true), []);
+
+  const { gestureFor, canvasGestureFor, ringOverlay, stagedGrabGesture } = usePartDrag({
     manipulator,
     heldDriver,
+    slideDriver,
     getFocusPoint,
     onPanStart,
     onPanMove,
     onPanEnd,
   });
 
-  // Composition identity changes ONLY when the held action or the canvas toggles change (touch-free moments), never on ordinary re-renders. Canvas gestures are attached ONLY when they can do something — with float and canvas-strafe both off, this is byte-identical to the classic pinch + two-finger-pan tree, so a no-op canvas gesture can never win the race and block a pinch (sloppy two-finger starts, zoom mid-drag).
+  // Composition identity changes ONLY when the held action, the canvas toggles, or stagedGrabGesture's own identity change (touch-free moments — usePartDrag recomputes stagedGrabGesture, gated null vs armed, only when the furniture load, the completed set, or the assembly mode changes, never on an ordinary re-render). Canvas gestures are attached ONLY when they can do something — with float and canvas-strafe both off and stagedGrabGesture null, this is byte-identical to the classic pinch + two-finger-pan tree, so a no-op canvas gesture can never win the race and block a pinch (sloppy two-finger starts, zoom mid-drag). This matters for stagedGrabGesture specifically: Gesture.Race resolves at the native ACTIVATION layer before its JS onStart ever runs, so leaving it attached "just in case" and relying on onStart to no-op would have already won the race and dead-legged strafe/pinch on every touch, staged or not — usePartDrag now derives the armed state from stagedGrabCandidates itself (the same predicate the candidate filter uses) so this attach gate can never diverge from it the way the earlier hasStagedOut presence-only gate did.
   const heldAction = sceneState.heldAction;
   const canvasStrafeOn = settings.canvasStrafe;
   const floatOn = settings.releaseBehavior === "float";
@@ -275,16 +303,47 @@ function GameScreen() {
     if (heldAction && (floatOn || canvasStrafeOn)) {
       return Gesture.Race(pinch, pan, canvasGestureFor(heldAction));
     }
-    if (!heldAction && canvasStrafeOn) {
-      return Gesture.Race(pinch, pan, strafePan);
+    if (!heldAction) {
+      // Nothing in hand: a long-press may be reaching for a staged sub-assembly resting on the canvas. It RACES the strafe rather than running alongside it — a held-still press is a grab, 12px of movement is a strafe, and only one of those can be what the player meant. stagedGrabGesture arrives already gated null-vs-armed from usePartDrag, so it is spliced in ONLY when non-null, preserving the exact pre-existing tree (Race(pinch, pan, strafePan) / Race(pinch, pan)) the rest of the time — a long-press wins its Race purely on native activation criteria, so attaching it unconditionally and trusting its onStart to no-op would have blocked strafe and pinch on every touch where there was nothing to grab.
+      if (!stagedGrabGesture) {
+        return canvasStrafeOn
+          ? Gesture.Race(pinch, pan, strafePan)
+          : Gesture.Race(pinch, pan);
+      }
+      return canvasStrafeOn
+        ? Gesture.Race(pinch, pan, strafePan, stagedGrabGesture)
+        : Gesture.Race(pinch, pan, stagedGrabGesture);
     }
     return Gesture.Race(pinch, pan);
-  }, [heldAction, floatOn, canvasStrafeOn, pinch, pan, strafePan, canvasGestureFor]);
+  }, [heldAction, floatOn, canvasStrafeOn, pinch, pan, strafePan, canvasGestureFor, stagedGrabGesture]);
 
-  if (!furniture) return <View style={styles.root} />;
+  // Stable identities: LoadingOverlay's fade effect deps include these; fresh arrows each render re-ran the effect and could cancel the hold timeout mid-beat with the fading latch already set, stranding the overlay.
+  const handleRetry = useCallback(() => {
+    setLoadError(false);
+    setModelReady(false);
+    setRetryKey((k) => k + 1);
+  }, []);
+  const handleBack = useCallback(() => router.back(), [router]);
+  const handleFadedOut = useCallback(() => setLoaderVisible(false), []);
+
+  // The overlay must cover BOTH branches below: the furniture-null branch IS the data-loading window it exists for.
+  const loadingOverlay = loaderVisible ? (
+    <LoadingOverlay
+      key={retryKey}
+      milestone={milestone}
+      error={loadError}
+      onRetry={handleRetry}
+      onBack={handleBack}
+      onFadedOut={handleFadedOut}
+    />
+  ) : null;
 
   return (
-    <ImageBackground
+    <>
+      {!furniture ? (
+        <View style={styles.root} />
+      ) : (
+        <ImageBackground
       // Focus Mode renders its backdrop this way (ImageBackground as the root).
       // A separate <Image style={absoluteFill}> here scaled the artwork
       // differently for the same file, so mirror the working structure exactly.
@@ -302,12 +361,15 @@ function GameScreen() {
       <GestureDetector gesture={sceneGesture}>
         <View style={styles.sceneWrap}>
           <AssemblyScene
-            key={renderStyle}
+            key={`${renderStyle}:${retryKey}`}
             cameraManipulator={manipulator}
             sceneState={sceneState}
             heldDriver={heldDriver}
             sinkDriver={sinkDriver}
             clusterDriver={clusterDriver}
+            pushDrivers={pushDrivers}
+            slideDriver={slideDriver}
+            onModelReady={handleModelReady}
           />
         </View>
       </GestureDetector>
@@ -425,7 +487,7 @@ function GameScreen() {
         !sceneState.activeTighten &&
         !orientationAction &&
         !driveAction ? (
-          <BeatControl action={sceneState.activeBeat} />
+          <BeatControl action={sceneState.activeBeat} pushDrivers={pushDrivers} />
         ) : null}
         <View style={styles.joystickZone}>
           <Joystick
@@ -457,7 +519,10 @@ function GameScreen() {
       </View>
       {ringOverlay}
       <GreenFlash trigger={completedCount} />
-    </ImageBackground>
+        </ImageBackground>
+      )}
+      {loadingOverlay}
+    </>
   );
 }
 

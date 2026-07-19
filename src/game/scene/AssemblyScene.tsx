@@ -1,3 +1,4 @@
+import { useEffect, useMemo } from "react";
 import { StyleSheet } from "react-native";
 import {
   Camera,
@@ -9,14 +10,16 @@ import {
 } from "react-native-filament";
 import { useGameStore } from "@/src/game/core/store";
 import type { PartId } from "@/src/game/core/type";
+import { stageOffsetMap } from "@/src/game/core/model/staging";
 import { FOCAL_LENGTH_MM } from "./cameraConfig";
 import { CEL_IBL_INTENSITY, getLightRig, IBL_INTENSITY } from "./lighting";
-import type { ClusterDriver, OffsetDriver } from "./offsetDriver";
+import type { ClusterDriver, DriverRegistry, OffsetDriver } from "./offsetDriver";
 import { PartModel } from "./PartModel";
+import { buildPushDriverMap } from "./pushOpen";
 import { ShadowPlane } from "./ShadowPlane";
 import { ToolModel } from "./ToolModel";
 import { SceneState } from "./useSceneState";
-import { useShaderStyle } from "./shaders";
+import { ShaderAssetsProvider, useShaderStyle } from "./shaders";
 
 
 export type OrbitManipulator = ReturnType<typeof useCameraManipulator>;
@@ -27,6 +30,12 @@ interface Props {
   heldDriver: OffsetDriver;
   sinkDriver: OffsetDriver;
   clusterDriver: ClusterDriver;
+  /** Telescoping-group drivers for the push-open beat (shared with BeatControl). */
+  pushDrivers: DriverRegistry;
+  /** Drives a component's non-lead bodies while the lead is held/dragged ("riding" mode). */
+  slideDriver: ClusterDriver;
+  /** Fired when the shared GLB reports parsed ("loaded") — the play screen's loading overlay keys its last milestone off this. Re-fires on remounts (style switch, retry); the listener must be idempotent. */
+  onModelReady?: () => void;
 }
 
 /** The 3D workbench: camera, lights, and every part rendered by its game-state mode. */
@@ -36,6 +45,9 @@ export function AssemblyScene({
   heldDriver,
   sinkDriver,
   clusterDriver,
+  pushDrivers,
+  slideDriver,
+  onModelReady,
 }: Props) {
   const furniture = useGameStore((s) => s.furniture);
   const renderStyle = useGameStore((s) => s.renderStyle);
@@ -67,6 +79,20 @@ export function AssemblyScene({
 
 
   const { modes, heldAction, activeTighten } = sceneState;
+  const pushMap = useMemo(
+    () =>
+      furniture?.pushOpen
+        ? buildPushDriverMap(furniture.pushOpen, pushDrivers)
+        : {},
+    [furniture, pushDrivers],
+  );
+  const stageOffsets = useMemo(
+    () => (furniture ? stageOffsetMap(furniture.parts) : {}),
+    [furniture],
+  );
+  useEffect(() => {
+    if (model.state === "loaded") onModelReady?.();
+  }, [model.state, onModelReady]);
   if (!furniture) return null;
   const driveAction = driveActionId
     ? furniture.actions.find((a) => a.actionId === driveActionId) ?? null
@@ -113,19 +139,24 @@ export function AssemblyScene({
       {furniture.shadow && anySeated && backdrop === "clear" ? (
         <ShadowPlane source={furniture.shadow} />
       ) : null}
-      {(Object.keys(furniture.parts) as PartId[]).map((id) => (
-        <PartModel
-          key={id}
-          def={furniture.parts[id]}
-          mode={modes[id] ?? "hidden"}
-          model={model}
-          heldDriver={heldDriver}
-          sinkDriver={sinkDriver}
-          clusterDriver={clusterDriver}
-          tightening={activeTighten?.partId === id}
-          ghostAtLoosePose={heldAction?.type === "insertFastener"}
-        />
-      ))}
+      <ShaderAssetsProvider>
+        {(Object.keys(furniture.parts) as PartId[]).map((id) => (
+          <PartModel
+            key={id}
+            def={furniture.parts[id]}
+            mode={modes[id] ?? "hidden"}
+            model={model}
+            heldDriver={heldDriver}
+            sinkDriver={sinkDriver}
+            clusterDriver={clusterDriver}
+            pushDriver={pushMap[id]}
+            slideDriver={slideDriver}
+            stageOffset={stageOffsets[id]}
+            tightening={activeTighten?.partId === id}
+            ghostAtLoosePose={heldAction?.type === "insertFastener"}
+          />
+        ))}
+      </ShaderAssetsProvider>
       {activeTighten?.tool &&
       activeTighten.partId &&
       toolEquipped(activeTighten.tool) &&
