@@ -12,7 +12,8 @@
 // scene, so a scene-level material apply is superseded by the components' own
 // material effects.
 
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { useBuffer, useFilamentContext } from "react-native-filament";
 import type { Entity } from "react-native-filament";
 import { useGameStore } from "@/src/game/core/store";
@@ -442,6 +443,47 @@ export function useShaderStyle(): ShaderStyleId {
   return styleFor(styles, renderStyle)?.shader ?? STYLE_SHADER[renderStyle];
 }
 
+/** The active look's material + texture buffers, loaded ONCE for the whole scene and shared by every entity via context. RNF's useBuffer has no cache — when each entity loaded its own copies, every part MOUNT re-fetched ~4 assets, and a pickup/snap (which remounts 3-4 entity components) froze the JS thread for seconds while filament kept drawing the half-transitioned scene. */
+type LoadedBuffer = ReturnType<typeof useBuffer>;
+interface ShaderAssets {
+  buffer?: LoadedBuffer;
+  grain?: LoadedBuffer;
+  side?: LoadedBuffer;
+  metal?: LoadedBuffer;
+}
+const ShaderAssetsCtx = createContext<ShaderAssets>({});
+
+/** Only mounted for a shader look ("toon"/"ink") — hooks can't be conditional, but a component boundary can be. */
+function ShaderAssetsLoader({
+  style,
+  children,
+}: {
+  style: Exclude<ShaderStyleId, "off">;
+  children: ReactNode;
+}) {
+  const buffer = useBuffer({ source: SOURCES[style], releaseOnUnmount: false });
+  const grain = useBuffer({ source: GRAIN_MAP, releaseOnUnmount: false });
+  const side = useBuffer({ source: SIDE_MAP, releaseOnUnmount: false });
+  const metal = useBuffer({ source: METAL_MAP, releaseOnUnmount: false });
+  const value = useMemo(
+    () => ({ buffer, grain, side, metal }),
+    [buffer, grain, side, metal],
+  );
+  return (
+    <ShaderAssetsCtx.Provider value={value}>{children}</ShaderAssetsCtx.Provider>
+  );
+}
+
+/** Wrap the scene's PartModels in this. The "off" look (realistic/cozy/cartoon) renders the GLB's own materials and must not touch the asset loader at all — it gets the empty context. */
+export function ShaderAssetsProvider({ children }: { children: ReactNode }) {
+  const style = useShaderStyle();
+  return style === "off" ? (
+    <>{children}</>
+  ) : (
+    <ShaderAssetsLoader style={style}>{children}</ShaderAssetsLoader>
+  );
+}
+
 /**
  * One Material per style, created ON THE RENDER THREAD.
  *
@@ -538,16 +580,8 @@ export function useShaderOverride(
 ) {
   const { engine, renderableManager, workletContext } = useFilamentContext();
 
-  // useBuffer can't be called conditionally; load whichever source is active and let
-  // the effect decide whether to use it. ("off" still needs a source, so park on the
-  // ink buffer — it is cached and never applied.)
-  const buffer = useBuffer({
-    source: style === "off" ? SOURCES.ink : SOURCES[style],
-    releaseOnUnmount: false,
-  });
-  const grain = useBuffer({ source: GRAIN_MAP, releaseOnUnmount: false });
-  const side = useBuffer({ source: SIDE_MAP, releaseOnUnmount: false });
-  const metalTex = useBuffer({ source: METAL_MAP, releaseOnUnmount: false });
+  // Shared scene-level buffers (ShaderAssetsProvider) — an entity mount must never load assets itself; per-entity useBuffer re-fetched everything on every mode-transition remount and froze the JS thread (the pickup/snap stall). Empty context under the "off" look, which never reads them.
+  const { buffer, grain, side, metal: metalTex } = useContext(ShaderAssetsCtx);
 
   // The material resolves ASYNCHRONOUSLY (it is built on the render thread), so this
   // state is what re-runs the apply-effect once it lands. Until then the part keeps its
