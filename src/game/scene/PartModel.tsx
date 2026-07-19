@@ -1,5 +1,5 @@
 // TODO: settle down the part marked as dev
-import { useEffect, useMemo } from "react";
+import { memo, useEffect, useMemo } from "react";
 import { useFilamentContext } from "react-native-filament";
 import type {
   Entity,
@@ -9,6 +9,7 @@ import type {
 } from "react-native-filament";
 import { FitState } from "@/src/game/core/geometry/fit";
 import { looseDelta } from "@/src/game/core/geometry/staging";
+import { stageShiftFor } from "@/src/game/core/model/staging";
 import {
   engageAxis,
   pressParkInfo,
@@ -134,6 +135,12 @@ interface Props {
   sinkDriver: OffsetDriver;
   /** Drives the whole moving cluster's offset while it's combined in (owned by ClusterTray). */
   clusterDriver: ClusterDriver;
+  /** Drives this part's telescoping group during the push-open beat. A flush part with a pushDriver registers against it (offset 0 = identical to static) so the beat can travel the group without remounting anything. */
+  pushDriver?: ClusterDriver;
+  /** Drives a component's non-lead bodies while the lead is being dragged ("riding" mode), so the whole slide reads as one object in hand. Optional/defensive like pushDriver — falls back to a static pose if not supplied. */
+  slideDriver?: ClusterDriver;
+  /** World offset this part rests at while its sub-assembly is out ("staged" mode) — the CARRIER's stageOffset, which its hardware shares. */
+  stageOffset?: Vec3;
   /** True when this fastener's tighten gesture is active. */
   tightening?: boolean;
   /** Ghost drop target is the loose pose (inserts) instead of the baked pose. */
@@ -217,7 +224,11 @@ function Ghost({
     const done = new Set(completed);
     let offset: readonly number[] = [0, 0, 0];
     if (atLoosePose) {
-      offset = looseDelta(def, engageAxis(def, done));
+      const base = looseDelta(def, engageAxis(def, done));
+      // A fastener fitted into a sub-assembly that is currently OUT of the furniture must preview where the part will really go — in the rod's end, out on the canvas — not at the socket the rod will eventually occupy. Same shift the drop target uses (core/scene/targets.ts), from the same function, so the ghost and the target cannot disagree.
+      const parts = useGameStore.getState().furniture?.parts;
+      const shift = parts ? stageShiftFor(def, parts) : undefined;
+      offset = shift ? [base[0] + shift[0], base[1] + shift[1], base[2] + shift[2]] : base;
     } else {
       const f = useGameStore.getState().furniture;
       const snap = f?.actions.find(
@@ -459,6 +470,9 @@ function StaticEntity({
     return () => scene.removeEntity(entity);
   }, [entity, scene]);
 
+  // Keyed by VALUE, not array identity — callers build the offset/rotation arrays fresh every render (looseDelta, flushScrew), and re-placing all ~100 static parts natively on every scene re-render is exactly the churn that stutters a drag.
+  const offsetKey = `${offset[0]},${offset[1]},${offset[2]}`;
+  const rotationKey = rotation ? rotation.join(",") : "";
   useEffect(() => {
     if (!entity) return;
     placeEntity(
@@ -471,7 +485,8 @@ function StaticEntity({
       ],
       rotation ?? def.pose.rotation,
     );
-  }, [entity, transformManager, def, offset, rotation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entity, transformManager, def, offsetKey, rotationKey]);
 
   useEffect(() => {
     if (entity) applyThemeMaterial(renderableManager, entity, material);
@@ -494,13 +509,16 @@ function HiddenEntity({ model, def }: { model: FilamentModel; def: PartDef }) {
   return null;
 }
 
-export function PartModel({
+function PartModelImpl({
   def,
   mode,
   model,
   heldDriver,
   sinkDriver,
   clusterDriver,
+  pushDriver,
+  slideDriver,
+  stageOffset,
   tightening,
   ghostAtLoosePose,
 }: Props) {
@@ -544,7 +562,15 @@ export function PartModel({
         <HiddenEntity key={`${def.partId}-hidden`} model={model} def={def} />
       );
     case "flush":
-      return (
+      // A telescoping-group member registers with its push driver (offset 0 renders exactly like static); the transient screw-spin pose keeps the static path since it needs its own offset/rotation.
+      return pushDriver && !flushScrew ? (
+        <ClusterDrivenEntity
+          key={`${def.partId}-flush-push`}
+          model={model}
+          def={def}
+          driver={pushDriver}
+        />
+      ) : (
         <StaticEntity
           key={`${def.partId}-flush`}
           model={model}
@@ -564,6 +590,33 @@ export function PartModel({
           />
           <Ghost model={model} def={def} atLoosePose={false} />
         </>
+      );
+    case "staged":
+      // Resting out in front of the furniture as part of a sub-assembly: the carrier the player took out, or a piece of hardware already pressed into it. Both sit at the CARRIER's stageOffset — a fastener's own def has none, so the offset is passed down by the scene rather than read from `def` here.
+      return (
+        <StaticEntity
+          key={`${def.partId}-staged`}
+          model={model}
+          def={def}
+          offset={stageOffset ?? [0, 0, 0]}
+        />
+      );
+    case "riding":
+      // Sibling body of a held component lead: tracks the lead's live drag offset via slideDriver so the slide reads as one solid object in hand. No driver supplied → fall back to the static baked pose (defensive, matches the "flush"/pushDriver pattern).
+      return slideDriver ? (
+        <ClusterDrivenEntity
+          key={`${def.partId}-riding`}
+          model={model}
+          def={def}
+          driver={slideDriver}
+        />
+      ) : (
+        <StaticEntity
+          key={`${def.partId}-riding-static`}
+          model={model}
+          def={def}
+          offset={[0, 0, 0]}
+        />
       );
     case "loose":
       return tightening ? (
@@ -625,3 +678,25 @@ export function PartModel({
     }
   }
 }
+
+/** useModel may hand back a fresh state object per render; two models are the same for rendering purposes when they're in the same load state holding the same asset. */
+const modelEqual = (a: FilamentModel, b: FilamentModel) =>
+  a === b ||
+  (a.state === b.state &&
+    (a as { asset?: unknown }).asset === (b as { asset?: unknown }).asset);
+
+/** Memoized: AssemblyScene re-renders all ~100 PartModels on every drag-time store flip (matched socket, fit state), but only parts whose mode/flags actually changed need to re-render — the rest would just re-run their hooks and effects for nothing, and that churn on the JS thread is what stutters the drag gesture. */
+export const PartModel = memo(
+  PartModelImpl,
+  (p, n) =>
+    p.def === n.def &&
+    p.mode === n.mode &&
+    modelEqual(p.model, n.model) &&
+    p.heldDriver === n.heldDriver &&
+    p.sinkDriver === n.sinkDriver &&
+    p.clusterDriver === n.clusterDriver &&
+    p.pushDriver === n.pushDriver &&
+    p.slideDriver === n.slideDriver &&
+    p.tightening === n.tightening &&
+    p.ghostAtLoosePose === n.ghostAtLoosePose,
+);
