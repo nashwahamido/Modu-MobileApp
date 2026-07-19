@@ -1,6 +1,6 @@
 // TODO: settle down the part marked as dev-setting (float mode vs auto return)
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { OrientationLock } from "expo-screen-orientation";
 import { ImageBackground, StyleSheet, Text, View } from "react-native";
@@ -283,9 +283,7 @@ function GameScreen() {
     [onPanStart, onPanMove, onPanEnd],
   );
 
-  const handleModelReady = useCallback(() => setModelReady(true), []);
-
-  const { gestureFor, canvasGestureFor, ringOverlay, stagedGrabGesture } = usePartDrag({
+  const { gestureFor, canvasGestureFor, ringOverlay } = usePartDrag({
     manipulator,
     heldDriver,
     slideDriver,
@@ -295,7 +293,7 @@ function GameScreen() {
     onPanEnd,
   });
 
-  // Composition identity changes ONLY when the held action, the canvas toggles, or stagedGrabGesture's own identity change (touch-free moments — usePartDrag recomputes stagedGrabGesture, gated null vs armed, only when the furniture load, the completed set, or the assembly mode changes, never on an ordinary re-render). Canvas gestures are attached ONLY when they can do something — with float and canvas-strafe both off and stagedGrabGesture null, this is byte-identical to the classic pinch + two-finger-pan tree, so a no-op canvas gesture can never win the race and block a pinch (sloppy two-finger starts, zoom mid-drag). This matters for stagedGrabGesture specifically: Gesture.Race resolves at the native ACTIVATION layer before its JS onStart ever runs, so leaving it attached "just in case" and relying on onStart to no-op would have already won the race and dead-legged strafe/pinch on every touch, staged or not — usePartDrag now derives the armed state from stagedGrabCandidates itself (the same predicate the candidate filter uses) so this attach gate can never diverge from it the way the earlier hasStagedOut presence-only gate did.
+  // Composition identity changes ONLY when the held action or the canvas toggles change (touch-free moments), never on ordinary re-renders. Canvas gestures are attached ONLY when they can do something — with float and canvas-strafe both off, this is byte-identical to the classic pinch + two-finger-pan tree, so a no-op canvas gesture can never win the race and block a pinch (sloppy two-finger starts, zoom mid-drag).
   const heldAction = sceneState.heldAction;
   const canvasStrafeOn = settings.canvasStrafe;
   const floatOn = settings.releaseBehavior === "float";
@@ -303,47 +301,32 @@ function GameScreen() {
     if (heldAction && (floatOn || canvasStrafeOn)) {
       return Gesture.Race(pinch, pan, canvasGestureFor(heldAction));
     }
-    if (!heldAction) {
-      // Nothing in hand: a long-press may be reaching for a staged sub-assembly resting on the canvas. It RACES the strafe rather than running alongside it — a held-still press is a grab, 12px of movement is a strafe, and only one of those can be what the player meant. stagedGrabGesture arrives already gated null-vs-armed from usePartDrag, so it is spliced in ONLY when non-null, preserving the exact pre-existing tree (Race(pinch, pan, strafePan) / Race(pinch, pan)) the rest of the time — a long-press wins its Race purely on native activation criteria, so attaching it unconditionally and trusting its onStart to no-op would have blocked strafe and pinch on every touch where there was nothing to grab.
-      if (!stagedGrabGesture) {
-        return canvasStrafeOn
-          ? Gesture.Race(pinch, pan, strafePan)
-          : Gesture.Race(pinch, pan);
-      }
-      return canvasStrafeOn
-        ? Gesture.Race(pinch, pan, strafePan, stagedGrabGesture)
-        : Gesture.Race(pinch, pan, stagedGrabGesture);
+    if (!heldAction && canvasStrafeOn) {
+      return Gesture.Race(pinch, pan, strafePan);
     }
     return Gesture.Race(pinch, pan);
-  }, [heldAction, floatOn, canvasStrafeOn, pinch, pan, strafePan, canvasGestureFor, stagedGrabGesture]);
+  }, [heldAction, floatOn, canvasStrafeOn, pinch, pan, strafePan, canvasGestureFor]);
 
-  // Stable identities: LoadingOverlay's fade effect deps include these; fresh arrows each render re-ran the effect and could cancel the hold timeout mid-beat with the fading latch already set, stranding the overlay.
-  const handleRetry = useCallback(() => {
-    setLoadError(false);
-    setModelReady(false);
-    setRetryKey((k) => k + 1);
-  }, []);
-  const handleBack = useCallback(() => router.back(), [router]);
-  const handleFadedOut = useCallback(() => setLoaderVisible(false), []);
-
-  // The overlay must cover BOTH branches below: the furniture-null branch IS the data-loading window it exists for.
+  // The overlay must cover BOTH returns: the furniture-null early return IS the data-loading window it exists for.
   const loadingOverlay = loaderVisible ? (
     <LoadingOverlay
       key={retryKey}
       milestone={milestone}
       error={loadError}
-      onRetry={handleRetry}
-      onBack={handleBack}
-      onFadedOut={handleFadedOut}
+      onRetry={() => {
+        setLoadError(false);
+        setModelReady(false);
+        setRetryKey((k) => k + 1);
+      }}
+      onBack={() => router.back()}
+      onFadedOut={() => setLoaderVisible(false)}
     />
   ) : null;
 
+  if (!furniture) return <View style={styles.root}>{loadingOverlay}</View>;
+
   return (
-    <>
-      {!furniture ? (
-        <View style={styles.root} />
-      ) : (
-        <ImageBackground
+    <ImageBackground
       // Focus Mode renders its backdrop this way (ImageBackground as the root).
       // A separate <Image style={absoluteFill}> here scaled the artwork
       // differently for the same file, so mirror the working structure exactly.
@@ -369,7 +352,7 @@ function GameScreen() {
             clusterDriver={clusterDriver}
             pushDrivers={pushDrivers}
             slideDriver={slideDriver}
-            onModelReady={handleModelReady}
+            onModelReady={() => setModelReady(true)}
           />
         </View>
       </GestureDetector>
@@ -519,10 +502,8 @@ function GameScreen() {
       </View>
       {ringOverlay}
       <GreenFlash trigger={completedCount} />
-        </ImageBackground>
-      )}
       {loadingOverlay}
-    </>
+    </ImageBackground>
   );
 }
 
