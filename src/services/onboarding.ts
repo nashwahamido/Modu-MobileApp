@@ -39,9 +39,39 @@ export async function saveOnboardingResults(input: OnboardingSaveInput) {
   return { skipped: false as const };
 }
 
-export async function saveSelectedAvatarMode(_modeId: ModeId) {
-  // The current Supabase schema does not store avatar/mode on user_profile.
-  // Keep this as a no-op so the prototype confirmation flow remains intact.
+export async function saveSelectedAvatarMode(modeId: ModeId) {
+  const { data: sessionData, error: sessionError } =
+    await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+
+  const user = sessionData.session?.user;
+  if (!user) {
+    return { skipped: true as const };
+  }
+
+  const { data: latestResult, error: selectError } = await supabase
+    .from("onboarding_results")
+    .select("answers, primary_mode, secondary_mode")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (selectError) throw selectError;
+  if (latestResult?.primary_mode === modeId) {
+    return { skipped: false as const };
+  }
+
+  const { error: insertError } = await supabase
+    .from("onboarding_results")
+    .insert({
+      user_id: user.id,
+      answers: latestResult?.answers ?? {},
+      primary_mode: modeId,
+      secondary_mode: latestResult?.secondary_mode ?? modeId,
+    });
+
+  if (insertError) throw insertError;
   return { skipped: false as const };
 }
 
