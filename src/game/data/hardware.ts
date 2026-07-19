@@ -97,7 +97,8 @@ const HARDWARE_RAW = {
   // screw110519 (drawer-back screw) is already defined above — shared article number
   dowel145572: {
     tool: "hand",
-    motion: "strike",
+    // the manual locks this one by ROTATING the knurled far end a quarter turn, not by tapping it home like an ordinary dowel
+    motion: "turn",
     label: { standard: "Dowel", simple: "Peg" },
     note: "wooden dowel pressed into the drawer front",
   },

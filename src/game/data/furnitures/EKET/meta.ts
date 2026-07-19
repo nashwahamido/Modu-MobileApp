@@ -1,7 +1,4 @@
-import {
-  expandFastenerRules,
-  withOrder,
-} from "@/src/game/core/composition/composeActions";
+import { composeFurnitureActions } from "@/src/game/core/composition/composeActions";
 import { applyStructure } from "@/src/game/core/model/liaisons";
 import { metaCounts } from "@/src/game/core/composition/metaCounts";
 import { FurnitureMeta } from "@/src/game/core/type";
@@ -11,9 +8,11 @@ import { ALL_PART_IDS, PARTS } from "./parts.gen";
 import { thumbnail } from "./thumbs.gen";
 
 const P = applyStructure(PARTS, STRUCTURE);
-export const ACTIONS = withOrder(
-  [...AUTHORED_ACTIONS, ...expandFastenerRules(FASTENER_RULES, P, HARDWARE)],
+export const ACTIONS = composeFurnitureActions(
+  AUTHORED_ACTIONS,
+  FASTENER_RULES,
   P,
+  HARDWARE,
 );
 
 export const EKET_META: FurnitureMeta = {

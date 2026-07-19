@@ -1,21 +1,28 @@
 import { applyStructure, buildLiaisons } from "@/src/game/core/model/liaisons";
+import { buildComponents } from "@/src/game/core/model/components";
 import { buildInstructions } from "@/src/game/core/presentation/instructions";
 import { Furniture, PartDef } from "@/src/game/core/type";
 import { assertValidFurniture } from "@/src/game/core/composition/validateFurniture";
 import { composeLabels } from "@/src/game/core/composition/composeLabels";
 import { HARDWARE } from "@/src/game/data/hardware";
 import { toolsUsed } from "@/src/game/data/tools";
-import { BEATS, CLUSTERS, GATES, LABELS, PUSH_OPEN, STRUCTURE } from "./authored";
+import { BEATS, CLUSTERS, COMPONENTS, GATES, LABELS, PUSH_OPEN, STRUCTURE } from "./authored";
 import { ACTIONS, EKET_META } from "./meta";
 import { PARTS } from "./parts.gen";
 import { clusterThumbs, thumbs } from "./thumbs.gen";
 
-const P = PARTS as Record<string, PartDef>;
-
 const PARTS_WITH_STRUCTURE = applyStructure(PARTS, STRUCTURE);
 const LIAISONS = buildLiaisons(PARTS_WITH_STRUCTURE);
+const COMPONENTS_IDX = buildComponents(COMPONENTS, PARTS_WITH_STRUCTURE);
 const LABELS_ALL = composeLabels(LABELS, PARTS_WITH_STRUCTURE, HARDWARE);
-const INSTRUCTIONS = buildInstructions(ACTIONS, P, LABELS_ALL, BEATS, CLUSTERS);
+// the STRUCTURED parts, not the raw generated ones: step text keys off authored fields (a staged carrier's stageOffset picks the "pick the sub-assembly back up" wording), which only exist after applyStructure
+const INSTRUCTIONS = buildInstructions(
+  ACTIONS,
+  PARTS_WITH_STRUCTURE as Record<string, PartDef>,
+  LABELS_ALL,
+  BEATS,
+  CLUSTERS,
+);
 
 const model = require("../../../../assets/models/furnitures/EKET/EKET.glb");
 
@@ -26,6 +33,7 @@ export const EKET: Furniture = {
   actions: ACTIONS,
   gates: GATES,
   liaisons: LIAISONS,
+  components: COMPONENTS_IDX,
   clusters: CLUSTERS,
   thumbs,
   clusterThumbs,

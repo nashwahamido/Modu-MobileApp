@@ -1,3 +1,5 @@
+import type { ComponentIndex } from "@/src/game/core/model/components";
+
 export type Vec3 = readonly [number, number, number];
 export type Quat = readonly [number, number, number, number];
 
@@ -14,9 +16,10 @@ export type PartId = string & Brand<"PartId">;
 export type GroupId = string & Brand<"GroupId">;
 export type ActionId = string & Brand<"ActionId">;
 export type ClusterId = string & Brand<"ClusterId">;
+export type ComponentId = string & Brand<"ComponentId">;
 export type LiaisonId = string & Brand<"LiaisonId">;
 
-export type FurnitureId = "DALFRED" | "LACK" | "MALM";
+export type FurnitureId = "DALFRED" | "LACK" | "EKET";
 export type BrandId = "IKEA" | "Others";
 export type ToolId = "allenkey" | "mallet" | "hammer" | "screwdriver" | "hand";
 
@@ -83,6 +86,10 @@ export interface StructuralFields {
   seed?: boolean;
   unstable?: boolean;
   placeDir?: Vec3;
+  /** Park distance (m) for this part's slide/press staging, overriding the engagement defaults — small fittings park a few cm off their seat, not the panel-scale backoff. */
+  parkBackoff?: number;
+  /** World-space offset (m) from this part's assembled pose to its SUB-ASSEMBLY rest pose. Presence of this field is what makes a part staged: a `stagePart` beat is generated ahead of its placement, hardware attached to it may be fitted while it rests out there, and a second placement gesture carries the finished sub-assembly home (see model/staging.ts). */
+  stageOffset?: Vec3;
 }
 export interface FastenerFields {
   fastenerKind?: FastenerKind;
@@ -127,6 +134,7 @@ export interface ClusterDef {
 }
 
 export type ActionType =
+  | "stagePart"
   | "placePart"
   | "insertFastener"
   | "tightenFastener"
@@ -135,7 +143,8 @@ export type ActionType =
   | "combineClusters"
   | "verify";
 
-export type DriveMotion = "spin" | "turn" | "strike";
+/** How a tighten/drive LOOKS. Resolved from HARDWARE.motion ?? the kind default. `press` is the keyhole-bolt push-fit (EKET drawer fronts). */
+export type DriveMotion = "spin" | "turn" | "strike" | "press";
 
 export interface AssemblyAction {
   actionId: ActionId;
@@ -172,6 +181,33 @@ export interface LabelSet {
   audio?: number;
 }
 export type LabelMap = Record<GroupId, LabelSet>;
+
+/** One rigid group of a telescoping mechanism and how far it travels, as a fraction of the full pull-out (frame 0 — omitted; middle ½; carriage, clip and the drawer box 1). Levels animate one after another. */
+export interface PushOpenGroup {
+  level: string;
+  ratio: number;
+  parts: readonly PartId[];
+}
+/** The push-to-open finishing beat: which parts telescope, along which world axis, how far — played when the `beatActionId` beat's gesture fires. */
+export interface PushOpenSpec {
+  axis: Vec3;
+  /** Full open travel of the drawer, in meters. */
+  distance: number;
+  beatActionId: string;
+  groups: readonly PushOpenGroup[];
+}
+
+/** A set of bodies the player handles as ONE object: one tray card, one drag, one placement gesture. The bodies keep their own actions, poses and engagements — a component is a PRESENTATION unit, not a physical one. */
+export interface ComponentDef {
+  id: ComponentId;
+  label: LabelSet;
+  /** Every body the gesture places, INCLUDING the lead. Must be ≥2. */
+  bodies: readonly PartId[];
+  /** The body whose place action the gesture drives; siblings ride its completion. */
+  lead: PartId;
+  thumb?: ThumbSet;
+}
+export type ComponentMap = Record<ComponentId, ComponentDef>;
 
 export interface MaterialParams {
   baseColor?: Vec3;
@@ -222,6 +258,10 @@ export interface Furniture {
   tools?: Partial<ToolMap>;
   instructions: InstructionSet;
   labels: LabelMap;
+  /** Telescoping drawer beat (EKET); absent = the finishing beat stays symbolic. */
+  pushOpen?: PushOpenSpec;
+  /** Derived body→component lookups (see model/components.ts); absent = no multi-body components. */
+  components?: ComponentIndex;
   xpPerStep: number;
   xpBonusOnComplete: number;
 }
