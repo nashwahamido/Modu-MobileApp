@@ -5,7 +5,15 @@
   "scripts": {
     "start": "npx expo start",
     "android": "npx expo run:android",
-    "ios": "npx expo run:ios"
+    "ios": "npx expo run:ios",
+    "test:unit": "node --import tsx --test \"src/game/**/*.test.ts\"",
+    "processGLB": "node tools/processGLB/processGLB.mjs",
+    "processGLB:test": "node --test tools/processGLB/test/",
+    "furniture:validate": "node --import tsx src/game/helper-scripts/validate-furniture.ts",
+    "furniture:test": "node --import tsx src/game/helper-scripts/engine-test.ts",
+    "thumbs": "node src/game/helper-scripts/thumbs.mjs",
+    "render:thumbs:blender": "node src/game/helper-scripts/render-thumbs-blender.mjs",
+    "gen:thumbs": "node src/game/helper-scripts/gen-thumbs.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.0",
