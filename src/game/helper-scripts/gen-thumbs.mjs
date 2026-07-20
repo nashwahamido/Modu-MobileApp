@@ -204,25 +204,26 @@ ${clusterExport}`,
 
 function generateForFurniture(id) {
   const parts = readPartsGen(id);
-  const partsDir = path.join(MODEL_ROOT, id, "parts");
   const lightParts = path.join(thumbDir(id, "light"), "parts");
-  if (!parts.length || !fs.existsSync(partsDir) || !fs.existsSync(lightParts)) return;
+  if (!parts.length || !fs.existsSync(lightParts)) return;
 
-  const pngFiles = new Set(fs.readdirSync(lightParts).filter((file) => file.endsWith(".png")));
+  // Thumbnail bases come from the rendered PNGs themselves. (The Blender renderer
+  // used to also emit a per-part GLB purely as a name index; that's gone now, so
+  // enumerate the images directly. Older furniture whose parts/ GLBs still exist
+  // is unaffected — the PNG basenames match the GLB basenames one-to-one.)
+  const partThumbBases = sortNatural(fs.readdirSync(lightParts))
+    .filter((file) => file.endsWith(".png"))
+    .map((file) => path.basename(file, ".png"));
+
   const darkPartsDir = path.join(thumbDir(id, "dark"), "parts");
   const darkParts = fs.existsSync(darkPartsDir)
     ? new Set(fs.readdirSync(darkPartsDir).filter((file) => file.endsWith(".png")))
     : new Set();
 
-  const partThumbBases = sortNatural(fs.readdirSync(partsDir))
-    .filter((file) => file.endsWith(".glb"))
-    .map((file) => path.basename(file, ".glb"));
-
   const availableByBase = new Map();
   const parsedThumbs = [];
   for (const base of partThumbBases) {
     const file = `${base}.png`;
-    if (!pngFiles.has(file)) continue;
     availableByBase.set(base, file);
     parsedThumbs.push({ ...parsePartThumbBase(base), file });
   }
