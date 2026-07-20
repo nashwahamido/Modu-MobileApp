@@ -104,6 +104,38 @@ export function clusterPrereqsMet(
 }
 
 /** A combineClusters action is ready when all (prerequisite) clusters are  complete. Uses authored ClusterDef ids when present, else the clusters  derived from parts. Single-combine furniture = "all clusters"; multi-combine  would reference specific clusters per action (future). */
+/**
+ * Which node of the BUILD MAP the player is on, 1-based: base → seat → combine.
+ *
+ * Deliberately NOT the authored `stage` number. Those count the beats inside the whole
+ * build (DALFRED authors its combine as stage 4), which is the right unit for gating what
+ * may be done next but the wrong one for telling the player where they are: the map shows
+ * three nodes, so "Stage 4 of 3" is nonsense. This counts the same things the map draws.
+ */
+export function buildPhase(
+  f: Furniture,
+  done: ReadonlySet<ActionId>,
+  activeCluster: ClusterId | null,
+): { index: number; total: number } {
+  const ids = focusableClusterIds(f);
+
+  // A build with no sub-assemblies to choose between (LACK) has no map phases to count, so
+  // it falls back to the AUTHORED stage — which is the only meaningful progress marker it
+  // has. Counting nodes there would pin it at "Stage 1" for the whole build.
+  if (ids.length === 0) {
+    const stages = f.actions.map((a) => a.stage);
+    return {
+      index: currentStageForClusterFocus(f, done, activeCluster),
+      total: stages.length ? Math.max(...stages) : 1,
+    };
+  }
+
+  const total = ids.length + 1; // the sub-assemblies, plus combining them
+  if (combineReady(f, done)) return { index: total, total };
+  const i = activeCluster ? ids.indexOf(activeCluster) : -1;
+  return { index: i >= 0 ? i + 1 : 1, total };
+}
+
 export function combineReady(
   f: Furniture,
   done: ReadonlySet<ActionId>,

@@ -18,7 +18,8 @@ import { PARTS } from "./parts.gen";
 const P = PARTS;
 
 export const META = {
-  name: "Dalfred Stool",
+  // IKEA product names are always set in caps.
+  name: "DALFRED Stool",
   brand: "IKEA",
   category: "Table & Chair",
   difficulty: 2,
@@ -95,8 +96,8 @@ export const AUTHORED_ACTIONS: DraftAction[] = [
 
 export const BEATS = {
   combine_assemblies: {
-    text: "Lower the seat assembly onto the base and line up the holes.",
-    simpleText: "Put the seat on top of the base.",
+    text: "Combine the seat with the base.",
+    simpleText: "Put the seat on the base.",
   },
   finishing_checks: {
     text: "Give the seat a spin and a gentle press to check it feels solid.",

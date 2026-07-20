@@ -58,7 +58,7 @@ export function ToolBar({ neededTool }: { neededTool: ToolId | null }) {
       >
         <Image
           source={require("../../assets/images/ui/icon-toolBar.png")}
-          style={styles.icon}
+          style={styles.toolboxIcon}
           resizeMode="contain"
         />
       </Pressable>
@@ -104,5 +104,9 @@ const makeStyles = (t: Theme) =>
   slotActive: { borderColor: t.accent, backgroundColor: t.surfaceRaised },
   slotWanted: { borderColor: t.accent },
   icon: { width: 26, height: 26 },
+  // The toolbox glyph is flat black artwork, so it takes a tint. This is deliberately a
+  // SEPARATE style from `icon`: that one is shared by the tool THUMBNAILS above, which are
+  // illustrated images — tinting those would flatten them into purple silhouettes.
+  toolboxIcon: { width: 26, height: 26, tintColor: t.accent },
   prompt: { fontSize: 11, fontWeight: "700", color: t.textDim, marginRight: 2 },
   });

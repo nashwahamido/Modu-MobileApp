@@ -136,6 +136,19 @@ interface GameState {
   examinePart: (partId: PartId) => void;
   examineCluster: (cluster: ClusterId) => void;
   clearExamine: () => void;
+  /** The build map (ClusterFocusControl) shown on demand — the pause screen. It opens by
+   *  itself when no cluster has been chosen yet; this flag is for reopening it mid-build. */
+  mapOpen: boolean;
+  setMapOpen: (open: boolean) => void;
+  /** The build map has been shown once for this furniture. Single-cluster builds open it as
+   *  an intro; this is what stops it reappearing every time the player returns. */
+  mapSeen: boolean;
+  setMapSeen: (seen: boolean) => void;
+  /** The finished-build screen has been dismissed. Without it, undoing from that screen
+   *  would re-show it the instant the step was redone. */
+  doneDismissed: boolean;
+  setDoneDismissed: (v: boolean) => void;
+
   setActiveCluster: (cluster: ClusterId | null) => void;
   setCombiningCluster: (cluster: ClusterId | null) => void;
 
@@ -159,6 +172,9 @@ export const useGameStore = create<GameState>()((set, get) => ({
   ...CLEARED,
   activeCluster: null,
   combiningCluster: null,
+  mapOpen: false,
+  mapSeen: false,
+  doneDismissed: false,
   tightenDeg: {},
   orientationActionId: null,
   orientationDeg: {},
@@ -186,6 +202,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
       undoneActions: [],
       activeCluster: null,
       combiningCluster: null,
+      mapSeen: false,
+      doneDismissed: false,
       tightenDeg: {},
       orientationActionId: null,
       orientationDeg: {},
@@ -414,6 +432,9 @@ export const useGameStore = create<GameState>()((set, get) => ({
   examineCluster: (cluster) =>
     set({ ...CLEARED, examine: { kind: "cluster", cluster } }),
   clearExamine: () => set({ examine: null }),
+  setMapOpen: (open) => set({ mapOpen: open }),
+  setMapSeen: (seen) => set({ mapSeen: seen }),
+  setDoneDismissed: (v) => set({ doneDismissed: v }),
   setActiveCluster: (cluster) => set({ activeCluster: cluster }),
   setCombiningCluster: (cluster) => set({ combiningCluster: cluster }),
 

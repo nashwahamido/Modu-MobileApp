@@ -100,14 +100,18 @@ const makeStyles = (t: Theme) =>
     // Top-left corner, above the undo button (top:54) and clear of the centred objective
     // bar. The XP that used to sit here now lives on the progress bar itself.
     left: 14,
-    width: 42,
+    // 36×36 with RADIUS.control corners — the exact box IconButton(small) draws, so the
+    // gear, the hint, and undo/redo below all sit on the same grid.
+    width: 36,
     height: 36,
-    borderRadius: 12,
+    borderRadius: 14,
     backgroundColor: t.surface,
     alignItems: "center",
     justifyContent: "center",
   },
-  icon: { width: 30, height: 30 },
+  // 22 in a 36 box leaves the same breathing room as the glyphs in undo/redo; at 30 the
+  // gear filled its button edge to edge once the box came down to 36.
+  icon: { width: 22, height: 22 },
   // The PNG is dark artwork; invert it (tint white) for the dark chip.
   backdrop: {
     ...StyleSheet.absoluteFillObject,

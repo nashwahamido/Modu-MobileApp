@@ -361,8 +361,10 @@ export function Segmented<T extends string>({
   );
 }
 
-/** Progress. Inset track, accent fill — NOT green: green means "done" in this palette, and
- *  a half-full bar is not done. The bar turns `success` only at 100%. */
+/** Progress. Inset track, accent fill at every value — the bar stays the interactive
+ *  lavender even when full. (It used to flip to green at 100%; completion is already said
+ *  by the objective text and the ✓ on a finished cluster, and the colour change read as a
+ *  different control rather than the same one finished.) */
 export function ProgressBar({
   value,
   total,
@@ -374,7 +376,6 @@ export function ProgressBar({
 }) {
   const t = useTheme();
   const pct = total > 0 ? Math.min(1, value / total) : 0;
-  const done = pct >= 1;
   return (
     <View
       accessibilityRole="progressbar"
@@ -386,7 +387,7 @@ export function ProgressBar({
           styles.fill,
           {
             width: `${pct * 100}%`,
-            backgroundColor: done ? t.success : t.accent,
+            backgroundColor: t.accent,
           },
         ]}
       />

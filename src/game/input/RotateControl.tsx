@@ -2,6 +2,7 @@ import * as Haptics from "expo-haptics";
 import { useEffect, useRef } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Svg, { Circle, G, Path } from "react-native-svg";
 import {
   ORIENTATION_TOTAL_DEG,
   useGameStore,
@@ -14,7 +15,20 @@ import {
 import { quatFromAxisAngle, quatMultiply } from "@/src/game/core/geometry/math";
 import type { OffsetDriver } from "../scene/offsetDriver";
 
-const SIZE = 120;
+// The same gauge TightenControl draws. Kept local rather than shared: this is the only
+// other control using it, and a shared module would mean touching files that are working.
+const RING = 96; // outer diameter of the band
+const STROKE = 9; // the band's own width — a gauge, not a donut
+const INK = 1.5; // fine enough to ink the shape without thickening it
+const PAD = 24; // room for the arrow head so it never clips the canvas
+const SIZE = RING + PAD * 2;
+const C = SIZE / 2;
+const R = (RING - STROKE) / 2;
+const CIRC = 2 * Math.PI * R;
+
+const FILL = "#8D7BA8"; // the band AND the arrow head — one purple
+const LINE = "#6A548B"; // the ink outline: same hue, +13pp sat, −11pp val
+const TRACK = "rgba(60,50,40,0.13)"; // the path still to travel
 
 interface Props {
   action: AssemblyAction;
@@ -97,21 +111,72 @@ export function RotateControl({ action, driver, sinkDelta }: Props) {
     });
 
   const progress = Math.min(1, deg / ORIENTATION_TOTAL_DEG);
+  const dashOffset = CIRC * (1 - progress);
+
+  // The arrow head rides the arc's leading end: −90° start, clockwise.
+  const angDeg = -90 + progress * 360;
+  const ang = angDeg * (Math.PI / 180);
+  const hx = C + R * Math.cos(ang);
+  const hy = C + R * Math.sin(ang);
+  const AW = STROKE * 1.5;
+  const AL = STROKE * 1.9;
+  const BACK = STROKE * 0.9; // base sits behind the band's edge so the fill merges them
+  const head = `M ${hx} ${hy - AL} L ${hx + AW} ${hy + BACK} L ${hx - AW} ${hy + BACK} Z`;
+  const headRot = angDeg + 180;
 
   return (
     <View style={styles.wrap} pointerEvents="box-none">
       <GestureDetector gesture={pan}>
-        <View style={[styles.dial, screwing && styles.dialScrew]}>
-          <View style={[styles.fill, { height: SIZE * progress }]} />
-          <Text style={[styles.arrow, { transform: [{ rotate: `${deg}deg` }] }]}>
-            ↻
-          </Text>
+        <View style={styles.dial}>
+          <Svg width={SIZE} height={SIZE}>
+            {/* the path still to travel */}
+            <Circle cx={C} cy={C} r={R} stroke={TRACK} strokeWidth={STROKE} fill="none" />
+
+            {/* INK layer for BOTH shapes, then FILL for both. Drawn shape-by-shape the
+                arrow's outline prints a seam across the band; with the fills last they
+                close over the join and read as one object. */}
+            <G transform={`rotate(-90 ${C} ${C})`}>
+              <Circle
+                cx={C}
+                cy={C}
+                r={R}
+                stroke={LINE}
+                strokeWidth={STROKE + INK * 2}
+                fill="none"
+                strokeLinecap="round"
+                strokeDasharray={CIRC}
+                strokeDashoffset={dashOffset}
+              />
+            </G>
+            <G transform={`rotate(${headRot} ${hx} ${hy})`}>
+              <Path
+                d={head}
+                fill={LINE}
+                stroke={LINE}
+                strokeWidth={INK * 2}
+                strokeLinejoin="round"
+              />
+            </G>
+
+            <G transform={`rotate(-90 ${C} ${C})`}>
+              <Circle
+                cx={C}
+                cy={C}
+                r={R}
+                stroke={FILL}
+                strokeWidth={STROKE}
+                fill="none"
+                strokeLinecap="round"
+                strokeDasharray={CIRC}
+                strokeDashoffset={dashOffset}
+              />
+            </G>
+            <G transform={`rotate(${headRot} ${hx} ${hy})`}>
+              <Path d={head} fill={FILL} strokeLinejoin="round" />
+            </G>
+          </Svg>
         </View>
       </GestureDetector>
-      <Text style={styles.hint}>
-        {screwing ? "Screw it in" : "Rotate to align"} ·{" "}
-        {Math.round(progress * 100)}%
-      </Text>
       {screwing ? null : (
         <Pressable
           style={styles.putBack}
@@ -126,6 +191,7 @@ export function RotateControl({ action, driver, sinkDelta }: Props) {
 }
 
 const styles = StyleSheet.create({
+  dial: { width: SIZE, height: SIZE, alignItems: "center", justifyContent: "center" },
   wrap: {
     position: "absolute",
     right: 160,
@@ -133,27 +199,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
-  dial: {
-    width: SIZE,
-    height: SIZE,
-    borderRadius: SIZE / 2,
-    borderWidth: 4,
-    borderColor: "#e8842c",
-    backgroundColor: "rgba(255,255,255,0.78)",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  dialScrew: { borderColor: "#37c871" },
-  fill: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "rgba(55, 200, 113, 0.25)",
-  },
-  arrow: { fontSize: 44, color: "#2e2a24" },
-  hint: { fontSize: 12, color: "#6b6257", fontWeight: "700" },
   putBack: {
     backgroundColor: "rgba(255,255,255,0.85)",
     borderRadius: 12,
