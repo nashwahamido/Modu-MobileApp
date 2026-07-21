@@ -102,6 +102,23 @@ const HARDWARE_RAW = {
     label: { standard: "Dowel", simple: "Peg" },
     note: "wooden dowel pressed into the drawer front",
   },
+  // ── BEKVÄM step stool (AA-444158-9) ──
+  screw105111: {
+    tool: "screwdriver",
+    label: { standard: "Long screw", simple: "Screw" },
+    note: "long wood screw — driven UP from below: through the top rails into the top step, and through the front rail into the step",
+  },
+  screw105215: {
+    tool: "screwdriver",
+    label: { standard: "Wood screw", simple: "Screw" },
+    note: "wood screw — through the side panels into the step and rail ends",
+  },
+  dowel101350: {
+    tool: "hand",
+    motion: "strike",
+    label: { standard: "Wood dowel", simple: "Peg" },
+    note: "wooden dowel joining the step to the side panels — tapped in before the mating side presses on",
+  },
 } satisfies Record<string, HardwareInfo>;
 
 export const HARDWARE = HARDWARE_RAW as Partial<Record<GroupId, HardwareInfo>>;
