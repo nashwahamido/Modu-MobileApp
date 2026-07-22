@@ -47,15 +47,6 @@ export type StructureOverlay = Record<
       | "tool"
       | "placeDir"
       | "parkBackoff"
-      | "insertRetract"
-      | "insertStage"
-      | "insertProud"
-      | "lockDir"
-      | "lockTravel"
-      | "dropOn"
-      | "toolAnchor"
-      | "fastenerKind"
-      | "engageDir"
     >
   >
 >;

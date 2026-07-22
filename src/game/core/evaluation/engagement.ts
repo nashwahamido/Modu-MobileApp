@@ -16,17 +16,14 @@ import {
   isSlider,
   liaisonOther,
 } from "../model/liaisons";
-import { clusterCombineEngagement, clusterParkInfo, SLIDE_BACKOFF_M } from "./clusterCombine";
 
 const gammaOf = (f: Furniture): LiaisonMap => f.liaisons ?? buildLiaisons(f.parts);
 
 export type PlaceEngagement = "drop" | "screw" | "slide" | "press";
 
-/** How far a pressing part parks off its seat before the push gesture drives it home, in meters; a press pushes less far than a slide (SLIDE_BACKOFF_M, in clusterCombine). */
+/** How far a sliding / pressing part parks off its seat before the gesture  drives it home, in meters. Slide travels further than a press push. */
+export const SLIDE_BACKOFF_M = 0.1;
 export const PRESS_BACKOFF_M = 0.03;
-
-/** Meters of the keyhole lock travel (StructuralFields.lockDir) when the part authors no lockTravel — the short slot-length shove, not a panel-scale glide. */
-export const LOCK_TRAVEL_M = 0.015;
 
 /** How far a screwing STRUCTURAL part (leg / tabletop) parks off its seat  before the rotation gesture sinks it home, in meters. */
 export const SCREW_BACKOFF_M = 0.045;
@@ -34,18 +31,16 @@ export const SCREW_BACKOFF_M = 0.045;
 /** Visible revolutions of the SPINNING part while a screw joint seats: full  turns only, so the start/end orientations equal the baked one — no pop. */
 export const SCREW_SPIN_DEG = 360;
 
-/** The preloaded connector of `kind` awaiting `partId` as its LATER endpoint: the other endpoint placed and the connector fully driven home. This is what turns the later placement into a joint-realizing gesture — threaded → the part screws on (LACK leg), pin → it presses on (BEKVÄM step over the standing dowel). */
-function preloadedConnectorFor(
+function preloadedThreadedFor(
   f: Furniture,
   partId: string,
   done: ReadonlySet<ActionId>,
-  kind: "threaded" | "pin",
 ): PartDef | null {
   for (const p of Object.values(f.parts)) {
     if (
       !isConnector(p) ||
       !p.attached!.includes(partId as never) ||
-      fastenerKindOf(p) !== kind
+      fastenerKindOf(p) !== "threaded"
     ) {
       continue;
     }
@@ -59,22 +54,6 @@ function preloadedConnectorFor(
     }
   }
   return null;
-}
-
-function preloadedThreadedFor(
-  f: Furniture,
-  partId: string,
-  done: ReadonlySet<ActionId>,
-): PartDef | null {
-  return preloadedConnectorFor(f, partId, done, "threaded");
-}
-
-function preloadedPinFor(
-  f: Furniture,
-  partId: string,
-  done: ReadonlySet<ActionId>,
-): PartDef | null {
-  return preloadedConnectorFor(f, partId, done, "pin");
 }
 
 function directScrewReceiver(
@@ -93,9 +72,6 @@ function directScrewReceiver(
 }
 
 function directScrewAxis(threader: PartDef, receiver: PartDef): Vec3 {
-  // Authored placeDir wins, same doctrine as travelAxis: the centre-delta heuristic below reads DIAGONAL whenever the receiver's centre sits off the thread line (EKET's suspension cover vs its corner-hugging bracket). The screw axis points the way the threader backs out = opposite its authored seating travel.
-  const authored = threader.placeDir ? unit(threader.placeDir) : null;
-  if (authored) return [-authored[0] || 0, -authored[1] || 0, -authored[2] || 0];
   const d: [number, number, number] = [
     threader.pose.position[0] - receiver.pose.position[0],
     threader.pose.position[1] - receiver.pose.position[1],
@@ -112,20 +88,14 @@ export function placeEngagement(
   done: ReadonlySet<ActionId>,
 ): PlaceEngagement {
   if (action.type === "combineClusters" && action.cluster) {
-    // authored cluster overlay wins; furniture without one keeps the legacy cross-cluster-thread behaviour so DALFRED/LACK/BEKVAM are untouched
-    const authored = clusterCombineEngagement(f.clusters, action.cluster);
-    if (authored) return authored;
     const threads = crossClusterThreads(gammaOf(f), f.parts, action.cluster);
     return threads.length ? "screw" : "drop";
   }
   if (action.type !== "placePart" || !action.partId) return "drop";
-  // dropOn: the part clicks home at drop even though a press/screw partner stands ready (EKET's suspension cover)
-  if (f.parts[action.partId]?.dropOn) return "drop";
   if (directScrewReceiver(f, action.partId, done)) return "screw";
   if (preloadedThreadedFor(f, action.partId, done)) return "screw";
   if (isSlider(gammaOf(f), action.partId)) return "slide";
   if (pressPartnerPlaced(f, action.partId, done)) return "press";
-  if (preloadedPinFor(f, action.partId, done)) return "press";
   return "drop";
 }
 
@@ -189,8 +159,6 @@ export interface ParkInfo {
   axis: Vec3;
   /** Backed-off offset from the baked seat where the part parks; the gesture  eases this to [0,0,0] as it drives home. Points OPPOSITE the travel axis. */
   offset: Vec3;
-  /** Keyhole second phase (part.lockDir): the lock axis and the HOOKED offset the part rests at once the press leg has closed — `offset` above already includes it, so single-phase consumers park correctly without knowing; HookPressControl decomposes the legs from this. Absent for a plain one-phase press. */
-  lock?: { axis: Vec3; offset: Vec3 };
 }
 
 function parkInfo(axis: Vec3, backoff: number): ParkInfo {
@@ -200,32 +168,12 @@ function parkInfo(axis: Vec3, backoff: number): ParkInfo {
   };
 }
 
-/** Fold a part's keyhole lock leg (lockDir/lockTravel) into its press park: the part parks backed off along BOTH legs — press in to the hooked offset, then the lockDir shove seats it. Identity for parts without lockDir. */
-function withLock(part: PartDef, park: ParkInfo): ParkInfo {
-  const axis = part.lockDir ? unit(part.lockDir) : null;
-  if (!axis) return park;
-  const t = part.lockTravel ?? LOCK_TRAVEL_M;
-  const lockOffset: Vec3 = [-axis[0] * t || 0, -axis[1] * t || 0, -axis[2] * t || 0];
-  return {
-    axis: park.axis,
-    offset: [
-      park.offset[0] + lockOffset[0],
-      park.offset[1] + lockOffset[1],
-      park.offset[2] + lockOffset[2],
-    ],
-    lock: { axis, offset: lockOffset },
-  };
-}
-
 /** Staging for a SLIDE placement: the glide axis and the backed-off park  offset. Null when `action` isn't a slider ready to glide. */
 export function slideParkInfo(
   f: Furniture,
   action: AssemblyAction,
   done: ReadonlySet<ActionId>,
 ): ParkInfo | null {
-  if (action.type === "combineClusters") {
-    return action.cluster ? clusterParkInfo(f.clusters, action.cluster) : null;
-  }
   if (action.type !== "placePart" || !action.partId) return null;
   if (!isSlider(gammaOf(f), action.partId)) return null;
   const part = f.parts[action.partId]!;
@@ -233,36 +181,17 @@ export function slideParkInfo(
   return parkInfo(travelAxis(part, owners), part.parkBackoff ?? SLIDE_BACKOFF_M);
 }
 
-/** Staging for a PRESS placement: the push axis and the backed-off park offset.  Null when `action` isn't a push-fit against a placed partner — either an  authored press edge (directJoins) or the placed endpoint of a preloaded pin. */
+/** Staging for a PRESS placement: the push axis and the backed-off park offset.  Null when `action` isn't a push-fit against a placed partner. */
 export function pressParkInfo(
   f: Furniture,
   action: AssemblyAction,
   done: ReadonlySet<ActionId>,
 ): ParkInfo | null {
   if (action.type !== "placePart" || !action.partId) return null;
-  const part = f.parts[action.partId]!;
-  // a dropOn part never parks — the approach ghost must sit at the seat, matching the drop that placeEngagement returns
-  if (part.dropOn) return null;
   const partners = joinedByKind(f, action.partId, "press", done);
-  if (!partners.length) {
-    const pin = preloadedPinFor(f, action.partId, done);
-    const other =
-      pin &&
-      f.parts[
-        pin.attached![0] === action.partId ? pin.attached![1] : pin.attached![0]
-      ];
-    if (!other) return null;
-    // The standing pin IS the press direction: the part travels opposite the signed engage axis (which points toward the missing endpoint and flips with placement order), so a part pressable onto EITHER of two mirrored dowels (BEKVÄM step between two seed legs) approaches whichever one is up — an authored placeDir can only bake one side.
-    const pinAxis = unit(engageAxis(pin, done));
-    if (pinAxis) {
-      return withLock(part, parkInfo(
-        [-pinAxis[0] || 0, -pinAxis[1] || 0, -pinAxis[2] || 0],
-        part.parkBackoff ?? PRESS_BACKOFF_M,
-      ));
-    }
-    return withLock(part, parkInfo(travelAxis(part, [other]), part.parkBackoff ?? PRESS_BACKOFF_M));
-  }
-  return withLock(part, parkInfo(travelAxis(part, partners), part.parkBackoff ?? PRESS_BACKOFF_M));
+  if (!partners.length) return null;
+  const part = f.parts[action.partId]!;
+  return parkInfo(travelAxis(part, partners), part.parkBackoff ?? PRESS_BACKOFF_M);
 }
 
 /** SIGNED engage axis for a fastener — points from its seat toward the side it backs out of (= toward the MISSING endpoint). The baked `engageDir` assumes the fastener drives into `attached[0]`; when the OTHER endpoint is the one placed (the reverse path: bolt into the LEG instead of the table), the fastener enters from the opposite side, so the axis flips. */

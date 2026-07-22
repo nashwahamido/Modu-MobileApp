@@ -1,4 +1,4 @@
-import { insertId, placeFastenerId, placeId, stageId } from "@/src/game/core/ids";
+import { insertId, placeId, stageId } from "@/src/game/core/ids";
 import type {
   ActionId,
   Furniture,
@@ -48,13 +48,8 @@ export function stagedMembers(
   done: ReadonlySet<ActionId>,
 ): PartId[] {
   if (!done.has(stageId(carrier)) || done.has(placeId(carrier))) return [];
-  // A 3-phase fastener is out on the canvas (resting at its STAGE pose) as soon as it is DROPPED (placeFastener), before it is pressed in — include it so it renders instead of vanishing between the drop and the press.
   return stagedGroupOf(f, carrier).filter(
-    (p) =>
-      p === carrier ||
-      done.has(insertId(p)) ||
-      done.has(placeFastenerId(p)) ||
-      isNonLeadBody(f.components, p),
+    (p) => p === carrier || done.has(insertId(p)) || isNonLeadBody(f.components, p),
   );
 }
 

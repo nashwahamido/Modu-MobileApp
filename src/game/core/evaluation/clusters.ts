@@ -38,8 +38,7 @@ export function actionsForClusterFocus<
   activeCluster: ClusterId | null,
 ): T[] {
   if (!requiresClusterFocus(f)) return [...actions];
-  // No focus is a real state, not an error: the combine stage runs unfocused, and cluster-LESS actions (combines, the finishing/test beats) must surface there — returning [] swallowed every post-combine beat.
-  if (!activeCluster) return actions.filter((action) => actionCluster(f, action) == null);
+  if (!activeCluster) return [];
   return actions.filter((action) => {
     const cluster = actionCluster(f, action);
     return cluster == null || cluster === activeCluster;

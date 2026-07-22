@@ -5,7 +5,6 @@ import {
   asPartId,
   insertId,
   isPartTiedType,
-  placeFastenerId,
   placeId,
   stageId,
   tightenId,
@@ -14,8 +13,6 @@ import {
   ActionId,
   ActionType,
   AssemblyAction,
-  ClusterDef,
-  ClusterId,
   DraftAction,
   DriveMotion,
   GroupId,
@@ -23,7 +20,6 @@ import {
   PartId,
   ToolId,
 } from "@/src/game/core/type";
-import { combinePrereqClusters } from "../evaluation/clusterCombine";
 import { fastenerKindOf, isConnector } from "../model/liaisons";
 import { hardwareOn, stagedCarrierOf, stagedCarriers } from "../model/staging";
 import { groupParts } from "../scene/targets";
@@ -82,8 +78,6 @@ interface FastenerPairOptions {
   insertTool?: ToolId;
   /** How the tighten LOOKS (presentation axis; resolved by expandFastenerRules  from HARDWARE.motion ?? the kind default). */
   motion?: DriveMotion;
-  /** Opt-in 3-phase lifecycle (part.insertStage set): split the drag-to-loose  insert into placeFastener (drag → stage, fully out) + insertFastener (PRESS →  loose). Absent ⇒ classic 2-phase. */
-  threePhase?: boolean;
 }
 
 const pair = (
@@ -94,34 +88,6 @@ const pair = (
   options: FastenerPairOptions = {},
 ): DraftAction[] => {
   const insert = insertId(partId);
-  const tighten: DraftAction = {
-    actionId: tightenId(partId),
-    type: "tightenFastener",
-    stage,
-    partId,
-    ...(tool ? { tool } : {}),
-    ...(options.motion ? { motion: options.motion } : {}),
-    requires: [insert, ...(options.tightenRequires ?? [])],
-  };
-  if (options.threePhase) {
-    // 3-phase: the drag from the tray is a placeFastener (lands at the STAGE pose, fully out); a separate insertFastener is the PRESS that drives stage → loose; tighten drives loose → flush. The carrier/OR prereqs gate bringing it out (place); insert only needs the place; downstream refs to insertId (rod slide-in, tighten) still mean "pressed in".
-    const place = placeFastenerId(partId);
-    return [
-      {
-        actionId: place,
-        type: "placeFastener",
-        stage,
-        partId,
-        ...(options.insertTool ? { tool: options.insertTool } : {}),
-        requires,
-        ...(options.insertRequiresAny?.length
-          ? { requiresAny: options.insertRequiresAny }
-          : {}),
-      },
-      { actionId: insert, type: "insertFastener", stage, partId, requires: [place] },
-      tighten,
-    ];
-  }
   return [
     {
       actionId: insert,
@@ -134,7 +100,15 @@ const pair = (
         ? { requiresAny: options.insertRequiresAny }
         : {}),
     },
-    tighten,
+    {
+      actionId: tightenId(partId),
+      type: "tightenFastener",
+      stage,
+      partId,
+      ...(tool ? { tool } : {}),
+      ...(options.motion ? { motion: options.motion } : {}),
+      requires: [insert, ...(options.tightenRequires ?? [])],
+    },
   ];
 };
 
@@ -195,7 +169,6 @@ export function expandFastenerRules(
           motion:
             hardware[r.group]?.motion ??
             (kind === "cam" ? "turn" : kind === "pin" ? "strike" : "spin"),
-          threePhase: !!p.insertStage,
         },
       );
     }),
@@ -244,27 +217,6 @@ export function withStaging(
   return out;
 }
 
-/** Derive each combineClusters action's ordering from the cluster overlay: a cluster's combine requires the combines of every cluster it slideJoins. The overlay is then the single source of truth for combine order, and authors stop hand-writing requires that must be kept in sync with slideJoins. Furniture with no overlay passes straight through. */
-export function withClusterCombines(
-  drafts: readonly DraftAction[],
-  clusters: Record<ClusterId, ClusterDef> | undefined,
-): DraftAction[] {
-  if (!clusters) return [...drafts];
-  const combineIdFor = new Map<ClusterId, ActionId>();
-  for (const d of drafts) {
-    if (d.type === "combineClusters" && d.cluster) combineIdFor.set(d.cluster, d.actionId);
-  }
-  if (combineIdFor.size === 0) return [...drafts];
-  return drafts.map((d) => {
-    if (d.type !== "combineClusters" || !d.cluster) return d;
-    const derived = combinePrereqClusters(clusters, d.cluster)
-      .map((c) => combineIdFor.get(c))
-      .filter((id): id is ActionId => !!id);
-    const merged = [...new Set([...d.requires, ...derived])];
-    return merged.length === d.requires.length ? d : { ...d, requires: merged };
-  });
-}
-
 /** Stamp the canonical `order` (used by guide mode) onto authored/expanded  drafts, by their final position in the composed action list. When `parts`  is given, also resolve each action's missing tool from its part's default  (action.tool → part.tool → none): DALFRED's pole authors `tool: "mallet"`  ONCE in STRUCTURE and every action touching it inherits it. */
 export const withOrder = (
   drafts: readonly DraftAction[],
@@ -282,13 +234,9 @@ export function composeFurnitureActions(
   rules: readonly FastenerRule[],
   parts: Parts,
   hardware: Partial<Record<GroupId, { tool: ToolId; motion?: DriveMotion }>> = {},
-  clusters?: Record<ClusterId, ClusterDef>,
 ): AssemblyAction[] {
   return withOrder(
-    withClusterCombines(
-      withStaging([...authored, ...expandFastenerRules(rules, parts, hardware)], parts),
-      clusters,
-    ),
+    withStaging([...authored, ...expandFastenerRules(rules, parts, hardware)], parts),
     parts,
   );
 }

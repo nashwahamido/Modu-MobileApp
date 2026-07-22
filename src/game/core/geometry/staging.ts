@@ -1,5 +1,5 @@
 import { PartDef, PartPose, Vec3 } from "@/src/game/core/type";
-import { LOOSE_OFFSET_M } from "./fastenerPose";
+import { loosePosition } from "./fastenerPose";
 
 /** Where a part materializes (XZ) when picked up from the tray, world meters. */
 export const SPAWN_POS: Vec3 = [0.28, 0, 0.15];
@@ -21,23 +21,9 @@ export function looseDelta(
   part: PartDef,
   axis: Vec3 = part.engageDir ?? [0, 0, 0],
 ): Vec3 {
-  // A `drawTurn` dowel rests RETRACTED into its carrier (−engageDir) and the tighten DRAWS it out to flush — the reverse of a normal fastener's proud loose pose. Uses the part's own baked engageDir (not the signed `axis`), so the draw direction is geometry-fixed regardless of which endpoint the caller signed by.
-  if (part.insertRetract) {
-    const e = part.engageDir ?? [0, 0, 0];
-    const r = -part.insertRetract;
-    return [e[0] * r, e[1] * r, e[2] * r];
-  }
-  // insertProud 0 = the insert lands FLUSH and the tighten works in place (cam locks); ?? keeps the explicit zero.
-  const proud = part.insertProud ?? LOOSE_OFFSET_M;
-  return [axis[0] * proud || 0, axis[1] * proud || 0, axis[2] * proud || 0];
-}
-
-/** Delta from a fastener's baked (flush) pose to its STAGE pose — fully OUTSIDE the hole, along +engageDir by `insertStage`. Only meaningful for 3-phase fasteners (placeFastener drops them here); [0,0,0] otherwise. The press insert then drives stage → loose (looseDelta), and the tighten drives loose → flush. */
-export function stageDelta(part: PartDef): Vec3 {
-  if (!part.insertStage) return [0, 0, 0];
-  const e = part.engageDir ?? [0, 0, 0];
-  const s = part.insertStage;
-  return [e[0] * s, e[1] * s, e[2] * s];
+  const lp = loosePosition(part.pose, axis);
+  const p = part.pose.position;
+  return [lp[0] - p[0], lp[1] - p[1], lp[2] - p[2]];
 }
 
 /** Camera pivot for a set of parts: the center of their structural bounding box, built over each part's VISUAL centre (pose.position + visualCenterOffset) — a part's origin can sit at one end of its mesh (a LACK leg's foot), and centring the camera on origins makes a lone first part look off-centre. Fasteners are ignored when structural parts are present, so cluster orbit stays centered on the furniture body rather than on surrounding screw heads. */
