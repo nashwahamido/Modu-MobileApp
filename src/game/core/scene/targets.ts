@@ -7,7 +7,7 @@ import {
   Quat,
   Vec3,
 } from "@/src/game/core/type";
-import { loosePosition } from "@/src/game/core/geometry/fastenerPose";
+import { looseDelta, stageDelta } from "@/src/game/core/geometry/staging";
 import { engageAxis } from "../evaluation/engagement";
 import { stageShiftFor } from "../model/staging";
 
@@ -63,11 +63,17 @@ export function targetPositionForAction(
 ): Vec3 {
   const part = parts[action.partId!];
   const shift = stagingShiftFor(action, parts);
+  if (action.type === "placeFastener") {
+    // 3-phase drop lands at the STAGE pose (fully out of the hole, +engageDir·insertStage); the press insert then drives it to loose.
+    const staged = add3(part.pose.position, stageDelta(part));
+    return shift ? add3(staged, shift) : staged;
+  }
   if (action.type !== "insertFastener") {
     return shift ? add3(part.pose.position, shift) : part.pose.position;
   }
   const axis = done ? engageAxis(part, done) : (part.engageDir ?? [0, 0, 0]);
-  const loose = loosePosition(part.pose, axis);
+  // for a `drawTurn` dowel this is the RETRACTED-into-carrier pose; for a normal fastener it's the proud loose pose — looseDelta owns the sign.
+  const loose = add3(part.pose.position, looseDelta(part, axis));
   return shift ? add3(loose, shift) : loose;
 }
 

@@ -8,8 +8,10 @@ import {
   useCameraManipulator,
   useModel,
 } from "react-native-filament";
+import type { ISharedValue } from "react-native-worklets-core";
 import { useGameStore } from "@/src/game/core/store";
 import type { PartId } from "@/src/game/core/type";
+import { CombineCarry, type CarryOffset } from "./CombineCarry";
 import { stageOffsetMap } from "@/src/game/core/model/staging";
 import { FOCAL_LENGTH_MM } from "./cameraConfig";
 import { CEL_IBL_INTENSITY, getLightRig, IBL_INTENSITY } from "./lighting";
@@ -34,6 +36,8 @@ interface Props {
   pushDrivers: DriverRegistry;
   /** Drives a component's non-lead bodies while the lead is held/dragged ("riding" mode). */
   slideDriver: ClusterDriver;
+  /** Combine carry offset, applied on the render thread (CombineCarry). */
+  carryShared: ISharedValue<CarryOffset>;
   /** Fired when the shared GLB reports parsed ("loaded") — the play screen's loading overlay keys its last milestone off this. Re-fires on remounts (style switch, retry); the listener must be idempotent. */
   onModelReady?: () => void;
 }
@@ -47,6 +51,7 @@ export function AssemblyScene({
   clusterDriver,
   pushDrivers,
   slideDriver,
+  carryShared,
   onModelReady,
 }: Props) {
   const furniture = useGameStore((s) => s.furniture);
@@ -78,7 +83,7 @@ export function AssemblyScene({
   const driveActionId = useGameStore((s) => s.driveActionId);
 
 
-  const { modes, heldAction, activeTighten } = sceneState;
+  const { modes, heldAction, activeTighten, activeInsertPress } = sceneState;
   const pushMap = useMemo(
     () =>
       furniture?.pushOpen
@@ -139,6 +144,7 @@ export function AssemblyScene({
       {furniture.shadow && anySeated && backdrop === "clear" ? (
         <ShadowPlane source={furniture.shadow} />
       ) : null}
+      <CombineCarry model={model} carryShared={carryShared} />
       <ShaderAssetsProvider>
         {(Object.keys(furniture.parts) as PartId[]).map((id) => (
           <PartModel
@@ -153,6 +159,7 @@ export function AssemblyScene({
             slideDriver={slideDriver}
             stageOffset={stageOffsets[id]}
             tightening={activeTighten?.partId === id}
+            inserting={activeInsertPress?.partId === id}
             ghostAtLoosePose={heldAction?.type === "insertFastener"}
           />
         ))}

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import {
   actionCluster,
+  combineReady,
   currentStageForClusterFocus,
   requiresClusterFocus,
 } from "@/src/game/core/evaluation/clusters";
@@ -55,6 +56,10 @@ export interface SceneState {
   trayItems: TrayItem[];
   /** Tighten action currently awaiting the circular gesture. */
   activeTighten: AssemblyAction | null;
+  /** 3-phase insertFastener currently awaiting the PRESS gesture (stage → loose). */
+  activeInsertPress: AssemblyAction | null;
+  /** A staged sub-assembly resting above its seat, ready to be slid in (placePart of a staged carrier) — the prompt, and it persists once grabbed so the slider survives the pickup. */
+  stagedSeat: AssemblyAction | null;
   /** Reorient/combine beat currently awaiting the player's swipe. */
   activeBeat: AssemblyAction | null;
 }
@@ -66,7 +71,6 @@ export function deriveSceneState(
   activeCluster: ClusterId | null = null,
   matchedActionId: ActionId | null = null,
   mode: AssemblyMode = "free",
-  combiningCluster: ClusterId | null = null,
   focusMode = false,
   /** Static-socket ghosts: hint EVERY available same-group socket, not just the proximity-matched one (the ghost component colors matched vs unmatched). */
   showAllGroupSockets = false,
@@ -94,9 +98,13 @@ export function deriveSceneState(
     }
     if (!a.partId || done.has(a.actionId)) continue;
     if (mode !== "free" && a.stage !== stage) continue;
-    // stagePart earns a card of its own (fetching the carrier out of the box). A staged carrier then keeps its card for the SEATING gesture too: the part is out on the canvas by then, but the canvas re-grab path only re-takes a part that is still logically held, so the card is what makes "pick the finished sub-assembly back up" work through the proven pickup path rather than a second, untested one. Its prompt (presentation/instructions.ts) says pick it back up, not take a new one out.
+    // stagePart earns a card of its own (fetching the carrier out of the box).
     if (!isPickupType(a.type)) continue;
     const part = furniture.parts[a.partId];
+    // a 3-phase insertFastener is a PRESS gesture on the already-dropped fastener (InsertPressControl), not a tray pickup — no card. Its placeFastener is the pickup that fetches it out of the tray.
+    if (a.type === "insertFastener" && part.insertStage) continue;
+    // a staged carrier's SEATING placePart earns NO tray card — the finished sub-assembly is out on the canvas and seats via SeatSlideControl (slide it straight down). Its stagePart card (taking it OUT of the box) still stands.
+    if (a.type === "placePart" && isStaged(part)) continue;
     // a non-lead component body never gets its own card — the lead's card stands for the whole component
     if (isNonLeadBody(furniture.components, a.partId)) continue;
     const comp = furniture.components?.byBody[a.partId];
@@ -141,14 +149,37 @@ export function deriveSceneState(
   }
   const firstTighten = available.find((a) => a.type === "tightenFastener") ?? null;
   const activeTighten = !heldAction ? firstTighten : null;
+  // 3-phase insert: the dowel is already out on the canvas at its stage pose, so its "insert" is a PRESS gesture (not a tray pickup) — surface it like a tighten.
+  const firstInsertPress =
+    available.find(
+      (a) => a.type === "insertFastener" && !!(a.partId && furniture.parts[a.partId]?.insertStage),
+    ) ?? null;
+  const activeInsertPress = !heldAction ? firstInsertPress : null;
+  // A finished staged sub-assembly seats by sliding straight down (stage sits above target). Prompt when its place is available; once the slider grabs it (held), keep pointing at it so the control survives the pickup.
+  const isStagedPlace = (a: AssemblyAction | null): boolean =>
+    !!a && a.type === "placePart" && !!a.partId && isStaged(furniture.parts[a.partId]);
+  const stagedSeat = isStagedPlace(heldAction)
+    ? heldAction
+    : (!heldAction
+        ? (available.find((a) => a.type === "placePart" && a.partId && isStaged(furniture.parts[a.partId])) ?? null)
+        : null);
   const activeBeat = !heldAction
     ? (available.find((a) => a.type === "reorient" || a.type === "combineClusters") ?? null)
     : null;
-  const combineDone = furniture.actions.some(
-    (a) => a.type === "combineClusters" && done.has(a.actionId),
-  );
+  // every combine done, not merely one — a single finished combine used to reveal the whole assembly and end the stage
+  const combineActions = furniture.actions.filter((a) => a.type === "combineClusters");
+  const combineDone =
+    combineActions.length > 0 && combineActions.every((a) => done.has(a.actionId));
   const showAllClusters =
     combineDone || (activeBeat ? actionCluster(furniture, activeBeat) == null : false);
+  // At the combine stage every not-yet-combined cluster is PRE-MOUNTED in "combining" mode (its entities stay out of the scene until its card is dragged — PartModel toggles membership). Mounting ~60 filament entities inside an active gesture is what froze the cluster drag-out.
+  const pendingCombineClusters = new Set<ClusterId>(
+    combineReady(furniture, done)
+      ? combineActions
+          .filter((a) => !done.has(a.actionId) && a.cluster)
+          .map((a) => a.cluster!)
+      : [],
+  );
 
   const heldGroup =
     heldAction?.partId && isPickupType(heldAction.type)
@@ -180,12 +211,17 @@ export function deriveSceneState(
       : acts.snap
         ? done.has(acts.snap)
         : false;
+    // a cluster whose own combine is complete stays standing in the scene while later combines run
+    const combinedIn = combineActions.some(
+      (a) => a.cluster === furniture.parts[id].cluster && done.has(a.actionId),
+    );
     const outsideFocus =
       focusRequired &&
       !showAllClusters &&
+      !combinedIn &&
       (!effectiveCluster || furniture.parts[id].cluster !== effectiveCluster);
 
-    if (combiningCluster && furniture.parts[id].cluster === combiningCluster) {
+    if (pendingCombineClusters.has(furniture.parts[id].cluster)) {
       modes[id] = "combining";
     } else if (heldAction?.partId === id) modes[id] = "held";
     else if (ridingComponent && furniture.components?.byBody[id] === ridingComponent && !placed) modes[id] = "riding";
@@ -209,7 +245,7 @@ export function deriveSceneState(
     else if (acts.tighten && !done.has(acts.tighten)) modes[id] = "loose";
     else modes[id] = "flush";
   }
-  return { modes, heldAction, trayItems, activeTighten, activeBeat };
+  return { modes, heldAction, trayItems, activeTighten, activeInsertPress, stagedSeat, activeBeat };
 }
 
 export function useSceneState(): SceneState {
@@ -219,14 +255,13 @@ export function useSceneState(): SceneState {
   const activeCluster = useGameStore((s) => s.activeCluster);
   const matchedActionId = useGameStore((s) => s.matchedActionId);
   const mode = useGameStore((s) => s.mode);
-  const combiningCluster = useGameStore((s) => s.combiningCluster);
   const focusMode = useGameStore((s) => s.settings.focusMode);
   const staticSockets = useGameStore((s) => s.settings.ghostStyle === "staticSockets");
   return useMemo(
     () =>
       furniture
-        ? deriveSceneState(furniture, completed, heldActionId, activeCluster, matchedActionId, mode, combiningCluster, focusMode, staticSockets)
-        : { modes: {}, heldAction: null, trayItems: [], activeTighten: null, activeBeat: null },
-    [furniture, completed, heldActionId, activeCluster, matchedActionId, mode, combiningCluster, focusMode, staticSockets],
+        ? deriveSceneState(furniture, completed, heldActionId, activeCluster, matchedActionId, mode, focusMode, staticSockets)
+        : { modes: {}, heldAction: null, trayItems: [], activeTighten: null, activeInsertPress: null, stagedSeat: null, activeBeat: null },
+    [furniture, completed, heldActionId, activeCluster, matchedActionId, mode, focusMode, staticSockets],
   );
 }

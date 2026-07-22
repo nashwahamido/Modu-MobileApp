@@ -1,6 +1,6 @@
 import type { Entity, TransformManager } from 'react-native-filament';
-import { quatToAxisAngle } from '@/src/game/core/geometry/math';
-import type { Quat } from '@/src/game/core/type';
+import { quatFromAxisAngle, quatMultiply, quatRotateVec3, quatToAxisAngle } from '@/src/game/core/geometry/math';
+import type { Quat, Vec3 } from '@/src/game/core/type';
 
 type Float3 = [number, number, number];
 
@@ -90,38 +90,103 @@ export interface ClusterDriver {
   /** Register one part's entity at its baked pose; returns an unregister fn. */
   register(tm: TransformManager, entity: Entity, base: Base): () => void;
   set(offset: Float3): void;
+  /** Offset PLUS a rigid spin of the whole cluster: every member orbits the axis line through the members' shared centroid by `angleRad` (its own orientation turning with it) — the screwing motion of a threaded combine. A plain `set` clears the spin. */
+  setSpin(offset: Float3, axis: Vec3, angleRad: number): void;
   readonly value: Float3;
 }
 
 export function createClusterDriver(): ClusterDriver {
   let offset: Float3 = [0, 0, 0];
-  const members = new Set<{ tm: TransformManager; entity: Entity; base: Base }>();
+  let spin: { axis: Vec3; angleRad: number } | null = null;
+  interface Member {
+    tm: TransformManager;
+    entity: Entity;
+    base: Base;
+    /** Baked rotation as axis-angle, computed ONCE at register — it never changes, and recomputing it per member per frame was pure waste on the drag hot path. */
+    aa: ReturnType<typeof quatToAxisAngle>;
+  }
+  const members = new Set<Member>();
 
-  const applyOne = (m: { tm: TransformManager; entity: Entity; base: Base }) => {
+  // Spin pivot: the axis line runs through the members' shared centroid (a screwing cluster is built around its thread axis, so the centroid sits on it); the y component is irrelevant to a rotation about that vertical line but harmless.
+  const centroid = (): Float3 => {
+    const c: Float3 = [0, 0, 0];
+    for (const m of members) {
+      c[0] += m.base.position[0] / members.size;
+      c[1] += m.base.position[1] / members.size;
+      c[2] += m.base.position[2] / members.size;
+    }
+    return c;
+  };
+
+  const applyOne = (m: Member, q: Quat | null, pivot: Float3 | null) => {
+    if (q && pivot) {
+      const r = quatRotateVec3(q, [
+        m.base.position[0] - pivot[0],
+        m.base.position[1] - pivot[1],
+        m.base.position[2] - pivot[2],
+      ]);
+      const pos: Float3 = [
+        pivot[0] + r[0] + offset[0],
+        pivot[1] + r[1] + offset[1],
+        pivot[2] + r[2] + offset[2],
+      ];
+      const aa = quatToAxisAngle(quatMultiply(q, m.base.rotation));
+      if (!aa) {
+        m.tm.setEntityPosition(m.entity, pos, false);
+        return;
+      }
+      m.tm.setEntityRotation(m.entity, aa.angleRad, aa.axis, false);
+      m.tm.setEntityPosition(m.entity, pos, true);
+      return;
+    }
     const pos: Float3 = [
       m.base.position[0] + offset[0],
       m.base.position[1] + offset[1],
       m.base.position[2] + offset[2],
     ];
-    const aa = quatToAxisAngle(m.base.rotation);
-    if (!aa) {
+    if (!m.aa) {
       m.tm.setEntityPosition(m.entity, pos, false);
       return;
     }
-    m.tm.setEntityRotation(m.entity, aa.angleRad, aa.axis, false);
+    m.tm.setEntityRotation(m.entity, m.aa.angleRad, m.aa.axis, false);
     m.tm.setEntityPosition(m.entity, pos, true);
+  };
+
+  // COALESCED: a 120Hz pan spits touch samples faster than frames render, and applying ~60 members × 2 native transform calls on every sample is what made the cluster carry crawl. set() just records the offset; one rAF applies the latest value per frame, so extra samples cost nothing.
+  let pending = false;
+  const flush = () => {
+    pending = false;
+    const q = spin && Math.abs(spin.angleRad) > 1e-6 ? quatFromAxisAngle(spin.axis, spin.angleRad) : null;
+    const pivot = q ? centroid() : null;
+    for (const m of members) applyOne(m, q, pivot);
+  };
+
+  const schedule = () => {
+    if (pending || members.size === 0) return;
+    if (typeof requestAnimationFrame === "function") {
+      pending = true;
+      requestAnimationFrame(flush);
+    } else {
+      flush();
+    }
   };
 
   return {
     register(tm, entity, base) {
-      const m = { tm, entity, base };
+      const m: Member = { tm, entity, base, aa: quatToAxisAngle(base.rotation) };
       members.add(m);
-      applyOne(m);
+      applyOne(m, null, null);
       return () => members.delete(m);
     },
     set(next) {
       offset = [...next];
-      for (const m of members) applyOne(m);
+      spin = null;
+      schedule();
+    },
+    setSpin(next, axis, angleRad) {
+      offset = [...next];
+      spin = { axis, angleRad };
+      schedule();
     },
     get value() {
       return offset;
