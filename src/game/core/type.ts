@@ -77,6 +77,8 @@ export interface PartCore {
   pose: PartPose;
   /** World-space offset from pose.position to the mesh bounds center. */
   visualCenterOffset?: Vec3;
+  /** World-space offset from pose.position to the TOOL's contact point for this part's tighten (ToolModel) — for when the node origin is not where the tool works (EKET suspension bracket: the origin sits on the plate, the screw hole at the circular boss ~1cm over). */
+  toolAnchor?: Vec3;
   tool?: ToolId;
 }
 export interface StructuralFields {
@@ -90,12 +92,24 @@ export interface StructuralFields {
   parkBackoff?: number;
   /** World-space offset (m) from this part's assembled pose to its SUB-ASSEMBLY rest pose. Presence of this field is what makes a part staged: a `stagePart` beat is generated ahead of its placement, hardware attached to it may be fitted while it rests out there, and a second placement gesture carries the finished sub-assembly home (see model/staging.ts). */
   stageOffset?: Vec3;
+  /** Unit direction of the keyhole LOCK travel — the short second shove after a press-fit's bolts enter their slots (EKET side↔top: press in along placeDir, then push down). Presence makes the press placement TWO-PHASE: the part parks backed off along BOTH legs, the press taps close the placeDir leg to the hooked pose, then a short drag along lockDir seats it and commits (HookPressControl). */
+  lockDir?: Vec3;
+  /** Meters of the lockDir travel; defaults to engagement.LOCK_TRAVEL_M. */
+  lockTravel?: number;
+  /** Force a plain snap placement even when a press/screw partner is already placed — the part just clicks home at drop with no drive gesture (EKET's suspension cover pushes over its bracket in the same motion that places it). */
+  dropOn?: boolean;
 }
 export interface FastenerFields {
   fastenerKind?: FastenerKind;
   screwMover?: PartId;
   attached?: readonly PartId[];
   engageDir?: Vec3;
+  /** Meters this fastener sits RETRACTED into its carrier at insert (−engageDir), instead of the default proud loose pose (+engageDir). Its `drawTurn` tighten then DRAWS it back OUT to flush while turning — the EKET stabiliser-rod dowels: pressed into the rod, then drawn into the slider hole and quarter-turned to lock. */
+  insertRetract?: number;
+  /** Opt-in to the 3-phase fastener lifecycle: meters the fastener sits at its STAGE pose (fully outside the hole, +engageDir) when first dropped from the tray. Presence splits the fastener into placeFastener (drag → stage) + insertFastener (PRESS gesture → loose) + tightenFastener (tool → flush). Absent ⇒ the classic 2-phase drag-to-loose insert + tighten. */
+  insertStage?: number;
+  /** Meters the LOOSE pose sits proud of flush (+engageDir); defaults to the global LOOSE_OFFSET_M. 0 = the insert lands FLUSH and the tighten happens in place — a cam lock drops fully into its housing and only TURNS (EKET's rear cams + pins, whose 2cm default proud poked out past the cabinet rear). */
+  insertProud?: number;
 }
 export interface PartDef extends PartCore, StructuralFields, FastenerFields {}
 
@@ -131,11 +145,22 @@ export interface ClusterDef {
   id: ClusterId;
   label: string;
   requires?: readonly ClusterId[];
+  /** The combine root: seats first and joins nothing. Exactly one cluster per furniture may carry it. A cluster that slideJoins another is never a seed. */
+  seed?: boolean;
+  /** Clusters this one slides onto at combine time — the cluster-level counterpart of a part's slideJoins. */
+  slideJoins?: readonly ClusterId[];
+  /** Unit direction this cluster TRAVELS as it seats (authored; a runner's axis is not derivable from poses). */
+  placeDir?: Vec3;
+  /** How far off its seat this cluster parks before the drive gesture; defaults to SLIDE_BACKOFF_M. */
+  parkBackoff?: number;
+  /** How the drive gesture seats a slide-joined cluster: absent = a straight glide (SlideControl); "screw" = it threads in — the dial spins the whole cluster about placeDir as it sinks (DALFRED's seat screwing onto the base). */
+  driveMotion?: "screw";
 }
 
 export type ActionType =
   | "stagePart"
   | "placePart"
+  | "placeFastener"
   | "insertFastener"
   | "tightenFastener"
   | "reorient"
@@ -143,8 +168,8 @@ export type ActionType =
   | "combineClusters"
   | "verify";
 
-/** How a tighten/drive LOOKS. Resolved from HARDWARE.motion ?? the kind default. `press` is the keyhole-bolt push-fit (EKET drawer fronts). */
-export type DriveMotion = "spin" | "turn" | "strike" | "press";
+/** How a tighten/drive LOOKS. Resolved from HARDWARE.motion ?? the kind default. `press` is a SINGLE bare-hand push that seats the fastener in one go (EKET's rear cam locks + pins — TapControl's one-tap variant). `drawTurn` is a single tighten beat that DRAWS the fastener out along its axis into the receiver then quarter-turns it to lock (EKET stabiliser-rod dowels). */
+export type DriveMotion = "spin" | "turn" | "strike" | "press" | "drawTurn";
 
 export interface AssemblyAction {
   actionId: ActionId;
@@ -188,12 +213,16 @@ export interface PushOpenGroup {
   ratio: number;
   parts: readonly PartId[];
 }
-/** The push-to-open finishing beat: which parts telescope, along which world axis, how far — played when the `beatActionId` beat's gesture fires. */
+/** The telescoping drawer motion: which parts telescope, along which world axis, how far. `testActionIds` gives each level its own interactive test beat (the player drags the drawer out and home); `beatActionId` instead plays the whole open/close as a passive tween on that one beat's swipe — author one or the other. */
 export interface PushOpenSpec {
   axis: Vec3;
   /** Full open travel of the drawer, in meters. */
   distance: number;
-  beatActionId: string;
+  /** How far the push-latch spring ejects the drawer on a press, in meters (the test beat's tap-to-pop). */
+  popDistance?: number;
+  beatActionId?: string;
+  /** level → the actionId of that level's drag-out-to-test beat. */
+  testActionIds?: Readonly<Record<string, string>>;
   groups: readonly PushOpenGroup[];
 }
 

@@ -74,7 +74,7 @@ interface GameState {
   orientationDeg: Record<ActionId, number>;
   /** placePart parked at its seat awaiting a slide/press DRIVE gesture (null = none). Parallel to the orientation/screw park, but for the linear gestures: a slider glided in, a push-fit pressed home. */
   driveActionId: ActionId | null;
-  driveKind: "slide" | "press" | null;
+  driveKind: "slide" | "press" | "screw" | null;
   /** Normalized 0..1 drive progress per parked action id (SlideControl adds a  drag fraction; PressControl adds 1/PRESS_TAPS per tap). */
   driveProgress: Record<ActionId, number>;
   /** Tool the player holds when `settings.manualTools` is on (sticky across steps). */
@@ -116,7 +116,7 @@ interface GameState {
   parkOrientation: (actionId: ActionId) => void;
   addOrientationDeg: (actionId: ActionId, deg: number) => void;
   /** Park a placePart for a linear DRIVE (slide glide / press push). */
-  parkDrive: (actionId: ActionId, kind: "slide" | "press") => void;
+  parkDrive: (actionId: ActionId, kind: "slide" | "press" | "screw") => void;
   /** Advance a parked drive by a normalized fraction; commits at ≥1. */
   advanceDrive: (actionId: ActionId, delta: number) => void;
 
@@ -345,7 +345,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
     const a = get()
       .available()
       .find((x) => x.actionId === actionId);
-    if (!a || a.type !== "placePart") return;
+    // a combineClusters with an authored slide overlay parks and drives exactly like a sliding part — the whole cluster is the mover
+    if (!a || (a.type !== "placePart" && a.type !== "combineClusters")) return;
     set({
       driveActionId: actionId,
       driveKind: kind,
@@ -367,6 +368,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
         driveActionId: null,
         driveKind: null,
         driveProgress: {},
+        // a cluster combine drive ends here — release the combining render mode too (no-op for part slides)
+        combiningCluster: null,
         ...CLEARED,
       });
     }
