@@ -11,17 +11,69 @@ import { sequenceIssues } from "@/src/game/core/composition/sequence";
 import { actionIdFor, isPartTiedType, placeId, stageId } from "@/src/game/core/ids";
 import { memberPlaceIdsForLead } from "@/src/game/core/model/components";
 import { hardwareOn, isStaged } from "@/src/game/core/model/staging";
-import { ActionId, ClusterId, Furniture, PartId } from "@/src/game/core/type";
+import { ActionId, ClusterDef, ClusterId, Furniture, PartId, PushOpenSpec } from "@/src/game/core/type";
 
 export interface ValidationIssue {
   level: "error" | "warn";
   message: string;
 }
 
+/** Build-time checks on the cluster combine overlay, so a mis-authored cluster fails here rather than deadlocking on device. Silent for furniture that authors no overlay at all — seed and slideJoins are both optional. */
+export function clusterOverlayIssues(
+  clusters: Record<ClusterId, ClusterDef> | undefined,
+  pushOpen: PushOpenSpec | undefined,
+): ValidationIssue[] {
+  const out: ValidationIssue[] = [];
+  if (!clusters) return out;
+  const ids = Object.keys(clusters) as ClusterId[];
+  const err = (m: string) => out.push({ level: "error", message: m });
+  const authored = ids.filter((id) => clusters[id].seed || clusters[id].slideJoins?.length);
+  if (authored.length === 0) return out;
+
+  const seeds = ids.filter((id) => clusters[id].seed);
+  if (seeds.length !== 1) {
+    err(`cluster overlay needs exactly one cluster with seed: true (found ${seeds.length})`);
+  }
+  for (const id of ids) {
+    const c = clusters[id];
+    if (c.seed && c.slideJoins?.length) {
+      err(`cluster "${id}" is a seed and also slideJoins — the root joins nothing`);
+    }
+    for (const t of c.slideJoins ?? []) {
+      if (!clusters[t]) err(`cluster "${id}" slideJoins unknown cluster "${t}"`);
+    }
+    if (c.slideJoins?.length) {
+      const d = c.placeDir;
+      if (!d || Math.hypot(d[0], d[1], d[2]) < 1e-6) {
+        err(`cluster "${id}" slideJoins but has no non-zero placeDir — its travel axis is not derivable from poses`);
+      }
+    }
+  }
+
+  // cycle detection over slideJoins
+  const state = new Map<ClusterId, 0 | 1 | 2>();
+  const walk = (id: ClusterId): boolean => {
+    const s = state.get(id) ?? 0;
+    if (s === 1) return true;
+    if (s === 2) return false;
+    state.set(id, 1);
+    for (const t of clusters[id]?.slideJoins ?? []) {
+      if (clusters[t] && walk(t)) return true;
+    }
+    state.set(id, 2);
+    return false;
+  };
+  if (ids.some((id) => walk(id))) err("cluster overlay has a cycle in slideJoins");
+
+  return out;
+}
+
 export function validateFurniture(f: Furniture): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const err = (m: string) => issues.push({ level: "error", message: m });
   const warn = (m: string) => issues.push({ level: "warn", message: m });
+
+  issues.push(...clusterOverlayIssues(f.clusters, f.pushOpen));
 
   const ids = new Set<string>();
   for (const a of f.actions) {
@@ -269,6 +321,61 @@ export function validateFurniture(f: Furniture): ValidationIssue[] {
   for (const p of Object.values(f.parts)) {
     if (p.slideJoins?.length && !p.placeDir) {
       warn(`slide mover "${p.partId}" has no placeDir — its glide axis falls back to the centroid heuristic; author placeDir in the STRUCTURE overlay`);
+    }
+  }
+
+  // keyhole two-phase (lockDir): the lock leg only ever runs inside a press placement, and its whole point is travel ACROSS the press axis — a parallel lockDir collapses back into a longer one-phase press
+  {
+    const liaisons = f.liaisons ?? buildLiaisons(f.parts);
+    const pressEdges = new Set(
+      Object.values(liaisons).filter((l) => l.kind === "press").flatMap((l) => [l.a, l.b]),
+    );
+    for (const p of Object.values(f.parts)) {
+      if (p.lockTravel !== undefined && !p.lockDir) {
+        warn(`"${p.partId}" authors lockTravel without lockDir — dead data; author the lock direction or drop the travel`);
+      }
+      if (!p.lockDir) continue;
+      const ll = Math.hypot(p.lockDir[0], p.lockDir[1], p.lockDir[2]);
+      if (ll < 1e-6) {
+        err(`"${p.partId}" authors a zero-length lockDir — the lock leg has no direction`);
+        continue;
+      }
+      if (p.type !== "structural" || !pressEdges.has(p.partId)) {
+        warn(`"${p.partId}" authors a lockDir but has no press liaison — the two-phase lock only engages on a press placement (directJoins); drop it or author the press edge`);
+      }
+      if (p.placeDir) {
+        const pl = Math.hypot(p.placeDir[0], p.placeDir[1], p.placeDir[2]);
+        const dot =
+          pl < 1e-6
+            ? 0
+            : (p.lockDir[0] * p.placeDir[0] + p.lockDir[1] * p.placeDir[1] + p.lockDir[2] * p.placeDir[2]) / (ll * pl);
+        if (Math.abs(dot) > 0.99) {
+          err(`"${p.partId}" lockDir is parallel to its placeDir — a keyhole locks ACROSS the press axis; give the lock leg its own direction`);
+        }
+      }
+    }
+  }
+
+  // the inverse trap: a part whose only press path is a preloaded PIN needs no placeDir — pressParkInfo derives the travel from the pin's signed engage axis (flipping with build order), so a baked direction is dead data that can only mislead (it froze BEKVÄM's step to one side when both legs became seeds)
+  {
+    const liaisons = f.liaisons ?? buildLiaisons(f.parts);
+    const pressEdges = new Set(
+      Object.values(liaisons).filter((l) => l.kind === "press").flatMap((l) => [l.a, l.b]),
+    );
+    for (const p of Object.values(f.parts)) {
+      if (p.type !== "structural" || !p.placeDir) continue;
+      if (p.slideJoins?.length || pressEdges.has(p.partId)) continue;
+      // staged flows never preload (their pins tighten only after the carrier seats), so a staged endpoint keeps the authored placeDir meaningful
+      const pinned = Object.values(f.parts).some(
+        (q) =>
+          isConnector(q) &&
+          fastenerKindOf(q) === "pin" &&
+          q.attached!.includes(p.partId) &&
+          !q.attached!.some((t) => isStaged(f.parts[t])),
+      );
+      if (pinned) {
+        warn(`"${p.partId}" authors a placeDir but presses onto a preloaded pin — the press axis is derived from the pin's engage axis and the placeDir is ignored; drop it`);
+      }
     }
   }
 
