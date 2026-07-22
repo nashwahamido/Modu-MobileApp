@@ -45,7 +45,8 @@ export function BuildMap() {
   //                starts the build; it must not behave like a chooser, because there is
   //                nothing to choose and the player would be stuck.
   //   paused     — opened deliberately mid-build; exit resumes.
-  const mustChoose = requiresClusterFocus(furniture) && !activeCluster;
+  // combineReady guard: once every cluster is built, a cleared focus means the COMBINE stage (cluster cards in the tray), not an unanswered "which section" question — forcing the chooser there would block the combine.
+  const mustChoose = requiresClusterFocus(furniture) && !activeCluster && !combineReady(furniture, done);
   const intro = clusters.length === 0 && !mapSeen;
   const showMap = mustChoose || intro || mapOpen;
 
