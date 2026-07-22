@@ -43,15 +43,17 @@ export const CLUSTERS = {
 export const STRUCTURE = {
   // WORLD FRAME, measured from parts.gen.ts: +Y = UP (topPlane y=+0.499); FRONT = −X (step x=−0.118, frontBottomRail x=−0.156, backBottomRail x=+0.156); +Z = RIGHT (legR z=+0.183, legL z=−0.183).
   // Every joint comes from the fasteners' attached pairs — no fastener-free contacts, so no directJoins anywhere. placeDir is the direction each part TRAVELS as it seats (park offset is its negation).
-  // The dowels are PIN connectors, so the preload locks drive the real BEKVÄM order by themselves: legL down → tap its dowel → step presses on → tap the other dowel → legR presses on — only then do the rails open up. The authored array matches that forced sequence.
+  // The two side panels are DISTINCT parts (mirrored, not interchangeable). Legs and step are all seeds — the player picks which starts the build.
+  // The dowels are PIN connectors, so the preload locks drive the real BEKVÄM order by themselves: a leg down → tap its dowel → step presses on → tap the other dowel → the other leg presses on — only then do the rails open up. The authored array is one such sequence (legL first).
+  // No placeDir on the legs or step: every press here is onto a standing dowel, and pressParkInfo derives the travel from the pin's signed engage axis — the step approaches whichever leg is up, in either build order.
   legL: { seed: true },
-  step: { placeDir: [0, 0, -1] as const }, // presses leftward onto the dowel standing in legL
-  legR: { placeDir: [0, 0, -1] as const }, // arrives from the right, pressing inward over the step's dowel
+  step: { seed: true },
+  legR: { seed: true },
   // rails go in AFTER both sides are up (the dowel locks force it), so each travels along X between the standing panels and parks outside its own face rather than inside a side panel
-  backBottomRail: { placeDir: [-1, 0, 0] as const }, // from behind, forward
-  frontBottomRail: { placeDir: [1, 0, 0] as const }, // from the front, backward under the step's front edge
-  frontTopRail: { placeDir: [1, 0, 0] as const },
-  backTopRail: { placeDir: [-1, 0, 0] as const },
+  backBottomRail: { placeDir: [-1, 0, 0] as const, unstable: true }, // from behind, forward
+  frontBottomRail: { placeDir: [1, 0, 0] as const, unstable: true }, // from the front, backward under the step's front edge
+  frontTopRail: { placeDir: [1, 0, 0] as const, unstable: true },
+  backTopRail: { placeDir: [-1, 0, 0] as const, unstable: true },
   topPlane: { placeDir: [0, -1, 0] as const }, // closes down onto the top rails
 } as StructureOverlay;
 

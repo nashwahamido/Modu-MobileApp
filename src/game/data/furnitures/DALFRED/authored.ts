@@ -38,9 +38,17 @@ export const LABELS = {
   seatPlate: { standard: "Seat plate", simple: "Plate" },
 } as LabelMap;
 
+// combine overlay: the base is the seed and seats first; the seat assembly (pole + top) then joins onto it travelling straight DOWN (−Y), its pole THREADING into the base's centre ring — driveMotion "screw" hands the drive to the dial, which spins the whole seat about the axis as it sinks. parkBackoff 0.15 lifts the parked seat clearly above the base (the pole's cap sits at y≈0.455, the base ring at y≈0.549) before the drive.
 export const CLUSTERS = {
-  base: { id: "base", label: "Base" },
-  seat: { id: "seat", label: "Seat" },
+  base: { id: "base", label: "Base", seed: true },
+  seat: {
+    id: "seat",
+    label: "Seat",
+    slideJoins: ["base"],
+    placeDir: [0, -1, 0] as const,
+    parkBackoff: 0.15,
+    driveMotion: "screw",
+  },
 } as Record<ClusterId, ClusterDef>;
 
 export const STRUCTURE: StructureOverlay = {
@@ -90,14 +98,20 @@ export const AUTHORED_ACTIONS: DraftAction[] = [
   action({ type: "placePart", stage: 3, partId: "seatPlate", requires: ["place_seat"] }),
   action({ type: "placePart", stage: 3, partId: "pole", requires: ["place_seatPlate"] }),
 
-  action({ actionId: "combine_assemblies", type: "combineClusters", stage: 4, cluster: "seat", requires: [] }),
-  action({ actionId: "finishing_checks", type: "reorient", stage: 4, requires: ["combine_assemblies"] }),
+  // ── combine: seat the base (seed drop), then lower the seat onto it; finish. combine_seat's dependence on combine_base is DERIVED from the CLUSTERS slideJoins overlay — do not hand-write it here. ──
+  action({ actionId: "combine_base", type: "combineClusters", stage: 4, cluster: "base", requires: ["reorient_upright"] }),
+  action({ actionId: "combine_seat", type: "combineClusters", stage: 4, cluster: "seat", requires: [] }),
+  action({ actionId: "finishing_checks", type: "reorient", stage: 4, requires: ["combine_seat"] }),
 ];
 
 export const BEATS = {
-  combine_assemblies: {
-    text: "Combine the seat with the base.",
-    simpleText: "Put the seat on the base.",
+  combine_base: {
+    text: "Set the base down in place.",
+    simpleText: "Place the base.",
+  },
+  combine_seat: {
+    text: "Set the seat's pole into the base and screw it clockwise until it sits tight.",
+    simpleText: "Screw the seat onto the base.",
   },
   finishing_checks: {
     text: "Give the seat a spin and a gentle press to check it feels solid.",

@@ -7,7 +7,6 @@ export const thumbnail = { light: require("../../../../assets/thumbnails/furnitu
 
 export const thumbs = {
   "backPanel": { light: require("../../../../assets/thumbnails/furnitures/EKET/light/parts/cabinet_backPanel.png") },
-  "bolt128918": { light: require("../../../../assets/thumbnails/furnitures/EKET/light/parts/drawerA_bolt128918.png") },
   "bottomPanel": { light: require("../../../../assets/thumbnails/furnitures/EKET/light/parts/cabinet_bottomPanel.png") },
   "cam139434": { light: require("../../../../assets/thumbnails/furnitures/EKET/light/parts/cabinet_cam139434.png") },
   "dowel139435": { light: require("../../../../assets/thumbnails/furnitures/EKET/light/parts/cabinet_dowel139435.png") },
