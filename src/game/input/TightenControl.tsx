@@ -69,7 +69,8 @@ export function TightenControl({ action, sinkDriver }: Props) {
           const part = action.partId
             ? useGameStore.getState().furniture?.parts[action.partId]
             : undefined;
-          if (part) {
+          // A STRUCTURAL part's tighten turns an invisible screw INTO it (EKET suspension bracket) — the part itself neither sinks nor spins; its engageDir exists only to orient the tool (ToolModel).
+          if (part && part.type === "fastener") {
             const axis = engageAxis(part, new Set(store.completed));
             const ld = looseDelta(part, axis);
             sinkDriver.set([ld[0] * (1 - p), ld[1] * (1 - p), ld[2] * (1 - p)]);

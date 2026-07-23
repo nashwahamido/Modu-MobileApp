@@ -3,12 +3,12 @@ import { useEffect, useRef } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { looseDelta } from "@/src/game/core/geometry/staging";
+import { engageAxis } from "@/src/game/core/evaluation/engagement";
 import { AssemblyAction } from "@/src/game/core/type";
 import { MALLET_TAPS, TIGHTEN_TOTAL_DEG, useGameStore } from "@/src/game/core/store";
 import type { OffsetDriver } from "../scene/offsetDriver";
 
 const SIZE = 120;
-const DEG_PER_TAP = TIGHTEN_TOTAL_DEG / MALLET_TAPS;
 
 interface Props {
   action: AssemblyAction;
@@ -16,8 +16,12 @@ interface Props {
   sinkDriver: OffsetDriver;
 }
 
-/** Mallet control: tap the target repeatedly; each hit drives the part one step toward flush (heavy haptic per hit). Counterpart of TightenControl's circular gesture for hand-tool fasteners. */
+/** Strike control: tap the target repeatedly; each hit drives the part one step toward flush (heavy haptic per hit). Counterpart of TightenControl's circular gesture for struck fasteners — reached via tool "mallet" OR motion "strike", so a bare-hand tap-in (BEKVÄM's wood dowel) lands here too and shows a hand instead of the mallet. Motion "press" is the ONE-shot variant: a single press seats it (EKET's rear cam locks + pins, already resting flush via insertProud 0). */
 export function TapControl({ action, sinkDriver }: Props) {
+  const struck = action.tool === "mallet" || action.tool === "hammer";
+  const single = action.motion === "press";
+  const taps = single ? 1 : MALLET_TAPS;
+  const degPerTap = TIGHTEN_TOTAL_DEG / taps;
   const deg = useGameStore((s) => s.tightenDeg[action.actionId] ?? 0);
   const squash = useRef(new Animated.Value(1)).current;
 
@@ -29,12 +33,13 @@ export function TapControl({ action, sinkDriver }: Props) {
     .runOnJS(true)
     .onEnd(() => {
       const store = useGameStore.getState();
-      store.addTightenDeg(action.actionId, DEG_PER_TAP);
+      store.addTightenDeg(action.actionId, degPerTap);
       const total = store.tightenDeg[action.actionId] ?? 0;
       const p = Math.min(1, total / TIGHTEN_TOTAL_DEG);
-      const part = action.partId ? useGameStore.getState().furniture?.parts[action.partId] : undefined;
+      const part = action.partId ? store.furniture?.parts[action.partId] : undefined;
       if (part) {
-        const ld = looseDelta(part);
+        // signed axis, not baked engageDir — in the reverse path (later endpoint placed first) the fastener sinks in from the opposite side
+        const ld = looseDelta(part, engageAxis(part, new Set(store.completed)));
         sinkDriver.set([ld[0] * (1 - p), ld[1] * (1 - p), ld[2] * (1 - p)]);
       }
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -47,7 +52,7 @@ export function TapControl({ action, sinkDriver }: Props) {
       }).start();
     });
 
-  const hits = Math.min(MALLET_TAPS, Math.round(deg / DEG_PER_TAP));
+  const hits = Math.min(taps, Math.round(deg / degPerTap));
 
   return (
     <View style={styles.wrap} pointerEvents="box-none">
@@ -55,11 +60,11 @@ export function TapControl({ action, sinkDriver }: Props) {
         <Animated.View
           style={[styles.target, { transform: [{ scale: squash }] }]}
         >
-          <Text style={styles.icon}>🔨</Text>
+          <Text style={styles.icon}>{struck ? "🔨" : "✋"}</Text>
         </Animated.View>
       </GestureDetector>
       <Text style={styles.hint}>
-        Tap to drive it in · {hits}/{MALLET_TAPS}
+        {single ? "Press it home" : `Tap to drive it in · ${hits}/${taps}`}
       </Text>
     </View>
   );

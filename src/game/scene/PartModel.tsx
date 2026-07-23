@@ -8,7 +8,7 @@ import type {
   TransformManager,
 } from "react-native-filament";
 import { FitState } from "@/src/game/core/geometry/fit";
-import { looseDelta } from "@/src/game/core/geometry/staging";
+import { looseDelta, stageDelta } from "@/src/game/core/geometry/staging";
 import { stageShiftFor } from "@/src/game/core/model/staging";
 import {
   engageAxis,
@@ -143,6 +143,8 @@ interface Props {
   stageOffset?: Vec3;
   /** True when this fastener's tighten gesture is active. */
   tightening?: boolean;
+  /** True when this 3-phase fastener's insert PRESS gesture is active (stage → loose). */
+  inserting?: boolean;
   /** Ghost drop target is the loose pose (inserts) instead of the baked pose. */
   ghostAtLoosePose?: boolean;
 }
@@ -402,15 +404,20 @@ function DrivenEntity({
   return null;
 }
 
-/** A part whose offset is driven together with its whole cluster (the combine lower). */
+/** A part whose offset is driven together with its whole cluster (the combine lower). `base` is a fixed per-part delta from the baked pose that the cluster offset rides ON TOP of — a fitted dowel carried on a staged rod keeps its own retract (looseDelta) so it stays pressed-into-the-rod during the carry instead of snapping to its drawn-out pose. */
 function ClusterDrivenEntity({
   model,
   def,
   driver,
+  base = [0, 0, 0],
+  hidden = false,
 }: {
   model: FilamentModel;
   def: PartDef;
   driver: ClusterDriver;
+  base?: readonly number[];
+  /** Keep the entity registered but OUT of the scene — a pre-mounted combine cluster waiting for its card to be dragged. Toggling membership is cheap; remounting the whole entity mid-gesture is not. */
+  hidden?: boolean;
 }) {
   const { transformManager, renderableManager, scene } = useFilamentContext();
   const entity = useInstanceEntity(model, def.meshName, 0);
@@ -419,22 +426,26 @@ function ClusterDrivenEntity({
 
   useEffect(() => {
     if (!entity) return;
+    if (hidden) {
+      scene.removeEntity(entity);
+      return;
+    }
     scene.addEntity(entity);
     return () => scene.removeEntity(entity);
-  }, [entity, scene]);
+  }, [entity, scene, hidden]);
 
   useEffect(() => {
     if (!entity) return;
     return driver.register(transformManager, entity, {
       position: [
-        def.pose.position[0],
-        def.pose.position[1],
-        def.pose.position[2],
+        def.pose.position[0] + base[0],
+        def.pose.position[1] + base[1],
+        def.pose.position[2] + base[2],
       ],
       rotation: def.pose.rotation,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entity, transformManager, driver]);
+  }, [entity, transformManager, driver, base[0], base[1], base[2]]);
 
   useEffect(() => {
     if (entity) applyThemeMaterial(renderableManager, entity, material);
@@ -520,6 +531,7 @@ function PartModelImpl({
   slideDriver,
   stageOffset,
   tightening,
+  inserting,
   ghostAtLoosePose,
 }: Props) {
   const partActions = useMemo(() => {
@@ -529,6 +541,13 @@ function PartModelImpl({
   const completed = useGameStore((s) => s.completed);
   const signedLooseDelta = () =>
     looseDelta(def, engageAxis(def, new Set(completed)));
+  // A 3-phase fastener's own offset while it rests staged out: STAGE (fully out) until it is pressed in, then LOOSE (the retract). Added to the CARRIER's stageOffset by the "staged" case. [0,0,0] for ordinary staged hardware.
+  const stagedOwnDelta = (): Vec3 => {
+    if (!def.insertStage) return [0, 0, 0];
+    const acts = partActions[def.partId] ?? {};
+    const inserted = acts.insert ? new Set(completed).has(acts.insert) : false;
+    return inserted ? signedLooseDelta() : stageDelta(def);
+  };
   const orientationActionId = useGameStore((s) => s.orientationActionId);
   const orientationDeg = useGameStore((s) =>
     s.orientationActionId ? (s.orientationDeg[s.orientationActionId] ?? 0) : 0,
@@ -580,57 +599,70 @@ function PartModelImpl({
         />
       );
     case "combining":
+      // CARRY: the parts stay IN the scene for the whole combine stage and CombineCarry's render loop parks them off-screen until the card is dragged, then carries them — toggling scene membership at drag start (the old `activeCombining` gate) burst-mounted the cluster mid-gesture and stalled the JS thread. DRIVE (parkDrive running): the whole cluster rides the same ClusterDriver home — the runners stay put during a combine; they only telescope in the test beats. No Ghost here: the baked-pose duplicate read as the assembly coming apart mid-drag.
       return (
+        <ClusterDrivenEntity
+          key={`${def.partId}-combining`}
+          model={model}
+          def={def}
+          driver={clusterDriver}
+        />
+      );
+    case "staged": {
+      // Resting out in front of the furniture as part of a sub-assembly: the carrier the player took out, or a piece of hardware already pressed into it. Both sit at the CARRIER's stageOffset. A 3-phase fastener ALSO carries its own stage/loose delta on top (dropped-but-not-pressed sits at STAGE; pressed-in sits at LOOSE).
+      const carrier = stageOffset ?? [0, 0, 0];
+      const own = stagedOwnDelta();
+      const s = stageDelta(def);
+      // Active insert PRESS: drive the sink from stage → loose (InsertPressControl sets carrier + lerp(stage, loose)); it starts at carrier + stage.
+      return inserting ? (
         <>
-          <ClusterDrivenEntity
-            key={`${def.partId}-combining`}
+          <DrivenEntity
+            key={`${def.partId}-insertpress`}
             model={model}
             def={def}
-            driver={clusterDriver}
+            driver={sinkDriver}
+            initial={[carrier[0] + s[0], carrier[1] + s[1], carrier[2] + s[2]]}
           />
-          <Ghost model={model} def={def} atLoosePose={false} />
+          {/* Goal ghost at the LOOSE pose the press converges into. */}
+          <Ghost model={model} def={def} atLoosePose dim />
         </>
-      );
-    case "staged":
-      // Resting out in front of the furniture as part of a sub-assembly: the carrier the player took out, or a piece of hardware already pressed into it. Both sit at the CARRIER's stageOffset — a fastener's own def has none, so the offset is passed down by the scene rather than read from `def` here.
-      return (
+      ) : (
         <StaticEntity
           key={`${def.partId}-staged`}
           model={model}
           def={def}
-          offset={stageOffset ?? [0, 0, 0]}
+          offset={[carrier[0] + own[0], carrier[1] + own[1], carrier[2] + own[2]]}
         />
       );
+    }
     case "riding":
-      // Sibling body of a held component lead: tracks the lead's live drag offset via slideDriver so the slide reads as one solid object in hand. No driver supplied → fall back to the static baked pose (defensive, matches the "flush"/pushDriver pattern).
+      // Sibling body of a held component lead, OR a fitted fastener carried on a staged carrier: tracks the lead's live drag offset via slideDriver so the whole thing reads as one solid object. A fitted dowel keeps its own retract (stagedOwnDelta = looseDelta) as the base so it stays pressed-into-the-rod during the carry instead of snapping to its drawn-out pose. No driver supplied → fall back to the static baked pose (defensive, matches the "flush"/pushDriver pattern).
       return slideDriver ? (
         <ClusterDrivenEntity
           key={`${def.partId}-riding`}
           model={model}
           def={def}
           driver={slideDriver}
+          base={stagedOwnDelta()}
         />
       ) : (
         <StaticEntity
           key={`${def.partId}-riding-static`}
           model={model}
           def={def}
-          offset={[0, 0, 0]}
+          offset={stagedOwnDelta()}
         />
       );
     case "loose":
       return tightening ? (
-        <>
-          <DrivenEntity
-            key={`${def.partId}-sink`}
-            model={model}
-            def={def}
-            driver={sinkDriver}
-            initial={signedLooseDelta()}
-          />
-          {/* Goal ghost at the FINAL (flush) pose while the fastener is being tightened — the sinking part converges into it. (Fasteners have no placePart action, so Ghost's park lookup yields offset 0 = flush.) */}
-          <Ghost model={model} def={def} atLoosePose={false} dim />
-        </>
+        // No goal ghost while tightening — the flush-pose preview just distracts from the gesture (user, 2026-07-20). Only the real sinking part renders.
+        <DrivenEntity
+          key={`${def.partId}-sink`}
+          model={model}
+          def={def}
+          driver={sinkDriver}
+          initial={signedLooseDelta()}
+        />
       ) : (
         <StaticEntity
           key={`${def.partId}-loose`}
@@ -698,5 +730,6 @@ export const PartModel = memo(
     p.pushDriver === n.pushDriver &&
     p.slideDriver === n.slideDriver &&
     p.tightening === n.tightening &&
+    p.inserting === n.inserting &&
     p.ghostAtLoosePose === n.ghostAtLoosePose,
 );

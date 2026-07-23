@@ -1,120 +1,75 @@
-import * as Haptics from "expo-haptics";
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { GestureDetector, GestureType } from "react-native-gesture-handler";
 import { availableActions } from "@/src/game/core/evaluation/availability";
 import {
-  clusterComplete,
-  clusterLabel,
+  combineReady,
   focusableClusterIds,
+  clusterLabel,
 } from "@/src/game/core/evaluation/clusters";
-import type { FitState } from "@/src/game/core/geometry/fit";
+import { clusterParkInfo } from "@/src/game/core/evaluation/clusterCombine";
+import type { ParkInfo } from "@/src/game/core/evaluation/engagement";
 import { pickThumb } from "@/src/game/core/presentation/labels";
 import { useGameStore } from "@/src/game/core/store";
 import { Theme, useStyles } from "@/src/game/ui/theme";
-import type { ActionId, ClusterId } from "@/src/game/core/type";
-import { animateClusterDriver, type ClusterDriver } from "@/src/game/scene/offsetDriver";
+import type { ActionId, AssemblyAction, ClusterId } from "@/src/game/core/type";
+import { clusterSink, type OffsetSink } from "@/src/game/scene/combineDriver";
+import type { ClusterDriver } from "@/src/game/scene/offsetDriver";
 import { useColorScheme } from "@/src/hooks/use-color-scheme";
 
-const SPAWN_OFFSET: [number, number, number] = [0.5, 0.06, 0];
-const ZERO: [number, number, number] = [0, 0, 0];
-const DRAG_PX = 180;
-const COMMIT_FRAC = 0.7;
-
-const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
-const lerp3 = (
-  a: [number, number, number],
-  b: [number, number, number],
-  t: number,
-): [number, number, number] => [
-  a[0] + (b[0] - a[0]) * t,
-  a[1] + (b[1] - a[1]) * t,
-  a[2] + (b[2] - a[2]) * t,
-];
-
-function buildDrag(
-  c: ClusterId,
-  combineId: ActionId | undefined,
-  clusterDriver: ClusterDriver,
-  fitRef: { current: FitState },
-) {
-  return Gesture.Pan()
-    .runOnJS(true)
-    .onStart(() => {
-      clusterDriver.set(SPAWN_OFFSET);
-      const s = useGameStore.getState();
-      s.setCombiningCluster(c);
-      fitRef.current = "held";
-      s.setDragFit("held", null);
-    })
-    .onUpdate((e) => {
-      const t = clamp01(e.translationY / DRAG_PX);
-      clusterDriver.set(lerp3(SPAWN_OFFSET, ZERO, t));
-      const fit: FitState = t >= COMMIT_FRAC ? "nearCorrect" : "held";
-      if (fit !== fitRef.current) {
-        fitRef.current = fit;
-        useGameStore.getState().setDragFit(fit, null);
-      }
-    })
-    .onEnd((e) => {
-      const t = clamp01(e.translationY / DRAG_PX);
-      const s = useGameStore.getState();
-      fitRef.current = "idle";
-      if (combineId && t >= COMMIT_FRAC) {
-        animateClusterDriver(clusterDriver, ZERO, 160, () => {
-          const st = useGameStore.getState();
-          st.completeAction(combineId);
-          st.setCombiningCluster(null);
-          st.setDragFit("idle", null);
-        });
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      } else {
-        s.setCombiningCluster(null);
-        s.setDragFit("idle", null);
-        clusterDriver.set(ZERO);
-      }
-    });
+interface Props {
+  clusterDriver: ClusterDriver;
+  /** usePartDrag's camera-projected cluster drag: render-thread free carry, then the `sink` takes over at the park handoff. */
+  clusterGestureFor: (
+    action: AssemblyAction,
+    sink: OffsetSink,
+    park: ParkInfo | null,
+  ) => GestureType;
 }
 
-/** A finished cluster you're not currently on becomes a card here (its rendered preview), shown from the moment it finishes until it's combined — alongside the current cluster's part cards (rendered as the PartsTray header). Once combine is reachable, drag the card out like a part: the cluster spawns to the side and you drag it in to seat onto the in-scene cluster, with a ghost + green fit feedback. */
-export function ClusterTray({ clusterDriver }: { clusterDriver: ClusterDriver }) {
+/** The combine stage's tray: one card per FINISHED cluster, shown until that cluster's own combine is done. The seed cluster's card enables first (its combine gates the others via the derived requires); dragging a card spawns the real cluster — the seed drops into place, a slide-joined cluster parks along its travel axis and is driven home by SlideControl, telescoping its runners. During the build phase a finished cluster earns a celebration, not a card here (this tray only renders with no cluster focus). */
+export function ClusterTray({ clusterDriver, clusterGestureFor }: Props) {
   const styles = useStyles(makeStyles);
   const furniture = useGameStore((s) => s.furniture);
   const completed = useGameStore((s) => s.completed);
-  const activeCluster = useGameStore((s) => s.activeCluster);
   const combiningCluster = useGameStore((s) => s.combiningCluster);
   const scheme = useColorScheme();
-  const fitRef = useRef<FitState>("idle");
 
   const done = useMemo(() => new Set(completed), [completed]);
-  const combineDone = useMemo(
-    () =>
-      !!furniture &&
-      furniture.actions.some((a) => a.type === "combineClusters" && done.has(a.actionId)),
-    [furniture, done],
-  );
+  // every cluster's OWN combine action, so a card can never fire another cluster's step
+  const combineFor = useMemo(() => {
+    const m = new Map<ClusterId, ActionId>();
+    if (furniture) {
+      for (const a of furniture.actions) {
+        if (a.type === "combineClusters" && a.cluster) m.set(a.cluster, a.actionId);
+      }
+    }
+    return m;
+  }, [furniture]);
+  // cards exist ONLY in the combine stage — no card while any cluster is still being built (a finished cluster earns a celebration then stays out of the way); once every cluster is done, each shows a card until ITS OWN combine completes
   const cards = useMemo(
     () =>
-      !furniture || combineDone
+      !furniture || !combineReady(furniture, done)
         ? []
-        : focusableClusterIds(furniture).filter(
-            (c) => c !== activeCluster && clusterComplete(furniture, c, done),
-          ),
-    [furniture, combineDone, activeCluster, done],
-  );
-  const combineId = useMemo(
-    () =>
-      furniture
-        ? availableActions(furniture, done).find((a) => a.type === "combineClusters")
-            ?.actionId
-        : undefined,
-    [furniture, done],
+        : focusableClusterIds(furniture).filter((c) => {
+            const id = combineFor.get(c);
+            return !!id && !done.has(id);
+          }),
+    [furniture, combineFor, done],
   );
   const gestures = useMemo(() => {
-    const m = new Map<ClusterId, ReturnType<typeof buildDrag>>();
-    for (const c of cards) m.set(c, buildDrag(c, combineId, clusterDriver, fitRef));
+    const m = new Map<ClusterId, GestureType>();
+    if (!furniture) return m;
+    const availableIds = new Set(availableActions(furniture, done).map((a) => a.actionId));
+    for (const c of cards) {
+      const id = combineFor.get(c);
+      if (!id || !availableIds.has(id)) continue;
+      const action = furniture.actions.find((a) => a.actionId === id)!;
+      const park = clusterParkInfo(furniture.clusters, c);
+      m.set(c, clusterGestureFor(action, clusterSink(clusterDriver), park));
+    }
     return m;
-  }, [cards, combineId, clusterDriver]);
+  }, [furniture, cards, combineFor, done, clusterDriver, clusterGestureFor]);
 
   if (!furniture || cards.length === 0) return null;
   const theme = scheme === "dark" ? "dark" : "light";
@@ -124,12 +79,13 @@ export function ClusterTray({ clusterDriver }: { clusterDriver: ClusterDriver })
       {cards.map((c) => {
         const set = furniture.clusterThumbs?.[c];
         const thumb = set ? pickThumb(set, theme) : undefined;
+        const g = gestures.get(c);
         const dragging = combiningCluster === c;
         const card = (
           <View
             style={[
               styles.card,
-              !combineId && styles.cardWaiting,
+              !g && styles.cardWaiting,
               dragging && styles.cardDragging,
             ]}
           >
@@ -141,11 +97,9 @@ export function ClusterTray({ clusterDriver }: { clusterDriver: ClusterDriver })
             <Text style={styles.label} numberOfLines={1}>
               {clusterLabel(furniture, c)}
             </Text>
-            <Text style={styles.hint}>{combineId ? "drag to assemble" : "finished"}</Text>
           </View>
         );
-        const g = gestures.get(c);
-        return combineId && g ? (
+        return g ? (
           <GestureDetector key={c} gesture={g}>
             {card}
           </GestureDetector>
@@ -174,5 +128,4 @@ const makeStyles = (t: Theme) =>
   cardDragging: { opacity: 0.4 },
   thumb: { width: 44, height: 44 },
   label: { fontSize: 11, fontWeight: "700", color: t.text, textAlign: "center" },
-  hint: { fontSize: 9, fontWeight: "600", color: t.success },
   });

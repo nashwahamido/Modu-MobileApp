@@ -1,4 +1,20 @@
 import { ActionId, ClusterId, Furniture, PartDef, PartId } from "@/src/game/core/type";
+import { isPickupType } from "@/src/game/core/ids";
+
+/** True once any pickup beat of `cluster` is complete — the cluster has left its untouched opening state (used to suspend free mode's grab-anything until the cluster's first part is out). */
+export function clusterStarted(
+  f: Furniture,
+  cluster: ClusterId,
+  done: ReadonlySet<ActionId>,
+): boolean {
+  return f.actions.some(
+    (a) =>
+      a.partId &&
+      isPickupType(a.type) &&
+      done.has(a.actionId) &&
+      f.parts[a.partId]?.cluster === cluster,
+  );
+}
 
 /** Distinct cluster ids present in a furniture's parts. */
 export function clustersOf(parts: Record<PartId, PartDef>): ClusterId[] {
@@ -38,7 +54,8 @@ export function actionsForClusterFocus<
   activeCluster: ClusterId | null,
 ): T[] {
   if (!requiresClusterFocus(f)) return [...actions];
-  if (!activeCluster) return [];
+  // No focus is a real state, not an error: the combine stage runs unfocused, and cluster-LESS actions (combines, the finishing/test beats) must surface there — returning [] swallowed every post-combine beat.
+  if (!activeCluster) return actions.filter((action) => actionCluster(f, action) == null);
   return actions.filter((action) => {
     const cluster = actionCluster(f, action);
     return cluster == null || cluster === activeCluster;

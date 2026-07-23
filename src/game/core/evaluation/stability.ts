@@ -40,9 +40,12 @@ function securingTightenActions(
 ): AssemblyAction[] {
   const byId = actionById(f.actions);
   const snap = placeId(partId);
+  // Only same-stage tightens hold the stability lock: a later-stage securing screw is unreachable under guide's stage gate, so counting it would hold the whole stage hostage (BEKVÄM's stage-2 step screw vs the unstable stage-1 front rail).
+  const snapStage = byId.get(snap)?.stage ?? Number.NEGATIVE_INFINITY;
 
   return f.actions.filter((a) => {
     if (a.type !== "tightenFastener") return false;
+    if (a.stage > snapStage) return false;
     if (a.requires.includes(snap)) return true;
 
     return a.requires.some((r) => {
@@ -112,6 +115,11 @@ function readyStabilizingActionIds(
     }
   }
 
+  // A securing screw-PLACE is allowed directly — its own placement IS the stabilizing act, so the placePart exclusion above (which keeps fastener-securing chains to their insert/tighten steps) does not apply to it.
+  for (const place of securingScrewPlaceActions(f, partId)) {
+    if (!done.has(place.actionId)) allowed.add(place.actionId);
+  }
+
   return allowed;
 }
 
@@ -175,13 +183,29 @@ function preloadConnectorLocks(
   });
 }
 
+/** placePart actions that SECURE `partId` by screwing onto it — a STRUCTURAL securer, recognized by the mover authoring `screwJoins` naming the unstable part (EKET's cover cap screws over the suspension cover; there is no separate fastener part to tighten). */
+function securingScrewPlaceActions(
+  f: Furniture,
+  partId: PartId,
+): AssemblyAction[] {
+  return f.actions.filter(
+    (a) =>
+      a.type === "placePart" &&
+      a.partId &&
+      f.parts[a.partId]?.screwJoins?.includes(partId),
+  );
+}
+
 export function unstablePartSecured(
   f: Furniture,
   partId: PartId,
   done: ReadonlySet<ActionId>,
 ): boolean {
   if (!done.has(placeId(partId))) return false;
-  return securingTightenActions(f, partId).every((a) => done.has(a.actionId));
+  return (
+    securingTightenActions(f, partId).every((a) => done.has(a.actionId)) &&
+    securingScrewPlaceActions(f, partId).every((a) => done.has(a.actionId))
+  );
 }
 
 export function looseUnstableParts(

@@ -30,11 +30,6 @@ export default function App() {
           <Link href="/engine-test" asChild>
             <Button label="engine test (dev)" variant="ghost" small />
           </Link>
-          {/* REFERENCE ONLY — Nashwa's original engine, untouched. Delete this link
-              together with src/adhd + play-adhd.tsx (merge plan Phase 7). */}
-          <Link href="/play-adhd" asChild>
-            <Button label="adhd original (ref)" variant="ghost" small />
-          </Link>
         </View>
       )}
       <StatusBar style="light" />

@@ -20,9 +20,14 @@ export function buildPushDriverMap(
 const easeOutCubic = (k: number) => 1 - (1 - k) ** 3;
 const easeInOutQuad = (k: number) =>
   k < 0.5 ? 2 * k * k : 1 - (1 - k) * (1 - k) * 2;
+// Overshoots ~10% past the target then settles — the spring of a push-latch ejecting the drawer.
+const easeOutBack = (k: number) => {
+  const c1 = 1.70158;
+  return 1 + (c1 + 1) * (k - 1) ** 3 + c1 * (k - 1) ** 2;
+};
 
 /** Set one level's travel: every group of that level offsets by axis·d·ratio. */
-function setTravel(spec: PushOpenSpec, registry: DriverRegistry, level: string, d: number) {
+export function setTravel(spec: PushOpenSpec, registry: DriverRegistry, level: string, d: number) {
   for (const g of spec.groups) {
     if (g.level !== level) continue;
     registry.get(pushKey(g.level, g.ratio)).set([
@@ -51,6 +56,23 @@ function tween(
 }
 
 const hold = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Depth the drawer front presses INWARD before the latch releases, in meters. */
+const PRESS_IN_M = 0.004;
+
+/** The push-latch pop: the drawer presses in a touch (the latch giving way), then springs OUT to `pop` with an overshoot bounce. Resolves with the travel resting exactly at `pop`; `onRelease` fires the moment the spring lets go (the haptic hook). */
+export async function popOpen(
+  spec: PushOpenSpec,
+  registry: DriverRegistry,
+  level: string,
+  pop: number,
+  onRelease?: () => void,
+): Promise<void> {
+  await tween(90, easeInOutQuad, (v) => setTravel(spec, registry, level, -PRESS_IN_M * v));
+  onRelease?.();
+  await tween(420, easeOutBack, (v) => setTravel(spec, registry, level, -PRESS_IN_M + (pop + PRESS_IN_M) * v));
+  setTravel(spec, registry, level, pop);
+}
 
 /** The finishing beat's motion: each drawer level pops OPEN (ease-out, the spring), rests a moment, then glides CLOSED — one level after the other. Ends with every driver back at zero, so the scene is bit-identical to the static flush render. */
 export async function runPushOpen(
