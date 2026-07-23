@@ -1,301 +1,209 @@
-# Blender headless thumbnail renderer for furniture parts.
+# Blender thumbnail renderer — run headless via the launcher:
+#   npm run render:thumbs:blender          (render-thumbs-blender.mjs resolves Blender)
+# or directly:
+#   blender -b -P src/game/helper-scripts/render_thumbs.py [-- --force]
 #
-# Invoked by render-thumbs-blender.mjs as:  blender -b -P render_thumbs.py
-# (which sets no CLI args, so configuration comes from env vars).
-#
-#   FURNITURE   comma-separated furniture ids to render (default: EKET)
-#   REPO_ROOT   repo root; defaults to two levels above this script's src dir
-#   THUMB_SIZE  square render size in px (default 256)
-#   THUMB_ENGINE  "EEVEE" (real materials, needs a GPU) or "WORKBENCH"
-#                 (fast, CPU, matte studio shading). Default: EEVEE.
-#
-# For each furniture it imports <ID>.glb once and then, per mesh object:
-#   * exports a single-object GLB to  assets/models/furnitures/<ID>/parts/<base>.glb
-#   * renders a framed, transparent PNG to
-#     assets/thumbnails/furnitures/<ID>/light/parts/<base>.png
-# It also renders the whole furniture (<ID>.png) and one image per cluster
-# (clusters/<cluster>.png). gen-thumbs.mjs then wires these into thumbs.gen.ts.
-#
-# Naming mirrors gen-thumbs.mjs' candidate bases: a structural mesh keeps its
-# object name; a fastener "<head>__<a>&<b>" becomes "<head>_<a>" (first attached).
+# Renders every MISSING thumbnail under src/assets/thumbnails (pass --force to
+# redo all): the furniture preview (<ID>.png), per-part thumbs from
+# models/<ID>/parts/*.glb, per-cluster previews for multi-cluster furniture, and
+# shared tool thumbs. The look is the neutral studio gray (materials overridden —
+# the GLB beige reads muddy at 256px), transparent background, soft 3/4 ortho
+# view, EEVEE. Written for Blender 4.2.
+import json
+import os
+import struct
+import sys
 
 import bpy
-import os
-import sys
-import math
-from mathutils import Vector, Matrix
-
-# --------------------------------------------------------------------------- #
-# Config
-# --------------------------------------------------------------------------- #
+from mathutils import Vector
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-REPO_ROOT = os.environ.get(
-    "REPO_ROOT", os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", ".."))
-)
-FURNITURES = [f.strip() for f in os.environ.get("FURNITURE", "EKET").split(",") if f.strip()]
-SIZE = int(os.environ.get("THUMB_SIZE", "256"))
-ENGINE = os.environ.get("THUMB_ENGINE", "EEVEE").strip().upper()
-# Which passes to render: any of furniture,clusters,parts (default all).
-STAGES = {s.strip() for s in os.environ.get("THUMB_STAGES", "furniture,clusters,parts").split(",") if s.strip()}
-# Replace every material with a uniform matte gray so the thumbnail look never
-# depends on the GLB's own material/texture color (the preferred neutral look).
-NEUTRAL = os.environ.get("THUMB_NEUTRAL", "").strip() not in ("", "0", "false")
-# Subset selection. By default gen-thumbs.mjs only references ONE representative
-# object per group, so we render just those to avoid redundant duplicate parts.
-# THUMB_ONLY (comma list) or THUMB_ONLY_FILE (newline list) name the exact object
-# names to render; empty means render every mesh.
-ONLY = {n.strip() for n in os.environ.get("THUMB_ONLY", "").split(",") if n.strip()}
-_only_file = os.environ.get("THUMB_ONLY_FILE", "").strip()
-if _only_file and os.path.exists(_only_file):
-    with open(_only_file, "r", encoding="utf-8") as fh:
-        ONLY |= {ln.strip() for ln in fh if ln.strip()}
+SRC = os.path.normpath(os.path.join(SCRIPT_DIR, "..", ".."))
+FURNITURE_MODELS = os.path.join(SRC, "assets", "models", "furnitures")
+TOOL_MODELS = os.path.join(SRC, "assets", "models", "tools")
+OUT = os.path.join(SRC, "assets", "thumbnails")
 
-# ISO view direction (from target toward camera). Matches the soft renderer.
-VIEW_DIR = Vector((1.0, -1.0, 0.8)).normalized()
-PADDING = 1.12  # extra room around the framed bounds
-
-ASSETS = os.path.join(REPO_ROOT, "src", "assets")
+SIZE = 256
+FORCE = "--force" in sys.argv
+# camera offset direction in Blender coords (+Z up; glTF -Z becomes +Y):
+# out front, a touch to the left, from above — the EKET/LACK thumbnail angle
+VIEW_OFFSET = Vector((-1.25, -1.0, 0.85))
+MARGIN = 1.26
 
 
-def log(msg):
-    print("[render_thumbs] " + msg, flush=True)
+def clusters_in_glb(path):
+    """Distinct node-name prefixes (cluster ids) among mesh nodes of a GLB."""
+    with open(path, "rb") as f:
+        magic, _, _ = struct.unpack("<III", f.read(12))
+        if magic != 0x46546C67:
+            return []
+        length, ctype = struct.unpack("<II", f.read(8))
+        if ctype != 0x4E4F534A:
+            return []
+        data = json.loads(f.read(length))
+    out = []
+    for n in data.get("nodes", []):
+        if "mesh" in n and n.get("name"):
+            c = n["name"].split("_")[0]
+            if c not in out:
+                out.append(c)
+    return out
 
 
-# --------------------------------------------------------------------------- #
-# Scene setup
-# --------------------------------------------------------------------------- #
-
-def resolve_engine():
-    ids = {e.identifier for e in bpy.types.RenderSettings.bl_rna.properties["engine"].enum_items}
-    if ENGINE == "WORKBENCH":
-        return "BLENDER_WORKBENCH"
-    # EEVEE: 4.2+ renamed the engine to EEVEE Next.
-    if "BLENDER_EEVEE_NEXT" in ids:
-        return "BLENDER_EEVEE_NEXT"
-    return "BLENDER_EEVEE"
-
-
-def setup_render():
+def reset_scene():
+    bpy.ops.wm.read_factory_settings(use_empty=True)
     scene = bpy.context.scene
-    engine = resolve_engine()
-    scene.render.engine = engine
+    for engine in ("BLENDER_EEVEE_NEXT", "BLENDER_EEVEE"):
+        try:
+            scene.render.engine = engine
+            break
+        except TypeError:
+            continue
     scene.render.resolution_x = SIZE
     scene.render.resolution_y = SIZE
-    scene.render.resolution_percentage = 100
     scene.render.film_transparent = True
     scene.render.image_settings.file_format = "PNG"
     scene.render.image_settings.color_mode = "RGBA"
-    scene.render.filter_size = 1.5
+    # Standard transform — Filmic/AgX gray down the flat studio look
+    scene.view_settings.view_transform = "Standard"
 
-    if engine == "BLENDER_WORKBENCH":
-        shading = scene.display.shading
-        shading.light = "STUDIO"
-        shading.color_type = "TEXTURE"  # show GLB textures/materials, fall back to base color
-        shading.show_shadows = False
-        shading.show_cavity = False
-    else:
-        # Soft, even key light + gentle world fill so matte surfaces read clearly.
-        world = bpy.data.worlds.new("thumbWorld")
-        world.use_nodes = True
-        bg = world.node_tree.nodes.get("Background")
-        if bg:
-            bg.inputs[0].default_value = (1, 1, 1, 1)
-            bg.inputs[1].default_value = 0.55
-        scene.world = world
-
-        sun_data = bpy.data.lights.new("thumbSun", "SUN")
-        sun_data.energy = 3.0
-        sun_data.angle = math.radians(15)  # softer shadow edges
-        sun = bpy.data.objects.new("thumbSun", sun_data)
-        scene.collection.objects.link(sun)
-        # Light roughly from the camera's upper-left/front.
-        light_dir = Vector((0.4, -0.7, 1.0)).normalized()
-        sun.rotation_euler = direction_to_euler(-light_dir)
-
-    return scene
+    world = bpy.data.worlds.new("thumb-world")
+    world.use_nodes = True
+    bg = world.node_tree.nodes["Background"]
+    bg.inputs[0].default_value = (1.0, 1.0, 1.0, 1.0)
+    bg.inputs[1].default_value = 0.32  # ambient fill
+    scene.world = world
 
 
-def direction_to_euler(forward):
-    # Build a rotation whose local -Z points along `forward` (Blender lamp/cam convention).
-    z = (-forward).normalized()
-    up = Vector((0, 0, 1))
-    if abs(z.dot(up)) > 0.999:
-        up = Vector((0, 1, 0))
-    x = up.cross(z).normalized()
-    y = z.cross(x).normalized()
-    return Matrix((x, y, z)).transposed().to_euler()
+def neutral_material():
+    mat = bpy.data.materials.new("thumb-gray")
+    mat.use_nodes = True
+    bsdf = mat.node_tree.nodes["Principled BSDF"]
+    bsdf.inputs["Base Color"].default_value = (0.80, 0.80, 0.80, 1.0)
+    bsdf.inputs["Roughness"].default_value = 0.65
+    bsdf.inputs["Metallic"].default_value = 0.0
+    return mat
 
 
-def make_camera(scene):
-    cam_data = bpy.data.cameras.new("thumbCam")
-    cam_data.type = "ORTHO"
-    cam = bpy.data.objects.new("thumbCam", cam_data)
-    scene.collection.objects.link(cam)
-    scene.camera = cam
-    # Orient once: camera +Z along VIEW_DIR, so it looks along -VIEW_DIR at the target.
-    z = VIEW_DIR
-    up = Vector((0, 0, 1))
-    x = up.cross(z).normalized()
-    y = z.cross(x).normalized()
-    cam.matrix_world = Matrix((
-        (x.x, y.x, z.x, 0.0),
-        (x.y, y.y, z.y, 0.0),
-        (x.z, y.z, z.z, 0.0),
-        (0.0, 0.0, 0.0, 1.0),
-    ))
-    return cam, (x, y, z)
+def add_lights():
+    key = bpy.data.lights.new("key", type="SUN")
+    key.energy = 2.4
+    key.angle = 0.35  # soft-ish shadows
+    key_obj = bpy.data.objects.new("key", key)
+    bpy.context.scene.collection.objects.link(key_obj)
+    key_obj.rotation_euler = (0.9, -0.25, -1.9)  # from the camera's upper left
+
+    fill = bpy.data.lights.new("fill", type="SUN")
+    fill.energy = 0.8
+    fill.angle = 0.6
+    fill_obj = bpy.data.objects.new("fill", fill)
+    bpy.context.scene.collection.objects.link(fill_obj)
+    fill_obj.rotation_euler = (1.1, 0.4, 1.1)  # opposite side, weaker
 
 
-# --------------------------------------------------------------------------- #
-# Framing + rendering
-# --------------------------------------------------------------------------- #
-
-def world_corners(objs):
+def frame_camera(objs):
+    """Ortho camera down VIEW_OFFSET, framed on the objects' world bbox."""
     corners = []
-    for o in objs:
-        for c in o.bound_box:
-            corners.append(o.matrix_world @ Vector(c))
-    return corners
+    for obj in objs:
+        for c in obj.bound_box:
+            corners.append(obj.matrix_world @ Vector(c))
+    if not corners:
+        return None
+    center = sum(corners, Vector()) / len(corners)
+
+    direction = VIEW_OFFSET.normalized()
+    cam_data = bpy.data.cameras.new("thumb-cam")
+    cam_data.type = "ORTHO"
+    cam = bpy.data.objects.new("thumb-cam", cam_data)
+    bpy.context.scene.collection.objects.link(cam)
+    radius = max((c - center).length for c in corners)
+    cam.location = center + direction * (radius * 3.0 + 0.5)
+    cam.rotation_euler = direction.to_track_quat("Z", "Y").to_euler()
+
+    # projected extent on the camera's right/up axes decides the ortho width
+    quat = direction.to_track_quat("Z", "Y")
+    right = quat @ Vector((1, 0, 0))
+    up = quat @ Vector((0, 1, 0))
+    xs = [(c - center).dot(right) for c in corners]
+    ys = [(c - center).dot(up) for c in corners]
+    span = max(max(xs) - min(xs), max(ys) - min(ys), 0.001)
+    cam_data.ortho_scale = span * MARGIN
+    # keep the subject centered on the projected mid, not the bbox center
+    mid = center + right * ((max(xs) + min(xs)) / 2) + up * ((max(ys) + min(ys)) / 2)
+    cam.location = mid + direction * (radius * 3.0 + 0.5)
+    bpy.context.scene.camera = cam
+    return cam
 
 
-def frame(cam, basis, objs):
-    x_axis, y_axis, z_axis = basis
-    corners = world_corners(objs)
-    center = sum(corners, Vector((0, 0, 0))) / len(corners)
+def render_glb(glb_path, out_path, cluster=None):
+    reset_scene()
+    bpy.ops.import_scene.gltf(filepath=glb_path)
 
-    minx = min((c - center).dot(x_axis) for c in corners)
-    maxx = max((c - center).dot(x_axis) for c in corners)
-    miny = min((c - center).dot(y_axis) for c in corners)
-    maxy = max((c - center).dot(y_axis) for c in corners)
-    minz = min((c - center).dot(z_axis) for c in corners)
-    maxz = max((c - center).dot(z_axis) for c in corners)
+    mat = neutral_material()
+    visible = []
+    for obj in list(bpy.context.scene.objects):
+        if obj.type != "MESH":
+            continue
+        if cluster and not obj.name.split("_")[0] == cluster:
+            bpy.data.objects.remove(obj, do_unlink=True)
+            continue
+        obj.data.materials.clear()
+        obj.data.materials.append(mat)
+        visible.append(obj)
+    if not visible:
+        print(f"skip {os.path.basename(glb_path)}: no meshes" + (f" in cluster {cluster}" in "" if False else ""))
+        return False
 
-    width = maxx - minx
-    height = maxy - miny
-    depth = maxz - minz
-    extent = max(width, height, 1e-4) * PADDING
+    add_lights()
+    if frame_camera(visible) is None:
+        return False
 
-    dist = depth * 0.5 + extent * 2.0 + 1.0
-    cam.location = center + z_axis * dist
-    cam.data.ortho_scale = extent
-    cam.data.clip_start = 0.01
-    cam.data.clip_end = dist + depth + extent * 2.0 + 10.0
-
-
-def render_to(path):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    bpy.context.scene.render.filepath = path
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    bpy.context.scene.render.filepath = out_path
     bpy.ops.render.render(write_still=True)
+    return True
 
 
-_neutral_mat = None
+def jobs():
+    out = []
+    if os.path.isdir(FURNITURE_MODELS):
+        for fid in sorted(os.listdir(FURNITURE_MODELS)):
+            fdir = os.path.join(FURNITURE_MODELS, fid)
+            if not os.path.isdir(fdir):
+                continue
+            light = os.path.join(OUT, "furnitures", fid, "light")
+            whole = os.path.join(fdir, f"{fid}.glb")
+            if os.path.isfile(whole):
+                out.append((whole, os.path.join(light, f"{fid}.png"), None))
+                clusters = clusters_in_glb(whole)
+                if len(clusters) > 1:
+                    for c in clusters:
+                        out.append((whole, os.path.join(light, "clusters", f"{c}.png"), c))
+            parts = os.path.join(fdir, "parts")
+            if os.path.isdir(parts):
+                for f in sorted(os.listdir(parts)):
+                    if f.endswith(".glb"):
+                        out.append((
+                            os.path.join(parts, f),
+                            os.path.join(light, "parts", f[:-4] + ".png"),
+                            None,
+                        ))
+    if os.path.isdir(TOOL_MODELS):
+        for f in sorted(os.listdir(TOOL_MODELS)):
+            if f.endswith(".glb"):
+                out.append((
+                    os.path.join(TOOL_MODELS, f),
+                    os.path.join(OUT, "tools", "light", f[:-4] + ".png"),
+                    None,
+                ))
+    return out
 
 
-def apply_neutral(meshes):
-    # One shared matte-gray material on every mesh, so the thumbnail tone never
-    # depends on the GLB's own material/texture color.
-    global _neutral_mat
-    if _neutral_mat is None:
-        _neutral_mat = bpy.data.materials.new("thumbNeutral")
-        _neutral_mat.use_nodes = True
-        bsdf = _neutral_mat.node_tree.nodes.get("Principled BSDF")
-        if bsdf:
-            bsdf.inputs["Base Color"].default_value = (0.62, 0.62, 0.62, 1.0)
-            bsdf.inputs["Roughness"].default_value = 0.7
-            if "Specular IOR Level" in bsdf.inputs:
-                bsdf.inputs["Specular IOR Level"].default_value = 0.2
-    for o in meshes:
-        o.data.materials.clear()
-        o.data.materials.append(_neutral_mat)
-
-
-def part_base(name):
-    # We render one representative per group, so name the image "<cluster>_<group>"
-    # — no instance index, no attached-part suffix. gen-thumbs.mjs matches this via
-    # its `${cluster}_${group}` candidate base.
-    cluster = name.split("_", 1)[0]
-    rest = name.split("_", 1)[1] if "_" in name else name
-    rest = rest.split("__", 1)[0]  # drop "__attached" for fasteners
-    segs = rest.split("_")
-    if len(segs) > 1 and segs[-1].isdigit():
-        segs = segs[:-1]  # drop trailing instance index
-    return cluster + "_" + "_".join(segs)
-
-
-def cluster_of(name):
-    return name.split("_")[0]
-
-
-# --------------------------------------------------------------------------- #
-# Main per-furniture pass
-# --------------------------------------------------------------------------- #
-
-def process(furn):
-    glb = os.path.join(ASSETS, "models", "furnitures", furn, furn + ".glb")
-    if not os.path.exists(glb):
-        log("skip %s: missing %s" % (furn, glb))
-        return
-
-    bpy.ops.wm.read_factory_settings(use_empty=True)
-    scene = setup_render()
-    cam, basis = make_camera(scene)
-
-    log("importing %s" % glb)
-    bpy.ops.import_scene.gltf(filepath=glb)
-
-    meshes = [o for o in bpy.data.objects if o.type == "MESH"]
-    log("%s: %d mesh objects" % (furn, len(meshes)))
-    if NEUTRAL:
-        apply_neutral(meshes)
-
-    light = os.path.join(ASSETS, "thumbnails", "furnitures", furn, "light")
-    parts_thumb = os.path.join(light, "parts")
-    clusters_thumb = os.path.join(light, "clusters")
-
-    def set_render_visible(visible_set):
-        for o in meshes:
-            o.hide_render = o not in visible_set
-
-    # Whole furniture.
-    if "furniture" in STAGES:
-        set_render_visible(set(meshes))
-        frame(cam, basis, meshes)
-        render_to(os.path.join(light, furn + ".png"))
-        log("rendered furniture %s.png" % furn)
-
-    # Clusters.
-    if "clusters" in STAGES:
-        clusters = {}
-        for o in meshes:
-            clusters.setdefault(cluster_of(o.name), []).append(o)
-        if len(clusters) > 1:
-            for cid, objs in clusters.items():
-                set_render_visible(set(objs))
-                frame(cam, basis, objs)
-                render_to(os.path.join(clusters_thumb, cid + ".png"))
-            log("rendered %d clusters" % len(clusters))
-
-    if "parts" not in STAGES:
-        return
-
-    # Per-part: isolate, frame, render. (No per-part GLB export — the render works
-    # off the combined GLB above; gen-thumbs.mjs keys off the PNG basenames.)
-    targets = [o for o in meshes if not ONLY or o.name in ONLY]
-    for o in targets:
-        base = part_base(o.name)
-        set_render_visible({o})
-        frame(cam, basis, [o])
-        render_to(os.path.join(parts_thumb, base + ".png"))
-    log("%s: rendered %d parts" % (furn, len(targets)))
-
-
-def main():
-    log("engine=%s size=%d furnitures=%s" % (ENGINE, SIZE, ",".join(FURNITURES)))
-    log("repo=%s" % REPO_ROOT)
-    for furn in FURNITURES:
-        process(furn)
-    log("done")
-
-
-main()
+wrote = 0
+for glb, png, cluster in jobs():
+    if not FORCE and os.path.isfile(png):
+        continue
+    if render_glb(glb, png, cluster):
+        wrote += 1
+        print("thumb:", os.path.relpath(png, SRC))
+print(f"done: wrote {wrote} thumbnail(s)")

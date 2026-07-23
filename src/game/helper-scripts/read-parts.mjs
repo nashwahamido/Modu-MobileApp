@@ -139,6 +139,8 @@ function buildParts(json, bin, typeOverrides = {}) {
   const parts = {};
   for (const n of json.nodes ?? []) {
     if (!n.name) continue;
+    // combined_* nodes are pre-merged whole-cluster proxies for the combine carry (ClusterDef.carryMesh) — presentation-only, never parts
+    if (n.name.startsWith('combined_')) continue;
     if (n.matrix) throw new Error(`node ${n.name} uses a matrix transform`);
     const p = parseName(n.name);
     const joinsTwo = p.attached?.length === 2;
