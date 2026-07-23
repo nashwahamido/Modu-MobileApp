@@ -5,7 +5,6 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Svg, { Circle, G, Path } from "react-native-svg";
 import { looseDelta } from "@/src/game/core/geometry/staging";
 import { engageAxis } from "@/src/game/core/evaluation/engagement";
-import { quatFromAxisAngle, quatMultiply } from "@/src/game/core/geometry/math";
 import { AssemblyAction } from "@/src/game/core/type";
 import { TIGHTEN_TOTAL_DEG, useGameStore } from "@/src/game/core/store";
 import type { OffsetDriver } from "../scene/offsetDriver";
@@ -30,7 +29,7 @@ interface Props {
   sinkDriver: OffsetDriver;
 }
 
-/** Two-STEP tighten for `drawTurn` fasteners (EKET stabiliser-rod dowels), splitting what TightenControl does at once: (1) DRAW OUT — a HORIZONTAL SLIDER (matching the dowel's travel) translates it from its loose (retracted-in-rod) pose out to flush in the slider, holding the pre-rotation so it does NOT spin yet; then (2) ROTATE LOCK — turn the dial to rotate it a quarter-turn home with NO position change. Commits the tightenFastener when the rotation completes. */
+/** Two-STEP tighten for `drawTurn` fasteners (EKET stabiliser-rod dowels): (1) DRAW OUT — a HORIZONTAL SLIDER (matching the dowel's travel) translates it from its loose (retracted-in-rod) pose out to flush in the slider; then (2) ROTATE LOCK — turn the dial to lock it home. The dial is prompt-only: the dowel stays baked at its final rotation throughout (a knurled cylinder's spin is unreadable anyway), the dial just accrues degrees. Commits the tightenFastener when the rotation completes. */
 export function DrawTurnControl({ action, sinkDriver }: Props) {
   const [phase, setPhase] = useState<"draw" | "turn">("draw");
   const [drawP, setDrawP] = useState(0);
@@ -47,8 +46,6 @@ export function DrawTurnControl({ action, sinkDriver }: Props) {
     const axis = engageAxis(part, new Set(store.completed));
     const ld = looseDelta(part, axis);
     sinkDriver.set([ld[0] * (1 - p), ld[1] * (1 - p), ld[2] * (1 - p)]);
-    const rad = (TIGHTEN_TOTAL_DEG * Math.PI) / 180; // hold the pre-rotation through the draw
-    sinkDriver.setRotation(quatMultiply(quatFromAxisAngle(axis, rad), part.pose.rotation));
   };
 
   useEffect(() => {
@@ -84,7 +81,7 @@ export function DrawTurnControl({ action, sinkDriver }: Props) {
       lastX.current = null;
     });
 
-  // ── TURN: rotate in place at flush, no translation ──
+  // ── TURN: prompt-only dial at flush — accrues degrees, the dowel itself doesn't move ──
   const pan = Gesture.Pan()
     .runOnJS(true)
     .onUpdate((e) => {
@@ -97,14 +94,6 @@ export function DrawTurnControl({ action, sinkDriver }: Props) {
           const store = useGameStore.getState();
           store.addTightenDeg(action.actionId, d);
           const total = store.tightenDeg[action.actionId] ?? 0;
-          const p = Math.min(1, total / TIGHTEN_TOTAL_DEG);
-          const part = action.partId ? store.furniture?.parts[action.partId] : undefined;
-          if (part) {
-            const axis = engageAxis(part, new Set(store.completed));
-            sinkDriver.set([0, 0, 0]); // drawn out already — rotate in place
-            const rad = ((TIGHTEN_TOTAL_DEG * (1 - p)) * Math.PI) / 180;
-            sinkDriver.setRotation(quatMultiply(quatFromAxisAngle(axis, rad), part.pose.rotation));
-          }
           const q = Math.floor(total / 90);
           if (q > lastQuarter.current) {
             lastQuarter.current = q;

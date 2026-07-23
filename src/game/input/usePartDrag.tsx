@@ -16,7 +16,7 @@ import {
   targetPositionForAction,
 } from "@/src/game/core/scene/targets";
 import type { GroupCandidate } from "@/src/game/core/scene/targets";
-import { actionsForClusterFocus } from "@/src/game/core/evaluation/clusters";
+import { actionCluster, actionsForClusterFocus, clusterStarted } from "@/src/game/core/evaluation/clusters";
 import { clusterDriveKind } from "@/src/game/core/evaluation/clusterCombine";
 import {
   placeEngagement,
@@ -344,6 +344,15 @@ export function usePartDrag({
           }
           if (!store.available().some((a) => a.actionId === action.actionId)) {
             if (store.mode !== "free") return;
+            // An untouched cluster's greyed cards don't run the pickup ring — beginPickup will refuse them anyway.
+            const cluster = store.furniture ? actionCluster(store.furniture, action) : undefined;
+            if (
+              cluster &&
+              store.furniture &&
+              !clusterStarted(store.furniture, cluster, new Set(store.completed))
+            ) {
+              return;
+            }
           }
           const t = e.allTouches[0];
           ringX.value = t.absoluteX;

@@ -13,7 +13,6 @@ const SWIPE_PX = 80;
 
 /** Swipe direction per beat: up = lift/stand, down = lower/press. */
 const BEAT_DIRECTION: Record<string, "up" | "down"> = {
-  reorient_upright: "up",
   combine_assemblies: "down",
   finishing_checks: "down",
 };
