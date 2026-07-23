@@ -59,7 +59,8 @@ export const STRUCTURE: StructureOverlay = {
   circleUpp: { seed: true },
   circleDown: { seed: true },
   ringRail: { unstable: true },
-  supportPin: {},
+  // dropped in from ABOVE: the sleeve SLIDES down through circleUpp's centre hole until its top flange (y=0.577) lands on the plate's top face (y=0.570) — the flange can't pass the hole, so this is its only insertion direction. The scene renders model space (upright) throughout, so the from-above slide works mid-build with no reorient beat. parkBackoff must clear the full 9.6cm sleeve above the plate; the press default parked it inside the plate stack (the reported collision).
+  supportPin: { slideJoins: [asPartId("circleUpp")], placeDir: [0, -1, 0] as const, parkBackoff: 0.12 },
   seat: { seed: true },
   seatPlate: { seed: true, unstable: true },
   pole: {
@@ -91,15 +92,15 @@ export const AUTHORED_ACTIONS: DraftAction[] = [
     partId: "ringRail",
     requires: tightenActionIds(P, asGroupId("screw105251")),
   }),
+  // no requires: the slide frontier (slideJoins circleUpp) is the real gate — the pin needs the top plate up to have a hole to drop through. Cluster reorient beats were cut 2026-07-23; the combine beat is the standing-up moment now.
   action({ type: "placePart", stage: 2, partId: "supportPin", requires: [] }),
-  action({ actionId: "reorient_upright", type: "reorient", stage: 2, cluster: "base", requires: [] }),
 
   action({ type: "placePart", stage: 3, partId: "seat", requires: [] }),
   action({ type: "placePart", stage: 3, partId: "seatPlate", requires: ["place_seat"] }),
   action({ type: "placePart", stage: 3, partId: "pole", requires: ["place_seatPlate"] }),
 
   // ── combine: seat the base (seed drop), then lower the seat onto it; finish. combine_seat's dependence on combine_base is DERIVED from the CLUSTERS slideJoins overlay — do not hand-write it here. ──
-  action({ actionId: "combine_base", type: "combineClusters", stage: 4, cluster: "base", requires: ["reorient_upright"] }),
+  action({ actionId: "combine_base", type: "combineClusters", stage: 4, cluster: "base", requires: [] }),
   action({ actionId: "combine_seat", type: "combineClusters", stage: 4, cluster: "seat", requires: [] }),
   action({ actionId: "finishing_checks", type: "reorient", stage: 4, requires: ["combine_seat"] }),
 ];

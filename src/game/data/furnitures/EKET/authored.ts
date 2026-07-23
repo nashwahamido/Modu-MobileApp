@@ -3,7 +3,7 @@ import {
   FastenerRule,
 } from "@/src/game/core/composition/composeActions";
 import { StructureOverlay } from "@/src/game/core/model/liaisons";
-import { asComponentId, asGroupId, asPartId, placeId } from "@/src/game/core/ids";
+import { asComponentId, asGroupId, asPartId, placeId, tightenId } from "@/src/game/core/ids";
 import {
   ClusterDef,
   ClusterId,
@@ -142,9 +142,9 @@ const cabinetRunners = (s: string): StructureOverlay => ({
   [`runnerMiddleR_${s}`]: { directJoins: [pid(`runnerFrameR_${s}`)] },
   [`runnerCarriageL_${s}`]: { directJoins: [pid(`runnerMiddleL_${s}`)] },
   [`runnerCarriageR_${s}`]: { directJoins: [pid(`runnerMiddleR_${s}`)] },
-  // clip seat is the −X (REAR) extreme of the slide: every clip sits at x=-0.131, behind all four carriages (x=-0.010..+0.039). The user approaches the exposed rear tip from outside the cabinet and pushes the clip FORWARD (+X) onto it, so it parks at x≈-0.161 — clear of the rail rather than buried inside it. The four clips are natively ONE interchangeable group in the GLB (renamed runnerClip_1..4: 1/2 ride carriageL levels 1/2, 3/4 ride carriageR — one tray card ×4, each socket renders its own mirrored mesh), and a 3cm parkBackoff: the 10cm slide default parks the tiny clip back inside the runner assembly.
-  [`runnerClip_${s}`]: { slideJoins: [pid(`runnerCarriageL_${s}`)], placeDir: [1, 0, 0] as const, parkBackoff: 0.03 },
-  [`runnerClip_${s === "1" ? "3" : "4"}`]: { slideJoins: [pid(`runnerCarriageR_${s}`)], placeDir: [1, 0, 0] as const, parkBackoff: 0.03 },
+  // clip seat is the −X (REAR) extreme of the slide: every clip sits at x=-0.131, behind all four carriages (x=-0.010..+0.039). DEVICE-VERIFIED: the clip slides on BACKWARD (−X) — it parks just ahead of the seat at x≈-0.101 and is pushed rearward onto the carriage tip (the earlier +X push drove it through the rail body and collided). The four clips are natively ONE interchangeable group in the GLB (renamed runnerClip_1..4: 1/2 ride carriageL levels 1/2, 3/4 ride carriageR — one tray card ×4, each socket renders its own mirrored mesh), and a 3cm parkBackoff: the 10cm slide default parks the tiny clip back inside the runner assembly.
+  [`runnerClip_${s}`]: { slideJoins: [pid(`runnerCarriageL_${s}`)], placeDir: [-1, 0, 0] as const, parkBackoff: 0.03 },
+  [`runnerClip_${s === "1" ? "3" : "4"}`]: { slideJoins: [pid(`runnerCarriageR_${s}`)], placeDir: [-1, 0, 0] as const, parkBackoff: 0.03 },
   // the stabiliser rod is a STAGED sub-assembly (manual steps 23-24): the player lifts it up on its rail just above the seat, presses a coupling dowel into each end there, lowers the finished bridge straight down between the two FIXED frames into the cradles, then rotates both dowels home. stageOffset is the whole switch — the stage beat, the dowels' insert-at-staging / tighten-after-seating order and the shared-offset carry are all derived from it (core/model/staging.ts). No directJoins: the rod's only Γ edges are the two rod↔frame joints its dowels create, so it never binds the moving carriages.
   [`stabilizerRod_${s}`]: {
     placeDir: [0, -1, 0] as const,
@@ -166,30 +166,29 @@ export const STRUCTURE: StructureOverlay = {
   sidePanelL: { seed: true, directJoins: [pid("topPanel"), pid("bottomPanel")], placeDir: [0, 0, -1] as const, lockDir: [-1, 0, 0] as const }, // lockDir engages only when a horizontal seeded first and this side becomes the mover — as the strict-order seed it just drops
   sidePanelR: { directJoins: [pid("topPanel"), pid("bottomPanel")], placeDir: [0, 0, 1] as const, lockDir: [-1, 0, 0] as const }, // not a seed — reachable via the topPanel edge once topPanel is down; arrives from the right, travelling inward — its keyholes ride over the top's edge dowels a bit FORWARD of seat, then it shoves BACK to lock
   topPanel: { seed: true, placeDir: [0, 0, 1] as const, lockDir: [1, 0, 0] as const }, // ALSO a seed: free mode may start from either horizontal (the manual itself builds off a flat panel) and the sides then hook onto IT with their opposite lockDir. As the strict-order mover it presses sideways (toward +Z) onto the standing LEFT side at target height, its edge dowels entering the big slot ends a bit BEHIND their final spots, then shoves FORWARD to lock
-  bottomPanel: { seed: true, placeDir: [0, 1, 0] as const }, // also a seed (see topPanel) but NO lockDir: closing last over the back it stays a plain upward press secured by the step-9 cams+pins, and when it seeds instead, the sides carry the keyhole motion
+  bottomPanel: { seed: true, placeDir: [0, 1, 0] as const, lockDir: [1, 0, 0] as const }, // also a seed (see topPanel); same dowel-carrier lock as the top — as the closing mover it presses UP onto the sides' bottom slots at a small depth overshoot, then shoves FORWARD to lock (the cams+pins then secure it, they don't replace the hook); as a seed it just drops and the sides carry the keyhole motion
   backPanel: { slideJoins: [pid("sidePanelL"), pid("sidePanelR")], placeDir: [0, 1, 0] as const }, // glides UP the side grooves from the still-open bottom — the top closes in stage 1 BEFORE the back, so coming down from above collides with it; if the build order ever flips (bottom first), this sign flips too — a static placeDir can only bake one order (same limitation engagement.ts notes for presses)
   // back-panel cam locks secure the slide joint AFTER the back is in — not a
   // preloaded connector joint (kind override: cam → secured; motion stays
   // "turn" from hardware.ts)
-  // engageDir OVERRIDDEN to [-1,0,0] (rear, outward): the GLB nodes bake it as +X (into the cabinet interior) — the Blender fastener nodes violate the shaft-on-local-Y convention — which put every loose/ghost pose INSIDE the box behind the back panel; the cams and pins really insert from the rear OUTSIDE. Fix the .blend orientations someday, but the override stays correct either way.
-  // insertProud 0 (user-verified): a cam/pin drops fully HOME — its front flush with the back panel's rear face (the baked seats already are; mesh front −0.151 = panel rear −0.151) — and the tighten turns/strikes IN PLACE; the default 2cm proud loose pose poked visibly out past the cabinet rear.
-  cam139434_1: { fastenerKind: "secured", engageDir: [-1, 0, 0] as const, insertProud: 0 },
-  cam139434_2: { fastenerKind: "secured", engageDir: [-1, 0, 0] as const, insertProud: 0 },
-  cam139434_3: { fastenerKind: "secured", engageDir: [-1, 0, 0] as const, insertProud: 0 },
-  cam139434_4: { fastenerKind: "secured", engageDir: [-1, 0, 0] as const, insertProud: 0 },
-  cam139434_5: { fastenerKind: "secured", engageDir: [-1, 0, 0] as const, insertProud: 0 },
-  cam139434_6: { fastenerKind: "secured", engageDir: [-1, 0, 0] as const, insertProud: 0 },
-  cam139434_7: { fastenerKind: "secured", engageDir: [-1, 0, 0] as const, insertProud: 0 },
-  cam139434_8: { fastenerKind: "secured", engageDir: [-1, 0, 0] as const, insertProud: 0 },
-  // the step-9 rear pins share the cams' baked-backwards +X engageDir — same override, same reason
-  dowel139435_1: { engageDir: [-1, 0, 0] as const, insertProud: 0 },
-  dowel139435_2: { engageDir: [-1, 0, 0] as const, insertProud: 0 },
-  dowel139435_3: { engageDir: [-1, 0, 0] as const, insertProud: 0 },
-  dowel139435_4: { engageDir: [-1, 0, 0] as const, insertProud: 0 },
-  dowel139435_5: { engageDir: [-1, 0, 0] as const, insertProud: 0 },
-  dowel139435_6: { engageDir: [-1, 0, 0] as const, insertProud: 0 },
-  dowel139435_7: { engageDir: [-1, 0, 0] as const, insertProud: 0 },
-  dowel139435_8: { engageDir: [-1, 0, 0] as const, insertProud: 0 },
+  // engageDir OVERRIDDEN per part (2026-07-23, from derive-fasteners DUMP head/tip positions — the GLB bakes a blanket +X for all 16, violating shaft-on-local-Y): a cam/pin engages big-end→small-end like a screw, and the two groups run on DIFFERENT axes. Each CAM sits inside its frame panel with its big face toward the cabinet interior and presses INTO that panel — down into the bottom (head y −0.151, tip −0.169), up into the top, sideways into its side — so its head→outward engageDir points at the interior, one clean cardinal per panel (the derived vectors also carry a ~6° bore lean; ignored). No insertProud override (reverses the earlier insertProud-0 pass): the default 2cm proud loose pose + one-shot press seat give the dowel interaction feel; with zero proud the press had no travel and the part looked home the moment it was dropped.
+  cam139434_1: { fastenerKind: "secured", engageDir: [0, 0, -1] as const }, // presses +Z into sidePanelL
+  cam139434_2: { fastenerKind: "secured", engageDir: [0, 1, 0] as const }, // presses down into bottomPanel
+  cam139434_3: { fastenerKind: "secured", engageDir: [0, 1, 0] as const },
+  cam139434_4: { fastenerKind: "secured", engageDir: [0, 1, 0] as const },
+  cam139434_5: { fastenerKind: "secured", engageDir: [0, 0, 1] as const }, // presses -Z into sidePanelR
+  cam139434_6: { fastenerKind: "secured", engageDir: [0, -1, 0] as const }, // presses up into topPanel
+  cam139434_7: { fastenerKind: "secured", engageDir: [0, -1, 0] as const },
+  cam139434_8: { fastenerKind: "secured", engageDir: [0, -1, 0] as const },
+  // the step-9 PINS go in exactly like their neighbouring cams (user-corrected): big end toward the interior, pressed into the host panel along its normal — NOT along X (that was the old blanket [-1,0,0]; the derive script's X-axis read is a red herring, the pin mesh is a near-uniform ~11mm disc whose PCA short axis is unreliable). Same per-panel cardinal as the cam beside each one.
+  dowel139435_1: { engageDir: [0, 1, 0] as const }, // presses down into bottomPanel
+  dowel139435_2: { engageDir: [0, 1, 0] as const },
+  dowel139435_3: { engageDir: [0, 0, 1] as const }, // presses -Z into sidePanelR
+  dowel139435_4: { engageDir: [0, -1, 0] as const }, // presses up into topPanel
+  dowel139435_5: { engageDir: [0, -1, 0] as const },
+  dowel139435_6: { engageDir: [0, -1, 0] as const },
+  dowel139435_7: { engageDir: [0, 0, -1] as const }, // presses +Z into sidePanelL
+  dowel139435_8: { engageDir: [0, 1, 0] as const },
   // stabiliser-rod coupling dowels (manual step 22), 3-phase: DROP each dowel to its STAGE pose (fully out of the rod end, +engageDir·insertStage) → PRESS it into the rod (insertFastener) so it sits RETRACTED (loose = −engageDir·insertRetract) → drawTurn TIGHTEN draws it back out into the slider hole while quarter-turning to lock. insertStage 0.03 = held ~3cm off the end before pressing (0.06 read as too far out on device); insertRetract 0.04 keeps the pressed dowel inside the rod (ends at z=±0.209). Tune both on device.
   dowel145572_1: { insertStage: 0.03, insertRetract: 0.04 },
   dowel145572_2: { insertStage: 0.03, insertRetract: 0.04 },
@@ -230,9 +229,29 @@ export const FASTENER_RULES: FastenerRule[] = [
   {
     group: asGroupId("dowel139435"),
     stage: 3,
-    requires: (p) => [...(p.attached ?? []).map(placeId), placeId(asPartId("backPanel"))],
+    // each pin also needs its co-located cam SEATED first (paired by shared bore position): the pin crosses the cam's slots inside the panel, so a still-loose cam physically blocks it — "tighten" here is the cam's one-shot press home, not a tool beat
+    requires: (p) => {
+      const cam = PIN_TO_CAM[p.partId as string];
+      return [
+        ...(p.attached ?? []).map(placeId),
+        placeId(asPartId("backPanel")),
+        ...(cam ? [tightenId(asPartId(cam))] : []),
+      ];
+    },
   },
 ];
+
+/** Pin → the cam sharing its bore (matched on baked positions: same host panel, same z/y slot). */
+const PIN_TO_CAM: Record<string, string> = {
+  dowel139435_1: "cam139434_2", // bottom, z +0.224
+  dowel139435_2: "cam139434_4", // bottom, z −0.224
+  dowel139435_8: "cam139434_3", // bottom, z 0
+  dowel139435_7: "cam139434_1", // side L
+  dowel139435_3: "cam139434_5", // side R
+  dowel139435_4: "cam139434_6", // top, z −0.224
+  dowel139435_6: "cam139434_7", // top, z 0
+  dowel139435_5: "cam139434_8", // top, z +0.224
+};
 
 /** Gate: whichever horizontal closes SECOND over the back panel's groove must wait for the back (manual steps 6-7) — under the linear build order topPanel always goes first (gated trivially true) and bottomPanel always goes second (gated on the back), but both gates stay symmetric in case the order ever changes. */
 export const GATES = {
@@ -303,7 +322,7 @@ export const AUTHORED_ACTIONS: DraftAction[] = [
   // ── cabinet stage 2 (manual steps 6-7): BACK slides into both sides' grooves, then BOTTOM closes over it (gated on the back) ──
   action({ type: "placePart", stage: 2, partId: "backPanel", requires: [], requiresAny: ["place_topPanel", "place_bottomPanel"] }),
   action({ type: "placePart", stage: 2, partId: "bottomPanel", requires: [], gate: "bottomPanelClosesAfterBack" }),
-  // ── cabinet stage 3: stabiliser rods (need the back seated + both sides' frames screwed), cams+pins (rules), suspension fittings, stand upright ──
+  // ── cabinet stage 3: stabiliser rods (need the back seated + both sides' frames screwed), cams+pins (rules), suspension fittings ──
   stabilizerRodAction("1"),
   stabilizerRodAction("2"),
   // gated: no suspension work until the rods, their dowels, and the rear cams + pins are all done (see GATES.suspAfterRearHardware)
@@ -319,14 +338,14 @@ export const AUTHORED_ACTIONS: DraftAction[] = [
   place("suspCap_1", 3),
   place("suspCover_2", 3),
   place("suspCap_2", 3),
-  action({ actionId: "reorient_cabinet", type: "reorient", stage: 3, cluster: "cabinet", requires: [] }),
+  // (cluster reorient beats cut 2026-07-23 — combine_cabinet is the standing-up moment; the part-less test/finishing beats below keep the reorient TYPE for their gestures)
 
   // ── drawer sub-assemblies ──
   ...drawerActions("1"),
   ...drawerActions("2"),
 
   // ── combine: seat the cabinet and slide BOTH drawers in; then each drawer's push-latch test (tap → springs open, pull out, push home — the runners telescope only then); then finish. Ordering between the combines is DERIVED from the CLUSTERS slideJoins overlay — do not hand-write it here; the test steps' gating IS hand-written (tests wait for both combines, top drawer first). ──
-  action({ actionId: "combine_cabinet", type: "combineClusters", stage: 4, cluster: "cabinet", requires: ["reorient_cabinet"] }),
+  action({ actionId: "combine_cabinet", type: "combineClusters", stage: 4, cluster: "cabinet", requires: [] }),
   action({ actionId: "combine_drawerA", type: "combineClusters", stage: 4, cluster: "drawerA", requires: [] }),
   action({ actionId: "combine_drawerB", type: "combineClusters", stage: 4, cluster: "drawerB", requires: [] }),
   action({ actionId: "test_drawerA", type: "reorient", stage: 4, requires: ["combine_drawerA", "combine_drawerB"] }),

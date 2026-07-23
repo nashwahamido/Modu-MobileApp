@@ -93,7 +93,7 @@ const HARDWARE_RAW = {
   // bolt128918 (drawer front keyhole bolts) removed 2026-07-20: the bolts now ship pre-attached — merged into the side-panel meshes in the GLB — so they are no longer separate parts and need no hardware entry, insert/tighten action or fastener rule
   dowel145572: {
     tool: "hand",
-    // manual step 22: (1) PRESS the knurled dowel into the stabiliser rod's end at staging (the insert beat), then (2+3) once the rod is seated, DRAW it OUT along its axis into the runner-slider hole and quarter-turn it to lock — folded into the single `drawTurn` tighten beat. NOTE: the drag-out TRANSLATION isn't animated yet (the dowel is baked at its final extended pose, no retract state); drawTurn currently drives the step TEXT + is the hook for a future draw-then-turn animation once a retract offset exists.
+    // manual step 22: (1) PRESS the knurled dowel into the stabiliser rod's end at staging (the insert beat), then (2+3) once the rod is seated, DRAW it OUT along its axis into the runner-slider hole and quarter-turn it to lock — folded into the single `drawTurn` tighten beat (DrawTurnControl: slider animates the draw-out translation; the rotate-lock dial is PROMPT-ONLY, the dowel never visibly spins).
     motion: "drawTurn",
     label: { standard: "Dowel", simple: "Peg" },
     note: "stabiliser-rod coupling dowel — pressed into the rod end, then drawn out into the slider hole and turned to lock",
