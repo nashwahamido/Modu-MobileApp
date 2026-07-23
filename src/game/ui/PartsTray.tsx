@@ -1,12 +1,19 @@
 import { Theme, useStyles } from "@/src/game/ui/theme";
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 import {
   GestureDetector,
   GestureType,
   ScrollView,
 } from "react-native-gesture-handler";
-import { AssemblyAction, ThumbMap } from "@/src/game/core/type";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
+import { AssemblyAction, GroupId, ThumbMap } from "@/src/game/core/type";
 import { thumbFor } from "@/src/game/core/presentation/labels";
 import { useColorScheme } from "@/src/hooks/use-color-scheme";
 import type { TrayItem } from "../scene/useSceneState";
@@ -18,19 +25,55 @@ interface Props {
   header?: ReactNode;
   /** Per-group thumbnails, keyed by group (furniture.thumbs). May be sparse. */
   thumbs?: ThumbMap;
+  /** Card to flash after a ? hint that says "take out X" — scrolled into view first if the list has it clipped. */
+  highlightGroup?: GroupId | null;
+  /** Bumped per ? press so the same group can flash again. */
+  highlightPulse?: number;
 }
 
 /** Inventory column (right edge): everything the current stage uses, grouped with remaining counts. Long-press an enabled card to take one in hand and drag it into the scene; locked cards are waiting on other steps. */
-export function PartsTray({ items, gestureFor, header, thumbs }: Props) {
+export function PartsTray({ items, gestureFor, header, thumbs, highlightGroup, highlightPulse }: Props) {
   const styles = useStyles(makeStyles);
   const theme = useColorScheme() === "dark" ? "dark" : "light";
+  const scrollRef = useRef<ScrollView>(null);
+  // Card positions within the list content, the current scroll offset, and the viewport height — enough to know when a card is clipped.
+  const cardLayouts = useRef<Record<string, { y: number; h: number }>>({});
+  const scrollY = useRef(0);
+  const viewportH = useRef(0);
+  const flash = useSharedValue(0);
+
+  useEffect(() => {
+    if (!highlightGroup) return;
+    const box = cardLayouts.current[highlightGroup];
+    if (box) {
+      const top = scrollY.current;
+      const bottom = top + viewportH.current;
+      // Only move the list when the card is actually clipped — an in-view card just flashes in place.
+      if (box.y < top || box.y + box.h > bottom) {
+        scrollRef.current?.scrollTo({ y: Math.max(0, box.y - 8), animated: true });
+      }
+    }
+    // Three gentle accent pulses — enough to draw the eye without strobing.
+    flash.value = 0;
+    flash.value = withRepeat(
+      withSequence(withTiming(1, { duration: 240 }), withTiming(0, { duration: 240 })),
+      3,
+    );
+  }, [highlightGroup, highlightPulse, flash]);
+
+  const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value * 0.5 }));
+
   if (items.length === 0 && !header) return null;
   return (
     <View style={styles.column} pointerEvents="box-none">
       <ScrollView
+        ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
+        onLayout={(e) => (viewportH.current = e.nativeEvent.layout.height)}
+        onScroll={(e) => (scrollY.current = e.nativeEvent.contentOffset.y)}
+        scrollEventThrottle={16}
       >
         {header}
         {items.map((item) => {
@@ -39,6 +82,12 @@ export function PartsTray({ items, gestureFor, header, thumbs }: Props) {
             <View
               key={item.group}
               style={[styles.card, !item.enabled && styles.cardDisabled]}
+              onLayout={(e) => {
+                cardLayouts.current[item.group] = {
+                  y: e.nativeEvent.layout.y,
+                  h: e.nativeEvent.layout.height,
+                };
+              }}
             >
               {thumb ? (
                 <Image source={thumb} style={styles.thumb} resizeMode="contain" />
@@ -52,6 +101,9 @@ export function PartsTray({ items, gestureFor, header, thumbs }: Props) {
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>×{item.remaining}</Text>
                 </View>
+              ) : null}
+              {item.group === highlightGroup ? (
+                <Animated.View pointerEvents="none" style={[styles.flashOverlay, flashStyle]} />
               ) : null}
             </View>
           );
@@ -113,4 +165,6 @@ const makeStyles = (t: Theme) =>
     paddingVertical: 1,
   },
   badgeText: { color: t.text, fontSize: 11, fontWeight: "700" },
+  // The ? hint pulse: the interactive-accent lavender, matching "press this" semantics.
+  flashOverlay: { ...StyleSheet.absoluteFillObject, borderRadius: 12, backgroundColor: t.accent },
   });
