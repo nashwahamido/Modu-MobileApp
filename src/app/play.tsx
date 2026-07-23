@@ -253,11 +253,13 @@ function GameScreen() {
     (m) => m !== "hidden" && m !== "socket_hint",
   );
 
+  const hintGroup = useGameStore((s) => s.hintGroup);
+  const hintPulse = useGameStore((s) => s.hintPulse);
   const selectedTool = useGameStore((s) => s.selectedTool);
   const rawTool = sceneState.activeTighten?.tool ?? driveAction?.tool ?? null;
   // "hand" is not equippable, so it is not NEEDED — otherwise the step would sit there
   // waiting for a tool the player has no way to pick up.
-  const neededTool = settings.manualTools ? rawTool : null;
+  const neededTool = settings.manualTools && rawTool !== "hand" ? rawTool : null;
   const toolReady = !neededTool || selectedTool === neededTool;
 
   // Scene gestures are MEMOIZED: the screen re-renders constantly mid-drag (fit-state churn), and handing GestureDetector fresh gesture instances reattaches native handlers — eating the first re-grab attempt and stuttering active drags (same lesson as the joystick).
@@ -474,6 +476,8 @@ function GameScreen() {
           items={sceneState.trayItems}
           gestureFor={gestureFor}
           thumbs={furniture.thumbs}
+          highlightGroup={hintGroup}
+          highlightPulse={hintPulse}
           header={
             focus ? undefined : (
               <ClusterTray
