@@ -8,6 +8,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withTiming,
+  type SharedValue,
 } from "react-native-reanimated";
 
 import {
@@ -15,13 +16,18 @@ import {
   targetPositionForAction,
 } from "@/src/game/core/scene/targets";
 import type { GroupCandidate } from "@/src/game/core/scene/targets";
-import { actionsForClusterFocus } from "@/src/game/core/evaluation/clusters";
+import { actionCluster, actionsForClusterFocus, clusterStarted } from "@/src/game/core/evaluation/clusters";
+import { clusterDriveKind } from "@/src/game/core/evaluation/clusterCombine";
 import {
   placeEngagement,
   pressParkInfo,
   screwParkOffset,
   slideParkInfo,
 } from "@/src/game/core/evaluation/engagement";
+import type { ParkInfo } from "@/src/game/core/evaluation/engagement";
+import type { ISharedValue } from "react-native-worklets-core";
+import type { OffsetSink } from "../scene/combineDriver";
+import type { CarryOffset } from "../scene/CombineCarry";
 import { computeFit } from "@/src/game/core/geometry/fit";
 import { isStaged } from "@/src/game/core/model/staging";
 import { isPickupType } from "@/src/game/core/ids";
@@ -76,6 +82,8 @@ interface Params {
   heldDriver: OffsetDriver;
   /** Drives a component's non-lead bodies while the lead is held/dragged, so they track the same live offset ("riding" mode). */
   slideDriver: ClusterDriver;
+  /** The combine carry offset, applied to the dragged cluster's entities on the RENDER thread (scene/CombineCarry) — carrying ~60 entities per frame from the JS thread froze the app. */
+  carryShared: ISharedValue<CarryOffset>;
   getFocusPoint: () => Vec3;
   /** Camera strafe callbacks — the canvas gesture falls back to these when the one-finger drag isn't re-grabbing a floating part (settings.canvasStrafe). */
   onPanStart?: (x: number, y: number) => void;
@@ -110,16 +118,26 @@ export function usePartDrag({
   manipulator,
   heldDriver,
   slideDriver,
+  carryShared,
   getFocusPoint,
   onPanStart,
   onPanMove,
   onPanEnd,
 }: Params) {
   const session = useRef<DragSession | null>(null);
+  // Combine-drag state lives in a ref, NOT gesture-closure locals: setCombiningCluster in onStart re-renders ClusterTray, which rebuilds the cluster gesture object, and gesture-handler carries the active touch onto the NEW object without re-firing its onStart — so closure-local ref/planeY/lastO would reset to null and onUpdate would stop tracking. A ref survives the swap, exactly as `session` does for part drags.
+  const clusterSession = useRef<{
+    ref: Float3;
+    planeY: number;
+    lastO: Float3;
+  } | null>(null);
 
   const ringX = useSharedValue(0);
   const ringY = useSharedValue(0);
   const ringProgress = useSharedValue(0);
+  // Screen position of the combine drag's target marker (the seat / park pose), driven from the cluster gesture.
+  const clusterRingX = useSharedValue(0);
+  const clusterRingY = useSharedValue(0);
   const { width: winW, height: winH } = useWindowDimensions();
 
   const fingerOnCameraPlaneAt = useCallback(
@@ -326,6 +344,15 @@ export function usePartDrag({
           }
           if (!store.available().some((a) => a.actionId === action.actionId)) {
             if (store.mode !== "free") return;
+            // An untouched cluster's greyed cards don't run the pickup ring — beginPickup will refuse them anyway.
+            const cluster = store.furniture ? actionCluster(store.furniture, action) : undefined;
+            if (
+              cluster &&
+              store.furniture &&
+              !clusterStarted(store.furniture, cluster, new Set(store.completed))
+            ) {
+              return;
+            }
           }
           const t = e.allTouches[0];
           ringX.value = t.absoluteX;
@@ -688,6 +715,161 @@ export function usePartDrag({
     ],
   );
 
+  /** Ease the carried cluster's shared offset home over `ms` — a JS rAF loop writing ONE shared value per frame; the render-thread loop does the actual moving. */
+  const animateCarryHome = useCallback(
+    (from: Float3, ms: number, onDone: () => void) => {
+      const t0 = Date.now();
+      const step = () => {
+        const k = Math.min(1, (Date.now() - t0) / ms);
+        const e = 1 - (1 - k) * (1 - k);
+        carryShared.value = {
+          x: from[0] * (1 - e),
+          y: from[1] * (1 - e),
+          z: from[2] * (1 - e),
+        };
+        if (k < 1) requestAnimationFrame(step);
+        else onDone();
+      };
+      requestAnimationFrame(step);
+    },
+    [carryShared],
+  );
+
+  /** Combine drag: a cluster card behaves like a part card. CARRY phase — the whole cluster materializes under the finger on the work plane (camera-projected, exactly like a part pickup) and follows it as ONE rigid body, gliding at its own baked height; the gesture only writes `carryShared`, and the render-thread loop (scene/CombineCarry) moves the entities. Release near its target: the seed cluster eases home and completes; a slide-joined cluster snaps to its park pose — the telescoping `sink` extends the runners out to meet it — and hands off to SlideControl for the drive home. Release anywhere else returns it to its card. */
+  const buildClusterGesture = useCallback(
+    (
+      action: AssemblyAction,
+      sink: OffsetSink,
+      park: ParkInfo | null,
+    ) => {
+      const target: Float3 = park ? ([...park.offset] as Float3) : [0, 0, 0];
+      // Long-press activation, exactly like a part card: the tray's ScrollView claims a bare pan the moment the finger clears its slop (the drag froze a step outside the tray), but it cannot steal a gesture that is already ACTIVE when the hold completes.
+      return Gesture.Pan()
+        .runOnJS(true)
+        .activateAfterLongPress(PICKUP_MS)
+        .onTouchesDown((e) => {
+          const t = e.allTouches[0];
+          ringX.value = t.absoluteX;
+          ringY.value = t.absoluteY;
+          ringProgress.value = 0;
+          ringProgress.value = withTiming(1, { duration: PICKUP_MS });
+        })
+        .onTouchesUp(() => {
+          ringProgress.value = withTiming(0, { duration: 80 });
+        })
+        .onStart((e) => {
+          ringProgress.value = withTiming(0, { duration: 120 });
+          const store = useGameStore.getState();
+          const f = store.furniture;
+          if (!action.cluster || !f) return;
+          // the finger carries the cluster's baked centroid; the carry plane sits at that height so the cluster glides level across the bench
+          const members = Object.values(f.parts).filter(
+            (p) => p.cluster === action.cluster,
+          );
+          const c: Float3 = [0, 0, 0];
+          for (const p of members) {
+            c[0] += p.pose.position[0] / members.length;
+            c[1] += p.pose.position[1] / members.length;
+            c[2] += p.pose.position[2] / members.length;
+          }
+          const planeY = c[1];
+          const p =
+            fingerOnPlane(e.absoluteX, e.absoluteY, planeY) ??
+            fingerOnCameraPlaneAt(e.absoluteX, e.absoluteY, getFocusPoint());
+          const lastO: Float3 = p ? [p[0] - c[0], 0, p[2] - c[2]] : target;
+          clusterSession.current = { ref: c, planeY, lastO };
+          store.setCombiningCluster(action.cluster);
+          store.setDragFit("held", null);
+          // pin the target marker where the release must land: the centroid shifted by the park offset (or the seat itself for the seed)
+          const sp = worldToScreen([c[0] + target[0], c[1] + target[1], c[2] + target[2]]);
+          if (sp) {
+            clusterRingX.value = sp.x;
+            clusterRingY.value = sp.y;
+          }
+          // the carry rides at the LOOSE height: the park offset's out-of-plane (vertical) component lifts the whole glide, so a vertically-parked cluster (DALFRED's seat) hovers above its seat instead of reading as already screwed in; zero for horizontal parks (EKET)
+          carryShared.value = { x: lastO[0], y: target[1], z: lastO[2] };
+        })
+        .onUpdate((e) => {
+          const s = clusterSession.current;
+          if (!s) return;
+          // Same camera-plane fallback onStart uses: when the horizontal-plane projection misses (a low/side orbit puts the plane at the cluster's height edge-on or above the horizon) fingerOnPlane returns null, so without the fallback the carry stops tracking. Anchor matches onStart (getFocusPoint) so the first drag frame doesn't jump.
+          const p =
+            fingerOnPlane(e.absoluteX, e.absoluteY, s.planeY) ??
+            fingerOnCameraPlaneAt(e.absoluteX, e.absoluteY, getFocusPoint());
+          if (!p) return;
+          const o: Float3 = [p[0] - s.ref[0], 0, p[2] - s.ref[2]];
+          s.lastO = o;
+          carryShared.value = { x: o[0], y: target[1], z: o[2] };
+          // re-project the marker each move so it survives a mid-drag zoom
+          const sp = worldToScreen([s.ref[0] + target[0], s.ref[1] + target[1], s.ref[2] + target[2]]);
+          if (sp) {
+            clusterRingX.value = sp.x;
+            clusterRingY.value = sp.y;
+          }
+          const snapDist = Math.min(
+            SNAP_DIST_MAX,
+            Math.max(SNAP_DIST_MIN, useGameStore.getState().settings.snapDistance),
+          );
+          // the carry glides in the horizontal plane (o[1] is structurally 0), so a VERTICAL park offset (DALFRED's seat parks 0.15 straight up) must not count against the snap — measure the miss in-plane only
+          const d = Math.hypot(o[0] - target[0], o[2] - target[2]);
+          const fit = d <= snapDist ? "nearCorrect" : "held";
+          if (fit !== useGameStore.getState().fitState) {
+            useGameStore.getState().setDragFit(fit, null);
+          }
+        })
+        .onFinalize(() => {
+          const s = clusterSession.current;
+          clusterSession.current = null;
+          const store = useGameStore.getState();
+          const ready = store.fitState === "nearCorrect";
+          store.setDragFit("idle", null);
+          if (!ready) {
+            // back to its card: the mode flip pulls the entities out of the scene, so the offset reset is invisible
+            store.setCombiningCluster(null);
+            carryShared.value = { x: 0, y: 0, z: 0 };
+            return;
+          }
+          if (park) {
+            // snap the carry to the park pose and hand off to the drive gesture (SlideControl glide or ScrewControl dial, per the cluster's authored driveMotion) for park -> 0
+            carryShared.value = { x: park.offset[0], y: park.offset[1], z: park.offset[2] };
+            sink.set([...park.offset] as Float3);
+            store.parkDrive(
+              action.actionId,
+              action.cluster ? clusterDriveKind(store.furniture?.clusters, action.cluster) : "slide",
+            );
+            Haptics.selectionAsync();
+            return;
+          }
+          // the seed cluster eases the last stretch home, then the placement commits
+          animateCarryHome(s?.lastO ?? [0, 0, 0], 180, () => {
+            const st = useGameStore.getState();
+            st.completeAction(action.actionId);
+            st.setCombiningCluster(null);
+            carryShared.value = { x: 0, y: 0, z: 0 };
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          });
+        });
+    },
+    [fingerOnPlane, fingerOnCameraPlaneAt, getFocusPoint, worldToScreen, clusterRingX, clusterRingY, ringX, ringY, ringProgress, carryShared, animateCarryHome],
+  );
+
+  // Cluster gestures are cached like part gestures so a ClusterTray re-render hands GestureDetector the SAME object and gesture-handler never swaps callbacks mid-drag (the swap that reset the closure state before the clusterSession fix; the cache kills the rebuild at the source).
+  const clusterGestureCache = useMemo(
+    () => new Map<string, { action: AssemblyAction; gesture: GestureType }>(),
+    [buildClusterGesture],
+  );
+  // Hits require the same action OBJECT, not just the same id: action ids can collide across furnitures, and this hook never observes furniture swaps, so an id-only hit could serve a gesture with a stale baked action/park.
+  const clusterGestureFor = useCallback(
+    (action: AssemblyAction, sink: OffsetSink, park: ParkInfo | null) => {
+      const hit = clusterGestureCache.get(action.actionId);
+      if (hit && hit.action === action) return hit.gesture;
+      const gesture = buildClusterGesture(action, sink, park);
+      clusterGestureCache.set(action.actionId, { action, gesture });
+      return gesture;
+    },
+    [clusterGestureCache, buildClusterGesture],
+  );
+
   const gestureCache = useMemo(
     () => new Map<string, GestureType>(),
     [buildGesture],
@@ -729,11 +911,43 @@ export function usePartDrag({
   }));
 
   const ringOverlay = (
-    <Animated.View pointerEvents="none" style={[styles.ring, ringStyle]} />
+    <>
+      <Animated.View pointerEvents="none" style={[styles.ring, ringStyle]} />
+      <ClusterTargetRing x={clusterRingX} y={clusterRingY} />
+    </>
   );
 
-  return { gestureFor, canvasGestureFor, ringOverlay };
+  return { gestureFor, canvasGestureFor, clusterGestureFor, ringOverlay };
 }
+
+/** Where to set the carried cluster down: a dashed ring at the seat (park pose for a drawer), the cluster-drag counterpart of the part drag's socket ghost. Turns solid green inside snap range. Hidden once the drive gesture owns the motion. */
+function ClusterTargetRing({
+  x,
+  y,
+}: {
+  x: SharedValue<number>;
+  y: SharedValue<number>;
+}) {
+  const visible = useGameStore(
+    (s) => s.combiningCluster !== null && s.driveActionId === null,
+  );
+  const ready = useGameStore((s) => s.fitState === "nearCorrect");
+  const style = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: x.value - TARGET_RING / 2 },
+      { translateY: y.value - TARGET_RING / 2 },
+    ],
+  }));
+  if (!visible) return null;
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[styles.targetRing, ready && styles.targetRingReady, style]}
+    />
+  );
+}
+
+const TARGET_RING = 92;
 
 const styles = StyleSheet.create({
   ring: {
@@ -744,5 +958,20 @@ const styles = StyleSheet.create({
     height: RING,
     borderRadius: RING / 2,
     borderColor: "#e8842c",
+  },
+  targetRing: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: TARGET_RING,
+    height: TARGET_RING,
+    borderRadius: TARGET_RING / 2,
+    borderWidth: 3,
+    borderStyle: "dashed",
+    borderColor: "rgba(255,255,255,0.9)",
+  },
+  targetRingReady: {
+    borderStyle: "solid",
+    borderColor: "#37c871",
   },
 });

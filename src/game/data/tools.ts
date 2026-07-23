@@ -1,13 +1,7 @@
 import { AssemblyAction, Furniture, ToolId, ToolInfo, ToolMap } from "@/src/game/core/type";
 
+// "hand" is deliberately absent: hand steps are automated, so it never appears in the toolbar.
 export const TOOLS: Partial<ToolMap> = {
-  hand: {
-    label: "By hand",
-    icon: {
-      light: require("../../assets/thumbnails/tools/light/Hand.png"),
-      dark: require("../../assets/thumbnails/tools/dark/Hand.png"),
-    },
-  },
   allenkey: {
     label: "Allen key",
     icon: {

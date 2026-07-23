@@ -10,9 +10,19 @@ import {
   LabelMap,
   PartDef,
   TextLevel,
+  Vec3,
 } from "@/src/game/core/type";
 import { labelFor } from "./labels";
 import { stagedCarrierOf } from "@/src/game/core/model/staging";
+
+/** Player-facing direction of a keyhole lock shove (StructuralFields.lockDir) — world +X is the de facto FRONT across the authored furniture frames, so ±X reads as forward/back. */
+export function lockShoveWord(dir: Vec3): string {
+  if ((dir[1] ?? 0) < -0.5) return "down";
+  if ((dir[1] ?? 0) > 0.5) return "up";
+  if ((dir[0] ?? 0) > 0.5) return "forward";
+  if ((dir[0] ?? 0) < -0.5) return "back";
+  return "sideways";
+}
 
 export const TOOL_NAME: Record<string, string> = {
   allenkey: "allen key",
@@ -33,6 +43,23 @@ export function buildInstructions(
   const clusterName = (id?: ClusterId): string =>
     (id && clusters[id]?.label?.toLowerCase()) || "assembly";
 
+  // Placement order per part, for order-aware keyhole wording below.
+  const placeOrder = new Map<string, number>();
+  for (const a of actions) {
+    if (a.type === "placePart" && a.partId) placeOrder.set(a.partId, a.order);
+  }
+
+  // True when the AUTHORED order makes `id` the keyhole mover — a press partner (directJoins, either direction) places earlier. A lockDir part that seeds first in the linear build just drops, and a free-mode role swap gets its guidance from the live control instead of this static text.
+  const keyholeMover = (id: string): boolean => {
+    const mine = placeOrder.get(id);
+    if (mine === undefined) return false;
+    const partners = new Set<string>(parts[id]?.directJoins ?? []);
+    for (const [qid, q] of Object.entries(parts)) {
+      if (q.directJoins?.includes(id as never)) partners.add(qid);
+    }
+    return [...partners].some((q) => (placeOrder.get(q) ?? Infinity) < mine);
+  };
+
   const contentFor = (a: AssemblyAction): InstructionContent => {
     if (beats[a.actionId]) return beats[a.actionId];
 
@@ -50,17 +77,46 @@ export function buildInstructions(
           text: `Take out the ${std} and set it down in front of you — you will fit its hardware before it goes in.`,
           simpleText: `Take out the ${sim}.`,
         };
-      case "placePart":
+      case "placePart": {
         // a staged carrier is already out on the canvas when its placement comes up, so its prompt has to send the player back to the part rather than to a tray card
-        return parts[a.partId ?? ""]?.stageOffset
+        if (parts[a.partId ?? ""]?.stageOffset) {
+          return {
+            text: `Pick the assembled ${std} back up and fit it into position.`,
+            simpleText: `Put the ${sim} in.`,
+          };
+        }
+        // keyhole two-phase (lockDir): the prompt has to carry BOTH motions — press onto the pins, then the short lock shove in the slot's direction
+        const lockDir = parts[a.partId ?? ""]?.lockDir;
+        if (lockDir && keyholeMover(a.partId ?? "")) {
+          const word = lockShoveWord(lockDir);
+          return {
+            text: `Press the ${std} onto its pins, then push it ${word} to lock.`,
+            simpleText: `Press the ${sim} on, then push ${word}.`,
+          };
+        }
+        return {
+          text: `Place the ${std} into position.`,
+          simpleText: `Add the ${sim}.`,
+        };
+      }
+      case "placeFastener": {
+        // 3-phase drop: the fastener lands at its STAGE pose (fully out of the hole); the PRESS (insertFastener) drives it in next
+        const carrier = a.partId
+          ? stagedCarrierOf(parts[a.partId], parts as Record<string, PartDef>)
+          : undefined;
+        const carrierLabel = carrier
+          ? labelFor(labels, parts[carrier]?.group ?? "", "standard")
+          : "";
+        return carrier
           ? {
-              text: `Pick the assembled ${std} back up and fit it into position.`,
-              simpleText: `Put the ${sim} in.`,
+              text: `Set the ${std} at the end of the ${carrierLabel}.`,
+              simpleText: `Add the ${sim}.`,
             }
           : {
-              text: `Place the ${std} into position.`,
+              text: `Line the ${std} up with its hole.`,
               simpleText: `Add the ${sim}.`,
             };
+      }
       case "insertFastener": {
         // hardware fitted to a staged sub-assembly is pressed into THAT part while it rests out in front of the player, so name it rather than saying "its hole"
         const carrier = a.partId
@@ -83,7 +139,7 @@ export function buildInstructions(
         const m = a.motion ?? (a.tool === "mallet" ? "strike" : "spin");
         if (m === "press")
           return {
-            text: `Press the ${std} down until it seats.`,
+            text: `Press the ${std} in until it seats.`,
             simpleText: `Press the ${sim} in.`,
           };
         if (m === "strike")
@@ -95,6 +151,11 @@ export function buildInstructions(
           return {
             text: `Rotate the ${std} a quarter turn to lock it.`,
             simpleText: `Turn the ${sim} to lock.`,
+          };
+        if (m === "drawTurn")
+          return {
+            text: `Draw the ${std} out into the slider, then turn it a quarter turn to lock.`,
+            simpleText: `Pull the ${sim} out and turn to lock.`,
           };
         return {
           text: `Tighten the ${std} ${withTool}.`,

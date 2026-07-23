@@ -1,6 +1,7 @@
 import { Theme, useStyles } from "@/src/game/ui/theme";
 import { Pressable, StyleSheet, Text } from "react-native";
 import { actionCluster } from "@/src/game/core/evaluation/clusters";
+import { engageAxis } from "@/src/game/core/evaluation/engagement";
 import { targetPositionForAction } from "@/src/game/core/scene/targets";
 import { HOVER_LIFT_M, looseDelta, spawnDelta } from "@/src/game/core/geometry/staging";
 import { TIGHTEN_TOTAL_DEG, useGameStore } from "@/src/game/core/store";
@@ -61,7 +62,8 @@ export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
         applied += 80;
         useGameStore.getState().addTightenDeg(action.actionId, 80);
         if (action.partId) {
-          const ld = looseDelta(furniture.parts[action.partId]);
+          const part = furniture.parts[action.partId];
+          const ld = looseDelta(part, engageAxis(part, new Set(useGameStore.getState().completed)));
           const p = Math.min(1, applied / TIGHTEN_TOTAL_DEG);
           sinkDriver.set([ld[0] * (1 - p), ld[1] * (1 - p), ld[2] * (1 - p)]);
         }

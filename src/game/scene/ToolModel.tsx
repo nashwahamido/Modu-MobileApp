@@ -63,8 +63,17 @@ export function ToolModel({ action }: { action: AssemblyAction }) {
     const align = axisAngleBetween(restAxis, axis);
     const p = Math.min(1, deg / TIGHTEN_TOTAL_DEG);
 
+    // Anchor at the authored tool contact point when the node origin isn't it (EKET suspension bracket: origin on the plate, screw hole at the circular boss); insertProud-0 parts rest flush, so the tool tip starts at the hole instead of following a 2cm proud head.
+    const [ax0, ay0, az0] = part.toolAnchor ?? [0, 0, 0];
+    const anchor: [number, number, number] = [
+      pose.position[0] + ax0,
+      pose.position[1] + ay0,
+      pose.position[2] + az0,
+    ];
+    const proud = part.insertProud ?? LOOSE_OFFSET_M;
+
     const place = (gap: number) => {
-      const head = LOOSE_OFFSET_M * (1 - p) + gap;
+      const head = proud * (1 - p) + gap;
       transformManager.setEntityRotation(root, align.angleRad, align.axis, false);
       if (!strike) {
         transformManager.setEntityRotation(root, (-deg * Math.PI) / 180, axis, true);
@@ -72,9 +81,9 @@ export function ToolModel({ action }: { action: AssemblyAction }) {
       transformManager.setEntityPosition(
         root,
         [
-          pose.position[0] + axis[0] * head,
-          pose.position[1] + axis[1] * head,
-          pose.position[2] + axis[2] * head,
+          anchor[0] + axis[0] * head,
+          anchor[1] + axis[1] * head,
+          anchor[2] + axis[2] * head,
         ],
         true,
       );

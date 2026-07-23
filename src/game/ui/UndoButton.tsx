@@ -1,54 +1,43 @@
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
 import { IconButton } from "@/src/game/ui/Button";
-import { SPACE, TYPE, useTheme } from "@/src/game/ui/theme";
+import { TYPE, useTheme } from "@/src/game/ui/theme";
 
-/** Back one step (↶) and forward again (↷). Forward is only available after an undo — any
- *  new completion clears the redo stack (store.undoneActions).
+/** Back one step (↶).
  *
- *  Both are glyph-only utilities, so they take the SQUARE treatment: in this palette the
- *  circle is reserved for the primary action, and shape alone should tell you which
- *  control matters. Unavailable ones dim rather than disappear — "not yet", not "gone". */
+ *  Redo was removed: it sat here permanently greyed out, because it only lights up in the
+ *  narrow window between an undo and the next completion — any new step clears the redo
+ *  stack. A control that is disabled almost all of the time is noise in a HUD this tight,
+ *  and it cost a slot next to the one button people actually reach for. `redoLastAction`
+ *  is untouched in the store if it ever needs a home again.
+ *
+ *  Glyph-only, so it takes the SQUARE treatment: in this palette the circle is reserved for
+ *  the primary action, and shape alone should say which control matters. Disabled dims
+ *  rather than disappears — "not yet", not "gone". */
 export function UndoButton() {
   const completedCount = useGameStore((s) => s.completed.length);
-  const undoneCount = useGameStore((s) => s.undoneActions.length);
   const undoLastAction = useGameStore((s) => s.undoLastAction);
-  const redoLastAction = useGameStore((s) => s.redoLastAction);
   const t = useTheme();
 
-  const glyph = (g: string, disabled: boolean) => (
-    <Text style={[TYPE.title, { color: disabled ? t.textFaint : t.text }]}>{g}</Text>
-  );
-
-  const undoDisabled = completedCount === 0;
-  const redoDisabled = undoneCount === 0;
+  const disabled = completedCount === 0;
 
   return (
-    <View style={styles.row}>
-      <IconButton
-        icon={glyph("↶", undoDisabled)}
-        onPress={undoLastAction}
-        disabled={undoDisabled}
-        small
-        accessibilityLabel="Back one step"
-      />
-      <IconButton
-        icon={glyph("↷", redoDisabled)}
-        onPress={redoLastAction}
-        disabled={redoDisabled}
-        small
-        accessibilityLabel="Forward one step"
-      />
-    </View>
+    <IconButton
+      icon={
+        <Text style={[TYPE.title, { color: disabled ? t.textFaint : t.text }]}>
+          ↶
+        </Text>
+      }
+      onPress={undoLastAction}
+      disabled={disabled}
+      small
+      style={styles.button}
+      accessibilityLabel="Back one step"
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  row: {
-    position: "absolute",
-    top: 54,
-    left: 14,
-    flexDirection: "row",
-    gap: SPACE.sm,
-  },
+  // Same left edge and 36px grid as the gear above and Recenter below.
+  button: { position: "absolute", top: 54, left: 14 },
 });

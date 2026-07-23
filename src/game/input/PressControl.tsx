@@ -17,10 +17,11 @@ interface Props {
   park?: ParkInfo | null;
 }
 
-/** Press control: tap the pad repeatedly to DRIVE a fastener-free push-fit part home — each tap shoves it one step along its push axis. TOOL-AWARE, like the tighten split (TapControl vs TightenControl): a press whose part carries a striking tool (DALFRED's pole is malleted onto the seat plate — place_pole inherits tool "mallet") shows the mallet and reads as a strike; a tool-less press is a bare-hand push. Structural cousin of TapControl (which tightens a fastener; this seats a structural part). Progress is normalized 0..1 (store.advanceDrive, 1/PRESS_TAPS per tap); at 1 the placement commits. */
+/** Press control: tap the pad repeatedly to DRIVE a fastener-free push-fit part home — each tap shoves it one step along its push axis. TOOL-AWARE, like the tighten split (TapControl vs TightenControl): a press whose part carries a striking tool (DALFRED's pole is malleted onto the seat plate — place_pole inherits tool "mallet") shows the mallet and reads as a strike; a screwdriver press reads as driving it in (no current user — kept as generic tool-awareness); a tool-less press is a bare-hand push. Structural cousin of TapControl (which tightens a fastener; this seats a structural part). Progress is normalized 0..1 (store.advanceDrive, 1/PRESS_TAPS per tap); at 1 the placement commits. */
 export function PressControl({ action, driver, park }: Props) {
   const progress = useGameStore((s) => s.driveProgress[action.actionId] ?? 0);
   const struck = action.tool === "mallet" || action.tool === "hammer";
+  const driven = action.tool === "screwdriver";
   const squash = useRef(new Animated.Value(1)).current;
   const parked = useRef<Vec3 | null>(null);
 
@@ -61,11 +62,11 @@ export function PressControl({ action, driver, park }: Props) {
     <View style={styles.wrap} pointerEvents="box-none">
       <GestureDetector gesture={tap}>
         <Animated.View style={[styles.pad, { transform: [{ scale: squash }] }]}>
-          <Text style={styles.icon}>{struck ? "🔨" : "✋"}</Text>
+          <Text style={styles.icon}>{struck ? "🔨" : driven ? "🪛" : "✋"}</Text>
         </Animated.View>
       </GestureDetector>
       <Text style={styles.hint}>
-        {struck ? "Tap to drive it in" : "Press to fit it in"} · {presses}/
+        {struck ? "Tap to drive it in" : driven ? "Tap to screw it in" : "Press to fit it in"} · {presses}/
         {PRESS_TAPS}
       </Text>
     </View>

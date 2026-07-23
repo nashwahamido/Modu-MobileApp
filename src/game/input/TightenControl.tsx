@@ -10,20 +10,18 @@ import { AssemblyAction } from "@/src/game/core/type";
 import { TIGHTEN_TOTAL_DEG, useGameStore } from "@/src/game/core/store";
 import type { OffsetDriver } from "../scene/offsetDriver";
 
-const RING = 92; // outer diameter of the ring (smaller than before)
-const STROKE = 13;
-const PAD = 16; // breathing room so the arrow never clips the canvas edge
-const SIZE = RING + PAD * 2; // the actual SVG / view box
-const C = SIZE / 2; // centre of everything
-const R = (RING - STROKE) / 2; // radius of the stroke's centre line
+const RING = 96; // outer diameter of the band
+const STROKE = 9; // the band's own width — thin, so it reads as a gauge not a donut
+const INK = 1.5; // the dark outline; kept fine so it inks the shape without thickening it
+const PAD = 24; // room for the arrow head so it never clips the canvas
+const SIZE = RING + PAD * 2;
+const C = SIZE / 2;
+const R = (RING - STROKE) / 2; // radius of the band's centre line
 const CIRC = 2 * Math.PI * R;
 
-const TRACK = "rgba(60,50,40,0.16)";
-const FILL = "#8D7BA8"; // the progress arc — interactive lavender
-const CENTER = "#F5EADD"; // solid cream hub (matches the joystick dial)
-const CENTER_EDGE = "rgba(60,50,40,0.22)";
-const ARROW = "#8D7BA8";      // lavender, matches the arc
-const ARROW_EDGE = "#ffffff"; // white rim so it reads on the cream hub
+const FILL = "#8D7BA8"; // the band AND the arrow head — one purple
+const LINE = "#6A548B"; // the ink outline: same hue, +13pp sat, −11pp val
+const TRACK = "rgba(60,50,40,0.13)"; // the unfilled path, kept faint
 
 interface Props {
   action: AssemblyAction;
@@ -32,12 +30,18 @@ interface Props {
 }
 
 /**
- * Circular tighten gesture: drag clockwise around the ring; rotation accumulates with
- * haptic ticks per quarter-turn until the fastener sits flush (2 full turns).
+ * Circular tighten gesture: drag clockwise; rotation accumulates with haptic ticks per
+ * quarter-turn until the fastener sits flush (2 full turns).
  *
- * A track ring, a lavender arc growing clockwise from the top, and an ARROW head riding the
- * arc's leading end that points the way to drag. The canvas is padded past the ring so the
- * arrow never clips. The hub is solid cream — no transparent centre.
+ * Drawn as an INKED band, like a sticker: every shape is filled purple and outlined in a
+ * darker shade of the same hue. The outline is what gives it weight against the 3D scene —
+ * a flat band alone reads as a thin UI stroke, an outlined one reads as an object.
+ *
+ * DRAW ORDER MATTERS. Every shape's INK is drawn first, then every shape's FILL on top.
+ * That is what merges the arrow into the band: drawn shape-by-shape instead, the arrow's
+ * own outline would print a seam across the band where the two overlap. With the fills
+ * last, they close over that join and the two read as one continuous object — the arrow
+ * growing out of the band rather than sitting on it.
  */
 export function TightenControl({ action, sinkDriver }: Props) {
   const deg = useGameStore((s) => s.tightenDeg[action.actionId] ?? 0);
@@ -65,7 +69,8 @@ export function TightenControl({ action, sinkDriver }: Props) {
           const part = action.partId
             ? useGameStore.getState().furniture?.parts[action.partId]
             : undefined;
-          if (part) {
+          // A STRUCTURAL part's tighten turns an invisible screw INTO it (EKET suspension bracket) — the part itself neither sinks nor spins; its engageDir exists only to orient the tool (ToolModel).
+          if (part && part.type === "fastener") {
             const axis = engageAxis(part, new Set(store.completed));
             const ld = looseDelta(part, axis);
             sinkDriver.set([ld[0] * (1 - p), ld[1] * (1 - p), ld[2] * (1 - p)]);
@@ -88,26 +93,57 @@ export function TightenControl({ action, sinkDriver }: Props) {
     });
 
   const progress = Math.min(1, deg / TIGHTEN_TOTAL_DEG);
+  const dashOffset = CIRC * (1 - progress);
 
-  // Arrow head at the arc's leading end: −90° start, clockwise.
+  // The arrow head rides the arc's leading end: −90° start, clockwise.
   const angDeg = -90 + progress * 360;
   const ang = angDeg * (Math.PI / 180);
   const hx = C + R * Math.cos(ang);
   const hy = C + R * Math.sin(ang);
-  // A small triangle, rotated to point ALONG the ring (tangent = angle + 90°).
-  const s = 9; // arrow half-size
-  const tan = angDeg + 180; // apex points ALONG the ring (clockwise), not outward
+
+  // A head wider than the band — that size difference is most of what makes it read as an
+  // arrow rather than a dot. BACK pushes the base BEHIND the band's leading edge so the two
+  // shapes overlap and merge. Apex points up before rotation, so the rotation that aligns it
+  // with the clockwise tangent is angDeg + 180.
+  const AW = STROKE * 1.5; // half-width
+  const AL = STROKE * 1.9; // base to tip
+  const BACK = STROKE * 0.9; // how far the base sits behind the arc's centre line
+  const head = `M ${hx} ${hy - AL} L ${hx + AW} ${hy + BACK} L ${hx - AW} ${hy + BACK} Z`;
+  const headRot = angDeg + 180;
 
   return (
     <View style={styles.wrap} pointerEvents="box-none">
       <GestureDetector gesture={pan}>
         <View style={styles.dial}>
           <Svg width={SIZE} height={SIZE}>
-            {/* solid hub */}
-            <Circle cx={C} cy={C} r={R - STROKE / 2} fill={CENTER} stroke={CENTER_EDGE} strokeWidth={1} />
-            {/* track */}
+            {/* the path still to travel */}
             <Circle cx={C} cy={C} r={R} stroke={TRACK} strokeWidth={STROKE} fill="none" />
-            {/* progress arc — 12 o'clock, clockwise */}
+
+            {/* ── INK LAYER: the outline of BOTH shapes ─────────────────── */}
+            <G transform={`rotate(-90 ${C} ${C})`}>
+              <Circle
+                cx={C}
+                cy={C}
+                r={R}
+                stroke={LINE}
+                strokeWidth={STROKE + INK * 2}
+                fill="none"
+                strokeLinecap="round"
+                strokeDasharray={CIRC}
+                strokeDashoffset={dashOffset}
+              />
+            </G>
+            <G transform={`rotate(${headRot} ${hx} ${hy})`}>
+              <Path
+                d={head}
+                fill={LINE}
+                stroke={LINE}
+                strokeWidth={INK * 2}
+                strokeLinejoin="round"
+              />
+            </G>
+
+            {/* ── FILL LAYER: closes over the join between them ─────────── */}
             <G transform={`rotate(-90 ${C} ${C})`}>
               <Circle
                 cx={C}
@@ -118,18 +154,11 @@ export function TightenControl({ action, sinkDriver }: Props) {
                 fill="none"
                 strokeLinecap="round"
                 strokeDasharray={CIRC}
-                strokeDashoffset={CIRC * (1 - progress)}
+                strokeDashoffset={dashOffset}
               />
             </G>
-            {/* arrow head riding the arc's end, pointing the drag direction */}
-            <G transform={`rotate(${tan} ${hx} ${hy})`}>
-              <Path
-                d={`M ${hx} ${hy - s} L ${hx + s} ${hy + s} L ${hx - s} ${hy + s} Z`}
-                fill={ARROW}
-                stroke={ARROW_EDGE}
-                strokeWidth={2.5}
-                strokeLinejoin="round"
-              />
+            <G transform={`rotate(${headRot} ${hx} ${hy})`}>
+              <Path d={head} fill={FILL} strokeLinejoin="round" />
             </G>
           </Svg>
         </View>
@@ -150,12 +179,5 @@ const styles = StyleSheet.create({
     height: SIZE,
     alignItems: "center",
     justifyContent: "center",
-    // No `elevation` — on Android that casts a big grey halo around a circular View. The
-    // ring's own outline (drawn in SVG below via the hub/track) is enough to separate it
-    // from the scene; a faint iOS shadow is kept for depth without the blob.
-    shadowColor: "#000",
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
   },
 });

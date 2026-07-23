@@ -8,6 +8,7 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { FilamentScene } from "react-native-filament";
+import { useSharedValue as useWorkletSharedValue } from "react-native-worklets-core";
 
 import { AssemblyScene } from "@/src/game/scene/AssemblyScene";
 import {
@@ -26,6 +27,13 @@ import { TightenControl } from "@/src/game/input/TightenControl";
 import { RotateControl } from "@/src/game/input/RotateControl";
 import { SlideControl } from "@/src/game/input/SlideControl";
 import { PressControl } from "@/src/game/input/PressControl";
+import { HookPressControl } from "@/src/game/input/HookPressControl";
+import { ScrewControl } from "@/src/game/input/ScrewControl";
+import { InsertPressControl } from "@/src/game/input/InsertPressControl";
+import { DrawTurnControl } from "@/src/game/input/DrawTurnControl";
+import { SeatSlideControl } from "@/src/game/input/SeatSlideControl";
+import { PushTestControl } from "@/src/game/input/PushTestControl";
+import { clusterSink } from "@/src/game/scene/combineDriver";
 import { ToolBar } from "@/src/game/ui/ToolBar";
 import {
   objectiveText,
@@ -45,22 +53,27 @@ import {
 import { instructionText } from "@/src/game/core/presentation/instructions";
 import { useStepAudio } from "@/src/game/audio/useStepAudio";
 
+import { BuildComplete } from "@/src/game/ui/BuildComplete";
 import { GreenFlash } from "@/src/game/ui/GreenFlash";
 import { HintToast } from "@/src/game/ui/HintToast";
 import { CenterDropRing } from "@/src/game/ui/CenterDropRing";
 import { FitChip } from "@/src/game/ui/FitChip";
 import { PartsTray } from "@/src/game/ui/PartsTray";
 import { ClusterTray } from "@/src/game/ui/ClusterTray";
+import { ClusterCelebration } from "@/src/game/ui/ClusterCelebration";
 import { UndoButton } from "@/src/game/ui/UndoButton";
 import { GameSettings } from "@/src/game/ui/GameSettings";
 import { DevAutoStep } from "@/src/game/ui/DevAutoStep";
+import { DevMenu } from "@/src/game/ui/DevMenu";
 import { ToggleChips } from "@/src/game/ui/ToggleChips";
-import { ClusterFocusControl } from "@/src/game/ui/ClusterFocusControl";
+import { BuildMap, ClusterFocusControl } from "@/src/game/ui/ClusterFocusControl";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
-import { Button, ProgressBar } from "@/src/game/ui/Button";
+import { Button, IconButton, ProgressBar } from "@/src/game/ui/Button";
+import { PauseIcon, RecenterIcon } from "@/src/game/ui/Icons";
 import { ELEVATION, RADIUS, SPACE, Theme, TYPE, useTheme } from "@/src/game/ui/theme";
 import {
-  currentStageForClusterFocus,
+  buildPhase,
+  combineReady,
   requiresClusterFocus,
 } from "@/src/game/core/evaluation/clusters";
 import { availableInMode } from "@/src/game/core/evaluation/availability";
@@ -107,6 +120,8 @@ function GameScreen() {
   const clusterDriver = useRef(createClusterDriver()).current;
   const pushDrivers = useRef(createDriverRegistry()).current;
   const slideDriver = useRef(createClusterDriver()).current;
+  // The combine carry offset — written by the cluster drag on the JS side, applied to the carried cluster's entities on the RENDER thread (scene/CombineCarry).
+  const carryShared = useWorkletSharedValue({ x: 0, y: 0, z: 0 });
 
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
@@ -140,11 +155,12 @@ function GameScreen() {
     const watchdog = setTimeout(() => setLoadError(true), 45000);
     return () => clearTimeout(watchdog);
   }, [loaderVisible, loadError, modelReady, retryKey]);
+  // The objective bar reports the BUILD MAP's phase (base → seat → combine), not the
+  // authored stage number — those count beats across the whole build and would read
+  // "Stage 4" on a three-node map.
   const stage = useGameStore((s) => {
     const f = s.furniture;
-    return f
-      ? currentStageForClusterFocus(f, new Set(s.completed), s.activeCluster)
-      : 1;
+    return f ? buildPhase(f, new Set(s.completed), s.activeCluster).index : 1;
   });
   const settings = useGameStore((s) => s.settings);
   // Dev-setting: float mode vs auto return
@@ -186,17 +202,28 @@ function GameScreen() {
     : null;
   const drivePark =
     furniture && driveAction
-      ? (driveKind === "slide" ? slideParkInfo : pressParkInfo)(
+      ? (driveKind === "press" ? pressParkInfo : slideParkInfo)(
           furniture,
           driveAction,
           new Set(useGameStore.getState().completed),
         )
       : null;
+  // which telescoping level the active beat tests, when it's one of the authored drag-out-to-test beats (spec.testActionIds)
+  const pushTestLevel = Object.entries(furniture?.pushOpen?.testActionIds ?? {}).find(
+    ([, id]) => id === sceneState.activeBeat?.actionId,
+  )?.[0];
+  // a combine drive moves the whole cluster, not the held part — one rigid body on the shared ClusterDriver (runners stay put during a combine; they only telescope in the test beats)
+  const combineDriveSink = useMemo(() => {
+    if (!furniture || driveAction?.type !== "combineClusters") return null;
+    return clusterSink(clusterDriver);
+  }, [furniture, driveAction, clusterDriver]);
   const needsFocusChoice =
     mode !== "strict" &&
     !!furniture &&
     requiresClusterFocus(furniture) &&
-    !activeCluster;
+    !activeCluster &&
+    // once every cluster is built, no focus means the combine stage, not an unanswered chooser
+    !combineReady(furniture, new Set(useGameStore.getState().completed));
   const objective = objectiveText({
     mode,
     needsFocusChoice,
@@ -218,11 +245,21 @@ function GameScreen() {
     settings.audio,
   );
 
+  // Recenter re-frames the camera on the build, so it means nothing until there IS a build:
+  // on an empty canvas it just jumps the view for no visible reason. `modes` is the honest
+  // source — "hidden" is a part still in the tray, and socket_hint is only a ghost preview
+  // of where a held part will go, not a part on the canvas.
+  const sceneHasParts = Object.values(sceneState.modes).some(
+    (m) => m !== "hidden" && m !== "socket_hint",
+  );
+
+  const hintGroup = useGameStore((s) => s.hintGroup);
+  const hintPulse = useGameStore((s) => s.hintPulse);
   const selectedTool = useGameStore((s) => s.selectedTool);
   const rawTool = sceneState.activeTighten?.tool ?? driveAction?.tool ?? null;
   // "hand" is not equippable, so it is not NEEDED — otherwise the step would sit there
   // waiting for a tool the player has no way to pick up.
-  const neededTool = settings.manualTools ? rawTool : null;
+  const neededTool = settings.manualTools && rawTool !== "hand" ? rawTool : null;
   const toolReady = !neededTool || selectedTool === neededTool;
 
   // Scene gestures are MEMOIZED: the screen re-renders constantly mid-drag (fit-state churn), and handing GestureDetector fresh gesture instances reattaches native handlers — eating the first re-grab attempt and stuttering active drags (same lesson as the joystick).
@@ -283,10 +320,11 @@ function GameScreen() {
     [onPanStart, onPanMove, onPanEnd],
   );
 
-  const { gestureFor, canvasGestureFor, ringOverlay } = usePartDrag({
+  const { gestureFor, canvasGestureFor, clusterGestureFor, ringOverlay } = usePartDrag({
     manipulator,
     heldDriver,
     slideDriver,
+    carryShared,
     getFocusPoint,
     onPanStart,
     onPanMove,
@@ -352,6 +390,7 @@ function GameScreen() {
             clusterDriver={clusterDriver}
             pushDrivers={pushDrivers}
             slideDriver={slideDriver}
+            carryShared={carryShared}
             onModelReady={() => setModelReady(true)}
           />
         </View>
@@ -369,35 +408,51 @@ function GameScreen() {
         ]}
         pointerEvents="box-none"
       >
-        {/* Instructions hidden → only the progress bar stays (slim pill). */}
-        <View
-          style={[
-            styles.objectiveBar,
-            !settings.showInstructions && styles.objectiveBarSlim,
-          ]}
-          pointerEvents="none"
-        >
-          {settings.showInstructions ? (
-            <Text style={[styles.objectiveText, { fontSize: objectiveFontSize }]}>
-              Stage {stage} · {objective} · {completedCount}/{totalCount}
-            </Text>
-          ) : null}
-          {/* [★ star] [progress track] [XP label] — the badge sits ON the bar's left,
-              the way the reference integrates the level star into the track. */}
-          <View style={[styles.progressRow, settings.showInstructions && styles.progressGap]}>
-            <View style={styles.xpStar} pointerEvents="none">
-              <Text style={styles.xpStarGlyph}>★</Text>
+        {/* Pause sits to the LEFT of the progress bar, grouped with it so the pair stays
+            centred together whatever width the bar takes. */}
+        <View style={styles.topRow} pointerEvents="box-none">
+          <IconButton
+            icon={<PauseIcon size={18} color={t.text} />}
+            onPress={() => useGameStore.getState().setMapOpen(true)}
+            small
+            accessibilityLabel="Pause and show the build map"
+          />
+          {/* Instructions hidden → only the progress bar stays (slim pill). */}
+          <View
+            style={[
+              styles.objectiveBar,
+              !settings.showInstructions && styles.objectiveBarSlim,
+            ]}
+            pointerEvents="none"
+          >
+            {settings.showInstructions ? (
+              <Text
+                style={[styles.objectiveText, { fontSize: objectiveFontSize }]}
+                numberOfLines={2}
+              >
+                Stage {stage} · {objective} · {completedCount}/{totalCount}
+              </Text>
+            ) : null}
+            {/* [★ star] [progress track] [XP label] — the badge sits ON the bar's left,
+                the way the reference integrates the level star into the track. */}
+            <View
+              style={[
+                styles.progressRow,
+                settings.showInstructions && styles.progressGap,
+              ]}
+            >
+              <View style={styles.xpStar} pointerEvents="none">
+                <Text style={styles.xpStarGlyph}>★</Text>
+              </View>
+              <ProgressBar
+                value={completedCount}
+                total={totalCount}
+                style={styles.xpTrack}
+              />
+              <Text style={styles.xpLabel}>
+                {completedCount * furniture.xpPerStep} XP
+              </Text>
             </View>
-            {/* Fills in the ACCENT and only turns green at 100% — a half-built table is not
-                done, and green is the one signal reserved for done. */}
-            <ProgressBar
-              value={completedCount}
-              total={totalCount}
-              style={styles.xpTrack}
-            />
-            <Text style={styles.xpLabel}>
-              {completedCount * furniture.xpPerStep} XP
-            </Text>
           </View>
         </View>
         <CenterDropRing />
@@ -410,6 +465,7 @@ function GameScreen() {
         {focus ? null : <UndoButton />}
         <GameSettings />
         <View style={styles.togglesRow}>
+          {focus ? null : <DevMenu />}
           {focus ? null : (
             <DevAutoStep heldDriver={heldDriver} sinkDriver={sinkDriver} />
           )}
@@ -420,7 +476,16 @@ function GameScreen() {
           items={sceneState.trayItems}
           gestureFor={gestureFor}
           thumbs={furniture.thumbs}
-          header={focus ? undefined : <ClusterTray clusterDriver={clusterDriver} />}
+          highlightGroup={hintGroup}
+          highlightPulse={hintPulse}
+          header={
+            focus ? undefined : (
+              <ClusterTray
+                clusterDriver={clusterDriver}
+                clusterGestureFor={clusterGestureFor}
+              />
+            )
+          }
         />
         <ToolBar neededTool={neededTool} />
         {mode === "free" && !focus ? (
@@ -432,8 +497,15 @@ function GameScreen() {
           />
         ) : null}
         {sceneState.activeTighten && toolReady ? (
-          sceneState.activeTighten.tool === "mallet" ? (
+          sceneState.activeTighten.tool === "mallet" ||
+          sceneState.activeTighten.motion === "strike" ||
+          sceneState.activeTighten.motion === "press" ? (
             <TapControl
+              action={sceneState.activeTighten}
+              sinkDriver={sinkDriver}
+            />
+          ) : sceneState.activeTighten.motion === "drawTurn" ? (
+            <DrawTurnControl
               action={sceneState.activeTighten}
               sinkDriver={sinkDriver}
             />
@@ -443,6 +515,22 @@ function GameScreen() {
               sinkDriver={sinkDriver}
             />
           )
+        ) : null}
+        {sceneState.activeInsertPress && !sceneState.activeTighten ? (
+          <InsertPressControl
+            action={sceneState.activeInsertPress}
+            sinkDriver={sinkDriver}
+          />
+        ) : null}
+        {sceneState.stagedSeat &&
+        sceneState.stagedSeat.partId &&
+        furniture.parts[sceneState.stagedSeat.partId]?.stageOffset ? (
+          <SeatSlideControl
+            action={sceneState.stagedSeat}
+            offset={furniture.parts[sceneState.stagedSeat.partId]!.stageOffset!}
+            heldDriver={heldDriver}
+            slideDriver={slideDriver}
+          />
         ) : null}
         {orientationAction ? (
           <RotateControl
@@ -454,14 +542,29 @@ function GameScreen() {
         {driveAction && driveKind === "slide" && toolReady ? (
           <SlideControl
             action={driveAction}
-            driver={heldDriver}
+            driver={combineDriveSink ?? heldDriver}
             park={drivePark}
           />
         ) : null}
         {driveAction && driveKind === "press" && toolReady ? (
-          <PressControl
+          drivePark?.lock ? (
+            <HookPressControl
+              action={driveAction}
+              driver={heldDriver}
+              park={drivePark}
+            />
+          ) : (
+            <PressControl
+              action={driveAction}
+              driver={heldDriver}
+              park={drivePark}
+            />
+          )
+        ) : null}
+        {driveAction && driveKind === "screw" && drivePark && toolReady ? (
+          <ScrewControl
             action={driveAction}
-            driver={heldDriver}
+            driver={clusterDriver}
             park={drivePark}
           />
         ) : null}
@@ -470,7 +573,17 @@ function GameScreen() {
         !sceneState.activeTighten &&
         !orientationAction &&
         !driveAction ? (
-          <BeatControl action={sceneState.activeBeat} pushDrivers={pushDrivers} />
+          furniture.pushOpen && pushTestLevel ? (
+            <PushTestControl
+              key={sceneState.activeBeat.actionId}
+              action={sceneState.activeBeat}
+              spec={furniture.pushOpen}
+              level={pushTestLevel}
+              pushDrivers={pushDrivers}
+            />
+          ) : (
+            <BeatControl action={sceneState.activeBeat} pushDrivers={pushDrivers} />
+          )
         ) : null}
         <View style={styles.joystickZone}>
           <Joystick
@@ -481,11 +594,15 @@ function GameScreen() {
           />
         </View>
         {focus ? null : (
-          <Button
-            label="⟲ Recenter"
+          <IconButton
+            icon={
+              <RecenterIcon color={sceneHasParts ? t.text : t.textFaint} />
+            }
+            onPress={resetCamera}
+            disabled={!sceneHasParts}
             small
             style={styles.recenterButton}
-            onPress={resetCamera}
+            accessibilityLabel="Recenter the view"
           />
         )}
 
@@ -500,8 +617,16 @@ function GameScreen() {
           />
         ) : null}
       </View>
+      {/* OUTSIDE the inset `chrome` container, with the other full-screen overlays. Inside
+          it, the map's scrim could only dim the chrome's own bounds — which left a lighter
+          rectangle of undimmed scene around the edges. */}
+      {/* Strict mode never offered the chooser, so it does not get the map either. Focus
+          mode DOES: pause is reachable there, and the map is what pause opens. */}
+      {mode !== "strict" ? <BuildMap /> : null}
       {ringOverlay}
       <GreenFlash trigger={completedCount} />
+      <ClusterCelebration />
+      <BuildComplete />
       {loadingOverlay}
     </ImageBackground>
   );
@@ -523,11 +648,21 @@ const makeStyles = (t: Theme) =>
     sceneWrap: { ...StyleSheet.absoluteFillObject },
     chrome: { position: "absolute" },
 
-    objectiveBar: {
+    // The row owns the position now; the bar is just a flex child of it.
+    topRow: {
       position: "absolute",
       top: 10,
       alignSelf: "center",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: SPACE.sm,
+    },
+    objectiveBar: {
       justifyContent: "center",
+      // CAPPED. The bar is centred and the cluster chips sit at right:14, so an unbounded
+      // bar grows under them on a long instruction. 360 + the pause button keeps the whole
+      // group clear of that corner; anything longer wraps to a second line instead.
+      maxWidth: 360,
       backgroundColor: t.surface,
       borderColor: t.border,
       borderWidth: StyleSheet.hairlineWidth * 2,
@@ -563,12 +698,24 @@ const makeStyles = (t: Theme) =>
     xpTrack: { flex: 1 },
     xpLabel: { ...TYPE.numeric, color: t.gold },
 
-    // Same line as the points chip and the gear.
-    // On the top row beside the gear (gear is 42 wide at left:14 → sits at left:64).
-    hintButton: { position: "absolute", left: 64, top: 8, minWidth: 42 },
+    // Row 1, beside the gear: the gear is 36 wide at left:14, +8 gap → 58. The same 36x36
+    // square as every other icon button. paddingHorizontal is zeroed because Button's own
+    // padding would otherwise widen it past the square.
+    hintButton: {
+      position: "absolute",
+      left: 58,
+      top: 8,
+      width: 36,
+      minWidth: 36,
+      paddingHorizontal: 0,
+    },
+    // Its own row, directly under undo (top:54 + 36 + 12 gap). Icon-only, so it is the same
+    // 36x36 square as everything else in the column rather than a wide text pill.
     recenterButton: { position: "absolute", left: 14, top: 102 },
+
     // The way back to the tray in float mode. PRIMARY: while a part is in the air, this is
     // the one thing the player might need, so it is the one thing that carries the accent.
+    // Below Recenter. Only visible in float mode, while a part is in the air.
     putBackButton: { position: "absolute", left: 14, top: 150 },
 
     // Left edge aligned with Recenter and the gear (all left:14); bottom aligned with the

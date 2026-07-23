@@ -5,14 +5,14 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useGameStore } from "@/src/game/core/store";
 import { AssemblyAction, Vec3 } from "@/src/game/core/type";
 import type { ParkInfo } from "@/src/game/core/evaluation/engagement";
-import type { OffsetDriver } from "../scene/offsetDriver";
+import type { OffsetSink } from "../scene/combineDriver";
 
 const TRACK = 220;
 
 interface Props {
   action: AssemblyAction;
-  /** The held part's driver — glided from its parked offset toward the seat as  the thumb advances. */
-  driver?: OffsetDriver;
+  /** Whatever is being driven — a single held part (OffsetDriver) or a whole telescoping cluster (combine driver) — glided from its parked offset toward the seat as the thumb advances. */
+  driver?: OffsetSink;
   /** Slide staging (engagement.slideParkInfo): the backed-off offset the part  parks at; the drive eases it to [0,0,0]. */
   park?: ParkInfo | null;
 }
