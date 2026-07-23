@@ -91,6 +91,14 @@ export function deriveSceneState(
     ? currentStageForClusterFocus(furniture, done, effectiveCluster)
     : currentStage(furniture.actions, done);
 
+  // An untouched cluster (none of its parts picked up yet) shows only its LEGAL cards as grabbable — free mode's grab-anything is suspended so each cluster's opening move (its seed, or a staged carrier) is unmistakable; from that cluster's first pickup on, normal per-mode rules resume.
+  const startedClusters = new Set<ClusterId>();
+  for (const a of furniture.actions) {
+    if (a.partId && isPickupType(a.type) && done.has(a.actionId)) {
+      startedClusters.add(furniture.parts[a.partId].cluster);
+    }
+  }
+
   const groups = new Map<string, TrayItem>();
   for (const a of furniture.actions) {
     if (focusRequired && (!effectiveCluster || actionCluster(furniture, a) !== effectiveCluster)) {
@@ -110,7 +118,9 @@ export function deriveSceneState(
     const comp = furniture.components?.byBody[a.partId];
     const compLabel = comp ? furniture.components!.label[comp] : undefined;
     const pickable = !heldAction && availableIds.has(a.actionId);
-    const draggable = pickable || (!heldAction && mode === "free");
+    const draggable =
+      pickable ||
+      (!heldAction && mode === "free" && startedClusters.has(part.cluster));
     const isHeld = heldAction?.actionId === a.actionId;
     const label = compLabel ? compLabel.standard : labelFor(furniture.labels, part.group);
     const g = groups.get(part.group);

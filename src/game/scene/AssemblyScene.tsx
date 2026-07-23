@@ -105,8 +105,9 @@ export function AssemblyScene({
   const anySeated = Object.values(modes).some(
     (m) => m === "flush" || m === "loose",
   );
+  // "hand" is always equipped: hand steps run without a toolbar pick even in manual mode.
   const toolEquipped = (tool?: string | null) =>
-    !manualTools || !tool || selectedTool === tool;
+    !manualTools || !tool || tool === "hand" || selectedTool === tool;
 
   return (
     <FilamentView style={styles.filament}>
