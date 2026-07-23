@@ -50,6 +50,24 @@ export function DevMenu() {
     setOpen(false);
   };
 
+  // Fast-forward the REAL store until the first cam-lock action reaches the frontier — lands right before inserting the EKET rear cams. No-op on furnitures without cam parts.
+  const toCamLock = () => {
+    const store = useGameStore.getState();
+    const furniture = store.furniture;
+    if (!furniture || !furniture.actions.some((a) => a.actionId.includes("cam"))) return;
+    if (store.heldActionId) store.cancelHeld();
+    const cap = furniture.actions.length * 2;
+    for (let i = 0; i < cap; i++) {
+      const s = useGameStore.getState();
+      const avail = s.available();
+      if (avail.some((a) => a.actionId.includes("cam"))) break;
+      const next = avail.find((a) => a.type !== "combineClusters");
+      if (!next) break;
+      s.completeAction(next.actionId);
+    }
+    setOpen(false);
+  };
+
   // Fast-forward the REAL store (builds, combines and all) until the first push-latch test beat is the frontier — the quickest way to iterate on the drawer test interaction.
   const toDrawerTest = () => {
     const store = useGameStore.getState();
@@ -75,6 +93,11 @@ export function DevMenu() {
           <Pressable style={styles.item} onPress={toCombine}>
             <Text style={styles.itemText} numberOfLines={1}>
               to combine
+            </Text>
+          </Pressable>
+          <Pressable style={styles.item} onPress={toCamLock}>
+            <Text style={styles.itemText} numberOfLines={1}>
+              to cam lock
             </Text>
           </Pressable>
           <Pressable style={styles.item} onPress={toDrawerTest}>
