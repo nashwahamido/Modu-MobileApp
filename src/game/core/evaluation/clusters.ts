@@ -1,4 +1,20 @@
 import { ActionId, ClusterId, Furniture, PartDef, PartId } from "@/src/game/core/type";
+import { isPickupType } from "@/src/game/core/ids";
+
+/** True once any pickup beat of `cluster` is complete — the cluster has left its untouched opening state (used to suspend free mode's grab-anything until the cluster's first part is out). */
+export function clusterStarted(
+  f: Furniture,
+  cluster: ClusterId,
+  done: ReadonlySet<ActionId>,
+): boolean {
+  return f.actions.some(
+    (a) =>
+      a.partId &&
+      isPickupType(a.type) &&
+      done.has(a.actionId) &&
+      f.parts[a.partId]?.cluster === cluster,
+  );
+}
 
 /** Distinct cluster ids present in a furniture's parts. */
 export function clustersOf(parts: Record<PartId, PartDef>): ClusterId[] {

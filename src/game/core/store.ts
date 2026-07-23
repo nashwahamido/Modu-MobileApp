@@ -7,7 +7,7 @@ import {
 } from "@/src/game/core/evaluation/availability";
 // Setting TYPES live in accessibility.ts; their defaults + the profiles in profile.ts.
 import { AccessibilitySettings } from "@/src/game/core/accessibility";
-import { actionCluster } from "@/src/game/core/evaluation/clusters";
+import { actionCluster, clusterStarted } from "@/src/game/core/evaluation/clusters";
 import {
   PROFILE_MODE,
   ProfileId,
@@ -21,6 +21,7 @@ import {
   BackdropId,
   ClusterId,
   Furniture,
+  GroupId,
   PartId,
   RenderStyleId,
   ThemeId,
@@ -66,6 +67,10 @@ interface GameState {
   matchedActionId: ActionId | null;
   /** FREE-mode soft hint shown when reaching for a not-yet-available part. */
   hint: string | null;
+  /** Tray group the ? hint points at (a pickup step): the tray flashes that card and scrolls it into view. */
+  hintGroup: GroupId | null;
+  /** Bumped on every ? press so a repeated hint for the same group re-triggers the flash. */
+  hintPulse: number;
   /** Accumulated tighten rotation per tighten-action id, in degrees. */
   tightenDeg: Record<ActionId, number>;
   /** Snap action parked at the socket, waiting for orientation correction. */
@@ -163,12 +168,14 @@ const CLEARED = {
   fitState: "idle" as FitState,
   matchedActionId: null,
   hint: null,
+  hintGroup: null,
 };
 
 export const useGameStore = create<GameState>()((set, get) => ({
   furniture: null,
   completed: [],
   undoneActions: [],
+  hintPulse: 0,
   ...CLEARED,
   activeCluster: null,
   combiningCluster: null,
@@ -380,14 +387,14 @@ export const useGameStore = create<GameState>()((set, get) => ({
     if (s.mode !== "free" || !s.settings.softHints || !s.furniture) return;
     const reason = blockReason(s.furniture, actionId, new Set(s.completed));
     if (reason)
-      set({ hint: hintText(reason, s.furniture, s.settings.textLevel) });
+      set({ hint: hintText(reason, s.furniture, s.settings.textLevel), hintGroup: null });
   },
   suggestNext: () => {
     const s = get();
     if (!s.furniture) return;
     const next = s.availableForMode()[0];
     if (!next) {
-      set({ hint: "This area is done — switch focus." });
+      set({ hint: "This area is done — switch focus.", hintGroup: null });
       return;
     }
     const text = instructionText(
@@ -395,9 +402,16 @@ export const useGameStore = create<GameState>()((set, get) => ({
       next.actionId,
       s.settings.textLevel,
     );
-    set({ hint: text ? `Try: ${text}` : null });
+    // A pickup hint also names a tray card — flag its group so the tray can flash it and scroll it into view.
+    const part = next.partId ? s.furniture.parts[next.partId] : undefined;
+    const group = isPickupType(next.type) && part ? part.group : null;
+    set({
+      hint: text ? `Try: ${text}` : null,
+      hintGroup: text ? group : null,
+      hintPulse: s.hintPulse + 1,
+    });
   },
-  clearHint: () => set({ hint: null }),
+  clearHint: () => set({ hint: null, hintGroup: null }),
 
   setSelectedTool: (tool) => set({ selectedTool: tool }),
 
@@ -409,6 +423,14 @@ export const useGameStore = create<GameState>()((set, get) => ({
     if (s.completed.includes(actionId)) return;
     const legal = s.available().some((x) => x.actionId === actionId);
     if (!legal && s.mode !== "free") return;
+    // An untouched cluster refuses illegal pickups even in free mode, so its greyed opening-state cards never lift — the soft hint explains the opening move instead.
+    if (!legal) {
+      const cluster = actionCluster(s.furniture!, a);
+      if (cluster && !clusterStarted(s.furniture!, cluster, new Set(s.completed))) {
+        s.noteBlocked(actionId);
+        return;
+      }
+    }
     set({ ...CLEARED, heldActionId: actionId, fitState: "held" });
   },
   setDragFit: (fitState, matchedActionId) => set({ fitState, matchedActionId }),
