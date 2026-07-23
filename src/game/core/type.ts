@@ -19,7 +19,7 @@ export type ClusterId = string & Brand<"ClusterId">;
 export type ComponentId = string & Brand<"ComponentId">;
 export type LiaisonId = string & Brand<"LiaisonId">;
 
-export type FurnitureId = "DALFRED" | "LACK" | "EKET" | "BEKVAM";
+export type FurnitureId = "DALFRED" | "LACK" | "EKET" | "BEKVAM" | "TUTORIAL";
 export type BrandId = "IKEA" | "Others";
 export type ToolId = "allenkey" | "mallet" | "hammer" | "screwdriver" | "hand";
 

@@ -100,6 +100,7 @@ const BACKDROPS: Record<string, { light: number; dark: number }> = {
 function GameScreen() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
   const insets = useSafeAreaInsets();
+  const [showRoomPrompt, setShowRoomPrompt] = useState(false);
 
   const {
     manipulator,
@@ -183,6 +184,7 @@ function GameScreen() {
   const completedCount = useGameStore((s) => s.completed.length);
   const orientationActionId = useGameStore((s) => s.orientationActionId);
   const totalCount = furniture?.actions.length ?? 0;
+  const taskComplete = totalCount > 0 && completedCount >= totalCount;
   const objectiveFontSize = Math.round(14 * settings.fontScale);
   const orientationAction = orientationActionId
     ? furniture?.actions.find((a) => a.actionId === orientationActionId)
@@ -255,6 +257,11 @@ function GameScreen() {
 
   const hintGroup = useGameStore((s) => s.hintGroup);
   const hintPulse = useGameStore((s) => s.hintPulse);
+
+  useEffect(() => {
+    setShowRoomPrompt(taskComplete);
+  }, [taskComplete]);
+
   const selectedTool = useGameStore((s) => s.selectedTool);
   const rawTool = sceneState.activeTighten?.tool ?? driveAction?.tool ?? null;
   // "hand" is not equippable, so it is not NEEDED — otherwise the step would sit there
@@ -623,6 +630,24 @@ function GameScreen() {
       {/* Strict mode never offered the chooser, so it does not get the map either. Focus
           mode DOES: pause is reachable there, and the map is what pause opens. */}
       {mode !== "strict" ? <BuildMap /> : null}
+      {showRoomPrompt ? (
+        <View style={styles.roomPromptLayer} pointerEvents="auto">
+          <View style={styles.roomPromptCard}>
+            <Text style={styles.roomPromptKicker}>Assembly complete</Text>
+            <Text style={styles.roomPromptTitle}>Your task is finished.</Text>
+            <Text style={styles.roomPromptBody}>Now enter your room and place your furniture.</Text>
+            <View style={styles.roomPromptActions}>
+              <Button label="Stay here" pill onPress={() => setShowRoomPrompt(false)} />
+              <Button
+                label="Enter room"
+                variant="primary"
+                pill
+                onPress={() => router.replace("/room")}
+              />
+            </View>
+          </View>
+        </View>
+      ) : null}
       {ringOverlay}
       <GreenFlash trigger={completedCount} />
       <ClusterCelebration />
@@ -729,5 +754,37 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       gap: SPACE.sm,
       zIndex: 15,
+    },
+
+    // Assembly-complete handoff to the room. Above every HUD layer, below nothing.
+    roomPromptLayer: {
+      ...StyleSheet.absoluteFillObject,
+      zIndex: 80,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: t.scrim,
+      padding: SPACE.xl,
+    },
+    roomPromptCard: {
+      width: "100%",
+      maxWidth: 430,
+      borderRadius: RADIUS.panel,
+      borderWidth: StyleSheet.hairlineWidth * 2,
+      borderColor: t.border,
+      backgroundColor: t.bg,
+      paddingHorizontal: SPACE.xl,
+      paddingVertical: SPACE.xl,
+      ...ELEVATION.card,
+    },
+    // Green kicker: the prompt announces a COMPLETED build, and green is the completion color.
+    roomPromptKicker: { ...TYPE.label, fontSize: 13, color: t.success, marginBottom: SPACE.xs },
+    roomPromptTitle: { ...TYPE.title, fontSize: 24, color: t.text },
+    roomPromptBody: { ...TYPE.body, color: t.textDim, marginTop: SPACE.sm, lineHeight: 21 },
+    roomPromptActions: {
+      marginTop: SPACE.lg,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "flex-end",
+      gap: SPACE.md,
     },
   });

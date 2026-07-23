@@ -16,9 +16,12 @@ export default function App() {
       <Text style={styles.sub}>Build furniture, step by step</Text>
 
       <View style={styles.actions}>
+        <Link href="/auth" asChild>
+          {/* The ONE primary action on the screen: first-run onboarding (auth → questionnaire → avatar → home). */}
+          <Button label="Get started" variant="primary" pill />
+        </Link>
         <Link href="/catalogue" asChild>
-          {/* The ONE primary action on the screen. */}
-          <Button label="Start building" variant="primary" pill />
+          <Button label="Start building" pill />
         </Link>
         <Link href="/settings" asChild>
           <Button label="Settings" pill />
@@ -44,6 +47,8 @@ const makeStyles = (t: Theme) =>
     backgroundColor: t.bg,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 28,
+    gap: 22,
   },
   title: { fontSize: 34, fontWeight: "800", color: t.text, letterSpacing: 0.5 },
   sub: { ...TYPE.body, color: t.textDim, marginTop: SPACE.sm },

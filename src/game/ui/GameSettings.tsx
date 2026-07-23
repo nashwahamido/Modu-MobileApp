@@ -1,6 +1,7 @@
 // In-game settings: a gear button that opens the shared SettingsControls in a cream modal card. Same controls as the homepage /settings screen — one source of truth, one look (adopted from the on-release engine).
 import { router } from "expo-router";
 import { useState } from "react";
+import type { ReactNode } from "react";
 import {
   Image,
   Modal,
@@ -17,12 +18,28 @@ import { SettingsControls } from "@/src/game/ui/SettingsControls";
 
 const SETTINGS_ICON = require("@/src/assets/images/ui/setting_icon.png");
 
-export function GameSettings() {
+interface GameSettingsProps {
+  headerContent?: ReactNode;
+  controls?: ReactNode;
+  confirmLabel?: string;
+  confirmDisabled?: boolean;
+  onConfirm?: () => void;
+}
+
+export function GameSettings({
+  headerContent,
+  controls,
+  confirmLabel = "Done",
+  confirmDisabled = false,
+  onConfirm,
+}: GameSettingsProps = {}) {
   const styles = useStyles(makeStyles);
   const [open, setOpen] = useState(false);
   const { height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const cardMaxHeight = winH - insets.top - insets.bottom - 32;
+
+  const closeSettings = () => setOpen(false);
 
   return (
     <>
@@ -51,20 +68,21 @@ export function GameSettings() {
           "landscape-right",
           "portrait",
         ]}
-        onRequestClose={() => setOpen(false)}
+        onRequestClose={closeSettings}
       >
         <View style={styles.backdrop} pointerEvents="box-none">
           <Pressable
             style={StyleSheet.absoluteFill}
-            onPress={() => setOpen(false)}
+            onPress={closeSettings}
           />
           <View style={[styles.card, { maxHeight: cardMaxHeight }]}>
             <Text style={styles.title}>Settings</Text>
+            {headerContent}
             <ScrollView
               contentContainerStyle={styles.cardScroll}
               showsVerticalScrollIndicator={false}
             >
-              <SettingsControls />
+              {controls ?? <SettingsControls />}
             </ScrollView>
             <View style={styles.footer}>
               <Pressable
@@ -78,11 +96,16 @@ export function GameSettings() {
                 <Text style={styles.homeText}>⌂ Home</Text>
               </Pressable>
               <Pressable
-                style={styles.done}
-                onPress={() => setOpen(false)}
+                style={[styles.done, confirmDisabled && styles.doneDisabled]}
+                onPress={() => {
+                  if (confirmDisabled) return;
+                  onConfirm?.();
+                  closeSettings();
+                }}
                 hitSlop={8}
+                disabled={confirmDisabled}
               >
-                <Text style={styles.doneText}>Done</Text>
+                <Text style={styles.doneText}>{confirmLabel}</Text>
               </Pressable>
             </View>
           </View>
@@ -148,5 +171,6 @@ const makeStyles = (t: Theme) =>
     paddingHorizontal: 18,
     paddingVertical: 9,
   },
+  doneDisabled: { opacity: 0.42 },
   doneText: { color: t.onAccent, fontWeight: "700", fontSize: 14 },
   });
