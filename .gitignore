@@ -34,7 +34,7 @@ expo-env.d.ts
 # Tool files
 git-filter-repo
 git-filter-repo.txt
-.test
+.test.ts
 
 # Logs
 npm-debug.*
@@ -56,3 +56,6 @@ docs/
 
 # processGLB tool
 tools/processGLB/work/
+
+# database
+*.sql
