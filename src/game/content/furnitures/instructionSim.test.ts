@@ -11,7 +11,7 @@ import { buildComponents, isNonLeadBody, memberPlaceIdsForLead } from "@/src/gam
 import { availableActions, availableInMode } from "@/src/game/core/evaluation/availability";
 import { blockReason, reasonActionable } from "@/src/game/core/evaluation/blockReason";
 import { combineReady, focusableClusterIds } from "@/src/game/core/evaluation/clusters";
-import { HARDWARE } from "@/src/game/data/hardware";
+import { HARDWARE } from "@/src/game/content/hardware";
 import {
   ActionId,
   AssemblyMode,

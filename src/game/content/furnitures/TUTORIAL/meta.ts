@@ -5,7 +5,7 @@ import {
 import { metaCounts } from "@/src/game/core/composition/metaCounts";
 import { applyStructure } from "@/src/game/core/model/liaisons";
 import { FurnitureMeta } from "@/src/game/core/type";
-import { HARDWARE } from "@/src/game/data/hardware";
+import { HARDWARE } from "@/src/game/content/hardware";
 import {
   FASTENER_RULES,
   FINISHING_ACTION,

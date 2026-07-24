@@ -3,8 +3,8 @@ import { assertValidFurniture } from "@/src/game/core/composition/validateFurnit
 import { applyStructure, buildLiaisons } from "@/src/game/core/model/liaisons";
 import { buildInstructions } from "@/src/game/core/presentation/instructions";
 import { Furniture, PartDef } from "@/src/game/core/type";
-import { HARDWARE } from "@/src/game/data/hardware";
-import { toolsUsed } from "@/src/game/data/tools";
+import { HARDWARE } from "@/src/game/content/hardware";
+import { toolsUsed } from "@/src/game/content/tools";
 import { BEATS, CLUSTERS, LABELS, STRUCTURE } from "./authored";
 import { ACTIONS, TUTORIAL_META } from "./meta";
 import { PARTS } from "./parts.gen";
