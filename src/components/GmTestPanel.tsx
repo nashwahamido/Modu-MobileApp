@@ -13,7 +13,6 @@ type GmTarget = {
 
 const targets: GmTarget[] = [
   { label: "Welcome", route: "/" as Href, note: "Landing screen" },
-  { label: "Home", route: "/home" as Href, note: "Main navigation" },
   { label: "Onboarding", route: "/onboarding-questionnaire" as Href, note: "Questionnaire" },
   {
     label: "Avatar",
@@ -23,6 +22,7 @@ const targets: GmTarget[] = [
   { label: "Tutorial", route: "/tutorial" as Href, note: "Mascot guide task" },
   { label: "Task", route: "/play" as Href, note: "Assembly task" },
   { label: "Room", route: "/room" as Href, note: "Virtual room" },
+  { label: "Engine", route: "/engine-test" as Href, note: "Engine test (dev)" },
 ];
 
 export function GmTestPanel() {
@@ -72,7 +72,7 @@ export function GmTestPanel() {
         hitSlop={10}
         pointerEvents="auto"
       >
-        <Text style={styles.fabText}>GM</Text>
+        <Text style={styles.fabText}>DEV</Text>
       </Pressable>
     </View>
   );
