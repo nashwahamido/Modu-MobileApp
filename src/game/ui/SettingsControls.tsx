@@ -207,6 +207,7 @@ export function SceneAppearanceControls({
 }: {
   onPreferenceChange?: (preference: "background" | "lighting") => void;
 } = {}) {
+  const styles = useStyles(makeStyles);
   const settings = useGameStore((s) => s.settings);
   const backdrop = useGameStore((s) => s.backdrop);
   const setSettings = useGameStore((s) => s.setSettings);

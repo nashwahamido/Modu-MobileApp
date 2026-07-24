@@ -9,7 +9,9 @@ import {
 import { useTutorialStore } from './store';
 import { useTutorialTargets, type TutorialFrame } from './targetRegistry';
 import { useTutorialAudio } from './useTutorialAudio';
-const mascotImage = require('../../assets/mascot/mascot.png');
+import { Button } from '@/src/game/ui/Button';
+import { ELEVATION, RADIUS, Theme, useStyles } from '@/src/game/ui/theme';
+const mascotImage = require("../../assets/images/mascot/mascot.png");
 const PADDING = 0;
 
 interface Props {
@@ -33,6 +35,7 @@ export function MascotGuideOverlay({
   blocked = false,
   audioEnabled = false,
 }: Props) {
+  const styles = useStyles(makeStyles);
   const overlayRef = useRef<View>(null);
   const windowSize = useWindowDimensions();
   const [overlaySize, setOverlaySize] = useState<{ width: number; height: number } | null>(null);
@@ -119,9 +122,13 @@ export function MascotGuideOverlay({
               Want a quick tour of part return, instructions, Focus mode, and Auto-view?
             </Text>
             <View style={styles.settingsActions}>
-              <Pressable style={styles.primaryButton} onPress={beginSettingsTutorial}>
-                <Text style={styles.primaryButtonText}>Personalize settings</Text>
-              </Pressable>
+              <Button
+                label="Personalize settings"
+                variant="primary"
+                small
+                style={styles.primaryAction}
+                onPress={beginSettingsTutorial}
+              />
               <Pressable onPress={skipSettingsTutorial} hitSlop={8}>
                 <Text style={styles.skipText}>Maybe later</Text>
               </Pressable>
@@ -144,8 +151,11 @@ export function MascotGuideOverlay({
           <View style={styles.rewardCopy}>
             <Text style={styles.rewardTitle}>Tutorial completed!</Text>
             <Text style={styles.rewardMessage}>Now entering the assembly task. You also earned +{TUTORIAL_REWARD_TOKENS} tokens.</Text>
-            <Pressable
-              style={styles.primaryButton}
+            <Button
+              label="Enter assembly task"
+              variant="primary"
+              small
+              style={styles.primaryAction}
               onPress={() => {
                 const tutorial = useTutorialStore.getState();
                 if (!tutorial.completed || tutorial.currentIndex !== tutorial.steps.length - 1) return;
@@ -153,9 +163,7 @@ export function MascotGuideOverlay({
                 dismissReward();
                 onContinueToAssembly?.();
               }}
-            >
-              <Text style={styles.primaryButtonText}>Enter assembly task</Text>
-            </Pressable>
+            />
           </View>
         </View>
       </View>
@@ -219,9 +227,7 @@ export function MascotGuideOverlay({
               {waitingForTool ? 'Finish this assembly step to reveal the tool.' : 'Complete the highlighted action to continue.'}
             </Text>
             {step.id === 'pinch-to-zoom' && onSimulatePinch ? (
-              <Pressable style={styles.simulatorButton} onPress={onSimulatePinch} hitSlop={8}>
-                <Text style={styles.simulatorButtonText}>Computer: test zoom</Text>
-              </Pressable>
+              <Button label="Computer: test zoom" small onPress={onSimulatePinch} />
             ) : null}
           </View>
         </View>
@@ -281,94 +287,88 @@ function bubblePosition(targetId: string, frame: TutorialFrame, screenW: number,
   return { bottom: Math.max(20, screenH - frame.y + 16), left };
 }
 
-const styles = StyleSheet.create({
-  layer: { ...StyleSheet.absoluteFillObject, zIndex: 50 },
-  scrim: { position: 'absolute', backgroundColor: 'rgba(35, 31, 32, 0.54)' },
-  highlight: {
-    position: 'absolute',
-    borderRadius: 18,
-    borderWidth: 3,
-    borderColor: '#8FA876',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  bubble: {
-    position: 'absolute',
-    width: 286,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  mascot: {
-    width: 82,
-    height: 66,
-    borderRadius: 14,
-    borderWidth: 3,
-    borderColor: '#FBF8F3',
-    backgroundColor: '#FBF8F3',
-  },
-  copy: {
-    flex: 1,
-    backgroundColor: 'rgba(251,248,243,0.96)',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(35,31,32,0.12)',
-  },
-  stepText: { color: '#8FA876', fontSize: 11, fontWeight: '800', marginBottom: 4 },
-  message: { color: '#231F20', fontSize: 14, lineHeight: 19, fontWeight: '700' },
-  actions: { marginTop: 8, gap: 7, alignItems: 'flex-start' },
-  settingsActions: { marginTop: 12, gap: 10, alignItems: 'flex-start' },
-  actionHint: { color: '#665f55', fontSize: 11, lineHeight: 15, fontWeight: '700' },
-  simulatorButton: {
-    borderRadius: 9,
-    borderWidth: 1,
-    borderColor: '#8FA876',
-    backgroundColor: '#F4F8EF',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  simulatorButtonText: { color: '#587047', fontSize: 11, fontWeight: '800' },
-  skipText: { color: '#665f55', fontSize: 12, fontWeight: '700' },
-  stepRewardToast: {
-    position: 'absolute',
-    top: 72,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(232, 212, 140, 0.96)',
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  stepRewardText: { color: '#231F20', fontSize: 13, fontWeight: '800' },
-  rewardLayer: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 60,
-    backgroundColor: 'rgba(35, 31, 32, 0.48)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  rewardCard: {
-    width: '100%',
-    maxWidth: 420,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    backgroundColor: 'rgba(251,248,243,0.97)',
-    borderRadius: 18,
-    padding: 16,
-  },
-  rewardMascot: { width: 104, height: 84, borderRadius: 16, backgroundColor: '#FBF8F3' },
-  rewardCopy: { flex: 1 },
-  rewardTitle: { fontSize: 20, fontWeight: '800', color: '#231F20' },
-  rewardMessage: { marginTop: 5, fontSize: 14, lineHeight: 19, fontWeight: '600', color: '#665f55' },
-  primaryButton: {
-    marginTop: 12,
-    alignSelf: 'flex-start',
-    backgroundColor: '#2D2A26',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  primaryButtonText: { color: '#FBF8F3', fontSize: 13, fontWeight: '800' },
-});
+const makeStyles = (t: Theme) =>
+  StyleSheet.create({
+    layer: { ...StyleSheet.absoluteFillObject, zIndex: 50 },
+    scrim: { position: 'absolute', backgroundColor: t.scrim },
+    // Green ring = "you did this here": completion colour marks the highlighted control.
+    highlight: {
+      position: 'absolute',
+      borderRadius: 18,
+      borderWidth: 3,
+      borderColor: t.success,
+      backgroundColor: 'rgba(255,255,255,0.08)',
+    },
+    bubble: {
+      position: 'absolute',
+      width: 286,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    mascot: {
+      width: 82,
+      height: 66,
+      borderRadius: 14,
+      borderWidth: 3,
+      borderColor: t.surface,
+      backgroundColor: t.surface,
+    },
+    copy: {
+      flex: 1,
+      backgroundColor: t.surface,
+      borderRadius: 16,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderWidth: 1,
+      borderColor: t.border,
+      ...ELEVATION.card,
+    },
+    stepText: { color: t.success, fontSize: 11, fontWeight: '800', marginBottom: 4 },
+    message: { color: t.text, fontSize: 14, lineHeight: 19, fontWeight: '700' },
+    actions: { marginTop: 8, gap: 7, alignItems: 'flex-start' },
+    settingsActions: { marginTop: 12, gap: 10, alignItems: 'flex-start' },
+    actionHint: { color: t.textDim, fontSize: 11, lineHeight: 15, fontWeight: '700' },
+    skipText: { color: t.textDim, fontSize: 12, fontWeight: '700' },
+    stepRewardToast: {
+      position: 'absolute',
+      top: 72,
+      alignSelf: 'center',
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderWidth: StyleSheet.hairlineWidth * 2,
+      borderRadius: RADIUS.control,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      ...ELEVATION.card,
+    },
+    // Gold = earned: the token toast text carries the XP colour on the plain surface.
+    stepRewardText: { color: t.gold, fontSize: 13, fontWeight: '800' },
+    rewardLayer: {
+      ...StyleSheet.absoluteFillObject,
+      zIndex: 60,
+      backgroundColor: t.scrim,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 20,
+    },
+    rewardCard: {
+      width: '100%',
+      maxWidth: 420,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+      backgroundColor: t.bg,
+      borderColor: t.border,
+      borderWidth: StyleSheet.hairlineWidth * 2,
+      borderRadius: RADIUS.panel,
+      padding: 16,
+      ...ELEVATION.card,
+    },
+    rewardMascot: { width: 104, height: 84, borderRadius: 16, backgroundColor: t.surface },
+    rewardCopy: { flex: 1 },
+    rewardTitle: { fontSize: 20, fontWeight: '800', color: t.text },
+    rewardMessage: { marginTop: 5, fontSize: 14, lineHeight: 19, fontWeight: '600', color: t.textDim },
+    // Positioning only — the shared Button owns the primary action's fill and label.
+    primaryAction: { marginTop: 12, alignSelf: 'flex-start' },
+  });

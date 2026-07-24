@@ -4,10 +4,12 @@ import { Image, StyleSheet, Text, View } from "react-native";
 import { useTutorialStore } from "@/src/game/tutorial/store";
 import { GameSettings } from "@/src/game/ui/GameSettings";
 import { SceneAppearanceControls } from "@/src/game/ui/SettingsControls";
+import { RADIUS, Theme, useStyles } from "@/src/game/ui/theme";
 
-const MASCOT_IMAGE = require("@/src/assets/mascot/mascot.png");
+const MASCOT_IMAGE = require("@/src/assets/images/mascot/mascot.png");
 
 export function TutorialGameSettings() {
+  const styles = useStyles(makeStyles);
   const [previewedBackground, setPreviewedBackground] = useState(false);
   const [previewedLighting, setPreviewedLighting] = useState(false);
   const tutorialStep = useTutorialStore((s) => s.steps[s.currentIndex]);
@@ -56,39 +58,41 @@ export function TutorialGameSettings() {
   );
 }
 
-const styles = StyleSheet.create({
-  callout: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginTop: 8,
-    marginBottom: 2,
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: "#f4f8ef",
-    borderWidth: 1,
-    borderColor: "#b7c9a7",
-  },
-  mascot: {
-    width: 54,
-    height: 48,
-    borderRadius: 10,
-    backgroundColor: "#fbf8f3",
-  },
-  copy: { flex: 1 },
-  title: { fontSize: 14, fontWeight: "800", color: "#2e2a24" },
-  message: {
-    marginTop: 2,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: "600",
-    color: "#665f55",
-  },
-  note: {
-    marginTop: 10,
-    color: "#7a7163",
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: "600",
-  },
-});
+const makeStyles = (t: Theme) =>
+  StyleSheet.create({
+    // A raised card on the settings sheet's surface, so the mascot callout reads as its own chip.
+    callout: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      marginTop: 8,
+      marginBottom: 2,
+      padding: 10,
+      borderRadius: RADIUS.control,
+      backgroundColor: t.surfaceRaised,
+      borderWidth: 1,
+      borderColor: t.border,
+    },
+    mascot: {
+      width: 54,
+      height: 48,
+      borderRadius: 10,
+      backgroundColor: t.surface,
+    },
+    copy: { flex: 1 },
+    title: { fontSize: 14, fontWeight: "800", color: t.text },
+    message: {
+      marginTop: 2,
+      fontSize: 12,
+      lineHeight: 16,
+      fontWeight: "600",
+      color: t.textDim,
+    },
+    note: {
+      marginTop: 10,
+      color: t.textDim,
+      fontSize: 12,
+      lineHeight: 17,
+      fontWeight: "600",
+    },
+  });
