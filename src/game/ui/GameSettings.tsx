@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Theme, useStyles } from "@/src/game/ui/theme";
 import { SettingsControls } from "@/src/game/ui/SettingsControls";
 
-const SETTINGS_ICON = require("@/src/assets/images/ui/icons/setting_icon.png");
+const SETTINGS_ICON = require("@/src/assets/ui/icons/setting_icon.png");
 
 interface GameSettingsProps {
   headerContent?: ReactNode;

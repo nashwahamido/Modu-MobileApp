@@ -71,7 +71,7 @@ export function ToolBar({ neededTool }: { neededTool: ToolId | null }) {
         hitSlop={8}
       >
         <Image
-          source={require("../../assets/images/ui/icons/icon-toolBar.png")}
+          source={require("../../assets/ui/icons/icon-toolBar.png")}
           style={styles.toolboxIcon}
           resizeMode="contain"
         />

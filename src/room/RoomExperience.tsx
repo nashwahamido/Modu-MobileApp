@@ -77,48 +77,208 @@ export function RoomExperience() {
     applyRoomControls(nextRotation, roomZoomRef.current);
   };
 
-  return <View style={s.screen}>
-    <View style={s.stage}>{heavySceneActive ? null : <RoomScene rotationY={roomRotation} zoom={roomZoom} onRotationChange={handleRoomRotationChange} />}</View>
-    <View style={s.stats}>
-      <Pressable accessibilityLabel="Settings" style={s.settingsButton} onPress={() => router.push('/settings' as Href)}><SettingsIcon size={40} color={t.textDim}/></Pressable>
-      <Pressable accessibilityLabel="Profile" style={s.levelGroup} onPress={() => router.push('/profile' as Href)}>
-        <View style={s.levelBadge}><LevelStarIcon size={48}/><Text style={s.levelNumber}>1</Text></View>
-        <View style={s.progress}><View style={s.progressFill}/><Text style={s.progressText}>50%</Text></View>
+  return (
+    <View style={s.screen}>
+      <View style={s.stage}>
+        {heavySceneActive ? null : (
+          <RoomScene
+            rotationY={roomRotation}
+            zoom={roomZoom}
+            onRotationChange={handleRoomRotationChange}
+          />
+        )}
+      </View>
+      <View style={s.stats}>
+        <Pressable
+          accessibilityLabel="Settings"
+          style={s.settingsButton}
+          onPress={() => router.push("/settings" as Href)}
+        >
+          <SettingsIcon size={40} color={t.textDim} />
+        </Pressable>
+        <Pressable
+          accessibilityLabel="Profile"
+          style={s.levelGroup}
+          onPress={() => router.push("/profile" as Href)}
+        >
+          <View style={s.levelBadge}>
+            <LevelStarIcon size={48} />
+            <Text style={s.levelNumber}>1</Text>
+          </View>
+          <View style={s.progress}>
+            <View style={s.progressFill} />
+            <Text style={s.progressText}>50%</Text>
+          </View>
+        </Pressable>
+        <View style={s.currencyGroup}>
+          <View style={s.coinBadge}>
+            <CoinMedalIcon size={44} />
+          </View>
+          <View style={s.currency}>
+            <Text style={s.currencyText}>6767</Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={s.roomControls}>
+        <View style={s.controlGroup}>
+          <Pressable
+            accessibilityLabel="Rotate room left"
+            style={({ pressed }) => [
+              s.controlButton,
+              pressed && s.controlButtonPressed,
+            ]}
+            onPress={() => rotateRoom(-1)}
+          >
+            <RotateLeftIcon size={23} />
+          </Pressable>
+          <Text style={s.controlReadout}>{rotationDegrees}°</Text>
+          <Pressable
+            accessibilityLabel="Rotate room right"
+            style={({ pressed }) => [
+              s.controlButton,
+              pressed && s.controlButtonPressed,
+            ]}
+            onPress={() => rotateRoom(1)}
+          >
+            <RotateRightIcon size={23} />
+          </Pressable>
+        </View>
+        <View style={s.controlGroup}>
+          <Pressable
+            accessibilityLabel="Zoom room in"
+            style={({ pressed }) => [
+              s.controlButton,
+              pressed && s.controlButtonPressed,
+            ]}
+            onPress={() => zoomRoom("in")}
+          >
+            <Text style={s.controlSymbol}>＋</Text>
+          </Pressable>
+          <Text style={s.controlReadout}>{zoomPercent}%</Text>
+          <Pressable
+            accessibilityLabel="Zoom room out"
+            style={({ pressed }) => [
+              s.controlButton,
+              pressed && s.controlButtonPressed,
+            ]}
+            onPress={() => zoomRoom("out")}
+          >
+            <Text style={s.controlSymbol}>－</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <DevMenu placement="roomFloat" />
+
+      {placing || placed ? (
+        <Animated.View
+          {...panResponder.panHandlers}
+          style={[
+            s.furnitureWrap,
+            {
+              transform: [
+                { translateX: position.x },
+                { translateY: position.y },
+                { scale },
+              ],
+            },
+            placing && s.furnitureActive,
+          ]}
+        >
+          <Pressable
+            accessibilityLabel={
+              placing ? "Selected furniture" : "Edit furniture"
+            }
+            onPress={editPlacement}
+          >
+            <Cabinet />
+          </Pressable>
+        </Animated.View>
+      ) : null}
+
+      <View style={[s.rail, !barOpen && s.railClosed]}>
+        <Pressable
+          accessibilityLabel="Toggle menu"
+          style={[s.chevron, !barOpen && s.chevronClosed]}
+          onPress={() => setBarOpen((x) => !x)}
+        >
+          <ChevronIcon size={barOpen ? 28 : 34} up={barOpen} />
+        </Pressable>
+        {barOpen ? (
+          <>
+            <Pressable
+              style={s.railButton}
+              onPress={() => router.push("/store" as Href)}
+            >
+              <CartIcon size={31} />
+              <Text style={s.railLabel}>shop</Text>
+            </Pressable>
+            <Pressable
+              style={s.railButton}
+              onPress={() => router.push("/inventory" as Href)}
+            >
+              <InventoryIcon size={32} />
+              <Text style={s.railLabel}>inventory</Text>
+            </Pressable>
+            <Pressable
+              style={s.railButton}
+              onPress={() => router.push("/profile" as Href)}
+            >
+              <FriendsIcon size={34} />
+              <Text style={s.railLabel}>visit friends</Text>
+            </Pressable>
+          </>
+        ) : (
+          <View style={s.collapsedPill} />
+        )}
+      </View>
+      <Pressable
+        accessibilityLabel="Tasks"
+        style={s.workbench}
+        onPress={() => router.push("/catalogue" as Href)}
+      >
+        <Image
+          source={require("../assets/ui/icons/Assemble.png")}
+          style={s.workbenchIcon}
+          resizeMode="contain"
+        />
       </Pressable>
-      <View style={s.currencyGroup}>
-        <View style={s.coinBadge}><CoinMedalIcon size={44}/></View>
-        <View style={s.currency}><Text style={s.currencyText}>6767</Text></View>
-      </View>
+
+      {placing ? (
+        <View style={s.placeBar}>
+          <Text style={s.placeHint}>Drag to position</Text>
+          <Pressable
+            accessibilityLabel="Delete furniture"
+            style={s.deleteButton}
+            onPress={removePlacement}
+          >
+            <TrashIcon size={23} color={t.danger} />
+          </Pressable>
+          <Pressable
+            accessibilityLabel="Confirm furniture position"
+            style={s.confirm}
+            onPress={confirmPlacement}
+          >
+            <CheckIcon size={27} color={t.onSuccess} />
+          </Pressable>
+        </View>
+      ) : null}
+
+      {unavailableFeature ? (
+        <OverlaySheet size="dialog" onClose={() => setUnavailableFeature(null)}>
+          <Text style={s.comingSoonTitle}>{unavailableFeature}</Text>
+          <Text style={s.comingSoonBody}>This feature is coming soon.</Text>
+          <Button
+            label="Got it"
+            variant="primary"
+            style={s.comingSoonButton}
+            onPress={() => setUnavailableFeature(null)}
+          />
+        </OverlaySheet>
+      ) : null}
     </View>
-
-    <View style={s.roomControls}>
-      <View style={s.controlGroup}>
-        <Pressable accessibilityLabel="Rotate room left" style={({ pressed }) => [s.controlButton, pressed && s.controlButtonPressed]} onPress={() => rotateRoom(-1)}><RotateLeftIcon size={23}/></Pressable>
-        <Text style={s.controlReadout}>{rotationDegrees}°</Text>
-        <Pressable accessibilityLabel="Rotate room right" style={({ pressed }) => [s.controlButton, pressed && s.controlButtonPressed]} onPress={() => rotateRoom(1)}><RotateRightIcon size={23}/></Pressable>
-      </View>
-      <View style={s.controlGroup}>
-        <Pressable accessibilityLabel="Zoom room in" style={({ pressed }) => [s.controlButton, pressed && s.controlButtonPressed]} onPress={() => zoomRoom('in')}><Text style={s.controlSymbol}>＋</Text></Pressable>
-        <Text style={s.controlReadout}>{zoomPercent}%</Text>
-        <Pressable accessibilityLabel="Zoom room out" style={({ pressed }) => [s.controlButton, pressed && s.controlButtonPressed]} onPress={() => zoomRoom('out')}><Text style={s.controlSymbol}>－</Text></Pressable>
-      </View>
-    </View>
-
-    <DevMenu placement="roomFloat" />
-
-    {(placing || placed) ? <Animated.View {...panResponder.panHandlers} style={[s.furnitureWrap,{ transform:[{translateX:position.x},{translateY:position.y},{scale}] }, placing && s.furnitureActive]}><Pressable accessibilityLabel={placing ? 'Selected furniture' : 'Edit furniture'} onPress={editPlacement}><Cabinet/></Pressable></Animated.View> : null}
-
-    <View style={[s.rail,!barOpen&&s.railClosed]}><Pressable accessibilityLabel="Toggle menu" style={[s.chevron,!barOpen&&s.chevronClosed]} onPress={()=>setBarOpen(x=>!x)}><ChevronIcon size={barOpen?28:34} up={barOpen}/></Pressable>{barOpen?<><Pressable style={s.railButton} onPress={()=>router.push('/store' as Href)}><CartIcon size={31}/><Text style={s.railLabel}>shop</Text></Pressable><Pressable style={s.railButton} onPress={()=>router.push('/inventory' as Href)}><InventoryIcon size={32}/><Text style={s.railLabel}>inventory</Text></Pressable><Pressable style={s.railButton} onPress={()=>router.push('/profile' as Href)}><FriendsIcon size={34}/><Text style={s.railLabel}>visit friends</Text></Pressable></>:<View style={s.collapsedPill}/>}</View>
-    <Pressable accessibilityLabel="Tasks" style={s.workbench} onPress={()=>router.push('/catalogue' as Href)}><Image source={require('../assets/images/ui/icons/Assemble.png')} style={s.workbenchIcon} resizeMode="contain"/></Pressable>
-
-    {placing ? <View style={s.placeBar}><Text style={s.placeHint}>Drag to position</Text><Pressable accessibilityLabel="Delete furniture" style={s.deleteButton} onPress={removePlacement}><TrashIcon size={23} color={t.danger}/></Pressable><Pressable accessibilityLabel="Confirm furniture position" style={s.confirm} onPress={confirmPlacement}><CheckIcon size={27} color={t.onSuccess}/></Pressable></View>:null}
-
-    {unavailableFeature ? <OverlaySheet size="dialog" onClose={()=>setUnavailableFeature(null)}>
-      <Text style={s.comingSoonTitle}>{unavailableFeature}</Text>
-      <Text style={s.comingSoonBody}>This feature is coming soon.</Text>
-      <Button label="Got it" variant="primary" style={s.comingSoonButton} onPress={()=>setUnavailableFeature(null)}/>
-    </OverlaySheet>:null}
-  </View>;
+  );
 }
 
 const makeStyles = (t: Theme) => StyleSheet.create({
