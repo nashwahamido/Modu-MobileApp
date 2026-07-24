@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
 import { Theme, useStyles } from "@/src/game/ui/theme";
-import { toolList } from "@/src/game/data/tools";
+import { toolList } from "@/src/game/content/tools";
 import { pickThumb } from "@/src/game/core/presentation/labels";
 import type { ToolId } from "@/src/game/core/type";
 

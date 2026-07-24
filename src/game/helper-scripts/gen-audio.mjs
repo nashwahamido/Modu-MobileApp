@@ -8,7 +8,7 @@
 // and <ext> ∈ m4a | mp3 | caf | wav.
 //
 // This script maps the `instructions/<ID>/` clips to a require() keyed by
-// ActionId and writes src/game/data/furnitures/<ID>/audio.gen.ts. To wire it in,
+// ActionId and writes src/game/content/furnitures/<ID>/audio.gen.ts. To wire it in,
 // add to that furniture's index.ts:
 //   import { audio } from "./audio.gen";   // …and `audio,` in the Furniture object.
 // Furnitures with no clips get no file (audio stays undefined — the UI falls back
@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const SRC = path.resolve(SCRIPT_DIR, "..", "..");
-const FURNITURES = path.join(SCRIPT_DIR, "..", "data", "furnitures");
+const FURNITURES = path.join(SCRIPT_DIR, "..", "content", "furnitures");
 const INSTR_ROOT = path.join(SRC, "assets", "audio", "furnitures", "instructions");
 // require() path is relative to data/furnitures/<ID>/audio.gen.ts
 const REQUIRE_PREFIX = "../../../../assets/audio/furnitures/instructions";
