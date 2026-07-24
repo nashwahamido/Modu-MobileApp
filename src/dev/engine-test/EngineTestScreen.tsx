@@ -31,7 +31,7 @@ import {
   FURNITURE_METAS,
   isPlayable,
   loadFurnitureById,
-} from "@/src/game/data/furnitures/furnitures";
+} from "@/src/game/content/furnitures/furnitures";
 import { OrientationLock } from "expo-screen-orientation";
 import { availableInMode } from "@/src/game/core/evaluation/availability";
 import {

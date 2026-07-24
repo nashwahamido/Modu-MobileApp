@@ -6,6 +6,8 @@
     "start": "npx expo start",
     "android": "npx expo run:android",
     "ios": "npx expo run:ios",
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
     "fix:ios-paths": "node scripts/fix-ios-space-paths.mjs"
   },
   "dependencies": {

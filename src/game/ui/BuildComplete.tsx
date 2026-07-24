@@ -4,22 +4,15 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { useGameStore } from "@/src/game/core/store";
 import { Theme, useStyles } from "@/src/game/ui/theme";
 
-/** Coins per completed step. Mirrors ClusterFocusControl — see the note there: there is no
- *  wallet or shop in the data model, so this is a placeholder RATE, not a typed-in number. */
+/** Coins per completed step. Mirrors ClusterFocusControl — see the note there: there is no wallet or shop in the data model, so this is a placeholder RATE, not a typed-in number. */
 const COINS_PER_STEP = 3;
 
 /**
  * The finished-build screen.
- *
- * Styled to match the build map (same cream card, same purple rim), and shown the moment
- * the last action lands.
- *
- * ── what is real and what is not ────────────────────────────────────────────────────────
- * The coins and XP are computed from the build. The "succulent plant" reward, "place in the
- * room" and "store in inventory" are from the wireframe and have NOTHING behind them yet —
- * no item model, no inventory, no room view. They are rendered as designed so the screen
- * can be reviewed whole, but both buttons currently just leave the build. Wiring them up is
- * a real feature, not a label change.
+ * The coins and XP are computed from the build. The "succulent plant" reward is from the wireframe and has nothing behind it yet — no item model. 
+ * The two action buttons route:
+ * "place in the room now!" goes to the room, "store in inventory" returns to the catalogue
+ * (there is no separate inventory screen — the built piece lives in the catalogue for now).
  */
 export function BuildComplete() {
   const styles = useStyles(makeStyles);
@@ -37,7 +30,9 @@ export function BuildComplete() {
 
   const coins = total * COINS_PER_STEP;
   const xp = total * furniture.xpPerStep;
-  const leave = () => router.replace("/catalogue");
+  // The finished piece goes to the room to be placed; "store" sends it back to the catalogue.
+  const placeInRoom = () => router.replace("/room");
+  const storeInInventory = () => router.replace("/catalogue");
 
   return (
     <View style={styles.scrim}>
@@ -116,7 +111,7 @@ export function BuildComplete() {
           <View style={styles.actionsRow}>
             <Pressable
               style={styles.action}
-              onPress={leave}
+              onPress={placeInRoom}
               accessibilityLabel="Place it in the room"
             >
               <Text style={styles.actionGlyph}>⌂</Text>
@@ -124,7 +119,7 @@ export function BuildComplete() {
             </Pressable>
             <Pressable
               style={styles.action}
-              onPress={leave}
+              onPress={storeInInventory}
               accessibilityLabel="Store it in your inventory"
             >
               <Text style={styles.actionGlyph}>▤</Text>
