@@ -23,12 +23,41 @@ export interface ItemCardProps {
   preview?: ReactNode;
   onPress?: () => void;
   disabled?: boolean;
+  highlighted?: boolean;
+  selected?: boolean;
+  dimmed?: boolean;
+  badge?: string;
 }
 
-export function ItemCard({ name, price, owned, status, statusTone = "muted", preview, onPress, disabled }: ItemCardProps) {
+export function ItemCard({
+  name,
+  price,
+  owned,
+  status,
+  statusTone = "muted",
+  preview,
+  onPress,
+  disabled,
+  highlighted,
+  selected,
+  dimmed,
+  badge,
+}: ItemCardProps) {
   const styles = useStyles(makeStyles);
   return (
-    <Pressable style={styles.card} onPress={onPress} disabled={disabled} accessibilityLabel={name}>
+    <Pressable
+      style={({ pressed }) => [
+        styles.card,
+        highlighted && styles.cardHighlighted,
+        selected && styles.cardSelected,
+        dimmed && styles.cardDimmed,
+        pressed && !disabled && styles.cardPressed,
+      ]}
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityLabel={name}
+    >
+      {badge ? <Text style={styles.badge}>{badge}</Text> : null}
       {price != null || owned ? (
         <View style={styles.topRow}>
           {price != null ? (
@@ -58,6 +87,35 @@ const makeStyles = (t: Theme) =>
     // surfaceRaised = "a card sitting on a panel", so the tile reads as lifted on both the Shop
     // page (bg) and the Inventory panel (surface).
     card: { width: 168, borderRadius: RADIUS.panel, borderWidth: 1, borderColor: t.border, backgroundColor: t.surfaceRaised, padding: SPACE.md },
+    cardHighlighted: {
+      borderWidth: 3,
+      borderColor: t.success,
+      shadowColor: t.success,
+      shadowOpacity: 0.34,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+    },
+    cardSelected: {
+      borderWidth: 3,
+      borderColor: t.accent,
+      backgroundColor: t.surface,
+    },
+    cardDimmed: { opacity: 0.42 },
+    cardPressed: { transform: [{ scale: 0.98 }] },
+    badge: {
+      position: "absolute",
+      zIndex: 2,
+      right: 8,
+      top: 8,
+      borderRadius: 9,
+      overflow: "hidden",
+      backgroundColor: t.success,
+      color: t.onSuccess,
+      fontSize: 9,
+      fontWeight: "900",
+      paddingHorizontal: 7,
+      paddingVertical: 3,
+    },
     topRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 20, marginBottom: SPACE.sm },
     pricePill: { flexDirection: "row", alignItems: "center", gap: SPACE.xs },
     priceText: { ...TYPE.labelSm, color: t.text },

@@ -17,42 +17,81 @@ import {
   useModel,
 } from "react-native-filament";
 import type { Mat4 } from "react-native-filament";
+import type { RenderStyleId } from "../../game/core/type";
+import {
+  getRoomFurnitureDefinition,
+  getRoomFurnitureModel,
+} from "../furnitureCatalog";
 
 // Metro exposes bundled GLBs through the React Native numeric asset module.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const ROOM_MODEL = require("../../assets/models/room/homepageroom-runtime.glb");
+const ROOM_MODEL = require("../../assets/models/room/virtualroom_empty.glb");
 
 export type RoomSceneProps = {
   rotationY: number;
   zoom: number;
   onRotationChange: (rotationY: number) => void;
+  furniture?: {
+    itemId: string;
+    position: { x: number; y: number };
+    perspectiveScale: number;
+    renderStyle?: RenderStyleId;
+  } | null;
 };
 
-function roomMaterialColor(name: string): [number, number, number] {
-  const value = name.toLowerCase();
-  if (value.includes("floor")) return [0.55, 0.45, 0.36];
-  if (value.includes("wall") || value.includes("plaster"))
-    return [0.9, 0.89, 0.87];
-  if (
-    value.includes("sofa") ||
-    value.includes("cushion") ||
-    value.includes("pillow") ||
-    value.includes("chair")
-  )
-    return [0.72, 0.66, 0.63];
-  if (value.includes("plant") || value.includes("calathea"))
-    return [0.4, 0.5, 0.37];
-  if (value.includes("gold")) return [0.72, 0.57, 0.33];
-  if (value.includes("glass")) return [0.72, 0.82, 0.85];
-  if (
-    value.includes("wood") ||
-    value.includes("oak") ||
-    value.includes("wicker")
-  )
-    return [0.6, 0.44, 0.3];
-  if (value.includes("mat") || value.includes("inside"))
-    return [0.18, 0.17, 0.16];
-  return [0.77, 0.75, 0.72];
+function PlacedFurnitureModel({
+  itemId,
+  position,
+  perspectiveScale,
+  renderStyle = "realistic",
+  roomRotation,
+  roomZoom,
+}: NonNullable<RoomSceneProps["furniture"]> & {
+  roomRotation: number;
+  roomZoom: number;
+}) {
+  const definition = getRoomFurnitureDefinition(itemId);
+  const source = definition
+    ? getRoomFurnitureModel(definition, renderStyle)
+    : ROOM_MODEL;
+  const model = useModel(source);
+  const { transformManager } = useFilamentContext();
+  const unitTransform = useRef<Mat4 | null>(null);
+
+  useEffect(() => {
+    if (!definition || model.state !== "loaded") return;
+    transformManager.transformToUnitCube(model.rootEntity, model.boundingBox);
+    unitTransform.current = transformManager.getTransform(model.rootEntity);
+  }, [definition, model, transformManager]);
+
+  useEffect(() => {
+    if (!definition || model.state !== "loaded" || !unitTransform.current) return;
+
+    const localScale = definition.sceneScale * perspectiveScale;
+    // UI placement points are normalized to the complete room viewport. Convert
+    // them once to the room model's normalized floor plane, then apply the same
+    // room rotation and zoom used by the room GLB.
+    const floorX = (position.x - 0.5) * 0.9;
+    const floorZ = (position.y - 0.62) * 0.9;
+    const floorY = -0.5 + localScale / 2;
+    const transform = unitTransform.current
+      .scaling([localScale, localScale, localScale])
+      .translate([floorX, floorY, floorZ])
+      .rotate(roomRotation, [0, 1, 0])
+      .scaling([roomZoom, roomZoom, roomZoom]);
+    transformManager.setTransform(model.rootEntity, transform);
+  }, [
+    definition,
+    model,
+    perspectiveScale,
+    position.x,
+    position.y,
+    roomRotation,
+    roomZoom,
+    transformManager,
+  ]);
+
+  return null;
 }
 
 function RoomModel({
@@ -65,11 +104,7 @@ function RoomModel({
   onReady: () => void;
 }) {
   const model = useModel(ROOM_MODEL);
-  const {
-    nameComponentManager,
-    renderableManager,
-    transformManager,
-  } = useFilamentContext();
+  const { transformManager } = useFilamentContext();
   const unitTransform = useRef<Mat4 | null>(null);
   const controlsRef = useRef({ rotationY, zoom });
   controlsRef.current = { rotationY, zoom };
@@ -85,29 +120,8 @@ function RoomModel({
       .scaling([initialControls.zoom, initialControls.zoom, initialControls.zoom]);
     transformManager.setTransform(model.rootEntity, initialTransform);
 
-    // The optimized GLB intentionally has no texture payload and most
-    // materials omit a base color. Keep Filament's native glTF shading while
-    // supplying the same calm material palette the previous room used.
-    for (const entity of model.asset.getRenderableEntities()) {
-      const entityName = nameComponentManager.getEntityName(entity) ?? "";
-      const primitiveCount = renderableManager.getPrimitiveCount(entity);
-      for (let index = 0; index < primitiveCount; index += 1) {
-        const material = renderableManager.getMaterialInstanceAt(entity, index);
-        material.setFloat4Parameter("baseColorFactor", [
-          ...roomMaterialColor(material.name ?? entityName),
-          1,
-        ]);
-      }
-    }
-
     onReady();
-  }, [
-    model,
-    nameComponentManager,
-    onReady,
-    renderableManager,
-    transformManager,
-  ]);
+  }, [model, onReady, transformManager]);
 
   useEffect(() => {
     if (model.state !== "loaded" || !unitTransform.current) return;
@@ -124,10 +138,12 @@ function RoomFilamentScene({
   rotationY,
   zoom,
   onReady,
+  furniture,
 }: {
   rotationY: number;
   zoom: number;
   onReady: () => void;
+  furniture?: RoomSceneProps["furniture"];
 }) {
   const cameraManipulator = useCameraManipulator({
     orbitHomePosition: [1.45, 1.05, -1.45],
@@ -165,6 +181,14 @@ function RoomFilamentScene({
         direction={[0.3, -0.25, 0.85]}
       />
       <RoomModel rotationY={rotationY} zoom={zoom} onReady={onReady} />
+      {furniture && getRoomFurnitureDefinition(furniture.itemId) ? (
+        <PlacedFurnitureModel
+          key={`${furniture.itemId}-${furniture.renderStyle ?? "realistic"}`}
+          {...furniture}
+          roomRotation={rotationY}
+          roomZoom={zoom}
+        />
+      ) : null}
     </FilamentView>
   );
 }
@@ -173,6 +197,7 @@ export function RoomScene({
   rotationY,
   zoom,
   onRotationChange,
+  furniture,
 }: RoomSceneProps) {
   const [loaded, setLoaded] = useState(false);
   const rotationStart = useRef(0);
@@ -202,6 +227,7 @@ export function RoomScene({
           rotationY={rotationY}
           zoom={zoom}
           onReady={handleReady}
+          furniture={furniture}
         />
       </FilamentScene>
       <View

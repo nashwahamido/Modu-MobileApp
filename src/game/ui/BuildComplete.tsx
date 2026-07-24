@@ -1,18 +1,22 @@
 import { useRouter } from "expo-router";
+import type { Href } from "expo-router";
+import { useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { useGameStore } from "@/src/game/core/store";
 import { Theme, useStyles } from "@/src/game/ui/theme";
+import { usePlacementStore } from "@/src/room/placement";
+import { useTaskRewardInventory } from "@/src/room/taskRewardInventory";
+
+const mascot = require("@/src/assets/images/mascot/mascot.png");
 
 /** Coins per completed step. Mirrors ClusterFocusControl — see the note there: there is no wallet or shop in the data model, so this is a placeholder RATE, not a typed-in number. */
 const COINS_PER_STEP = 3;
 
 /**
  * The finished-build screen.
- * The coins and XP are computed from the build. The "succulent plant" reward is from the wireframe and has nothing behind it yet — no item model. 
- * The two action buttons route:
- * "place in the room now!" goes to the room, "store in inventory" returns to the catalogue
- * (there is no separate inventory screen — the built piece lives in the catalogue for now).
+ * Coins and XP are computed from the build. The completed furniture can either
+ * enter the guided room placement immediately or be collected from Inventory later.
  */
 export function BuildComplete() {
   const styles = useStyles(makeStyles);
@@ -22,6 +26,7 @@ export function BuildComplete() {
   const undoLastAction = useGameStore((s) => s.undoLastAction);
   const redoLastAction = useGameStore((s) => s.redoLastAction);
   const dismissed = useGameStore((s) => s.doneDismissed);
+  const [savedToInventory, setSavedToInventory] = useState(false);
 
   if (!furniture) return null;
   const total = furniture.actions.length;
@@ -30,9 +35,26 @@ export function BuildComplete() {
 
   const coins = total * COINS_PER_STEP;
   const xp = total * furniture.xpPerStep;
-  // The finished piece goes to the room to be placed; "store" sends it back to the catalogue.
-  const placeInRoom = () => router.replace("/room");
-  const storeInInventory = () => router.replace("/catalogue");
+  const reward = {
+    id: String(furniture.meta.id),
+    name: furniture.meta.name,
+  };
+  // Carry the completed task furniture into the room and begin its first placement flow.
+  const placeInRoom = () => {
+    useTaskRewardInventory.getState().grant(reward);
+    useTaskRewardInventory.getState().finishInventoryGuide();
+    usePlacementStore.getState().startFirstPlacement(
+      reward.id,
+      reward.name,
+    );
+    router.replace("/room" as Href);
+  };
+  const storeInInventory = () => {
+    useTaskRewardInventory.getState().grant(reward);
+    useTaskRewardInventory.getState().startInventoryGuide(reward.id);
+    setSavedToInventory(true);
+  };
+  const goToInventory = () => router.replace("/inventory" as Href);
 
   return (
     <View style={styles.scrim}>
@@ -67,9 +89,42 @@ export function BuildComplete() {
           </Pressable>
         </View>
 
-        <Text style={styles.title}>{furniture.meta.name} assembled!</Text>
+        <View style={styles.congratulations}>
+          <Image source={mascot} style={styles.mascot} resizeMode="contain" />
+          <View style={styles.congratulationsCopy}>
+            <Text style={styles.title}>
+              {savedToInventory ? "Saved to your inventory!" : "Your first furniture is ready!"}
+            </Text>
+            <Text style={styles.message}>
+              {savedToInventory
+                ? `Your ${furniture.meta.name} is safe. Let me show you where to find it.`
+                : `Congratulations! You earned ${furniture.meta.name}. Let\u2019s place it in your room.`}
+            </Text>
+          </View>
+        </View>
 
-        <ScrollView
+        {savedToInventory ? (
+          <View style={styles.savedActions}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.inventoryGuideAction,
+                pressed && styles.primaryActionPressed,
+              ]}
+              onPress={goToInventory}
+              accessibilityLabel="Go to inventory"
+            >
+              <Text style={styles.inventoryGuideKicker}>NEXT STEP</Text>
+              <Text style={styles.inventoryGuideText}>Go to inventory</Text>
+            </Pressable>
+            <Pressable
+              style={styles.laterAction}
+              onPress={() => router.replace("/room" as Href)}
+              accessibilityLabel="Go to the room later"
+            >
+              <Text style={styles.laterActionText}>Maybe later</Text>
+            </Pressable>
+          </View>
+        ) : <ScrollView
           contentContainerStyle={styles.body}
           showsVerticalScrollIndicator={false}
         >
@@ -92,9 +147,12 @@ export function BuildComplete() {
                     <Text style={styles.rewardText}>+ {coins} coins</Text>
                   </View>
                   <View style={styles.rewardItem}>
-                    {/* Placeholder art: there is no item model to draw from. */}
-                    <View style={styles.itemBox} />
-                    <Text style={styles.rewardText}>succulent plant</Text>
+                    <Image
+                      source={furniture.meta.thumbnail.light}
+                      style={styles.rewardFurniture}
+                      resizeMode="contain"
+                    />
+                    <Text style={styles.rewardText}>furniture unlocked</Text>
                   </View>
                 </View>
               </View>
@@ -110,12 +168,19 @@ export function BuildComplete() {
 
           <View style={styles.actionsRow}>
             <Pressable
-              style={styles.action}
+              style={({ pressed }) => [
+                styles.action,
+                styles.primaryAction,
+                pressed && styles.primaryActionPressed,
+              ]}
               onPress={placeInRoom}
               accessibilityLabel="Place it in the room"
             >
-              <Text style={styles.actionGlyph}>⌂</Text>
-              <Text style={styles.actionText}>place in the room now!</Text>
+              <Text style={styles.primaryActionKicker}>NEXT STEP</Text>
+              <View style={styles.primaryActionContent}>
+                <Text style={styles.primaryActionGlyph}>⌂</Text>
+                <Text style={styles.primaryActionText}>Place it in my room</Text>
+              </View>
             </Pressable>
             <Pressable
               style={styles.action}
@@ -126,7 +191,7 @@ export function BuildComplete() {
               <Text style={styles.actionText}>store in inventory</Text>
             </Pressable>
           </View>
-        </ScrollView>
+        </ScrollView>}
       </View>
     </View>
   );
@@ -171,8 +236,30 @@ const makeStyles = (t: Theme) =>
       fontSize: 19,
       fontWeight: "800",
       color: t.accent,
-      textAlign: "center",
-      marginBottom: 12,
+    },
+    congratulations: {
+      flexDirection: "row",
+      alignItems: "center",
+      alignSelf: "center",
+      width: "78%",
+      minHeight: 58,
+      gap: 10,
+      marginBottom: 10,
+    },
+    mascot: {
+      width: 54,
+      height: 54,
+      borderRadius: 12,
+    },
+    congratulationsCopy: {
+      flex: 1,
+      gap: 3,
+    },
+    message: {
+      color: t.textDim,
+      fontSize: 11,
+      lineHeight: 15,
+      fontWeight: "600",
     },
     body: { paddingBottom: 2 },
 
@@ -209,13 +296,9 @@ const makeStyles = (t: Theme) =>
     rewardRow: { flexDirection: "row", gap: 18 },
     rewardItem: { alignItems: "center", gap: 4, maxWidth: 84 },
     coinGlyph: { fontSize: 22, color: t.gold },
-    itemBox: {
+    rewardFurniture: {
       width: 26,
       height: 26,
-      borderRadius: 4,
-      borderWidth: StyleSheet.hairlineWidth * 2,
-      borderColor: t.borderStrong,
-      backgroundColor: t.surfaceInset,
     },
     rewardText: {
       fontSize: 10,
@@ -226,8 +309,89 @@ const makeStyles = (t: Theme) =>
     xpText: { fontSize: 17, fontWeight: "800", color: t.text },
     xpStar: { color: t.accent },
 
-    actionsRow: { flexDirection: "row", justifyContent: "center", gap: 44 },
-    action: { alignItems: "center", gap: 4, maxWidth: 150 },
+    actionsRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 30 },
+    savedActions: {
+      minHeight: 176,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 12,
+    },
+    inventoryGuideAction: {
+      minWidth: 230,
+      minHeight: 64,
+      borderRadius: 14,
+      borderWidth: 3,
+      borderColor: t.success,
+      backgroundColor: t.surface,
+      alignItems: "center",
+      justifyContent: "center",
+      shadowColor: t.success,
+      shadowOpacity: 0.3,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+    },
+    inventoryGuideKicker: {
+      color: t.success,
+      fontSize: 9,
+      fontWeight: "900",
+      letterSpacing: 0.7,
+    },
+    inventoryGuideText: {
+      color: t.text,
+      fontSize: 17,
+      fontWeight: "900",
+    },
+    laterAction: {
+      minWidth: 120,
+      minHeight: 38,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    laterActionText: {
+      color: t.textDim,
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    action: { minWidth: 138, minHeight: 54, alignItems: "center", justifyContent: "center", gap: 4 },
+    primaryAction: {
+      minWidth: 190,
+      minHeight: 58,
+      borderWidth: 3,
+      borderColor: t.success,
+      borderRadius: 14,
+      backgroundColor: t.success,
+      paddingHorizontal: 16,
+      paddingVertical: 7,
+      shadowColor: t.success,
+      shadowOpacity: 0.34,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 3 },
+    },
+    primaryActionPressed: {
+      transform: [{ scale: 0.97 }],
+      opacity: 0.9,
+    },
+    primaryActionKicker: {
+      color: t.onSuccess,
+      fontSize: 8,
+      lineHeight: 10,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+    primaryActionContent: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 7,
+    },
+    primaryActionGlyph: { fontSize: 23, color: t.onSuccess },
+    primaryActionText: {
+      color: t.onSuccess,
+      fontSize: 12,
+      lineHeight: 15,
+      fontWeight: "900",
+      textAlign: "center",
+    },
     actionGlyph: { fontSize: 24, color: t.text },
     actionText: {
       fontSize: 11,
