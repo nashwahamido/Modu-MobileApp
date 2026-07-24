@@ -9,10 +9,10 @@ import {
   View,
 } from "react-native";
 
-import { FURNITURE_METAS } from "@/src/game/data/furnitures/furnitures";
-import { Panel } from "@/src/game/ui/Button";
+import { FURNITURE_METAS } from "@/src/game/content/furnitures/furnitures";
+import { Button } from "@/src/game/ui/Button";
 import { ELEVATION, RADIUS, SPACE, Theme, TYPE, useStyles} from "@/src/game/ui/theme";
-import { brandFor } from "@/src/game/data/brands";
+import { brandFor } from "@/src/game/content/brands";
 import type { FurnitureMeta } from "@/src/game/core/type";
 
 const DIFFICULTY: Record<1 | 2 | 3, string> = { 1: "Easy", 2: "Medium", 3: "Hard" };
@@ -28,8 +28,13 @@ export default function CatalogueScreen() {
   return (
     <View style={styles.root}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Choose a build</Text>
-        <Text style={styles.subtitle}>{items.length} furniture available</Text>
+        <View style={styles.header}>
+          <Button label="‹ Room" onPress={() => router.back()} />
+          <View>
+            <Text style={styles.title}>Choose a build</Text>
+            <Text style={styles.subtitle}>{items.length} furniture available</Text>
+          </View>
+        </View>
         <View style={styles.grid}>
           {items.map((m) => (
             <FurnitureCard
@@ -86,12 +91,17 @@ const makeStyles = (t: Theme) =>
   StyleSheet.create({
   root: { flex: 1, backgroundColor: t.bg },
   content: { padding: SPACE.xl, paddingTop: 56 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACE.lg,
+    marginBottom: SPACE.xl,
+  },
   title: { fontSize: 28, fontWeight: "800", color: t.text },
   subtitle: {
     ...TYPE.body,
     color: t.textDim,
     marginTop: SPACE.xs,
-    marginBottom: SPACE.xl,
   },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: SPACE.lg },
   card: {

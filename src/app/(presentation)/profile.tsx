@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "@/src/game/ui/Button";
 import { SettingsIcon, StarIcon } from "@/src/components/Icons";
 import { ELEVATION, RADIUS, SPACE, Theme, TYPE, useStyles, useTheme } from "@/src/game/ui/theme";
-import { FURNITURE_METAS } from "@/src/game/data/furnitures/furnitures";
+import { FURNITURE_METAS } from "@/src/game/content/furnitures/furnitures";
 import type { ProfileId } from "@/src/game/core/profile";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import type { Profile } from "@/src/data";

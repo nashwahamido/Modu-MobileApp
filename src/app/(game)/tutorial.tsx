@@ -8,12 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FilamentScene } from "react-native-filament";
 
 import { AssemblyScene } from "@/src/game/scene/AssemblyScene";
-import {
-  createClusterDriver,
-  createDriverRegistry,
-  createOffsetDriver,
-} from "@/src/game/scene/offsetDriver";
-import { useSharedValue as useWorkletSharedValue } from "react-native-worklets-core";
+import { useAssemblyDrivers } from "@/src/game/scene/useAssemblyDrivers";
 import { useSceneState } from "@/src/game/scene/useSceneState";
 import { SCENE_BACKGROUND } from "@/src/game/scene/lighting";
 
@@ -30,10 +25,7 @@ import { ToolBar } from "@/src/game/ui/ToolBar";
 import { ObjectiveBar } from "@/src/game/ui/ObjectiveBar";
 import { HintButton, RecenterButton } from "@/src/game/ui/HudControls";
 import { Theme, useStyles } from "@/src/game/ui/theme";
-import {
-  objectiveText,
-  speaksSteps,
-} from "@/src/game/core/presentation/objective";
+import { useStepObjective } from "@/src/game/core/presentation/useStepObjective";
 
 import { useGameStore } from "@/src/game/core/store";
 import {
@@ -43,9 +35,7 @@ import {
 } from "@/src/game/core/evaluation/engagement";
 import {
   loadFurnitureById,
-} from "@/src/game/data/furnitures/furnitures";
-import { instructionText } from "@/src/game/core/presentation/instructions";
-import { useStepAudio } from "@/src/game/audio/useStepAudio";
+} from "@/src/game/content/furnitures/furnitures";
 
 import { GreenFlash } from "@/src/game/ui/GreenFlash";
 import { HintToast } from "@/src/game/ui/HintToast";
@@ -56,6 +46,7 @@ import { ClusterTray } from "@/src/game/ui/ClusterTray";
 import { UndoButton } from "@/src/game/ui/UndoButton";
 import { TutorialGameSettings } from "@/src/game/tutorial/TutorialGameSettings";
 import { ClusterFocusControl } from "@/src/game/ui/ClusterFocusControl";
+import { backdropSource } from "@/src/game/ui/backdrops";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 import {
   currentStageForClusterFocus,
@@ -70,22 +61,6 @@ import {
   TUTORIAL_STEP_REWARD_TOKENS,
   type ToolTutorialKind,
 } from "@/src/game/tutorial/steps";
-
-// Per-backdrop images (from the on-release engine's set), each with a dark variant. The Background setting picks the key; Dark mode picks the variant.
-const BACKDROPS: Record<string, { light: number; dark: number }> = {
-  studio: {
-    light: require("../assets/images/backdrops/studio-light.png"),
-    dark: require("../assets/images/backdrops/studio-dark.png"),
-  },
-  cozy: {
-    light: require("../assets/images/backdrops/cozy-light.png"),
-    dark: require("../assets/images/backdrops/cozy-dark.png"),
-  },
-  cartoon: {
-    light: require("../assets/images/backdrops/cartoon-light.png"),
-    dark: require("../assets/images/backdrops/cartoon-dark.png"),
-  },
-};
 
 function TutorialScreen() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
@@ -108,13 +83,14 @@ function TutorialScreen() {
   const joystickTutorialStartedAt = useRef<number | null>(null);
   const oneFingerPanStartedAt = useRef<{ x: number; y: number } | null>(null);
   const sceneState = useSceneState();
-  const heldDriver = useRef(createOffsetDriver()).current;
-  const sinkDriver = useRef(createOffsetDriver()).current;
-  const clusterDriver = useRef(createClusterDriver()).current;
-  const pushDrivers = useRef(createDriverRegistry()).current;
-  const slideDriver = useRef(createClusterDriver()).current;
-  // The combine carry offset — written by the cluster drag on the JS side, applied to the carried cluster's entities on the RENDER thread (scene/CombineCarry).
-  const carryShared = useWorkletSharedValue({ x: 0, y: 0, z: 0 });
+  const {
+    heldDriver,
+    sinkDriver,
+    clusterDriver,
+    pushDrivers,
+    slideDriver,
+    carryShared,
+  } = useAssemblyDrivers();
 
   useEffect(() => {
     let active = true;
@@ -264,26 +240,16 @@ function TutorialScreen() {
     !!furniture &&
     requiresClusterFocus(furniture) &&
     !activeCluster;
-  const objective = objectiveText({
-    mode,
+  const objective = useStepObjective({
+    furniture,
+    firstAvailable,
     needsFocusChoice,
-    stepText:
-      furniture && firstAvailable
-        ? instructionText(
-            furniture.instructions,
-            firstAvailable,
-            settings.textLevel,
-          )
-        : null,
+    mode,
+    textLevel: settings.textLevel,
+    audioOn: settings.audio,
     completedCount,
     totalCount,
   });
-
-  useStepAudio(
-    furniture?.audio,
-    needsFocusChoice || !speaksSteps(mode) ? undefined : firstAvailable,
-    settings.audio,
-  );
 
   const selectedTool = useGameStore((s) => s.selectedTool);
   const neededTool = settings.manualTools
@@ -401,17 +367,13 @@ function TutorialScreen() {
   return (
     <View style={[styles.root, theme === "dark" && styles.rootDark]}>
       {/* "clear": no image — the milk-white root (SCENE_BACKGROUND) / dark root shows through. Every other backdrop is a full-bleed image. */}
-      {backdrop === "clear" ? null : (
+      {backdropSource(backdrop, theme === "dark") ? (
         <Image
-          source={
-            (BACKDROPS[backdrop] ?? BACKDROPS.studio)[
-              theme === "dark" ? "dark" : "light"
-            ]
-          }
+          source={backdropSource(backdrop, theme === "dark")}
           style={StyleSheet.absoluteFill}
           resizeMode="cover"
         />
-      )}
+      ) : null}
       <GestureDetector gesture={sceneGesture}>
         <View style={styles.sceneWrap}>
           <TutorialTarget id="scene" style={styles.sceneTarget}>
@@ -603,7 +565,6 @@ function TutorialScreen() {
       <MascotGuideOverlay
         activeToolKind={activeToolKind}
         assemblyComplete={totalCount > 0 && completedCount >= totalCount}
-        assemblyStepCount={totalCount}
         audioEnabled={settings.audio}
         onClaimReward={() => {}}
         onSimulatePinch={() => {

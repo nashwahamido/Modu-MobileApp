@@ -3,19 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { OrientationLock } from "expo-screen-orientation";
-import { ImageBackground, StyleSheet, Text, View } from "react-native";
+import { ImageBackground, StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { FilamentScene } from "react-native-filament";
-import { useSharedValue as useWorkletSharedValue } from "react-native-worklets-core";
 
 import { AssemblyScene } from "@/src/game/scene/AssemblyScene";
-import {
-  createClusterDriver,
-  createDriverRegistry,
-  createOffsetDriver,
-} from "@/src/game/scene/offsetDriver";
+import { useAssemblyDrivers } from "@/src/game/scene/useAssemblyDrivers";
 import { useSceneState } from "@/src/game/scene/useSceneState";
 
 import { Joystick } from "@/src/game/input/Joystick";
@@ -35,10 +30,7 @@ import { SeatSlideControl } from "@/src/game/input/SeatSlideControl";
 import { PushTestControl } from "@/src/game/input/PushTestControl";
 import { clusterSink } from "@/src/game/scene/combineDriver";
 import { ToolBar } from "@/src/game/ui/ToolBar";
-import {
-  objectiveText,
-  speaksSteps,
-} from "@/src/game/core/presentation/objective";
+import { useStepObjective } from "@/src/game/core/presentation/useStepObjective";
 
 import { useGameStore } from "@/src/game/core/store";
 import { useBuildPersistence } from "@/src/hooks/useBuildPersistence";
@@ -50,9 +42,7 @@ import {
 import {
   isPlayable,
   loadFurnitureById,
-} from "@/src/game/data/furnitures/furnitures";
-import { instructionText } from "@/src/game/core/presentation/instructions";
-import { useStepAudio } from "@/src/game/audio/useStepAudio";
+} from "@/src/game/content/furnitures/furnitures";
 
 import { BuildComplete } from "@/src/game/ui/BuildComplete";
 import { GreenFlash } from "@/src/game/ui/GreenFlash";
@@ -73,7 +63,7 @@ import { Button, IconButton } from "@/src/game/ui/Button";
 import { PauseIcon } from "@/src/game/ui/Icons";
 import { ObjectiveBar } from "@/src/game/ui/ObjectiveBar";
 import { HintButton, RecenterButton } from "@/src/game/ui/HudControls";
-import { ELEVATION, RADIUS, SPACE, Theme, TYPE, useTheme } from "@/src/game/ui/theme";
+import { SPACE, Theme, useTheme } from "@/src/game/ui/theme";
 import {
   buildPhase,
   combineReady,
@@ -83,27 +73,11 @@ import { availableInMode } from "@/src/game/core/evaluation/availability";
 import type { FurnitureId } from "@/src/game/core/type";
 import { LoadingOverlay } from "@/src/game/ui/LoadingOverlay";
 import type { Milestone } from "@/src/game/ui/loadingProgress";
-
-// Per-backdrop images (from the on-release engine's set), each with a dark variant. The Background setting picks the key; Dark mode picks the variant.
-const BACKDROPS: Record<string, { light: number; dark: number }> = {
-  studio: {
-    light: require("../assets/images/backdrops/studio-light.png"),
-    dark: require("../assets/images/backdrops/studio-dark.png"),
-  },
-  cozy: {
-    light: require("../assets/images/backdrops/cozy-light.png"),
-    dark: require("../assets/images/backdrops/cozy-dark.png"),
-  },
-  cartoon: {
-    light: require("../assets/images/backdrops/cartoon-light.png"),
-    dark: require("../assets/images/backdrops/cartoon-dark.png"),
-  },
-};
+import { backdropSource } from "@/src/game/ui/backdrops";
 
 function GameScreen() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
   const insets = useSafeAreaInsets();
-  const [showRoomPrompt, setShowRoomPrompt] = useState(false);
 
   const {
     manipulator,
@@ -119,13 +93,14 @@ function GameScreen() {
   } = useOrbitCamera();
   const lastScale = useRef(1);
   const sceneState = useSceneState();
-  const heldDriver = useRef(createOffsetDriver()).current;
-  const sinkDriver = useRef(createOffsetDriver()).current;
-  const clusterDriver = useRef(createClusterDriver()).current;
-  const pushDrivers = useRef(createDriverRegistry()).current;
-  const slideDriver = useRef(createClusterDriver()).current;
-  // The combine carry offset — written by the cluster drag on the JS side, applied to the carried cluster's entities on the RENDER thread (scene/CombineCarry).
-  const carryShared = useWorkletSharedValue({ x: 0, y: 0, z: 0 });
+  const {
+    heldDriver,
+    sinkDriver,
+    clusterDriver,
+    pushDrivers,
+    slideDriver,
+    carryShared,
+  } = useAssemblyDrivers();
 
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
@@ -189,7 +164,6 @@ function GameScreen() {
   const completedCount = useGameStore((s) => s.completed.length);
   const orientationActionId = useGameStore((s) => s.orientationActionId);
   const totalCount = furniture?.actions.length ?? 0;
-  const taskComplete = totalCount > 0 && completedCount >= totalCount;
   const objectiveFontSize = Math.round(14 * settings.fontScale);
   const orientationAction = orientationActionId
     ? furniture?.actions.find((a) => a.actionId === orientationActionId)
@@ -231,26 +205,16 @@ function GameScreen() {
     !activeCluster &&
     // once every cluster is built, no focus means the combine stage, not an unanswered chooser
     !combineReady(furniture, new Set(useGameStore.getState().completed));
-  const objective = objectiveText({
-    mode,
+  const objective = useStepObjective({
+    furniture,
+    firstAvailable,
     needsFocusChoice,
-    stepText:
-      furniture && firstAvailable
-        ? instructionText(
-            furniture.instructions,
-            firstAvailable,
-            settings.textLevel,
-          )
-        : null,
+    mode,
+    textLevel: settings.textLevel,
+    audioOn: settings.audio,
     completedCount,
     totalCount,
   });
-
-  useStepAudio(
-    furniture?.audio,
-    needsFocusChoice || !speaksSteps(mode) ? undefined : firstAvailable,
-    settings.audio,
-  );
 
   // Recenter re-frames the camera on the build, so it means nothing until there IS a build:
   // on an empty canvas it just jumps the view for no visible reason. `modes` is the honest
@@ -262,10 +226,6 @@ function GameScreen() {
 
   const hintGroup = useGameStore((s) => s.hintGroup);
   const hintPulse = useGameStore((s) => s.hintPulse);
-
-  useEffect(() => {
-    setShowRoomPrompt(taskComplete);
-  }, [taskComplete]);
 
   const selectedTool = useGameStore((s) => s.selectedTool);
   const rawTool = sceneState.activeTighten?.tool ?? driveAction?.tool ?? null;
@@ -381,13 +341,7 @@ function GameScreen() {
       // A separate <Image style={absoluteFill}> here scaled the artwork
       // differently for the same file, so mirror the working structure exactly.
       // "clear": no source — the milk-white root (SCENE_BACKGROUND) / dark root shows through.
-      source={
-        backdrop === "clear"
-          ? undefined
-          : (BACKDROPS[backdrop] ?? BACKDROPS.studio)[
-              theme === "dark" ? "dark" : "light"
-            ]
-      }
+      source={backdropSource(backdrop, theme === "dark")}
       resizeMode="cover"
       style={styles.root}
     >
@@ -603,24 +557,6 @@ function GameScreen() {
       {/* Strict mode never offered the chooser, so it does not get the map either. Focus
           mode DOES: pause is reachable there, and the map is what pause opens. */}
       {mode !== "strict" ? <BuildMap /> : null}
-      {showRoomPrompt ? (
-        <View style={styles.roomPromptLayer} pointerEvents="auto">
-          <View style={styles.roomPromptCard}>
-            <Text style={styles.roomPromptKicker}>Assembly complete</Text>
-            <Text style={styles.roomPromptTitle}>Your task is finished.</Text>
-            <Text style={styles.roomPromptBody}>Now enter your room and place your furniture.</Text>
-            <View style={styles.roomPromptActions}>
-              <Button label="Stay here" pill onPress={() => setShowRoomPrompt(false)} />
-              <Button
-                label="Enter room"
-                variant="primary"
-                pill
-                onPress={() => router.replace("/room")}
-              />
-            </View>
-          </View>
-        </View>
-      ) : null}
       {ringOverlay}
       <GreenFlash trigger={completedCount} />
       <ClusterCelebration />
@@ -679,37 +615,5 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       gap: SPACE.sm,
       zIndex: 15,
-    },
-
-    // Assembly-complete handoff to the room. Above every HUD layer, below nothing.
-    roomPromptLayer: {
-      ...StyleSheet.absoluteFillObject,
-      zIndex: 80,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: t.scrim,
-      padding: SPACE.xl,
-    },
-    roomPromptCard: {
-      width: "100%",
-      maxWidth: 430,
-      borderRadius: RADIUS.panel,
-      borderWidth: StyleSheet.hairlineWidth * 2,
-      borderColor: t.border,
-      backgroundColor: t.bg,
-      paddingHorizontal: SPACE.xl,
-      paddingVertical: SPACE.xl,
-      ...ELEVATION.card,
-    },
-    // Green kicker: the prompt announces a COMPLETED build, and green is the completion color.
-    roomPromptKicker: { ...TYPE.label, fontSize: 13, color: t.success, marginBottom: SPACE.xs },
-    roomPromptTitle: { ...TYPE.title, fontSize: 24, color: t.text },
-    roomPromptBody: { ...TYPE.body, color: t.textDim, marginTop: SPACE.sm, lineHeight: 21 },
-    roomPromptActions: {
-      marginTop: SPACE.lg,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "flex-end",
-      gap: SPACE.md,
     },
   });
