@@ -17,7 +17,6 @@ const PADDING = 0;
 interface Props {
   activeToolKind: ToolTutorialKind | null;
   assemblyComplete: boolean;
-  assemblyStepCount: number;
   onClaimReward: () => void;
   onContinueToAssembly?: () => void;
   onSimulatePinch?: () => void;
@@ -28,7 +27,6 @@ interface Props {
 export function MascotGuideOverlay({
   activeToolKind,
   assemblyComplete,
-  assemblyStepCount,
   onClaimReward,
   onContinueToAssembly,
   onSimulatePinch,
@@ -216,7 +214,7 @@ export function MascotGuideOverlay({
         <Image source={mascotImage} style={styles.mascot} resizeMode="contain" />
         <View style={styles.copy} pointerEvents="box-none">
           <Text style={styles.stepText}>
-            {phase === 'settings' ? 'SETTINGS · ' : ''}{currentIndex + 1}/{phase === 'core' ? steps.length + assemblyStepCount : steps.length}
+            {phase === 'settings' ? 'SETTINGS · ' : ''}{currentIndex + 1}/{steps.length}
           </Text>
           <Text style={styles.message}>{message}</Text>
           <View
