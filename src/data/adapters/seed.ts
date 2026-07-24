@@ -1,5 +1,6 @@
 // Demo seed data for the in-memory adapter: a fake "me" plus demo friends, each with a profile and a room. Doubles as demo data (the DEV panel) and test fixtures.
 import type { FurnitureId } from "@/src/game/core/type";
+import type { ShopItemId } from "../shopItems";
 import type { BuildSave, Friend, Profile, RoomLayout, UserId } from "../types";
 
 // The fake current user for local/dev runs. Real code derives the id from Supabase auth (useAuth().user.id).
@@ -45,6 +46,16 @@ export function seedCompleted(): Record<UserId, FurnitureId[]> {
   return {
     [DEMO_ME]: ["LACK"],
     [DEMO_FRIEND_A]: ["LACK", "DALFRED", "EKET", "BEKVAM"],
+    [DEMO_FRIEND_B]: [],
+  };
+}
+
+// Shop items each user already owns — the checkmarks in the shop grid, and the contents of
+// their inventory. "me" owns two to match the mock (the two ticked cards).
+export function seedInventory(): Record<UserId, ShopItemId[]> {
+  return {
+    [DEMO_ME]: ["shelving-units-wooden", "stool-black-adjustable"],
+    [DEMO_FRIEND_A]: ["sofa-navy", "table", "chair"],
     [DEMO_FRIEND_B]: [],
   };
 }

@@ -1,5 +1,6 @@
 // The data-access seam. Features depend ONLY on these interfaces; swapping the in-memory adapter for a Supabase one is a single change in ./index.
 import type { FurnitureId } from "@/src/game/core/type";
+import type { ShopItem, ShopItemId } from "./shopItems";
 import type { BuildSave, Friend, Profile, ProfilePatch, RoomLayout, UserId } from "./types";
 
 export interface ProfileRepo {
@@ -43,6 +44,21 @@ export interface RoomLikesRepo {
   count(roomOwnerId: UserId): Promise<number>;
 }
 
+// The outcome of a purchase attempt. insufficient_coins / already_owned are expected
+// domain results (returned, not thrown) so the UI can show them without a try/catch.
+export type PurchaseOutcome =
+  | { ok: true; coinsRemaining: number }
+  | { ok: false; reason: "insufficient_coins" | "already_owned" };
+
+export interface StoreRepo {
+  // The purchasable catalog — reference data, the same for everyone.
+  listItems(): Promise<ShopItem[]>;
+  // The item ids this user already owns (their inventory).
+  listOwned(userId: UserId): Promise<ShopItemId[]>;
+  // Spend coins to buy an item. Atomic: checks balance + ownership, deducts coins, grants the item.
+  purchase(userId: UserId, itemId: ShopItemId): Promise<PurchaseOutcome>;
+}
+
 // The bundle every feature reaches through. One object, swappable behind ./index.
 export interface Repos {
   profiles: ProfileRepo;
@@ -50,4 +66,5 @@ export interface Repos {
   friends: FriendsRepo;
   builds: BuildProgressRepo;
   likes: RoomLikesRepo;
+  store: StoreRepo;
 }

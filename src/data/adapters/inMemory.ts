@@ -1,9 +1,11 @@
 // In-memory adapter for the repo seam. Values are cloned on the way in and out so callers can't mutate the backing store by reference — the same isolation a network round-trip gives you.
 import type { FurnitureId } from "@/src/game/core/type";
-import type { BuildProgressRepo, FriendsRepo, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo } from "../repos";
+import type { BuildProgressRepo, FriendsRepo, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo } from "../repos";
 import type { BuildSave, Friend, Profile, ProfilePatch, RoomLayout, UserId } from "../types";
+import type { ShopItemId } from "../shopItems";
+import { DEFAULT_SHOP_ITEMS } from "../shopItems";
 import { titleForLevel } from "../levelTitles";
-import { seedBuilds, seedCompleted, seedFriends, seedProfiles, seedRoomLikes, seedRooms } from "./seed";
+import { seedBuilds, seedCompleted, seedFriends, seedInventory, seedProfiles, seedRoomLikes, seedRooms } from "./seed";
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 
@@ -29,6 +31,10 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
   );
   const roomLikes = new Map<UserId, Set<UserId>>(
     Object.entries(seedRoomLikes()).map(([id, list]) => [id, new Set(list)] as [UserId, Set<UserId>]),
+  );
+  // Owned shop items per user — the contents of their inventory and the source of the shop's "owned" ticks.
+  const inventory = new Map<UserId, Set<ShopItemId>>(
+    Object.entries(seedInventory()).map(([id, list]) => [id, new Set(list)] as [UserId, Set<ShopItemId>]),
   );
 
   // Fill the derived fields (title from level, itemsAssembled/likes from the sets) — mirrors what the Supabase adapter reads back from the level_titles table and the trigger-cached counters.
@@ -147,5 +153,32 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
     },
   };
 
-  return { profiles: profileRepo, rooms: roomRepo, friends: friendsRepo, builds: buildsRepo, likes: likesRepo };
+  const storeRepo: StoreRepo = {
+    async listItems() {
+      await delay(latency);
+      return clone(DEFAULT_SHOP_ITEMS);
+    },
+    async listOwned(userId) {
+      await delay(latency);
+      return [...(inventory.get(userId) ?? [])];
+    },
+    async purchase(userId, itemId) {
+      await delay(latency);
+      const owned = inventory.get(userId) ?? new Set<ShopItemId>();
+      if (owned.has(itemId)) return { ok: false, reason: "already_owned" };
+      const item = DEFAULT_SHOP_ITEMS.find((i) => i.id === itemId);
+      if (!item) throw new Error(`No shop item ${itemId}`);
+      const profile = profiles.get(userId);
+      if (!profile) throw new Error(`No profile for ${userId}`);
+      if (profile.coins < item.price) return { ok: false, reason: "insufficient_coins" };
+      // Spend the coins and grant the item — the same two effects the Supabase RPC does atomically.
+      const coinsRemaining = profile.coins - item.price;
+      profiles.set(userId, { ...profile, coins: coinsRemaining });
+      owned.add(itemId);
+      inventory.set(userId, owned);
+      return { ok: true, coinsRemaining };
+    },
+  };
+
+  return { profiles: profileRepo, rooms: roomRepo, friends: friendsRepo, builds: buildsRepo, likes: likesRepo, store: storeRepo };
 }

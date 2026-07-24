@@ -3,8 +3,9 @@ import type { PostgrestError } from "@supabase/supabase-js";
 import { supabase } from "@/src/config/supabase";
 import type { AssemblyMode } from "@/src/game/core/type";
 import type { FurnitureId } from "@/src/game/core/type";
-import type { BuildProgressRepo, FriendsRepo, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo } from "../repos";
+import type { BuildProgressRepo, FriendsRepo, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo } from "../repos";
 import type { BuildSave, Friend, Profile, ProfilePatch, RoomLayout, UserId } from "../types";
+import type { ShopItem } from "../shopItems";
 import type { AvatarRef } from "../avatars";
 import { idForMode, modeForId } from "../avatars";
 import type { LevelTitle } from "../levelTitles";
@@ -268,6 +269,47 @@ const likesRepo: RoomLikesRepo = {
   },
 };
 
+// --- shop / inventory -------------------------------------------------------
+
+// The catalog is reference data — small and unchanging — so fetch it once per session.
+let shopItemsCache: Promise<ShopItem[]> | null = null;
+function getShopItems(): Promise<ShopItem[]> {
+  if (!shopItemsCache) {
+    shopItemsCache = (async () => {
+      const { data, error } = await supabase.from("shop_items").select("id, name, category, price");
+      check(error);
+      return (data as { id: string; name: string; category: string; price: number }[]).map((r) => ({
+        id: r.id,
+        name: r.name,
+        category: r.category as ShopItem["category"],
+        price: r.price,
+      }));
+    })();
+  }
+  return shopItemsCache;
+}
+
+const storeRepo: StoreRepo = {
+  listItems() {
+    return getShopItems();
+  },
+  async listOwned(userId) {
+    const { data, error } = await supabase.from("user_inventory").select("item_id").eq("owner_id", userId);
+    check(error);
+    return (data as { item_id: string }[]).map((r) => r.item_id);
+  },
+  async purchase(_userId, itemId) {
+    // Atomic in the DB: purchase_shop_item checks balance + ownership, deducts coins and grants
+    // the item as the authenticated caller (auth.uid()), so _userId is implied — never trusted from the client.
+    const { data, error } = await supabase.rpc("purchase_shop_item", { p_item_id: itemId });
+    check(error);
+    const res = data as { ok: boolean; reason?: string; coins?: number };
+    if (res.ok) return { ok: true, coinsRemaining: res.coins ?? 0 };
+    // Map anything that isn't a clean success onto the two outcomes the UI knows how to show.
+    return { ok: false, reason: res.reason === "already_owned" ? "already_owned" : "insufficient_coins" };
+  },
+};
+
 export function createSupabaseRepos(): Repos {
-  return { profiles: profileRepo, rooms: roomRepo, friends: friendsRepo, builds: buildRepo, likes: likesRepo };
+  return { profiles: profileRepo, rooms: roomRepo, friends: friendsRepo, builds: buildRepo, likes: likesRepo, store: storeRepo };
 }
