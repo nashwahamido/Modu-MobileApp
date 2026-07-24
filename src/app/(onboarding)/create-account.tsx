@@ -9,7 +9,10 @@ import {
   type PrototypeAuthMethod,
 } from "@/src/services/auth";
 
-const mascot = require("../assets/mascot/mascot.png");
+import { Button } from "@/src/game/ui/Button";
+import { SPACE, Theme, TYPE, useStyles, useTheme } from "@/src/game/ui/theme";
+
+const mascot = require("../../assets/images/mascot/mascot.png");
 const loadingRoute = "/loading" as Href;
 
 const authMethods = [
@@ -19,6 +22,8 @@ const authMethods = [
 ];
 
 export default function CreateAccountScreen() {
+  const styles = useStyles(makeStyles);
+  const t = useTheme();
   const params = useLocalSearchParams<{ mode?: string }>();
   const initialMode = params.mode === "login" ? "login" : "create";
   const [mode, setMode] = useState<AccountMode>(initialMode);
@@ -99,13 +104,17 @@ export default function CreateAccountScreen() {
               inputMode="email"
               onChangeText={setEmail}
               placeholder="Email address"
-              placeholderTextColor="#8b8174"
+              placeholderTextColor={t.textFaint}
               style={styles.input}
               value={email}
             />
-            <Pressable onPress={() => continueFlow("email")} style={[styles.primaryButton, busy && styles.disabledButton]}>
-              <Text style={styles.primaryButtonText}>{busy ? "Connecting..." : copy.primary}</Text>
-            </Pressable>
+            <Button
+              label={busy ? "Connecting..." : copy.primary}
+              variant="primary"
+              pill
+              disabled={busy}
+              onPress={() => continueFlow("email")}
+            />
             {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
             {status ? <Text style={styles.statusText}>{status}</Text> : null}
           </View>
@@ -137,174 +146,169 @@ export default function CreateAccountScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F3ECE0",
-    paddingHorizontal: 42,
-    paddingVertical: 20,
-  },
-  panel: {
-    width: "100%",
-    maxWidth: 980,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 36,
-  },
-  intro: {
-    flex: 1,
-    maxWidth: 470,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 18,
-  },
-  mascot: {
-    width: 92,
-    height: 92,
-    borderRadius: 22,
-  },
-  copy: {
-    flex: 1,
-    gap: 8,
-  },
-  brand: {
-    color: "#C9A876",
-    fontSize: 32,
-    fontWeight: "900",
-    letterSpacing: 7,
-  },
-  title: {
-    color: "#231F20",
-    fontSize: 30,
-    fontWeight: "900",
-    lineHeight: 35,
-  },
-  subtitle: {
-    color: "#665f55",
-    fontSize: 15,
-    fontWeight: "700",
-    lineHeight: 21,
-  },
-  form: {
-    width: 340,
-    gap: 12,
-  },
-  segmented: {
-    flexDirection: "row",
-    borderRadius: 24,
-    backgroundColor: "#e4dccf",
-    padding: 4,
-  },
-  segment: {
-    flex: 1,
-    alignItems: "center",
-    borderRadius: 20,
-    paddingVertical: 9,
-  },
-  activeSegment: {
-    backgroundColor: "#FBF8F3",
-  },
-  segmentText: {
-    color: "#665f55",
-    fontSize: 15,
-    fontWeight: "900",
-  },
-  activeSegmentText: {
-    color: "#231F20",
-  },
-  emailGroup: {
-    gap: 10,
-  },
-  input: {
-    borderColor: "#d8cdbb",
-    borderRadius: 18,
-    borderWidth: 2,
-    color: "#231F20",
-    fontSize: 16,
-    fontWeight: "700",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  primaryButton: {
-    alignItems: "center",
-    backgroundColor: "#2D2A26",
-    borderRadius: 24,
-    paddingVertical: 13,
-  },
-  disabledButton: {
-    opacity: 0.58,
-  },
-  primaryButtonText: {
-    color: "#FBF8F3",
-    fontSize: 16,
-    fontWeight: "900",
-  },
-  errorText: {
-    color: "#C98B76",
-    fontSize: 12,
-    fontWeight: "800",
-    lineHeight: 16,
-  },
-  statusText: {
-    color: "#8FA876",
-    fontSize: 12,
-    fontWeight: "800",
-    lineHeight: 16,
-  },
-  dividerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  divider: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#d8cdbb",
-  },
-  dividerText: {
-    color: "#665f55",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  methodList: {
-    gap: 9,
-  },
-  methodButton: {
-    minHeight: 46,
-    flexDirection: "row",
-    alignItems: "center",
-    borderColor: "#d8cdbb",
-    borderRadius: 23,
-    borderWidth: 2,
-    paddingHorizontal: 14,
-    gap: 12,
-  },
-  methodMark: {
-    width: 26,
-    height: 26,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 13,
-    backgroundColor: "#e4dccf",
-  },
-  methodMarkText: {
-    color: "#231F20",
-    fontSize: 13,
-    fontWeight: "900",
-  },
-  methodText: {
-    color: "#231F20",
-    fontSize: 15,
-    fontWeight: "900",
-  },
-  prototypeNote: {
-    color: "#665f55",
-    fontSize: 12,
-    fontWeight: "700",
-    lineHeight: 16,
-    textAlign: "center",
-  },
-});
+const makeStyles = (t: Theme) =>
+  StyleSheet.create({
+    root: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: t.bg,
+      paddingHorizontal: 42,
+      paddingVertical: 20,
+    },
+    panel: {
+      width: "100%",
+      maxWidth: 980,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 36,
+    },
+    intro: {
+      flex: 1,
+      maxWidth: 470,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 18,
+    },
+    mascot: {
+      width: 92,
+      height: 92,
+      borderRadius: 22,
+    },
+    copy: {
+      flex: 1,
+      gap: SPACE.sm,
+    },
+    brand: {
+      color: t.gold,
+      fontSize: 32,
+      fontWeight: "900",
+      letterSpacing: 7,
+    },
+    title: {
+      ...TYPE.title,
+      color: t.text,
+      fontSize: 30,
+      fontWeight: "900",
+      lineHeight: 35,
+    },
+    subtitle: {
+      ...TYPE.body,
+      color: t.textDim,
+      fontSize: 15,
+      fontWeight: "700",
+      lineHeight: 21,
+    },
+    form: {
+      width: 340,
+      gap: SPACE.md,
+    },
+    segmented: {
+      flexDirection: "row",
+      borderRadius: 24,
+      backgroundColor: t.surfaceInset,
+      padding: SPACE.xs,
+    },
+    segment: {
+      flex: 1,
+      alignItems: "center",
+      borderRadius: 20,
+      paddingVertical: 9,
+    },
+    activeSegment: {
+      backgroundColor: t.surface,
+    },
+    segmentText: {
+      ...TYPE.label,
+      color: t.textDim,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    activeSegmentText: {
+      color: t.text,
+    },
+    emailGroup: {
+      gap: 10,
+    },
+    input: {
+      borderColor: t.borderStrong,
+      borderRadius: 18,
+      borderWidth: 2,
+      color: t.text,
+      fontSize: 16,
+      fontWeight: "700",
+      paddingHorizontal: SPACE.lg,
+      paddingVertical: SPACE.md,
+    },
+    disabledButton: {
+      opacity: 0.58,
+    },
+    errorText: {
+      ...TYPE.labelSm,
+      color: t.danger,
+      fontWeight: "800",
+      lineHeight: 16,
+    },
+    statusText: {
+      ...TYPE.labelSm,
+      color: t.success,
+      fontWeight: "800",
+      lineHeight: 16,
+    },
+    dividerRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    divider: {
+      flex: 1,
+      height: 1,
+      backgroundColor: t.border,
+    },
+    dividerText: {
+      color: t.textDim,
+      fontSize: 13,
+      fontWeight: "800",
+    },
+    methodList: {
+      gap: 9,
+    },
+    methodButton: {
+      minHeight: 46,
+      flexDirection: "row",
+      alignItems: "center",
+      borderColor: t.borderStrong,
+      borderRadius: 23,
+      borderWidth: 2,
+      paddingHorizontal: 14,
+      gap: SPACE.md,
+    },
+    methodMark: {
+      width: 26,
+      height: 26,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 13,
+      backgroundColor: t.surfaceRaised,
+    },
+    methodMarkText: {
+      ...TYPE.labelSm,
+      color: t.text,
+      fontSize: 13,
+      fontWeight: "900",
+    },
+    methodText: {
+      ...TYPE.label,
+      color: t.text,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    prototypeNote: {
+      ...TYPE.labelSm,
+      color: t.textDim,
+      fontWeight: "700",
+      lineHeight: 16,
+      textAlign: "center",
+    },
+  });

@@ -13,28 +13,17 @@ export default function App() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Modu</Text>
-      <Text style={styles.sub}>Build furniture, step by step</Text>
 
       <View style={styles.actions}>
         <Link href="/auth" asChild>
           {/* The ONE primary action on the screen: first-run onboarding (auth → questionnaire → avatar → home). */}
-          <Button label="Get started" variant="primary" pill />
+          <Button label="New User" variant="primary" pill />
         </Link>
-        <Link href="/catalogue" asChild>
-          <Button label="Start building" pill />
-        </Link>
-        <Link href="/settings" asChild>
-          <Button label="Settings" pill />
+        <Link href="/room" asChild>
+          <Button label="Home" pill />
         </Link>
       </View>
 
-      {__DEV__ && (
-        <View style={styles.devRow}>
-          <Link href="/engine-test" asChild>
-            <Button label="engine test (dev)" variant="ghost" small />
-          </Link>
-        </View>
-      )}
       <StatusBar style="light" />
     </View>
   );
@@ -58,5 +47,4 @@ const makeStyles = (t: Theme) =>
     gap: SPACE.lg,
     marginTop: 36,
   },
-  devRow: { marginTop: SPACE.xl, flexDirection: "row", gap: SPACE.md },
   });

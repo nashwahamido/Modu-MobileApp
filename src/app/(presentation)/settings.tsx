@@ -4,7 +4,6 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SettingsControls } from "@/src/game/ui/SettingsControls";
 import { SPACE, Theme, TYPE, useStyles } from "@/src/game/ui/theme";
-import { AppNavigation } from "@/src/components/AppNavigation";
 
 export default function SettingsScreen() {
   const styles = useStyles(makeStyles);
@@ -35,7 +34,6 @@ export default function SettingsScreen() {
       >
         <SettingsControls />
       </ScrollView>
-      <AppNavigation active="settings" />
     </View>
   );
 }

@@ -41,6 +41,7 @@ import {
 } from "@/src/game/core/presentation/objective";
 
 import { useGameStore } from "@/src/game/core/store";
+import { useBuildPersistence } from "@/src/hooks/useBuildPersistence";
 import {
   pressParkInfo,
   screwParkOffset,
@@ -68,8 +69,10 @@ import { DevMenu } from "@/src/game/ui/DevMenu";
 import { ToggleChips } from "@/src/game/ui/ToggleChips";
 import { BuildMap, ClusterFocusControl } from "@/src/game/ui/ClusterFocusControl";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
-import { Button, IconButton, ProgressBar } from "@/src/game/ui/Button";
-import { PauseIcon, RecenterIcon } from "@/src/game/ui/Icons";
+import { Button, IconButton } from "@/src/game/ui/Button";
+import { PauseIcon } from "@/src/game/ui/Icons";
+import { ObjectiveBar } from "@/src/game/ui/ObjectiveBar";
+import { HintButton, RecenterButton } from "@/src/game/ui/HudControls";
 import { ELEVATION, RADIUS, SPACE, Theme, TYPE, useTheme } from "@/src/game/ui/theme";
 import {
   buildPhase,
@@ -135,6 +138,8 @@ function GameScreen() {
   const target: FurnitureId = isPlayable(id as FurnitureId)
     ? (id as FurnitureId)
     : "DALFRED";
+  // Autosave progress and resume it next time this furniture is opened (through the repo seam).
+  useBuildPersistence(target);
   useEffect(() => {
     setModelReady(false);
     setLoadError(false);
@@ -425,42 +430,17 @@ function GameScreen() {
             accessibilityLabel="Pause and show the build map"
           />
           {/* Instructions hidden → only the progress bar stays (slim pill). */}
-          <View
-            style={[
-              styles.objectiveBar,
-              !settings.showInstructions && styles.objectiveBarSlim,
-            ]}
-            pointerEvents="none"
-          >
-            {settings.showInstructions ? (
-              <Text
-                style={[styles.objectiveText, { fontSize: objectiveFontSize }]}
-                numberOfLines={2}
-              >
-                Stage {stage} · {objective} · {completedCount}/{totalCount}
-              </Text>
-            ) : null}
-            {/* [★ star] [progress track] [XP label] — the badge sits ON the bar's left,
-                the way the reference integrates the level star into the track. */}
-            <View
-              style={[
-                styles.progressRow,
-                settings.showInstructions && styles.progressGap,
-              ]}
-            >
-              <View style={styles.xpStar} pointerEvents="none">
-                <Text style={styles.xpStarGlyph}>★</Text>
-              </View>
-              <ProgressBar
-                value={completedCount}
-                total={totalCount}
-                style={styles.xpTrack}
-              />
-              <Text style={styles.xpLabel}>
-                {completedCount * furniture.xpPerStep} XP
-              </Text>
-            </View>
-          </View>
+          <ObjectiveBar
+            line={
+              settings.showInstructions
+                ? `Stage ${stage} · ${objective} · ${completedCount}/${totalCount}`
+                : null
+            }
+            fontSize={objectiveFontSize}
+            value={completedCount}
+            total={totalCount}
+            xp={completedCount * furniture.xpPerStep}
+          />
         </View>
         <CenterDropRing />
         <FitChip />
@@ -496,9 +476,7 @@ function GameScreen() {
         />
         <ToolBar neededTool={neededTool} />
         {mode === "free" && !focus ? (
-          <Button
-            label="?"
-            small
+          <HintButton
             style={styles.hintButton}
             onPress={() => useGameStore.getState().suggestNext()}
           />
@@ -601,15 +579,10 @@ function GameScreen() {
           />
         </View>
         {focus ? null : (
-          <IconButton
-            icon={
-              <RecenterIcon color={sceneHasParts ? t.text : t.textFaint} />
-            }
+          <RecenterButton
+            enabled={sceneHasParts}
             onPress={resetCamera}
-            disabled={!sceneHasParts}
-            small
             style={styles.recenterButton}
-            accessibilityLabel="Recenter the view"
           />
         )}
 
@@ -682,58 +655,10 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       gap: SPACE.sm,
     },
-    objectiveBar: {
-      justifyContent: "center",
-      // CAPPED. The bar is centred and the cluster chips sit at right:14, so an unbounded
-      // bar grows under them on a long instruction. 360 + the pause button keeps the whole
-      // group clear of that corner; anything longer wraps to a second line instead.
-      maxWidth: 360,
-      backgroundColor: t.surface,
-      borderColor: t.border,
-      borderWidth: StyleSheet.hairlineWidth * 2,
-      paddingHorizontal: SPACE.lg,
-      // With the objective sentence shown the bar needs two rows, so it sizes to content.
-      paddingVertical: 6,
-      borderRadius: RADIUS.panel,
-      ...ELEVATION.card,
-    },
-    // Instructions hidden — just the XP row. FIXED to the cluster panel's height (its
-    // paddingTop 6 + chip 32 + paddingBottom 8 = 46); both sit at top:10, so their bottom
-    // edges line up at y=56. No vertical padding: the 46 is the whole height.
-    objectiveBarSlim: { width: 260, height: 46, paddingVertical: 0 },
-    objectiveText: { ...TYPE.body, color: t.text, fontSize: 13, lineHeight: 15 },
-    progressGap: { marginTop: SPACE.sm },
+    // The bar itself (pill + XP row) is the shared ObjectiveBar component (ui/ObjectiveBar).
 
-    // The XP badge sits INSIDE the bar, on the progress track's left — a star that overlaps
-    // the track's start, with the running total beside it. (There is no level system in the
-    // data — just xpPerStep — so this shows the honest running total, not a fake N/500.)
-    progressRow: { flexDirection: "row", alignItems: "center", gap: SPACE.sm },
-    xpStar: {
-      width: 22,
-      height: 22,
-      borderRadius: 11,
-      backgroundColor: t.accent,
-      alignItems: "center",
-      justifyContent: "center",
-      // Pull it left so it straddles the track's start, as in the reference.
-      marginRight: -2,
-      ...ELEVATION.card,
-    },
-    xpStarGlyph: { color: t.onAccent, fontSize: 13, fontWeight: "800" },
-    xpTrack: { flex: 1 },
-    xpLabel: { ...TYPE.numeric, color: t.gold },
-
-    // Row 1, beside the gear: the gear is 36 wide at left:14, +8 gap → 58. The same 36x36
-    // square as every other icon button. paddingHorizontal is zeroed because Button's own
-    // padding would otherwise widen it past the square.
-    hintButton: {
-      position: "absolute",
-      left: 58,
-      top: 8,
-      width: 36,
-      minWidth: 36,
-      paddingHorizontal: 0,
-    },
+    // Row 1, beside the gear: the gear is 36 wide at left:14, +8 gap → 58 (HintButton owns the square sizing).
+    hintButton: { position: "absolute", left: 58, top: 8 },
     // Its own row, directly under undo (top:54 + 36 + 12 gap). Icon-only, so it is the same
     // 36x36 square as everything else in the column rather than a wide text pill.
     recenterButton: { position: "absolute", left: 14, top: 102 },

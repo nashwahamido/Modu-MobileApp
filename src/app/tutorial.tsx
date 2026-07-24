@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { router } from "expo-router";
 import { OrientationLock } from "expo-screen-orientation";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -10,8 +10,10 @@ import { FilamentScene } from "react-native-filament";
 import { AssemblyScene } from "@/src/game/scene/AssemblyScene";
 import {
   createClusterDriver,
+  createDriverRegistry,
   createOffsetDriver,
 } from "@/src/game/scene/offsetDriver";
+import { useSharedValue as useWorkletSharedValue } from "react-native-worklets-core";
 import { useSceneState } from "@/src/game/scene/useSceneState";
 import { SCENE_BACKGROUND } from "@/src/game/scene/lighting";
 
@@ -25,6 +27,9 @@ import { RotateControl } from "@/src/game/input/RotateControl";
 import { SlideControl } from "@/src/game/input/SlideControl";
 import { PressControl } from "@/src/game/input/PressControl";
 import { ToolBar } from "@/src/game/ui/ToolBar";
+import { ObjectiveBar } from "@/src/game/ui/ObjectiveBar";
+import { HintButton, RecenterButton } from "@/src/game/ui/HudControls";
+import { Theme, useStyles } from "@/src/game/ui/theme";
 import {
   objectiveText,
   speaksSteps,
@@ -85,6 +90,7 @@ const BACKDROPS: Record<string, { light: number; dark: number }> = {
 function TutorialScreen() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
   const insets = useSafeAreaInsets();
+  const styles = useStyles(makeStyles);
 
   const {
     manipulator,
@@ -105,6 +111,10 @@ function TutorialScreen() {
   const heldDriver = useRef(createOffsetDriver()).current;
   const sinkDriver = useRef(createOffsetDriver()).current;
   const clusterDriver = useRef(createClusterDriver()).current;
+  const pushDrivers = useRef(createDriverRegistry()).current;
+  const slideDriver = useRef(createClusterDriver()).current;
+  // The combine carry offset — written by the cluster drag on the JS side, applied to the carried cluster's entities on the RENDER thread (scene/CombineCarry).
+  const carryShared = useWorkletSharedValue({ x: 0, y: 0, z: 0 });
 
   useEffect(() => {
     let active = true;
@@ -202,6 +212,10 @@ function TutorialScreen() {
   const activeCluster = useGameStore((s) => s.activeCluster);
   const mode = useGameStore((s) => s.mode);
   const focus = settings.focusMode;
+  // Recenter means nothing until there IS a build on the canvas — same rule as play.tsx.
+  const sceneHasParts = Object.values(sceneState.modes).some(
+    (m) => m !== "hidden" && m !== "socket_hint",
+  );
   const dark = theme === "dark";
   const firstAvailable = useGameStore((s) => {
     const f = s.furniture;
@@ -357,9 +371,11 @@ function TutorialScreen() {
     [onPanStart, onPanMove, onPanEnd],
   );
 
-  const { gestureFor, canvasGestureFor, ringOverlay } = usePartDrag({
+  const { gestureFor, canvasGestureFor, clusterGestureFor, ringOverlay } = usePartDrag({
     manipulator,
     heldDriver,
+    slideDriver,
+    carryShared,
     getFocusPoint,
     onPanStart,
     onPanMove,
@@ -406,6 +422,9 @@ function TutorialScreen() {
               heldDriver={heldDriver}
               sinkDriver={sinkDriver}
               clusterDriver={clusterDriver}
+              pushDrivers={pushDrivers}
+              slideDriver={slideDriver}
+              carryShared={carryShared}
             />
           </TutorialTarget>
         </View>
@@ -428,47 +447,22 @@ function TutorialScreen() {
         ]}
         pointerEvents="box-none"
       >
-        {/* Instructions hidden → only the progress bar stays (slim pill). */}
-        <View
-          style={[
-            styles.objectiveBar,
-            !settings.showInstructions && styles.objectiveBarSlim,
-            dark && styles.objectiveBarDark,
-          ]}
-          pointerEvents="none"
-        >
-          {settings.showInstructions ? (
-            <Text style={[styles.objectiveText, dark && styles.objectiveTextDark, { fontSize: objectiveFontSize }]}>
-              {guideCompleted
-                ? `Finish the tutorial cabinet · ${displayedCompletedCount}/${displayedTotalCount}`
-                : `Stage ${stage} · ${objective} · ${completedCount}/${totalCount}`}
-            </Text>
-          ) : null}
-          <View
-            style={[
-              styles.progressTrack,
-              !settings.showInstructions && styles.progressTrackSlim,
-              dark && styles.progressTrackDark,
-            ]}
-          >
-            <View
-              style={[
-                styles.progressFill,
-                !settings.showInstructions && styles.progressFillSlim,
-                {
-                  width: `${displayedTotalCount ? (displayedCompletedCount / displayedTotalCount) * 100 : 0}%`,
-                },
-              ]}
-            />
-          </View>
+        {/* Instructions hidden → only the progress bar stays (slim pill). Shared with play.tsx, so the tutorial HUD can never drift from the real one. */}
+        <View style={styles.objectiveWrap} pointerEvents="none">
+          <ObjectiveBar
+            line={
+              settings.showInstructions
+                ? guideCompleted
+                  ? `Finish the tutorial cabinet · ${displayedCompletedCount}/${displayedTotalCount}`
+                  : `Stage ${stage} · ${objective} · ${completedCount}/${totalCount}`
+                : null
+            }
+            fontSize={objectiveFontSize}
+            value={displayedCompletedCount}
+            total={displayedTotalCount}
+            xp={completedCount * furniture.xpPerStep}
+          />
         </View>
-        {focus ? null : (
-          <View style={[styles.pointsChip, dark && styles.pointsChipDark]} pointerEvents="none">
-            <Text style={[styles.pointsText, dark && styles.pointsTextDark]}>
-              ★ {completedCount * furniture.xpPerStep}
-            </Text>
-          </View>
-        )}
         <CenterDropRing />
         <FitChip />
         <HintToast />
@@ -489,7 +483,12 @@ function TutorialScreen() {
           items={sceneState.trayItems}
           gestureFor={gestureFor}
           thumbs={furniture.thumbs}
-          header={<ClusterTray clusterDriver={clusterDriver} />}
+          header={
+            <ClusterTray
+              clusterDriver={clusterDriver}
+              clusterGestureFor={clusterGestureFor}
+            />
+          }
         />
         <TutorialTarget
           id="partsTray"
@@ -504,16 +503,12 @@ function TutorialScreen() {
         />
         {mode === "free" && !focus ? (
           <TutorialTarget id="hint" style={styles.hintButton}>
-            <Pressable
-              style={styles.targetFill}
-              hitSlop={8}
+            <HintButton
               onPress={() => {
                 useGameStore.getState().suggestNext();
                 useTutorialStore.getState().completeEvent("hint_requested");
               }}
-            >
-              <Text style={styles.hintButtonText}>?</Text>
-            </Pressable>
+            />
           </TutorialTarget>
         ) : null}
         {activeToolKind ? (
@@ -590,26 +585,16 @@ function TutorialScreen() {
             dark={dark}
           />
         </TutorialTarget>
-        <TutorialTarget
-          id="recenter"
-          style={[styles.recenterButton, dark && styles.recenterButtonDark]}
-        >
-          <Pressable
-            style={styles.targetFill}
+        <TutorialTarget id="recenter" style={styles.recenterButton}>
+          <RecenterButton
+            enabled={sceneHasParts}
             onPress={() => {
               resetCamera();
               useTutorialStore
                 .getState()
                 .completeEvent("camera_recentered");
             }}
-            hitSlop={8}
-          >
-            <Text
-              style={[styles.recenterText, dark && styles.recenterTextDark]}
-            >
-              ⟲ Recenter
-            </Text>
-          </Pressable>
+          />
         </TutorialTarget>
 
       </View>
@@ -656,131 +641,60 @@ export default function TutorialRoute() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: SCENE_BACKGROUND },
-  rootDark: { backgroundColor: "#17140f" },
-  sceneWrap: { ...StyleSheet.absoluteFillObject },
-  sceneTarget: { flex: 1 },
-  assemblyTarget: {
-    position: "absolute",
-    left: "22%",
-    top: "24%",
-    width: "50%",
-    height: "52%",
-  },
-  chrome: { position: "absolute" },
-  objectiveBar: {
-    position: "absolute",
-    top: 10,
-    alignSelf: "center",
-    backgroundColor: "rgba(255,255,255,0.75)",
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    borderRadius: 18,
-  },
-  // Instructions hidden: a slim fixed-width pill so the bar doesn't collapse without its text.
-  objectiveBarSlim: { width: 260, paddingVertical: 7 },
-  objectiveText: { fontSize: 14, color: "#2e2a24", fontWeight: "600" },
-  // Bar-only mode: thicker track/fill so the lone bar stays clearly visible.
-  progressTrackSlim: { marginTop: 0, height: 7, borderRadius: 3.5 },
-  progressFillSlim: { height: 7, borderRadius: 3.5 },
-  progressTrack: {
-    marginTop: 6,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "rgba(60,50,40,0.15)",
-    alignSelf: "stretch",
-    overflow: "hidden",
-  },
-  progressFill: { height: 4, borderRadius: 2, backgroundColor: "#37c871" },
-  pointsChip: {
-    // Fixed size so the top-left row never shifts, whether the score is 0 or 300.
-    position: "absolute",
-    top: 8,
-    left: 14,
-    width: 70,
-    height: 36,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.75)",
-    borderRadius: 14,
-  },
-  pointsText: { fontSize: 13, fontWeight: "700", color: "#b8741a" },
-  hintButton: {
-    // Same line as the settings icon (points chip → gear → ?), shared 42×36 grid.
-    position: "absolute",
-    left: 142,
-    top: 8,
-    width: 42,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.85)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  hintButtonText: { fontSize: 17, fontWeight: "800", color: "#7a6f5d" },
-  targetFill: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  joystickZone: { position: "absolute", left: 28, bottom: 28 },
-  partsTrayTarget: {
-    position: "absolute",
-    right: 10,
-    top: 70,
-    bottom: 70,
-    width: 124,
-  },
-  toolbarTarget: {
-    position: "absolute",
-    alignSelf: "center",
-    bottom: 16,
-    width: 118,
-    height: 48,
-  },
-  toolTarget: {
-    position: "absolute",
-    right: 150,
-    bottom: 28,
-    width: 140,
-    height: 160,
-  },
-  undoTarget: {
-    position: "absolute",
-    top: 54,
-    left: 14,
-    width: 92,
-    height: 36,
-  },
-  settingsTarget: {
-    position: "absolute",
-    top: 8,
-    left: 92,
-    width: 42,
-    height: 36,
-  },
-  recenterButton: {
-    position: "absolute",
-    left: 14,
-    top: 102,
-    backgroundColor: "rgba(255,255,255,0.85)",
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderWidth: 1,
-    borderColor: "rgba(60,50,40,0.15)",
-  },
-  recenterText: { fontSize: 12, fontWeight: "700", color: "#2e2a24" },
-  // Dark-mode chrome (on-release engine's palette): dark translucent surfaces, light text, warm points accent.
-  objectiveBarDark: { backgroundColor: "rgba(22,30,44,0.82)" },
-  objectiveTextDark: { color: "#eef1f6" },
-  progressTrackDark: { backgroundColor: "rgba(255,255,255,0.16)" },
-  pointsChipDark: { backgroundColor: "rgba(22,30,44,0.82)" },
-  pointsTextDark: { color: "#f0b866" },
-  recenterButtonDark: {
-    backgroundColor: "rgba(22,30,44,0.86)",
-    borderColor: "rgba(255,255,255,0.18)",
-  },
-  recenterTextDark: { color: "#eef1f6" },
-});
+/** Theme-driven, mirroring play.tsx: shared HUD elements copy the game screen's themed styles so the two HUDs look identical. */
+const makeStyles = (t: Theme) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: SCENE_BACKGROUND },
+    rootDark: { backgroundColor: "#17140f" },
+    sceneWrap: { ...StyleSheet.absoluteFillObject },
+    sceneTarget: { flex: 1 },
+    assemblyTarget: {
+      position: "absolute",
+      left: "22%",
+      top: "24%",
+      width: "50%",
+      height: "52%",
+    },
+    chrome: { position: "absolute" },
+    // The pill itself is the shared ObjectiveBar (ui/ObjectiveBar); this just centres it, as in play.tsx.
+    objectiveWrap: { position: "absolute", top: 10, alignSelf: "center" },
+    // Beside the gear on play.tsx's 36px grid: gear 36 wide at left:14, +8 gap → 58 (HintButton owns the square sizing).
+    hintButton: { position: "absolute", left: 58, top: 8 },
+    joystickZone: { position: "absolute", left: 14, bottom: 16 },
+    partsTrayTarget: {
+      position: "absolute",
+      right: 10,
+      top: 70,
+      bottom: 70,
+      width: 124,
+    },
+    toolbarTarget: {
+      position: "absolute",
+      alignSelf: "center",
+      bottom: 16,
+      width: 118,
+      height: 48,
+    },
+    toolTarget: {
+      position: "absolute",
+      right: 150,
+      bottom: 28,
+      width: 140,
+      height: 160,
+    },
+    undoTarget: {
+      position: "absolute",
+      top: 54,
+      left: 14,
+      width: 92,
+      height: 36,
+    },
+    settingsTarget: {
+      position: "absolute",
+      top: 8,
+      left: 92,
+      width: 42,
+      height: 36,
+    },
+    recenterButton: { position: "absolute", left: 14, top: 102 },
+  });

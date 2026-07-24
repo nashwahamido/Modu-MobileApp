@@ -22,6 +22,7 @@ const targets: GmTarget[] = [
   { label: "Tutorial", route: "/tutorial" as Href, note: "Mascot guide task" },
   { label: "Task", route: "/play" as Href, note: "Assembly task" },
   { label: "Room", route: "/room" as Href, note: "Virtual room" },
+  { label: "Profile", route: "/profile" as Href, note: "Profile & friends" },
   { label: "Engine", route: "/engine-test" as Href, note: "Engine test (dev)" },
 ];
 

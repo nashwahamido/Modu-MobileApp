@@ -10,13 +10,16 @@ import { useGameStore } from "@/src/game/core/store";
 import type { ProfileId } from "@/src/game/core/profile";
 import { useTutorialStore } from "@/src/game/tutorial/store";
 import { saveSelectedAvatarMode } from "@/src/services/onboarding";
+import { Button } from "@/src/game/ui/Button";
+import { RADIUS, SPACE, Theme, TYPE, useStyles } from "@/src/game/ui/theme";
 
-const mascot = require("../assets/mascot/mascot.png");
-const lumiAvatar = require("../assets/avatars/lumi.jpg");
-const sparkyAvatar = require("../assets/avatars/sparky.jpg");
-const ciaraAvatar = require("../assets/avatars/ciara.jpg");
-const felixAvatar = require("../assets/avatars/felix.jpg");
-const homeRoute = "/home" as Href;
+const mascot = require("../../assets/images/mascot/mascot.png");
+const lumiAvatar = require("../../assets/images/avatars/lumi.jpg");
+const sparkyAvatar = require("../../assets/images/avatars/sparky.jpg");
+const ciaraAvatar = require("../../assets/images/avatars/ciara.jpg");
+const felixAvatar = require("../../assets/images/avatars/felix.jpg");
+// The room is the post-onboarding hub now that the home tab is gone.
+const homeRoute = "/room" as Href;
 
 const avatarImages = {
   visual: lumiAvatar,
@@ -31,6 +34,7 @@ const modes = avatarModes.map((mode) => ({
 }));
 
 export default function AvatarRecommendationScreen() {
+  const styles = useStyles(makeStyles);
   const params = useLocalSearchParams<{ mode?: string }>();
   const initialModeId = modes.some((mode) => mode.id === params.mode) ? (params.mode as ModeId) : "momentum";
   const [selectedModeId, setSelectedModeId] = useState<ModeId>(initialModeId);
@@ -154,14 +158,12 @@ export default function AvatarRecommendationScreen() {
             ))}
           </View>
           {saveError ? <Text style={styles.saveErrorText}>{saveError}</Text> : null}
-          <Pressable
+          <Button
+            label={savingChoice ? "Saving..." : "Confirm this avatar"}
+            variant="primary"
             onPress={confirmAvatar}
-            style={[styles.confirmButton, savingChoice && styles.disabledButton]}
-          >
-            <Text style={styles.confirmButtonText}>
-              {savingChoice ? "Saving..." : "Confirm this avatar"}
-            </Text>
-          </Pressable>
+            disabled={savingChoice}
+          />
         </View>
       </View>
 
@@ -213,12 +215,8 @@ export default function AvatarRecommendationScreen() {
                 Your avatar is set. Start the guided assembly task now, or return to the homepage for later.
               </Text>
               <View style={styles.taskActions}>
-                <Pressable onPress={goToGame} style={styles.readyButton}>
-                  <Text style={styles.readyButtonText}>I am ready</Text>
-                </Pressable>
-                <Pressable onPress={goHome} style={styles.notNowButton}>
-                  <Text style={styles.notNowButtonText}>Not now</Text>
-                </Pressable>
+                <Button label="I am ready" variant="primary" pill onPress={goToGame} />
+                <Button label="Not now" pill onPress={goHome} />
               </View>
             </View>
             <View style={styles.smallMascotCircle}>
@@ -231,302 +229,261 @@ export default function AvatarRecommendationScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: "#F3ECE0",
-    paddingHorizontal: 38,
-    paddingVertical: 18,
-  },
-  header: {
-    position: "absolute",
-    right: 42,
-    top: 18,
-    zIndex: 10,
-    flexDirection: "row",
-    gap: 18,
-  },
-  navButton: {
-    width: 56,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  navText: {
-    color: "#231F20",
-    fontSize: 42,
-    fontWeight: "900",
-    lineHeight: 42,
-  },
-  recommendationLayout: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 34,
-    paddingBottom: 66,
-    paddingRight: 54,
-  },
-  audioButton: {
-    alignSelf: "flex-start",
-    flexShrink: 0,
-    marginTop: 42,
-  },
-  modeCard: {
-    width: 190,
-    height: 260,
-    alignItems: "center",
-    justifyContent: "center",
-    borderColor: "#D8CDBB",
-    borderRadius: 8,
-    borderWidth: 2,
-    backgroundColor: "#FBF8F3",
-    gap: 8,
-    padding: 14,
-  },
-  modeCardRecommended: {
-    borderColor: "#4AAE78",
-    borderWidth: 3,
-    backgroundColor: "#EDF6EF",
-  },
-  avatarCircle: {
-    width: 112,
-    height: 112,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 56,
-  },
-  avatarImage: {
-    width: 82,
-    height: 82,
-    borderRadius: 22,
-  },
-  recommendedBadge: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    borderRadius: 8,
-    backgroundColor: "#4AAE78",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  recommendedBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 9,
-    fontWeight: "900",
-  },
-  modeTitle: {
-    color: "#231F20",
-    fontSize: 21,
-    fontWeight: "900",
-    textAlign: "center",
-  },
-  avatarName: {
-    color: "#665f55",
-    fontSize: 14,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-  recommendationCopy: {
-    flex: 1,
-    minWidth: 0,
-    gap: 7,
-  },
-  title: {
-    color: "#231F20",
-    fontSize: 26,
-    fontWeight: "900",
-    lineHeight: 31,
-  },
-  avatarLine: {
-    color: "#231F20",
-    fontSize: 16,
-    fontWeight: "900",
-  },
-  personalityLine: {
-    color: "#231F20",
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  explanation: {
-    color: "#665f55",
-    fontSize: 13,
-    fontWeight: "700",
-    lineHeight: 18,
-  },
-  sloganLine: {
-    color: "#8FA876",
-    fontSize: 14,
-    fontWeight: "800",
-    lineHeight: 18,
-  },
-  bulletList: {
-    gap: 5,
-  },
-  bulletRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-  },
-  bulletDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-    backgroundColor: "#231F20",
-  },
-  bulletText: {
-    flex: 1,
-    color: "#231F20",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  modeTabs: {
-    position: "absolute",
-    left: 38,
-    right: 38,
-    bottom: 18,
-    height: 56,
-    flexDirection: "row",
-    gap: 8,
-  },
-  modeTab: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    borderColor: "#D8CDBB",
-    borderRadius: 8,
-    borderWidth: 2,
-    backgroundColor: "#FBF8F3",
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-  },
-  modeTabSelected: {
-    borderColor: "#4AAE78",
-    borderWidth: 3,
-    backgroundColor: "#EDF6EF",
-  },
-  modeTabText: {
-    color: "#231F20",
-    fontSize: 14,
-    fontWeight: "900",
-    textAlign: "center",
-  },
-  modeTabTextSelected: {
-    color: "#26734B",
-  },
-  modeTabRecommended: {
-    color: "#4AAE78",
-    fontSize: 9,
-    fontWeight: "900",
-    marginTop: 1,
-  },
-  confirmButton: {
-    alignItems: "center",
-    borderRadius: 8,
-    backgroundColor: "#2D2A26",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-  },
-  disabledButton: {
-    opacity: 0.58,
-  },
-  confirmButtonText: {
-    color: "#FBF8F3",
-    fontSize: 15,
-    fontWeight: "900",
-  },
-  saveErrorText: {
-    color: "#C98B76",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  dimOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(35, 31, 32, 0.48)",
-  },
-  highlightedPopup: {
-    position: "absolute",
-    right: 92,
-    bottom: 58,
-    width: 620,
-    minHeight: 142,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    borderColor: "#E8D48C",
-    borderRadius: 28,
-    borderWidth: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.26,
-    shadowRadius: 16,
-  },
-  noteCopy: {
-    flex: 1,
-    borderRadius: 20,
-    backgroundColor: "#FBF8F3",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-  },
-  noteTitle: {
-    color: "#231F20",
-    fontSize: 21,
-    fontWeight: "900",
-    marginBottom: 5,
-  },
-  noteText: {
-    color: "#231F20",
-    fontSize: 14,
-    fontWeight: "700",
-    lineHeight: 19,
-  },
-  taskActions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 12,
-  },
-  readyButton: {
-    alignItems: "center",
-    borderRadius: 20,
-    backgroundColor: "#2D2A26",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-  },
-  readyButtonText: {
-    color: "#FBF8F3",
-    fontSize: 14,
-    fontWeight: "900",
-  },
-  notNowButton: {
-    alignItems: "center",
-    borderColor: "#d8cdbb",
-    borderRadius: 20,
-    borderWidth: 2,
-    backgroundColor: "#FBF8F3",
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-  },
-  notNowButtonText: {
-    color: "#231F20",
-    fontSize: 14,
-    fontWeight: "900",
-  },
-  smallMascotCircle: {
-    width: 88,
-    height: 88,
-    alignItems: "center",
-    justifyContent: "center",
-    borderColor: "#E8D48C",
-    borderRadius: 44,
-    borderWidth: 1,
-    backgroundColor: "#FBF8F3",
-    marginLeft: -8,
-  },
-  smallMascot: {
-    width: 62,
-    height: 62,
-    borderRadius: 18,
-  },
-});
+const makeStyles = (t: Theme) =>
+  StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor: t.bg,
+      paddingHorizontal: 38,
+      paddingVertical: 18,
+    },
+    header: {
+      position: "absolute",
+      right: 42,
+      top: 18,
+      zIndex: 10,
+      flexDirection: "row",
+      gap: 18,
+    },
+    navButton: {
+      width: 56,
+      height: 44,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    navText: {
+      color: t.text,
+      fontSize: 42,
+      fontWeight: "900",
+      lineHeight: 42,
+    },
+    recommendationLayout: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 34,
+      paddingBottom: 66,
+      paddingRight: 54,
+    },
+    audioButton: {
+      alignSelf: "flex-start",
+      flexShrink: 0,
+      marginTop: 42,
+    },
+    modeCard: {
+      width: 190,
+      height: 260,
+      alignItems: "center",
+      justifyContent: "center",
+      borderColor: t.border,
+      borderRadius: 8,
+      borderWidth: 2,
+      backgroundColor: t.surface,
+      gap: SPACE.sm,
+      padding: 14,
+    },
+    modeCardRecommended: {
+      borderColor: t.success,
+      borderWidth: 3,
+      backgroundColor: t.surfaceRaised,
+    },
+    avatarCircle: {
+      width: 112,
+      height: 112,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 56,
+    },
+    avatarImage: {
+      width: 82,
+      height: 82,
+      borderRadius: 22,
+    },
+    recommendedBadge: {
+      position: "absolute",
+      top: 10,
+      right: 10,
+      borderRadius: 8,
+      backgroundColor: t.success,
+      paddingHorizontal: SPACE.sm,
+      paddingVertical: SPACE.xs,
+    },
+    recommendedBadgeText: {
+      color: t.onSuccess,
+      fontSize: 9,
+      fontWeight: "900",
+    },
+    modeTitle: {
+      color: t.text,
+      fontSize: 21,
+      fontWeight: "900",
+      textAlign: "center",
+    },
+    avatarName: {
+      color: t.textDim,
+      fontSize: 14,
+      fontWeight: "800",
+      textAlign: "center",
+    },
+    recommendationCopy: {
+      flex: 1,
+      minWidth: 0,
+      gap: 7,
+    },
+    title: {
+      color: t.text,
+      fontSize: 26,
+      fontWeight: "900",
+      lineHeight: 31,
+    },
+    avatarLine: {
+      color: t.text,
+      fontSize: 16,
+      fontWeight: "900",
+    },
+    personalityLine: {
+      color: t.text,
+      fontSize: 15,
+      fontWeight: "800",
+    },
+    explanation: {
+      color: t.textDim,
+      fontSize: 13,
+      fontWeight: "700",
+      lineHeight: 18,
+    },
+    sloganLine: {
+      color: t.success,
+      fontSize: 14,
+      fontWeight: "800",
+      lineHeight: 18,
+    },
+    bulletList: {
+      gap: 5,
+    },
+    bulletRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 9,
+    },
+    bulletDot: {
+      width: 9,
+      height: 9,
+      borderRadius: 5,
+      backgroundColor: t.text,
+    },
+    bulletText: {
+      flex: 1,
+      color: t.text,
+      fontSize: 13,
+      fontWeight: "700",
+    },
+    modeTabs: {
+      position: "absolute",
+      left: 38,
+      right: 38,
+      bottom: 18,
+      height: 56,
+      flexDirection: "row",
+      gap: SPACE.sm,
+    },
+    modeTab: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      borderColor: t.border,
+      borderRadius: 8,
+      borderWidth: 2,
+      backgroundColor: t.surface,
+      paddingHorizontal: SPACE.sm,
+      paddingVertical: 5,
+    },
+    modeTabSelected: {
+      borderColor: t.accent,
+      borderWidth: 3,
+      backgroundColor: t.surfaceRaised,
+    },
+    modeTabText: {
+      ...TYPE.label,
+      color: t.text,
+      fontWeight: "900",
+      textAlign: "center",
+    },
+    modeTabTextSelected: {
+      color: t.accent,
+    },
+    modeTabRecommended: {
+      color: t.success,
+      fontSize: 9,
+      fontWeight: "900",
+      marginTop: 1,
+    },
+    saveErrorText: {
+      ...TYPE.labelSm,
+      color: t.danger,
+    },
+    dimOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      zIndex: 20,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: t.scrim,
+    },
+    highlightedPopup: {
+      position: "absolute",
+      right: 92,
+      bottom: 58,
+      width: 620,
+      minHeight: 142,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "flex-end",
+      borderColor: t.gold,
+      borderRadius: 28,
+      borderWidth: 3,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.26,
+      shadowRadius: 16,
+    },
+    noteCopy: {
+      flex: 1,
+      borderRadius: RADIUS.panel,
+      backgroundColor: t.surface,
+      paddingHorizontal: 20,
+      paddingVertical: SPACE.lg,
+    },
+    noteTitle: {
+      color: t.text,
+      fontSize: 21,
+      fontWeight: "900",
+      marginBottom: 5,
+    },
+    noteText: {
+      color: t.text,
+      fontSize: 14,
+      fontWeight: "700",
+      lineHeight: 19,
+    },
+    taskActions: {
+      flexDirection: "row",
+      gap: 10,
+      marginTop: SPACE.md,
+    },
+    smallMascotCircle: {
+      width: 88,
+      height: 88,
+      alignItems: "center",
+      justifyContent: "center",
+      borderColor: t.gold,
+      borderRadius: 44,
+      borderWidth: 1,
+      backgroundColor: t.surface,
+      marginLeft: -8,
+    },
+    smallMascot: {
+      width: 62,
+      height: 62,
+      borderRadius: 18,
+    },
+  });

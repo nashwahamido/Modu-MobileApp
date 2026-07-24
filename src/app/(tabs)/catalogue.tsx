@@ -14,7 +14,6 @@ import { Panel } from "@/src/game/ui/Button";
 import { ELEVATION, RADIUS, SPACE, Theme, TYPE, useStyles} from "@/src/game/ui/theme";
 import { brandFor } from "@/src/game/data/brands";
 import type { FurnitureMeta } from "@/src/game/core/type";
-import { AppNavigation } from "@/src/components/AppNavigation";
 
 const DIFFICULTY: Record<1 | 2 | 3, string> = { 1: "Easy", 2: "Medium", 3: "Hard" };
 
@@ -43,7 +42,6 @@ export default function CatalogueScreen() {
           ))}
         </View>
       </ScrollView>
-      <AppNavigation active="tasks" />
     </View>
   );
 }

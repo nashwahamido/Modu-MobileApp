@@ -20,7 +20,7 @@ import type { Mat4 } from "react-native-filament";
 
 // Metro exposes bundled GLBs through the React Native numeric asset module.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const ROOM_MODEL = require("../../assets/models/homepageroom-runtime.glb");
+const ROOM_MODEL = require("../../assets/models/room/homepageroom-runtime.glb");
 
 export type RoomSceneProps = {
   rotationY: number;

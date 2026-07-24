@@ -27,8 +27,11 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <Stack screenOptions={{ headerShown: false }} />
-        <GmTestPanel />
+        <Stack screenOptions={{ headerShown: false }}>
+          {/* The (presentation) group is the modal LAYER: it presents over the current scene (hub or task) without unmounting it, so nothing behind it reloads. */}
+          <Stack.Screen name="(presentation)" options={{ presentation: "modal" }} />
+        </Stack>
+        {__DEV__ && <GmTestPanel />}
         <StatusBar style="auto" hidden />
       </SafeAreaProvider>
     </GestureHandlerRootView>

@@ -7,7 +7,7 @@ import {
   type ViewStyle,
 } from "react-native";
 
-const voiceIcon = require("../../assets/icons/voice.jpg");
+const voiceIcon = require("../../assets/images/ui/icons/voice.jpg");
 
 type VoiceButtonProps = {
   onPress: PressableProps["onPress"];
