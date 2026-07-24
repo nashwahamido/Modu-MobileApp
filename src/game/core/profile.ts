@@ -5,7 +5,7 @@
 // Spec features NOT yet in the engine are tracked in MERGE_PLAN (profile gaps).
 
 import { AccessibilitySettings } from "@/src/game/core/accessibility";
-import { AssemblyMode } from "@/src/game/core/type";
+import { AssemblyMode, FurnitureId } from "@/src/game/core/type";
 
 export const DEFAULT_SETTINGS: AccessibilitySettings = {
   textLevel: "standard",
@@ -30,6 +30,11 @@ export const DEFAULT_SETTINGS: AccessibilitySettings = {
 };
 
 export type ProfileId = "visual" | "momentum" | "clearPath" | "control";
+
+/** Default onboarding task for each support profile. Catalogue choices still override this. */
+export function furnitureForProfile(profile: ProfileId): FurnitureId {
+  return profile === "momentum" || profile === "clearPath" ? "LACK" : "DALFRED";
+}
 
 export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>> = {
   // Autonomy and adjustable guidance: the DEFAULT profile at launch.

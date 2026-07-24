@@ -202,6 +202,44 @@ function SectionHeader({ children }: { children: string }) {
   return <Text style={styles.section}>{children}</Text>;
 }
 
+export function SceneAppearanceControls({
+  onPreferenceChange,
+}: {
+  onPreferenceChange?: (preference: "background" | "lighting") => void;
+} = {}) {
+  const styles = useStyles(makeStyles);
+  const settings = useGameStore((s) => s.settings);
+  const backdrop = useGameStore((s) => s.backdrop);
+  const setSettings = useGameStore((s) => s.setSettings);
+  const setBackdrop = useGameStore((s) => s.setBackdrop);
+
+  return (
+    <View style={styles.list}>
+      <SectionHeader>Scene appearance</SectionHeader>
+      <Choice
+        label="Background"
+        desc="Preview the scene behind your furniture"
+        value={backdrop}
+        options={BACKDROPS}
+        onChange={(value) => {
+          setBackdrop(value);
+          onPreferenceChange?.("background");
+        }}
+      />
+      <Choice
+        label="Lighting"
+        desc="Preview how the furniture is lit"
+        value={settings.lightingPreset}
+        options={LIGHTING}
+        onChange={(value) => {
+          setSettings({ lightingPreset: value });
+          onPreferenceChange?.("lighting");
+        }}
+      />
+    </View>
+  );
+}
+
 // ── the shared controls ──────────────────────────────────────────────────────
 export function SettingsControls() {
   const styles = useStyles(makeStyles);

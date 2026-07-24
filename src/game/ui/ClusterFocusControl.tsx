@@ -12,7 +12,7 @@ import {
   requiresClusterFocus,
 } from "@/src/game/core/evaluation/clusters";
 import { useGameStore } from "@/src/game/core/store";
-import { brandFor } from "@/src/game/data/brands";
+import { brandFor } from "@/src/game/content/brands";
 import { ResumeIcon, StarBadge } from "@/src/game/ui/Icons";
 import { Theme, useStyles, useTheme } from "@/src/game/ui/theme";
 import type { ClusterId } from "@/src/game/core/type";

@@ -1,7 +1,7 @@
 // Run after a model re-export (alongside read-parts.mjs).
 //
 // Drafts a FULL authored.ts for each furniture from its combined GLB + parts.gen
-// and writes src/game/data/furnitures/<ID>/dev/authored.derived.ts — a starting skeleton
+// and writes src/game/content/furnitures/<ID>/dev/authored.derived.ts — a starting skeleton
 // to review, NOT shipped logic. What it fills in vs leaves for a human:
 //
 //   DERIVED (rough, edit freely):
@@ -32,7 +32,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const MODELS = path.join(ROOT, "..", "..", "assets", "models", "furnitures");
-const OUT = path.join(ROOT, "..", "data", "furnitures");
+const OUT = path.join(ROOT, "..", "content", "furnitures");
 // AUTO-DISCOVERED: every assets/models/furnitures/<ID>/<ID>.glb gets a draft.
 const FURNITURES = fs
   .readdirSync(MODELS, { withFileTypes: true })

@@ -9,6 +9,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import "react-native-reanimated";
 
+import { GmTestPanel } from "@/src/components/GmTestPanel";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 
 export default function RootLayout() {
@@ -26,7 +27,11 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <Stack screenOptions={{ headerShown: false }} />
+        <Stack screenOptions={{ headerShown: false }}>
+          {/* The (presentation) group is the modal LAYER: it presents over the current scene (hub or task) without unmounting it, so nothing behind it reloads. */}
+          <Stack.Screen name="(presentation)" options={{ presentation: "modal" }} />
+        </Stack>
+        {__DEV__ && <GmTestPanel />}
         <StatusBar style="auto" hidden />
       </SafeAreaProvider>
     </GestureHandlerRootView>

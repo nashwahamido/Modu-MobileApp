@@ -7,13 +7,13 @@
     "orientation": "landscape",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "icon": "./src/assets/images/Modu_Icon.png",
+    "icon": "./src/assets/ui/icons/Modu_Icon.png",
     "android": {
       "package": "com.modu.app",
       "adaptiveIcon": {
-        "foregroundImage": "./src/assets/images/Modu_Icon.png",
+        "foregroundImage": "./src/assets/ui/icons/Modu_Icon.png",
         "backgroundColor": "#ffffff",
-        "monochromeImage": "./src/assets/images/Modu_Icon.png"
+        "monochromeImage": "./src/assets/ui/icons/Modu_Icon.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -24,13 +24,9 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.app.modu"
+      "bundleIdentifier": "com.modu.app"
     },
-    "plugins": [
-      "expo-router",
-      "expo-audio",
-      "expo-asset"
-    ],
+    "plugins": ["expo-router", "expo-audio", "expo-asset"],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
