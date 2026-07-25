@@ -93,15 +93,24 @@ export function RoomExperience() {
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => placing,
+        onStartShouldSetPanResponder: () => placing || placed,
+        onStartShouldSetPanResponderCapture: () => placing || placed,
         onMoveShouldSetPanResponder: (_, g) =>
-          placing && (Math.abs(g.dx) > 2 || Math.abs(g.dy) > 2),
+          (placing || placed) && (Math.abs(g.dx) > 2 || Math.abs(g.dy) > 2),
+        onMoveShouldSetPanResponderCapture: (_, g) =>
+          (placing || placed) && (Math.abs(g.dx) > 2 || Math.abs(g.dy) > 2),
         onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: () => {
+          // If the piece is only placed (not yet in edit mode), promote it to
+          // editing within this same touch — keeps the responder chain intact
+          // so a press-and-drag in one motion works, not just press-then-drag.
+          if (placed && !placing) {
+            editPlacement();
+          }
           setPlacementWarning(null);
           position.stopAnimation((v) => {
-            dragStart.current = v;
-            setPlacementPoint(v);
+            dragStart.current = { x: v.x, y: v.y };
+            setPlacementPoint({ x: v.x, y: v.y });
           });
         },
         onPanResponderMove: (_, g) => {
@@ -121,15 +130,21 @@ export function RoomExperience() {
             collisionFootprint,
           );
           setPlacementWarning(warning);
-          if (!warning) {
-            position.setValue(candidate);
-            setPlacementPoint(candidate);
-          }
+          position.setValue(candidate);
+          setPlacementPoint(candidate);
         },
         onPanResponderRelease: () => setPlacementWarning(null),
         onPanResponderTerminate: () => setPlacementWarning(null),
       }),
-    [collisionFootprint, height, placing, position, width],
+    [
+      collisionFootprint,
+      height,
+      placing,
+      placed,
+      position,
+      width,
+      editPlacement,
+    ],
   );
   const scale = position.y.interpolate({
     inputRange: [height * 0.25, height * 0.72],
@@ -320,8 +335,8 @@ export function RoomExperience() {
 
       {(placing || placed) && roomFurniture ? (
         <Animated.View
-          pointerEvents="box-none"
-          {...(placing ? panResponder.panHandlers : {})}
+          collapsable={false}
+          {...panResponder.panHandlers}
           style={[
             s.furnitureWrap,
             {
@@ -334,25 +349,7 @@ export function RoomExperience() {
             placing && s.furnitureActive,
             placementWarning && s.furnitureBlocked,
           ]}
-        >
-          <Pressable
-            pointerEvents="box-only"
-            accessibilityLabel={
-              placing
-                ? `Move ${itemName ?? roomFurniture.displayName}`
-                : `Edit ${itemName ?? roomFurniture.displayName}`
-            }
-            accessibilityHint={
-              placing
-                ? "Drag to reposition this furniture"
-                : "Long press to edit this furniture"
-            }
-            style={s.furniturePressTarget}
-            onLongPress={!placing ? editPlacement : undefined}
-            delayLongPress={350}
-            hitSlop={20}
-          />
-        </Animated.View>
+        />
       ) : null}
 
       {firstPlacementGuide ? (
