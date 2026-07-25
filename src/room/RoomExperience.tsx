@@ -235,36 +235,6 @@ export function RoomExperience() {
         )}
       </View>
 
-      {placing && roomFurniture ? (
-        <View
-          accessibilityLabel={`Drag ${itemName ?? roomFurniture.displayName} to position`}
-          accessibilityHint="Drag anywhere in the room to move the selected furniture"
-          style={s.placementGestureSurface}
-          {...panResponder.panHandlers}
-        />
-      ) : null}
-
-      {placed && !placing && roomFurniture ? (
-        <Animated.View
-          style={[
-            s.furnitureWrap,
-            {
-              transform: [
-                { translateX: furnitureTranslateX },
-                { translateY: furnitureTranslateY },
-                { scale: furnitureScale },
-              ],
-            },
-          ]}
-        >
-          <Pressable
-            accessibilityLabel={`Edit ${itemName ?? roomFurniture.displayName}`}
-            style={s.furniturePressTarget}
-            onPress={editPlacement}
-          />
-        </Animated.View>
-      ) : null}
-
       <View style={s.stats}>
         <Pressable
           accessibilityLabel="Settings"
@@ -348,7 +318,7 @@ export function RoomExperience() {
 
       <DevMenu placement="roomFloat" />
 
-      {(placing || placed) && !roomFurniture ? (
+      {(placing || placed) && roomFurniture ? (
         <Animated.View
           {...panResponder.panHandlers}
           style={[
@@ -366,13 +336,13 @@ export function RoomExperience() {
         >
           <Pressable
             accessibilityLabel={
-              placing ? `Move ${itemName ?? "furniture"}` : "Edit furniture"
+              placing
+                ? `Move ${itemName ?? roomFurniture.displayName}`
+                : `Edit ${itemName ?? roomFurniture.displayName}`
             }
             style={s.furniturePressTarget}
             onPress={editPlacement}
-          >
-            <Cabinet />
-          </Pressable>
+          />
         </Animated.View>
       ) : null}
 
