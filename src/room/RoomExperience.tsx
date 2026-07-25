@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { router, useRootNavigationState } from "expo-router";
 import type { Href } from "expo-router";
 import {
-  Animated,
   Image,
   PanResponder,
   Pressable,
@@ -29,7 +28,6 @@ import { DevMenu } from "../game/ui/DevMenu";
 import { OverlaySheet } from "../game/ui/OverlaySheet";
 import { Theme, useStyles, useTheme } from "../game/ui/theme";
 import { RoomScene } from "./scene/RoomScene";
-import { Cabinet } from "./Cabinet";
 import { usePlacementStore } from "./placement";
 import { getRoomFurnitureDefinition } from "./furnitureCatalog";
 import { useGameStore } from "../game/core/store";
@@ -82,10 +80,16 @@ export function RoomExperience() {
   const roomZoomRef = useRef(roomZoom);
   const zoomPercent = Math.round(roomZoom * 100);
   const rotationDegrees = Math.round(((roomRotation * 180) / Math.PI) % 360);
-  const initialPlacement = placementStart(width, height);
-  const position = useRef(new Animated.ValueXY(initialPlacement)).current;
-  const [placementPoint, setPlacementPoint] = useState(initialPlacement);
-  const dragStart = useRef({ x: 0, y: 0 });
+  const [placementPoint, setPlacementPoint] = useState(() =>
+    placementStart(width, height),
+  );
+  const placementPointRef = useRef(placementPoint);
+  const dragStart = useRef(placementPoint);
+
+  const updatePlacementPoint = (nextPoint: { x: number; y: number }) => {
+    placementPointRef.current = nextPoint;
+    setPlacementPoint(nextPoint);
+  };
   const [placementWarning, setPlacementWarning] = useState<string | null>(null);
   const roomFurniture = getRoomFurnitureDefinition(itemId);
   const collisionFootprint =
@@ -93,30 +97,36 @@ export function RoomExperience() {
   const panResponder = useMemo(
     () =>
       PanResponder.create({
+        // The responder exists only on the selected furniture box. No long press
+        // is required: touching the selected box starts dragging immediately.
         onStartShouldSetPanResponder: () => placing || placed,
         onStartShouldSetPanResponderCapture: () => placing || placed,
-        onMoveShouldSetPanResponder: (_, g) =>
-          (placing || placed) && (Math.abs(g.dx) > 2 || Math.abs(g.dy) > 2),
-        onMoveShouldSetPanResponderCapture: (_, g) =>
-          (placing || placed) && (Math.abs(g.dx) > 2 || Math.abs(g.dy) > 2),
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          (placing || placed) &&
+          (Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2),
+        onMoveShouldSetPanResponderCapture: (_, gesture) =>
+          (placing || placed) &&
+          (Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2),
+        onShouldBlockNativeResponder: () => true,
         onPanResponderTerminationRequest: () => false,
+
         onPanResponderGrant: () => {
-          // If the piece is only placed (not yet in edit mode), promote it to
-          // editing within this same touch — keeps the responder chain intact
-          // so a press-and-drag in one motion works, not just press-then-drag.
+          // Use the current point synchronously. The previous stopAnimation
+          // callback could run after the first move event, which made the first
+          // drag start from {0, 0}.
+          dragStart.current = { ...placementPointRef.current };
+
           if (placed && !placing) {
             editPlacement();
           }
+
           setPlacementWarning(null);
-          position.stopAnimation((v) => {
-            dragStart.current = { x: v.x, y: v.y };
-            setPlacementPoint({ x: v.x, y: v.y });
-          });
         },
-        onPanResponderMove: (_, g) => {
+
+        onPanResponderMove: (_, gesture) => {
           const candidate = {
-            x: dragStart.current.x + g.dx,
-            y: dragStart.current.y + g.dy,
+            x: dragStart.current.x + gesture.dx,
+            y: dragStart.current.y + gesture.dy,
           };
           const candidateScale = getPlacementPerspectiveScale(
             candidate.y,
@@ -129,52 +139,32 @@ export function RoomExperience() {
             candidateScale,
             collisionFootprint,
           );
+
           setPlacementWarning(warning);
-          position.setValue(candidate);
-          setPlacementPoint(candidate);
+          updatePlacementPoint(candidate);
         },
+
         onPanResponderRelease: () => setPlacementWarning(null),
         onPanResponderTerminate: () => setPlacementWarning(null),
       }),
-    [
-      collisionFootprint,
-      height,
-      placing,
-      placed,
-      position,
-      width,
-      editPlacement,
-    ],
+    [collisionFootprint, editPlacement, height, placed, placing, width],
   );
-  const scale = position.y.interpolate({
-    inputRange: [height * 0.25, height * 0.72],
-    outputRange: [0.55, 1.18],
-    extrapolate: "clamp",
-  });
-  // Project the transparent interaction proxy through the same visible controls
-  // as the GLB so dragging remains aligned with the rendered furniture.
+
+  // The selection box and the 3D furniture now use the same React state.
+  // This removes the old split where the box used Animated.ValueXY while the
+  // model used placementPoint, allowing the box to move without the furniture.
   const roomPivot = { x: width * 0.5, y: height * 0.57 };
+  const roomOffsetX = placementPoint.x - roomPivot.x;
+  const roomOffsetY = placementPoint.y - roomPivot.y;
   const rotationCos = Math.cos(roomRotation);
   const rotationSin = Math.sin(roomRotation);
-  const roomOffsetX = Animated.subtract(position.x, roomPivot.x);
-  const roomOffsetY = Animated.subtract(position.y, roomPivot.y);
-  const projectedOffsetX = Animated.add(
-    Animated.multiply(roomOffsetX, rotationCos),
-    Animated.multiply(roomOffsetY, rotationSin * 0.52),
-  );
-  const projectedOffsetY = Animated.add(
-    roomOffsetY,
-    Animated.multiply(roomOffsetX, rotationSin * 0.18),
-  );
-  const furnitureTranslateX = Animated.add(
-    roomPivot.x,
-    Animated.multiply(projectedOffsetX, roomZoom),
-  );
-  const furnitureTranslateY = Animated.add(
-    roomPivot.y,
-    Animated.multiply(projectedOffsetY, roomZoom),
-  );
-  const furnitureScale = Animated.multiply(scale, roomZoom);
+  const projectedOffsetX =
+    roomOffsetX * rotationCos + roomOffsetY * rotationSin * 0.52;
+  const projectedOffsetY = roomOffsetY + roomOffsetX * rotationSin * 0.18;
+  const furnitureTranslateX = roomPivot.x + projectedOffsetX * roomZoom;
+  const furnitureTranslateY = roomPivot.y + projectedOffsetY * roomZoom;
+  const furnitureScale =
+    getPlacementPerspectiveScale(placementPoint.y, height) * roomZoom;
 
   // A fresh placement starts at the default point. A confirmed placement restores
   // from normalized room coordinates when the room remounts or changes size.
@@ -182,8 +172,7 @@ export function RoomExperience() {
     const nextPosition = savedPosition
       ? denormalizePlacementPoint(savedPosition, width, height)
       : placementStart(width, height);
-    position.setValue(nextPosition);
-    setPlacementPoint(nextPosition);
+    updatePlacementPoint(nextPosition);
     setPlacementWarning(null);
     if (startNonce > 0 && !savedPosition) {
       applyRoomControls(0, 1);
@@ -218,7 +207,9 @@ export function RoomExperience() {
   };
   const handleConfirmPlacement = () => {
     if (placementWarning) return;
-    confirmPlacement(normalizePlacementPoint(placementPoint, width, height));
+    confirmPlacement(
+      normalizePlacementPoint(placementPointRef.current, width, height),
+    );
   };
 
   return (
@@ -233,11 +224,18 @@ export function RoomExperience() {
               roomFurniture && (placing || placed)
                 ? {
                     itemId: roomFurniture.id,
-                    position: normalizePlacementPoint(
-                      placementPoint,
-                      width,
-                      height,
-                    ),
+                    position: (() => {
+                      const normalized = normalizePlacementPoint(
+                        placementPoint,
+                        width,
+                        height,
+                      );
+
+                      return {
+                        x: 1 - normalized.x,
+                        y: 1 - normalized.y,
+                      };
+                    })(),
                     perspectiveScale: getPlacementPerspectiveScale(
                       placementPoint.y,
                       height,
@@ -334,7 +332,8 @@ export function RoomExperience() {
       <DevMenu placement="roomFloat" />
 
       {(placing || placed) && roomFurniture ? (
-        <Animated.View
+        <View
+          pointerEvents="box-only"
           collapsable={false}
           {...panResponder.panHandlers}
           style={[
@@ -687,6 +686,8 @@ const makeStyles = (t: Theme) =>
       top: -45,
       width: 110,
       height: 90,
+      // Keeps the otherwise empty native view hittable on Android.
+      backgroundColor: "rgba(0, 0, 0, 0.001)",
     },
     furniturePressTarget: {
       flex: 1,
