@@ -208,7 +208,7 @@ export function RoomExperience() {
 
   return (
     <View style={s.screen}>
-      <View style={s.stage}>
+      <View style={s.stage} pointerEvents={placing ? "none" : "auto"}>
         {heavySceneActive ? null : (
           <RoomScene
             rotationY={roomRotation}
@@ -320,7 +320,8 @@ export function RoomExperience() {
 
       {(placing || placed) && roomFurniture ? (
         <Animated.View
-          {...panResponder.panHandlers}
+          pointerEvents="box-none"
+          {...(placing ? panResponder.panHandlers : {})}
           style={[
             s.furnitureWrap,
             {
@@ -335,13 +336,21 @@ export function RoomExperience() {
           ]}
         >
           <Pressable
+            pointerEvents="box-only"
             accessibilityLabel={
               placing
                 ? `Move ${itemName ?? roomFurniture.displayName}`
                 : `Edit ${itemName ?? roomFurniture.displayName}`
             }
+            accessibilityHint={
+              placing
+                ? "Drag to reposition this furniture"
+                : "Long press to edit this furniture"
+            }
             style={s.furniturePressTarget}
-            onPress={editPlacement}
+            onLongPress={!placing ? editPlacement : undefined}
+            delayLongPress={350}
+            hitSlop={20}
           />
         </Animated.View>
       ) : null}
