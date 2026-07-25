@@ -159,8 +159,8 @@ export function RoomExperience() {
   const rotationCos = Math.cos(roomRotation);
   const rotationSin = Math.sin(roomRotation);
   const projectedOffsetX =
-    roomOffsetX * rotationCos + roomOffsetY * rotationSin * 0.52;
-  const projectedOffsetY = roomOffsetY + roomOffsetX * rotationSin * 0.18;
+    roomOffsetX * rotationCos + roomOffsetY * rotationSin * -0.52;
+  const projectedOffsetY = roomOffsetY + roomOffsetX * rotationSin * -0.18;
   const furnitureTranslateX = roomPivot.x + projectedOffsetX * roomZoom;
   const furnitureTranslateY = roomPivot.y + projectedOffsetY * roomZoom;
   const furnitureScale =
