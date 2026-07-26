@@ -12,14 +12,6 @@ import {
   LabelMap,
 } from "@/src/game/core/type";
 
-export const META = {
-  name: "Simple Cabinet",
-  brand: "Others",
-  category: "Shelf & Cabinet",
-  difficulty: 1,
-  duration: 5,
-} as const;
-
 export const LABELS = {
   panel: { standard: "Cabinet panel", simple: "Panel" },
   connector: { standard: "Cabinet connector", simple: "Connector" },

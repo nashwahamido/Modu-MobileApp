@@ -1,15 +1,17 @@
 import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { useGameStore } from "@/src/game/core/store";
 import { Theme, useStyles } from "@/src/game/ui/theme";
-
-/** Coins per completed step. Mirrors ClusterFocusControl — see the note there: there is no wallet or shop in the data model, so this is a placeholder RATE, not a typed-in number. */
-const COINS_PER_STEP = 3;
+import { useRepos } from "@/src/data";
+import { useCatalogRow } from "@/src/data/catalogStore";
 
 /**
  * The finished-build screen.
- * The coins and XP are computed from the build. The "succulent plant" reward is from the wireframe and has nothing behind it yet — no item model. 
+ * The coins and XP shown are the catalog's configured reward (item_build) — the same source the
+ * grant uses — so the display can't drift from what's awarded. The "succulent plant" reward is from
+ * the wireframe and has nothing behind it yet — no item model.
  * The two action buttons route:
  * "place in the room now!" goes to the room, "store in inventory" returns to the catalogue
  * (there is no separate inventory screen — the built piece lives in the catalogue for now).
@@ -17,19 +19,36 @@ const COINS_PER_STEP = 3;
 export function BuildComplete() {
   const styles = useStyles(makeStyles);
   const router = useRouter();
+  const repos = useRepos();
   const furniture = useGameStore((s) => s.furniture);
   const completed = useGameStore((s) => s.completed);
   const undoLastAction = useGameStore((s) => s.undoLastAction);
   const redoLastAction = useGameStore((s) => s.redoLastAction);
   const dismissed = useGameStore((s) => s.doneDismissed);
+  const [reward, setReward] = useState({ coins: 0, xp: 0 });
+
+  const furnitureId = furniture?.meta.id ?? null;
+  // Display copy is DB-authored; the bundle knows only the id and the artwork.
+  const catalogRow = useCatalogRow(furnitureId);
+  useEffect(() => {
+    if (!furnitureId) return;
+    let alive = true;
+    repos.builds
+      .buildReward(furnitureId)
+      .then((r) => alive && setReward(r))
+      // Showing zero beats an uncaught rejection — the grant is server-side regardless. Matches BuildMap.
+      .catch((err) => console.warn("[BuildComplete] reward lookup failed", err));
+    return () => {
+      alive = false;
+    };
+  }, [furnitureId, repos]);
 
   if (!furniture) return null;
   const total = furniture.actions.length;
   const isDone = total > 0 && completed.length >= total;
   if (!isDone || dismissed) return null;
 
-  const coins = total * COINS_PER_STEP;
-  const xp = total * furniture.xpPerStep;
+  const { coins, xp } = reward;
   // The finished piece goes to the room to be placed; "store" sends it back to the catalogue.
   const placeInRoom = () => router.replace("/room");
   const storeInInventory = () => router.replace("/catalogue");
@@ -67,7 +86,7 @@ export function BuildComplete() {
           </Pressable>
         </View>
 
-        <Text style={styles.title}>{furniture.meta.name} assembled!</Text>
+        <Text style={styles.title}>{catalogRow ? `${catalogRow.name} assembled!` : "Assembled!"}</Text>
 
         <ScrollView
           contentContainerStyle={styles.body}

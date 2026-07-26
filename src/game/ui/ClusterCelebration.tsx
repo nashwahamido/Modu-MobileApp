@@ -18,6 +18,10 @@ export function ClusterCelebration() {
   const completed = useGameStore((s) => s.completed);
   const [shown, setShown] = useState<ClusterId | null>(null);
   const seen = useRef<Set<ClusterId> | null>(null);
+  // Which furniture `seen` was baselined against. Cluster ids are generic ("base", "seat"), and the
+  // play screen swaps furniture WITHOUT remounting — so a set carried across a swap either swallows
+  // the new build's "base" celebration or replays a resumed build's already-finished ones.
+  const seenFor = useRef<string | null>(null);
 
   const done = new Set(completed);
   const clusters = furniture ? focusableClusterIds(furniture) : [];
@@ -28,9 +32,13 @@ export function ClusterCelebration() {
 
   useEffect(() => {
     if (!furniture) return;
-    // first run baselines to the clusters already finished at mount, so a remount mid-build doesn't replay old celebrations
-    if (!seen.current) {
+    // first run — and every furniture swap — baselines to the clusters already finished, so neither a
+    // remount mid-build nor a resumed save replays old celebrations
+    if (!seen.current || seenFor.current !== furniture.meta.id) {
       seen.current = new Set(finished);
+      seenFor.current = furniture.meta.id;
+      // A stale card from the previous furniture must not survive the swap.
+      setShown(null);
       return;
     }
     for (const c of finished) {

@@ -5,7 +5,7 @@ import { EKET_META } from "./EKET/meta";
 import { BEKVAM_META } from "./BEKVAM/meta";
 import { TUTORIAL_META } from "./TUTORIAL/meta";
 
-/** Lightweight list for the furniture picker (no heavy payload loaded).  Entries flagged `engineOnly` (no GLB yet) are for the test harness — the  3D picker filters them out. */
+/** Lightweight list for the furniture picker (no heavy payload loaded). Every entry is shown — the picker no longer hides any. */
 export const FURNITURE_METAS: FurnitureMeta[] = [DALFRED_META, LACK_META, EKET_META, BEKVAM_META, TUTORIAL_META];
 
 /** Lazy loaders for the full build payload. Adding a furniture = one line. */

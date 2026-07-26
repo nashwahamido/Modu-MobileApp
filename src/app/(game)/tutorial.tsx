@@ -215,7 +215,13 @@ function TutorialScreen() {
   useEffect(() => {
     if (tutorialBuilt && !tutorialRecorded.current) {
       tutorialRecorded.current = true;
-      repos.builds.complete(me, "tutorial");
+      repos.builds.complete(me, "tutorial").catch((err) => {
+        // Re-arm so a later render can retry: the flag is set BEFORE the call to keep the effect from
+        // firing twice, which would otherwise turn a transient failure into a permanently unrecorded
+        // tutorial (and a missing placeable item).
+        tutorialRecorded.current = false;
+        console.warn("[tutorial] could not record the completed build", err);
+      });
     }
   }, [tutorialBuilt, me, repos]);
   const displayedCompletedCount = guideCompleted

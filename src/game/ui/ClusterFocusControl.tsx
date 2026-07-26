@@ -16,6 +16,7 @@ import { brandFor } from "@/src/game/content/brands";
 import { ResumeIcon, StarBadge } from "@/src/game/ui/Icons";
 import { Theme, useStyles, useTheme } from "@/src/game/ui/theme";
 import { useRepos } from "@/src/data";
+import { useCatalogRow } from "@/src/data/catalogStore";
 import type { ClusterId } from "@/src/game/core/type";
 
 export function BuildMap() {
@@ -33,6 +34,8 @@ export function BuildMap() {
   // recomputing a rate here — what this panel promises and what the grant applies cannot drift.
   // Above the early return: the map unmounts between builds, so these hooks must stay unconditional.
   const furnitureId = furniture?.meta.id ?? null;
+  // Name and brand are DB-authored too; read from the boot-loaded catalogue rather than the bundle. Synchronous by design — this panel opens mid-build and cannot wait on a fetch.
+  const catalogRow = useCatalogRow(furnitureId);
   const [reward, setReward] = useState({ coins: 0, xp: 0 });
   useEffect(() => {
     if (!furnitureId) return;
@@ -132,7 +135,8 @@ export function BuildMap() {
       ...clusterNodes,
       {
         key: "combine",
-        label: `Combine ${furniture.meta.name.split(" ").pop()}`,
+        // Last word of the catalogue name ("…Cabinet"), falling back to a generic verb before the catalogue lands.
+        label: catalogRow ? `Combine ${catalogRow.name.split(" ").pop()}` : "Combine",
         actions: combineActions,
         doneCount: combineDone,
         thumb: furniture.meta.thumbnail.light,
@@ -152,7 +156,7 @@ export function BuildMap() {
     const pct = totalSteps ? Math.round((done.size / totalSteps) * 100) : 0;
     // Both come straight from the DB row — zero until the lookup lands, or if it failed.
     const { coins, xp: totalXp } = reward;
-    const brand = brandFor(furniture.meta.brand);
+    const brand = catalogRow ? brandFor(catalogRow.brand) : null;
 
     return (
       <View style={styles.scrim}>
@@ -169,13 +173,15 @@ export function BuildMap() {
           </Pressable>
 
           <View style={styles.titleRow}>
-            <Text style={styles.title}>{furniture.meta.name}</Text>
-            <Image
-              source={brand.logo}
-              style={styles.brandLogo}
-              resizeMode="contain"
-              accessibilityLabel={brand.name}
-            />
+            <Text style={styles.title}>{catalogRow?.name ?? ""}</Text>
+            {brand ? (
+              <Image
+                source={brand.logo}
+                style={styles.brandLogo}
+                resizeMode="contain"
+                accessibilityLabel={brand.name}
+              />
+            ) : null}
           </View>
 
           <View style={styles.nodeRow}>

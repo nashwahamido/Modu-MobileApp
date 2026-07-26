@@ -19,15 +19,9 @@ export type ClusterId = string & Brand<"ClusterId">;
 export type ComponentId = string & Brand<"ComponentId">;
 export type LiaisonId = string & Brand<"LiaisonId">;
 
-export type FurnitureId = "DALFRED" | "LACK" | "EKET" | "BEKVAM" | "TUTORIAL";
+export type FurnitureId = "dalfred-stool" | "lack-table" | "eket-cabinet" | "bekvam-stool" | "tutorial";
 export type BrandId = "IKEA" | "Others";
 export type ToolId = "allenkey" | "mallet" | "hammer" | "screwdriver" | "hand";
-
-export type FurnitureCategory =
-  | "Table & Chair"
-  | "Shelf & Cabinet"
-  | "Bed"
-  | "Other";
 
 export type ThemeId = "light" | "dark" | "high_contrast";
 /** How the furniture is rendered. Two mechanisms, one axis:
@@ -255,20 +249,16 @@ export interface RenderStyle {
 }
 export type StyleSet = Partial<Record<RenderStyleId, RenderStyle>>;
 
+// What the BUNDLE knows about a furniture: its id, its artwork, and the counts derived from the recipe.
+// Everything a human authors — name, brand, type, duration, link — lives in item_build and is read
+// through the catalogue store, so it can be edited without shipping a build.
 export interface FurnitureMeta {
   id: FurnitureId;
-  name: string;
   thumbnail: ThumbSet;
-  brand: BrandId;
-  category: FurnitureCategory;
-  difficulty: 1 | 2 | 3;
   partCount: number;
-  duration: number;
   stageCount: number;
   stepCount: number;
-  link?: string;
-  /** No GLB yet: playable in the engine-test harness, hidden from the 3D picker. */
-  engineOnly?: boolean;
+  clusterCount: number;
 }
 export interface Furniture {
   meta: FurnitureMeta;
