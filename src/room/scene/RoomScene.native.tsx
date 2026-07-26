@@ -58,9 +58,19 @@ function PlacedFurnitureModel({
   const model = useModel(source);
   const { transformManager } = useFilamentContext();
   const unitTransform = useRef<Mat4 | null>(null);
+  const normalizedHeight = useRef(2);
 
   useEffect(() => {
     if (!definition || model.state !== "loaded") return;
+    const [halfWidth, halfHeight, halfDepth] = model.boundingBox.halfExtent;
+    const maxHalfExtent = Math.max(
+      Math.abs(halfWidth),
+      Math.abs(halfHeight),
+      Math.abs(halfDepth),
+    );
+    normalizedHeight.current =
+      maxHalfExtent > 0 ? (2 * Math.abs(halfHeight)) / maxHalfExtent : 2;
+
     transformManager.transformToUnitCube(model.rootEntity, model.boundingBox);
     unitTransform.current = transformManager.getTransform(model.rootEntity);
   }, [definition, model, transformManager]);
@@ -69,7 +79,8 @@ function PlacedFurnitureModel({
     if (!definition || model.state !== "loaded" || !unitTransform.current) return;
 
     const localScale = definition.sceneScale * perspectiveScale;
-    const floorPoint = getRoomFloorPoint(position, localScale);
+    const renderedHeight = normalizedHeight.current * localScale;
+    const floorPoint = getRoomFloorPoint(position, renderedHeight);
 
     // Apply the local furniture scale last. Previously it preceded translate,
     // which scaled the translation as well and made models hover or jump.

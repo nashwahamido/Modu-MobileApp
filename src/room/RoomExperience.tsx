@@ -85,8 +85,6 @@ export function RoomExperience() {
   );
   const placementPointRef = useRef(placementPoint);
   const dragStart = useRef(placementPoint);
-  const editHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isDraggingFurniture = useRef(false);
 
   const updatePlacementPoint = (nextPoint: { x: number; y: number }) => {
     placementPointRef.current = nextPoint;
@@ -97,59 +95,26 @@ export function RoomExperience() {
   const collisionFootprint =
     roomFurniture?.footprint ?? DEFAULT_FURNITURE_FOOTPRINT;
 
-  useEffect(
-    () => () => {
-      if (editHoldTimer.current) clearTimeout(editHoldTimer.current);
-    },
-    [],
-  );
-
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        // New furniture can be positioned immediately. A confirmed item needs a
-        // deliberate long press before it re-enters edit mode.
-        onStartShouldSetPanResponder: () => placing || placed,
-        onStartShouldSetPanResponderCapture: () => placing || placed,
+        onStartShouldSetPanResponder: () => placing,
+        onStartShouldSetPanResponderCapture: () => placing,
         onMoveShouldSetPanResponder: (_, gesture) =>
-          (placing || placed) &&
+          placing &&
           (Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2),
         onMoveShouldSetPanResponderCapture: (_, gesture) =>
-          (placing || placed) &&
+          placing &&
           (Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2),
         onShouldBlockNativeResponder: () => true,
         onPanResponderTerminationRequest: () => false,
 
         onPanResponderGrant: () => {
-          // Use the current point synchronously. The previous stopAnimation
-          // callback could run after the first move event, which made the first
-          // drag start from {0, 0}.
           dragStart.current = { ...placementPointRef.current };
-
-          isDraggingFurniture.current = placing;
-          if (placed && !placing) {
-            editHoldTimer.current = setTimeout(() => {
-              editHoldTimer.current = null;
-              isDraggingFurniture.current = true;
-              editPlacement();
-            }, 450);
-          }
-
           setPlacementWarning(null);
         },
 
         onPanResponderMove: (_, gesture) => {
-          if (!isDraggingFurniture.current) {
-            if (
-              editHoldTimer.current &&
-              (Math.abs(gesture.dx) > 5 || Math.abs(gesture.dy) > 5)
-            ) {
-              clearTimeout(editHoldTimer.current);
-              editHoldTimer.current = null;
-            }
-            return;
-          }
-
           const candidate = {
             x: dragStart.current.x + gesture.dx,
             y: dragStart.current.y + gesture.dy,
@@ -171,19 +136,13 @@ export function RoomExperience() {
         },
 
         onPanResponderRelease: () => {
-          if (editHoldTimer.current) clearTimeout(editHoldTimer.current);
-          editHoldTimer.current = null;
-          isDraggingFurniture.current = false;
           setPlacementWarning(null);
         },
         onPanResponderTerminate: () => {
-          if (editHoldTimer.current) clearTimeout(editHoldTimer.current);
-          editHoldTimer.current = null;
-          isDraggingFurniture.current = false;
           setPlacementWarning(null);
         },
       }),
-    [collisionFootprint, editPlacement, height, placed, placing, width],
+    [collisionFootprint, height, placing, width],
   );
 
   // The selection box and the 3D furniture now use the same React state.
@@ -368,10 +327,14 @@ export function RoomExperience() {
       <DevMenu placement="roomFloat" />
 
       {(placing || placed) && roomFurniture ? (
-        <View
+        <Pressable
           pointerEvents="box-only"
           collapsable={false}
-          {...panResponder.panHandlers}
+          delayLongPress={420}
+          hitSlop={placed && !placing ? 18 : 0}
+          pressRetentionOffset={20}
+          onLongPress={placed && !placing ? editPlacement : undefined}
+          {...(placing ? panResponder.panHandlers : {})}
           style={[
             s.furnitureWrap,
             {
