@@ -20,7 +20,7 @@ export async function saveOnboardingResults(input: OnboardingSaveInput) {
 
   await createProfileIfMissing(user.id, user.email);
 
-  const { error } = await supabase.from("onboarding_results").insert({
+  const { error } = await supabase.from("questionnaire").insert({
     user_id: user.id,
     answers: {
       handedness: input.handedness,
@@ -50,7 +50,7 @@ export async function saveSelectedAvatarMode(modeId: ModeId) {
   }
 
   const { data: latestResult, error: selectError } = await supabase
-    .from("onboarding_results")
+    .from("questionnaire")
     .select("answers, primary_mode, secondary_mode")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
@@ -63,7 +63,7 @@ export async function saveSelectedAvatarMode(modeId: ModeId) {
   }
 
   const { error: insertError } = await supabase
-    .from("onboarding_results")
+    .from("questionnaire")
     .insert({
       user_id: user.id,
       answers: latestResult?.answers ?? {},
@@ -77,7 +77,7 @@ export async function saveSelectedAvatarMode(modeId: ModeId) {
 
 export async function getLatestOnboardingMode(userId: string) {
   const { data, error } = await supabase
-    .from("onboarding_results")
+    .from("questionnaire")
     .select("primary_mode")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })

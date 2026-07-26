@@ -3,6 +3,7 @@ import type { Href } from "expo-router";
 import { Image, StyleSheet, Text, View } from "react-native";
 
 import { Button } from "@/src/game/ui/Button";
+import { ShowcaseAccounts } from "@/src/dev/ShowcaseAccounts";
 import { SPACE, Theme, TYPE, useStyles } from "@/src/game/ui/theme";
 
 const mascot = require("../../assets/images/mascot/mascot.png");
@@ -33,6 +34,8 @@ export default function AuthScreen() {
           <Link href={loginRoute} asChild>
             <Button label="Log in" pill />
           </Link>
+          {/* Renders nothing unless EXPO_PUBLIC_SHOWCASE is on. */}
+          <ShowcaseAccounts />
         </View>
       </View>
     </View>
