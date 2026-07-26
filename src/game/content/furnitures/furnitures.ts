@@ -10,11 +10,11 @@ export const FURNITURE_METAS: FurnitureMeta[] = [DALFRED_META, LACK_META, EKET_M
 
 /** Lazy loaders for the full build payload. Adding a furniture = one line. */
 export const FURNITURE_LOADERS: Record<FurnitureId, () => Promise<Furniture>> = {
-  DALFRED: () => import("./DALFRED").then((m) => m.DALFRED),
-  LACK: () => import("./LACK").then((m) => m.LACK),
-  EKET: () => import("./EKET").then((m) => m.EKET),
-  BEKVAM: () => import("./BEKVAM").then((m) => m.BEKVAM),
-  TUTORIAL: () => import("./TUTORIAL").then((m) => m.TUTORIAL),
+  "dalfred-stool": () => import("./DALFRED").then((m) => m.DALFRED),
+  "lack-table": () => import("./LACK").then((m) => m.LACK),
+  "eket-cabinet": () => import("./EKET").then((m) => m.EKET),
+  "bekvam-stool": () => import("./BEKVAM").then((m) => m.BEKVAM),
+  "tutorial": () => import("./TUTORIAL").then((m) => m.TUTORIAL),
 };
 
 /** True when a catalogue entry has a composable, playable payload. */

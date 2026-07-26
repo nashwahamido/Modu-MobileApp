@@ -17,7 +17,7 @@ export const ACTIONS = composeFurnitureActions(
 );
 
 export const LACK_META: FurnitureMeta = {
-  id: "LACK",
+  id: "lack-table",
   name: META.name,
   thumbnail,
   brand: META.brand,

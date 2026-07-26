@@ -35,9 +35,8 @@ import { useStepObjective } from "@/src/game/core/presentation/useStepObjective"
 import { useGameStore } from "@/src/game/core/store";
 import { useBuildPersistence } from "@/src/hooks/useBuildPersistence";
 import {
-  pressParkInfo,
+  parkForDrive,
   screwParkOffset,
-  slideParkInfo,
 } from "@/src/game/core/evaluation/engagement";
 import {
   isPlayable,
@@ -112,7 +111,7 @@ function GameScreen() {
 
   const target: FurnitureId = isPlayable(id as FurnitureId)
     ? (id as FurnitureId)
-    : "DALFRED";
+    : "dalfred-stool";
   // Autosave progress and resume it next time this furniture is opened (through the repo seam).
   useBuildPersistence(target);
   useEffect(() => {
@@ -183,11 +182,7 @@ function GameScreen() {
     : null;
   const drivePark =
     furniture && driveAction
-      ? (driveKind === "press" ? pressParkInfo : slideParkInfo)(
-          furniture,
-          driveAction,
-          new Set(useGameStore.getState().completed),
-        )
+      ? parkForDrive(furniture, driveAction, new Set(useGameStore.getState().completed))
       : null;
   // which telescoping level the active beat tests, when it's one of the authored drag-out-to-test beats (spec.testActionIds)
   const pushTestLevel = Object.entries(furniture?.pushOpen?.testActionIds ?? {}).find(

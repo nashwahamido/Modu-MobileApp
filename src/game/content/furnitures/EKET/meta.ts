@@ -17,7 +17,7 @@ export const ACTIONS = composeFurnitureActions(
 );
 
 export const EKET_META: FurnitureMeta = {
-  id: "EKET",
+  id: "eket-cabinet",
   name: META.name,
   thumbnail,
   brand: META.brand,

@@ -16,7 +16,7 @@ export const ACTIONS = composeFurnitureActions(
 );
 
 export const BEKVAM_META: FurnitureMeta = {
-  id: "BEKVAM",
+  id: "bekvam-stool",
   name: META.name,
   thumbnail,
   brand: META.brand,

@@ -27,7 +27,7 @@ export const ACTIONS = withOrder(
 );
 
 export const TUTORIAL_META: FurnitureMeta = {
-  id: "TUTORIAL",
+  id: "tutorial",
   name: META.name,
   thumbnail,
   brand: META.brand,

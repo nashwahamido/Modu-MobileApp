@@ -28,10 +28,10 @@ import { Theme, useStyles } from "@/src/game/ui/theme";
 import { useStepObjective } from "@/src/game/core/presentation/useStepObjective";
 
 import { useGameStore } from "@/src/game/core/store";
+import { useCurrentUserId, useRepos } from "@/src/data";
 import {
-  pressParkInfo,
+  parkForDrive,
   screwParkOffset,
-  slideParkInfo,
 } from "@/src/game/core/evaluation/engagement";
 import {
   loadFurnitureById,
@@ -102,7 +102,7 @@ function TutorialScreen() {
       softHints: state.settings.softHints,
       oneFingerPanEnabled: state.settings.canvasStrafe,
     });
-    loadFurnitureById("TUTORIAL").then((f) => {
+    loadFurnitureById("tutorial").then((f) => {
       if (active) useGameStore.getState().loadFurniture(f);
     });
     return () => {
@@ -204,6 +204,19 @@ function TutorialScreen() {
   const guideStepCount = useTutorialStore((s) => s.steps.length);
   const orientationActionId = useGameStore((s) => s.orientationActionId);
   const totalCount = furniture?.actions.length ?? 0;
+
+  // Record the tutorial furniture as a completed build once it's assembled — so the player owns it
+  // (it's a placeable built_item) and it counts toward assembly_count, like any build. Fires once.
+  const repos = useRepos();
+  const me = useCurrentUserId();
+  const tutorialRecorded = useRef(false);
+  const tutorialBuilt = totalCount > 0 && completedCount >= totalCount;
+  useEffect(() => {
+    if (tutorialBuilt && !tutorialRecorded.current) {
+      tutorialRecorded.current = true;
+      repos.builds.complete(me, "tutorial");
+    }
+  }, [tutorialBuilt, me, repos]);
   const displayedCompletedCount = guideCompleted
     ? guideStepCount + completedCount
     : completedCount;
@@ -229,11 +242,7 @@ function TutorialScreen() {
     : null;
   const drivePark =
     furniture && driveAction
-      ? (driveKind === "slide" ? slideParkInfo : pressParkInfo)(
-          furniture,
-          driveAction,
-          new Set(useGameStore.getState().completed),
-        )
+      ? parkForDrive(furniture, driveAction, new Set(useGameStore.getState().completed))
       : null;
   const needsFocusChoice =
     mode !== "strict" &&

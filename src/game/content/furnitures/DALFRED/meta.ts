@@ -17,7 +17,7 @@ export const ACTIONS = composeFurnitureActions(
 );
 
 export const DALFRED_META: FurnitureMeta = {
-  id: "DALFRED",
+  id: "dalfred-stool",
   name: META.name,
   thumbnail,
   brand: META.brand,
