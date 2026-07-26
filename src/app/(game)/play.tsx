@@ -136,8 +136,7 @@ function GameScreen() {
     const watchdog = setTimeout(() => setLoadError(true), 45000);
     return () => clearTimeout(watchdog);
   }, [loaderVisible, loadError, modelReady, retryKey]);
-  // The objective bar reports the BUILD MAP's phase (base → seat → combine), not the
-  // authored stage number — those count beats across the whole build and would read
+  // The objective bar reports the BUILD MAP's phase (base → seat → combine), not the authored stage number — those count beats across the whole build and would read
   // "Stage 4" on a three-node map.
   const stage = useGameStore((s) => {
     const f = s.furniture;
@@ -190,9 +189,9 @@ function GameScreen() {
         )
       : null;
   // which telescoping level the active beat tests, when it's one of the authored drag-out-to-test beats (spec.testActionIds)
-  const pushTestLevel = Object.entries(furniture?.pushOpen?.testActionIds ?? {}).find(
-    ([, id]) => id === sceneState.activeBeat?.actionId,
-  )?.[0];
+  const pushTestLevel = Object.entries(
+    furniture?.pushOpen?.testActionIds ?? {},
+  ).find(([, id]) => id === sceneState.activeBeat?.actionId)?.[0];
   // a combine drive moves the whole cluster, not the held part — one rigid body on the shared ClusterDriver (runners stay put during a combine; they only telescope in the test beats)
   const combineDriveSink = useMemo(() => {
     if (!furniture || driveAction?.type !== "combineClusters") return null;
@@ -231,7 +230,8 @@ function GameScreen() {
   const rawTool = sceneState.activeTighten?.tool ?? driveAction?.tool ?? null;
   // "hand" is not equippable, so it is not NEEDED — otherwise the step would sit there
   // waiting for a tool the player has no way to pick up.
-  const neededTool = settings.manualTools && rawTool !== "hand" ? rawTool : null;
+  const neededTool =
+    settings.manualTools && rawTool !== "hand" ? rawTool : null;
   const toolReady = !neededTool || selectedTool === neededTool;
 
   // Scene gestures are MEMOIZED: the screen re-renders constantly mid-drag (fit-state churn), and handing GestureDetector fresh gesture instances reattaches native handlers — eating the first re-grab attempt and stuttering active drags (same lesson as the joystick).
@@ -292,16 +292,17 @@ function GameScreen() {
     [onPanStart, onPanMove, onPanEnd],
   );
 
-  const { gestureFor, canvasGestureFor, clusterGestureFor, ringOverlay } = usePartDrag({
-    manipulator,
-    heldDriver,
-    slideDriver,
-    carryShared,
-    getFocusPoint,
-    onPanStart,
-    onPanMove,
-    onPanEnd,
-  });
+  const { gestureFor, canvasGestureFor, clusterGestureFor, ringOverlay } =
+    usePartDrag({
+      manipulator,
+      heldDriver,
+      slideDriver,
+      carryShared,
+      getFocusPoint,
+      onPanStart,
+      onPanMove,
+      onPanEnd,
+    });
 
   // Composition identity changes ONLY when the held action or the canvas toggles change (touch-free moments), never on ordinary re-renders. Canvas gestures are attached ONLY when they can do something — with float and canvas-strafe both off, this is byte-identical to the classic pinch + two-finger-pan tree, so a no-op canvas gesture can never win the race and block a pinch (sloppy two-finger starts, zoom mid-drag).
   const heldAction = sceneState.heldAction;
@@ -315,7 +316,15 @@ function GameScreen() {
       return Gesture.Race(pinch, pan, strafePan);
     }
     return Gesture.Race(pinch, pan);
-  }, [heldAction, floatOn, canvasStrafeOn, pinch, pan, strafePan, canvasGestureFor]);
+  }, [
+    heldAction,
+    floatOn,
+    canvasStrafeOn,
+    pinch,
+    pan,
+    strafePan,
+    canvasGestureFor,
+  ]);
 
   // The overlay must cover BOTH returns: the furniture-null early return IS the data-loading window it exists for.
   const loadingOverlay = loaderVisible ? (
@@ -521,7 +530,10 @@ function GameScreen() {
               pushDrivers={pushDrivers}
             />
           ) : (
-            <BeatControl action={sceneState.activeBeat} pushDrivers={pushDrivers} />
+            <BeatControl
+              action={sceneState.activeBeat}
+              pushDrivers={pushDrivers}
+            />
           )
         ) : null}
         <View style={styles.joystickZone}>
@@ -540,7 +552,7 @@ function GameScreen() {
           />
         )}
 
-      {heldActionId && settings.releaseBehavior === "float" ? (
+        {heldActionId && settings.releaseBehavior === "float" ? (
           // Float mode: a released part stays where it was set down; this is the way back to the tray. (In autoReturn mode a miss returns by itself.)
           <Button
             label="↩ Put back"
