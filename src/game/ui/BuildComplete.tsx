@@ -12,9 +12,9 @@ import { useCatalogRow } from "@/src/data/catalogStore";
  * The coins and XP shown are the catalog's configured reward (item_build) — the same source the
  * grant uses — so the display can't drift from what's awarded. The "succulent plant" reward is from
  * the wireframe and has nothing behind it yet — no item model.
- * The two action buttons route:
- * "place in the room now!" goes to the room, "store in inventory" returns to the catalogue
- * (there is no separate inventory screen — the built piece lives in the catalogue for now).
+ * Both action buttons go to the inventory: the built piece appears there now, and placement is not
+ * wired yet, so "place in the room now!" has nothing to place. They stay separate buttons so the
+ * placement route can be restored to the first one without touching the layout.
  */
 export function BuildComplete() {
   const styles = useStyles(makeStyles);
@@ -49,9 +49,19 @@ export function BuildComplete() {
   if (!isDone || dismissed) return null;
 
   const { coins, xp } = reward;
-  // The finished piece goes to the room to be placed; "store" sends it back to the catalogue.
-  const placeInRoom = () => router.replace("/room");
-  const storeInInventory = () => router.replace("/catalogue");
+  // BOTH buttons land on the inventory, where the finished piece now shows up (user_build joined to
+  // the catalog). They stay two buttons because they will diverge again once placement is wired —
+  // "place in the room now!" is meant to drop straight into placing, which nothing can do yet.
+  //
+  // Two steps, not a plain replace("/inventory"). The (presentation) group is a MODAL layer that
+  // floats over whatever scene is beneath it, and every other entry into it is a push from the room —
+  // inventory's own back button is dismissTo("/room") and needs the room to actually be there.
+  // Replacing play (rather than pushing) also drops the finished build off the back stack, and the
+  // room remount is what makes the new piece show up in it.
+  const goToInventory = () => {
+    router.replace("/room");
+    router.push("/inventory");
+  };
 
   return (
     <View style={styles.scrim}>
@@ -130,7 +140,7 @@ export function BuildComplete() {
           <View style={styles.actionsRow}>
             <Pressable
               style={styles.action}
-              onPress={placeInRoom}
+              onPress={goToInventory}
               accessibilityLabel="Place it in the room"
             >
               <Text style={styles.actionGlyph}>⌂</Text>
@@ -138,7 +148,7 @@ export function BuildComplete() {
             </Pressable>
             <Pressable
               style={styles.action}
-              onPress={storeInInventory}
+              onPress={goToInventory}
               accessibilityLabel="Store it in your inventory"
             >
               <Text style={styles.actionGlyph}>▤</Text>
