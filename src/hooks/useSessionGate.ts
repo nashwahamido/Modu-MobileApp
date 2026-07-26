@@ -2,6 +2,7 @@
 import { useEffect } from "react";
 import { router, useRootNavigationState, useSegments } from "expo-router";
 
+import { isAuthTransitionActive } from "@/src/dev/accounts";
 import { useAuth } from "./useAuth";
 
 // Only the live backend needs a session. The in-memory adapter is BUILT to run signed-out, on the demo user.
@@ -26,6 +27,10 @@ export function useSessionGate(): void {
     if (!navState?.key) return;
     // loading = auth still resolving (including a magic-link exchange). Redirecting here would race it.
     if (loading || user) return;
+    // An account switch signs out before it signs in. That gap is not "the user is logged out", it is
+    // the middle of a deliberate swap — bouncing to /auth here would race the switcher's own
+    // navigation and land you on the login screen instead of where you asked to go.
+    if (isAuthTransitionActive()) return;
 
     const group = segments[0] as string | undefined;
     if (group === undefined || PUBLIC_GROUPS.has(group)) return;

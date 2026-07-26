@@ -4,11 +4,10 @@ import { actionCluster } from "@/src/game/core/evaluation/clusters";
 import { useGameStore } from "@/src/game/core/store";
 import { Theme, useStyles } from "@/src/game/ui/theme";
 
-/** DEV-only round drawer button: tap to fan out developer shortcuts. First occupant: finish the focused cluster in one click (drives the REAL store action-by-action, so gates/cascades/celebration all fire — only the gestures are skipped). More tools land here later; the whole thing is stripped from release builds by the __DEV__ guard. */
-/** Where the menu anchors. Default flows inline (play.tsx's right-anchored togglesRow, fan opens left). "roomFloat" self-positions as a floating overlay above the home-room rotate controls, fanning upward. */
-type DevMenuPlacement = "inline" | "roomFloat";
-
-export function DevMenu({ placement = "inline" }: { placement?: DevMenuPlacement } = {}) {
+/** DEV-only round drawer button: tap to fan out developer shortcuts. First occupant: finish the focused cluster in one click (drives the REAL store action-by-action, so gates/cascades/celebration all fire — only the gestures are skipped). More tools land here later; the whole thing is stripped from release builds by the __DEV__ guard.
+ *
+ *  ASSEMBLY ONLY — every shortcut here reads store.furniture, so it is dead weight anywhere but play.tsx. Cross-screen dev navigation lives in GmTestPanel, which _layout.tsx mounts globally. */
+export function DevMenu() {
   const styles = useStyles(makeStyles);
   const [open, setOpen] = useState(false);
   const activeCluster = useGameStore((s) => s.activeCluster);
@@ -90,10 +89,7 @@ export function DevMenu({ placement = "inline" }: { placement?: DevMenuPlacement
 
   if (!__DEV__) return null;
   return (
-    <View
-      style={[styles.wrap, placement === "roomFloat" && styles.wrapRoomFloat]}
-      pointerEvents="box-none"
-    >
+    <View style={styles.wrap} pointerEvents="box-none">
       {open ? (
         <>
           <Pressable style={styles.item} onPress={toCombine}>
@@ -135,26 +131,19 @@ export function DevMenu({ placement = "inline" }: { placement?: DevMenuPlacement
 
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
-    // Default (play.tsx): flows inside the right-anchored togglesRow; the fan opens INLINE to the button's left (the row grows leftward without shifting the neighbours). An absolute fan was width-clamped to the 36px circle by Yoga and wrapped its label vertically.
+    // Flows inside play.tsx's right-anchored togglesRow; the fan opens INLINE to the button's left (the row grows leftward without shifting the neighbours). An absolute fan was width-clamped to the 36px circle by Yoga and wrapped its label vertically.
     wrap: { flexDirection: "row", alignItems: "center", gap: 8 },
-    // roomFloat (RoomExperience): floats above the bottom-left rotate controls without taking a layout slot. box-none (on the wrap) lets taps fall through the gaps; column-reverse pins the fab to the bottom and fans the items UPWARD, clear of the controls below. Left edge lines up with the rotate control group (left:24); bottom clears its 44px height (bottom:78).
-    wrapRoomFloat: {
-      position: "absolute",
-      left: 24,
-      bottom: 132,
-      zIndex: 20,
-      flexDirection: "column-reverse",
-      alignItems: "flex-start",
-    },
+    // Resting state is deliberately faint — this is a dev affordance sitting on top of the real UI, and it should read as an overlay, not as a game control. Opening it brings it back to full strength.
     fab: {
       width: 36,
       height: 36,
       borderRadius: 18,
       backgroundColor: t.scrim,
+      opacity: 0.4,
       alignItems: "center",
       justifyContent: "center",
     },
-    fabOpen: { backgroundColor: t.accent },
+    fabOpen: { backgroundColor: t.accent, opacity: 1 },
     fabText: { color: t.onAccent, fontSize: 11, fontWeight: "800" },
     item: {
       backgroundColor: t.scrim,

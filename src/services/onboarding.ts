@@ -1,6 +1,6 @@
 import type { Handedness, ModeId } from "../onboarding/questionnaire";
 import { supabase } from "../config/supabase";
-import { createProfileIfMissing, updateProfile } from "./profile";
+import { createProfileIfMissing, getProfile, updateProfile } from "./profile";
 
 export type OnboardingSaveInput = {
   handedness: Handedness | null;
@@ -18,10 +18,12 @@ export async function saveOnboardingResults(input: OnboardingSaveInput) {
     return { skipped: true as const };
   }
 
-  await createProfileIfMissing(user.id, user.email);
+  const profile = await createProfileIfMissing(user.id, user.email);
 
   const { error } = await supabase.from("questionnaire").insert({
     user_id: user.id,
+    // Snapshot of the name at answer time — questionnaire rows are append-only history.
+    username: profile.username,
     answers: {
       handedness: input.handedness,
       responses: input.answers,
@@ -49,6 +51,10 @@ export async function saveSelectedAvatarMode(modeId: ModeId) {
     return { skipped: true as const };
   }
 
+  // Re-read the profile rather than carrying the old row's username forward: the user may have
+  // renamed themselves between finishing the questionnaire and overriding the recommended mode.
+  const profile = await getProfile(user.id);
+
   const { data: latestResult, error: selectError } = await supabase
     .from("questionnaire")
     .select("answers, primary_mode, secondary_mode")
@@ -66,6 +72,7 @@ export async function saveSelectedAvatarMode(modeId: ModeId) {
     .from("questionnaire")
     .insert({
       user_id: user.id,
+      username: profile?.username ?? null,
       answers: latestResult?.answers ?? {},
       primary_mode: modeId,
       secondary_mode: latestResult?.secondary_mode ?? modeId,

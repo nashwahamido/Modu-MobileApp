@@ -4,7 +4,6 @@ import type { Href } from 'expo-router';
 import { Animated, Image, PanResponder, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { CartIcon, CheckIcon, ChevronIcon, CoinMedalIcon, FriendsIcon, InventoryIcon, LevelStarIcon, RotateLeftIcon, RotateRightIcon, SettingsIcon, TrashIcon } from '../components/Icons';
 import { Button } from '../game/ui/Button';
-import { DevMenu } from '../game/ui/DevMenu';
 import { OverlaySheet } from '../game/ui/OverlaySheet';
 import { Theme, useStyles, useTheme } from '../game/ui/theme';
 import { levelProgressFraction } from '../data/levels';
@@ -176,8 +175,6 @@ export function RoomExperience() {
           </Pressable>
         </View>
       </View>
-
-      <DevMenu placement="roomFloat" />
 
       {placing || placed ? (
         <Animated.View

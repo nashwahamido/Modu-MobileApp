@@ -1,30 +1,27 @@
-// The in-app account switcher, mounted at the bottom of /settings. Swaps between the prepared test
-// accounts from inside a live session, which is the piece ShowcaseAccounts cannot cover: that one is
-// the SIGNED-OUT picker on the auth screen, and nothing in the app signs you out, so without this a
-// switch meant clearing app storage.
+// The account switcher, mounted inside the DEV panel (GmTestPanel) — the SIGNED-IN half of the pair,
+// with AccountPicker (the auth screen) covering the signed-out half. Both read the same rosters.ts.
 //
-// Self-gating on SHOWCASE_ENABLED, exactly like ShowcaseAccounts, so settings.tsx can mount it
-// unconditionally — a build with EXPO_PUBLIC_SHOWCASE unset renders nothing.
+// This half is what makes the other reachable: nothing else in the app signs you out, so before it
+// existed a switch meant clearing app storage.
 //
-// Styled after SettingsControls rather than the auth screen: this is dev tooling sharing a scroll
-// view with the real settings, so it should read as one more section, not as product surface.
+// It lives in the dev panel rather than /settings because that is where the rest of the jump-to-a-state
+// tooling already is, and because /settings is a real product screen — a sign-out button sitting in it
+// is one stray tap away from a player, and one merge away from shipping. The panel is __DEV__-only at
+// its mount point, so nothing here can reach a release build.
+//
+// Styled with the panel's own flat palette, not the app theme: it has to read as part of the panel,
+// and the panel deliberately does not follow the product's surfaces.
 import { useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import type { Href } from "expo-router";
 
-import { SPACE, Theme, useStyles } from "@/src/game/ui/theme";
 import { useAuth } from "@/src/hooks/useAuth";
 import { SIGN_IN_ROUTE } from "@/src/hooks/useSessionGate";
-import {
-  SHOWCASE_ACCOUNTS,
-  SHOWCASE_ENABLED,
-  signInToShowcaseAccount,
-  signOutShowcase,
-  startFreshShowcaseAccount,
-} from "./showcase";
+import { purgeAnonymousAccounts, signOutAccount } from "./accounts";
+import { ENABLED_ROSTERS } from "./rosters";
 
-// A fresh account starts the questionnaire so the whole onboarding run is on show; the same routes ShowcaseAccounts uses.
+// A fresh account starts the questionnaire so the whole onboarding run is on show; a prepared one drops into its room.
 const ESTABLISHED_ROUTE = "/room" as Href;
 const FRESH_ROUTE = "/onboarding-questionnaire" as Href;
 
@@ -38,30 +35,55 @@ function describeUser(user: { id: string; email?: string; user_metadata?: Record
   return `${name} (${user.id.slice(0, 8)})`;
 }
 
-export function AccountSwitcher() {
-  const styles = useStyles(makeStyles);
+/** onDone fires just before navigating, so the panel that owns this can close itself. */
+export function AccountSwitcher({ onDone }: { onDone?: () => void }) {
   const { user } = useAuth();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  // Purge is irreversible and one tap from "Start fresh", so it arms first and fires on the second tap.
+  const [armed, setArmed] = useState(false);
 
-  if (!SHOWCASE_ENABLED) return null;
+  if (ENABLED_ROSTERS.length === 0) return null;
 
-  // Settings is a (presentation) modal over the room. A switch pops back to the room it is already
-  // sitting on — the HUD and the modal screens all read on focus, so the new account's data lands
-  // without a remount. Leaving the session (fresh account, sign out) instead has to clear the modal
-  // layer first: replace() from inside a modal would only replace the modal itself.
+  // An anonymous session cannot purge (it would be deleting itself), and the server refuses anyway.
+  const canPurge = Boolean(user) && !user?.is_anonymous;
+
+  const purge = async () => {
+    if (busy) return;
+    if (!armed) {
+      setArmed(true);
+      return;
+    }
+    setArmed(false);
+    setBusy("purge");
+    setError(null);
+    setNotice(null);
+    try {
+      const deleted = await purgeAnonymousAccounts();
+      setNotice(`deleted ${deleted} anonymous account${deleted === 1 ? "" : "s"}`);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // The panel floats above everything, so it can be open over a modal (/settings, /profile). Clearing
+  // that layer first is what makes replace() land on the root stack instead of swapping the modal.
   const leaveTo = (destination: Href) => {
+    onDone?.();
     if (router.canDismiss()) router.dismissAll();
     router.replace(destination);
   };
 
-  const run = async (key: string, action: () => Promise<void>, go: () => void) => {
+  const run = async (key: string, action: () => Promise<void>, destination: Href) => {
     if (busy) return;
     setBusy(key);
     setError(null);
     try {
       await action();
-      go();
+      leaveTo(destination);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -71,86 +93,120 @@ export function AccountSwitcher() {
 
   return (
     <View style={styles.root}>
-      <Text style={styles.section}>Account (dev)</Text>
-      <Text style={styles.current}>Signed in as {describeUser(user)}</Text>
+      {ENABLED_ROSTERS.map((roster) => (
+        <View key={roster.title}>
+          <Text style={styles.section}>{roster.title}</Text>
+          <Text style={styles.current}>{describeUser(user)}</Text>
 
-      {SHOWCASE_ACCOUNTS.length === 0 ? (
-        <Text style={styles.hint}>Set EXPO_PUBLIC_SHOWCASE_ACCOUNTS to list accounts here.</Text>
-      ) : null}
+          {roster.accounts.length === 0 ? (
+            <Text style={styles.hint}>Set {roster.envVar} to list accounts here.</Text>
+          ) : null}
 
-      {SHOWCASE_ACCOUNTS.map((account) => {
-        const isCurrent = user?.email === account.email;
-        return (
-          <Pressable
-            key={account.email}
-            style={[styles.row, isCurrent && styles.rowCurrent]}
-            disabled={busy !== null || isCurrent}
-            onPress={() =>
-              run(account.email, () => signInToShowcaseAccount(account.email), () => router.dismissTo(ESTABLISHED_ROUTE))
-            }
-          >
-            <Text style={[styles.rowLabel, isCurrent && styles.rowLabelCurrent]}>{account.label}</Text>
-            <Text style={[styles.rowMeta, isCurrent && styles.rowLabelCurrent]}>
-              {isCurrent ? "current" : "switch"}
-            </Text>
-          </Pressable>
-        );
-      })}
+          <View style={styles.grid}>
+            {roster.accounts.map((account) => {
+              const isCurrent = user?.email === account.email;
+              return (
+                <Pressable
+                  key={account.email}
+                  style={[styles.chip, isCurrent && styles.chipCurrent]}
+                  disabled={busy !== null || isCurrent}
+                  onPress={() => run(account.email, () => roster.signIn(account.email), ESTABLISHED_ROUTE)}
+                >
+                  <Text style={styles.chipLabel} numberOfLines={1}>
+                    {account.label}
+                  </Text>
+                  {/* The account you are on stays listed rather than hidden, so the buttons never move under your finger. */}
+                  <Text style={styles.chipNote}>{isCurrent ? "current" : "switch"}</Text>
+                </Pressable>
+              );
+            })}
 
-      <Pressable
-        style={styles.row}
-        disabled={busy !== null}
-        onPress={() => run("fresh", startFreshShowcaseAccount, () => leaveTo(FRESH_ROUTE))}
-      >
-        <Text style={styles.rowLabel}>Start fresh</Text>
-        <Text style={styles.rowMeta}>new anonymous account</Text>
-      </Pressable>
+            <Pressable
+              style={styles.chip}
+              disabled={busy !== null}
+              onPress={() => run(`${roster.title}:fresh`, roster.startFresh, FRESH_ROUTE)}
+            >
+              <Text style={styles.chipLabel}>Start fresh</Text>
+              <Text style={styles.chipNote}>new anonymous</Text>
+            </Pressable>
 
-      <Pressable
-        style={styles.row}
-        disabled={busy !== null}
-        onPress={() => run("out", signOutShowcase, () => leaveTo(SIGN_IN_ROUTE as Href))}
-      >
-        <Text style={[styles.rowLabel, styles.signOut]}>Sign out</Text>
-        <Text style={styles.rowMeta}>back to the login screen</Text>
-      </Pressable>
+            {/* Sign out is roster-agnostic, but it belongs beside the accounts it undoes. */}
+            <Pressable
+              style={styles.chip}
+              disabled={busy !== null}
+              onPress={() => run("out", signOutAccount, SIGN_IN_ROUTE as Href)}
+            >
+              <Text style={[styles.chipLabel, styles.signOut]}>Sign out</Text>
+              <Text style={styles.chipNote}>to login</Text>
+            </Pressable>
+
+            {/* Cleans up after "Start fresh", which leaves a real auth user behind on every tap. */}
+            <Pressable
+              style={[styles.chip, armed && styles.chipArmed]}
+              disabled={busy !== null || !canPurge}
+              onPress={purge}
+            >
+              <Text style={[styles.chipLabel, styles.signOut]}>{armed ? "Sure?" : "Purge anon"}</Text>
+              <Text style={styles.chipNote}>
+                {canPurge ? (armed ? "tap to delete" : "delete fresh accts") : "sign in first"}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      ))}
 
       {busy ? <ActivityIndicator style={styles.spinner} /> : null}
+      {notice ? <Text style={styles.notice}>{notice}</Text> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </View>
   );
 }
 
-const makeStyles = (t: Theme) =>
-  StyleSheet.create({
-    root: { marginTop: SPACE.md },
-    // Matches SettingsControls' SectionHeader so the block reads as one more settings section.
-    section: {
-      fontSize: 12,
-      fontWeight: "800",
-      letterSpacing: 0.5,
-      textTransform: "uppercase",
-      color: t.gold,
-      marginTop: 16,
-      marginBottom: 4,
-    },
-    current: { fontSize: 12, color: t.textDim, marginBottom: 4 },
-    hint: { fontSize: 12, color: t.textFaint, paddingVertical: 10 },
-    row: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      paddingVertical: 12,
-      borderTopWidth: 1,
-      borderTopColor: t.border,
-    },
-    // The account you are already on stays listed rather than hidden — the list is then the same
-    // length every time, so the button you want is always in the same place.
-    rowCurrent: { opacity: 0.5 },
-    rowLabel: { flex: 1, paddingRight: 12, fontSize: 15, fontWeight: "700", color: t.text },
-    rowLabelCurrent: { color: t.textDim },
-    rowMeta: { fontSize: 12, color: t.textDim },
-    signOut: { color: t.danger },
-    spinner: { marginTop: SPACE.xs },
-    error: { fontSize: 12, color: t.danger, marginTop: SPACE.xs },
-  });
+// The panel's palette, repeated here rather than imported: GmTestPanel keeps its own flat sheet, and
+// a shared token file would tie this dev chrome to the product theme it is deliberately ignoring.
+const styles = StyleSheet.create({
+  root: {
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#d8cdbb",
+    gap: 6,
+  },
+  section: {
+    color: "#231F20",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  current: {
+    color: "#665f55",
+    fontSize: 10,
+    fontWeight: "700",
+    marginTop: 2,
+    marginBottom: 6,
+  },
+  hint: { color: "#665f55", fontSize: 10, fontWeight: "700", marginBottom: 6 },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: {
+    width: "31.7%",
+    minHeight: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#d8cdbb",
+    backgroundColor: "#FBF8F3",
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+    justifyContent: "center",
+  },
+  chipCurrent: { backgroundColor: "#EFE7DA", opacity: 0.6 },
+  // Armed = the next tap deletes. Red border rather than a dialog: the panel is dev chrome, and a
+  // modal over it would be the heaviest thing on the screen.
+  chipArmed: { borderColor: "#9A3B2F", backgroundColor: "#F6E5E1" },
+  chipLabel: { color: "#231F20", fontSize: 12, fontWeight: "900" },
+  chipNote: { color: "#665f55", fontSize: 9, fontWeight: "700", marginTop: 3 },
+  signOut: { color: "#9A3B2F" },
+  spinner: { marginTop: 6, alignSelf: "flex-start" },
+  notice: { color: "#4E6B3A", fontSize: 10, fontWeight: "700", marginTop: 6 },
+  error: { color: "#9A3B2F", fontSize: 10, fontWeight: "700", marginTop: 6 },
+});

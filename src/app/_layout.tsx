@@ -9,8 +9,8 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import "react-native-reanimated";
 
-import { GmTestPanel } from "@/src/components/GmTestPanel";
 import { useDevAutoSignIn } from "@/src/dev/devAuth";
+import { GmTestPanel } from "@/src/dev/GmTestPanel";
 import { AuthProvider } from "@/src/hooks/useAuth";
 import { useCatalogSync } from "@/src/hooks/useCatalogSync";
 import { useSessionGate } from "@/src/hooks/useSessionGate";

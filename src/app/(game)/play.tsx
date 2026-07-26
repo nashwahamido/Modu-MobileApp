@@ -54,8 +54,8 @@ import { ClusterTray } from "@/src/game/ui/ClusterTray";
 import { ClusterCelebration } from "@/src/game/ui/ClusterCelebration";
 import { UndoButton } from "@/src/game/ui/UndoButton";
 import { GameSettings } from "@/src/game/ui/GameSettings";
-import { DevAutoStep } from "@/src/game/ui/DevAutoStep";
-import { DevMenu } from "@/src/game/ui/DevMenu";
+import { DevAutoStep } from "@/src/dev/DevAutoStep";
+import { DevMenu } from "@/src/dev/DevMenu";
 import { ToggleChips } from "@/src/game/ui/ToggleChips";
 import { BuildMap, ClusterFocusControl } from "@/src/game/ui/ClusterFocusControl";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
@@ -415,10 +415,10 @@ function GameScreen() {
         {focus ? null : <UndoButton />}
         <GameSettings />
         <View style={styles.togglesRow}>
-          {focus ? null : <DevMenu />}
           {focus ? null : (
             <DevAutoStep heldDriver={heldDriver} sinkDriver={sinkDriver} />
           )}
+          {focus ? null : <DevMenu />}
           <ToggleChips />
         </View>
         {!focus && mode !== "strict" ? <ClusterFocusControl /> : null}
