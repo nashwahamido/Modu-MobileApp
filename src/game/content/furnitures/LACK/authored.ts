@@ -17,15 +17,6 @@ import { PARTS } from "./parts.gen";
 
 const P = PARTS;
 
-export const META = {
-  name: "Lack Table",
-  brand: "IKEA",
-  category: "Table & Chair",
-  difficulty: 1,
-  duration: 8,
-  link: "https://www.ikea.com/",
-} as const;
-
 export const LABELS = {
   tableTop: { standard: "Table top", simple: "Top" },
   leg: { standard: "Leg" },

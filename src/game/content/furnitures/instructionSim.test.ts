@@ -72,10 +72,10 @@ function fixture(id: string, m: AuthoredExports, raw: Record<PartId, PartDef>): 
 }
 
 const FIXTURES: { id: string; f: Furniture }[] = [
-  { id: "LACK", f: fixture("LACK", LACK as AuthoredExports, LACK_PARTS) },
-  { id: "BEKVAM", f: fixture("BEKVAM", BEKVAM as AuthoredExports, BEKVAM_PARTS) },
-  { id: "DALFRED", f: fixture("DALFRED", DALFRED as AuthoredExports, DALFRED_PARTS) },
-  { id: "EKET", f: fixture("EKET", EKET as AuthoredExports, EKET_PARTS) },
+  { id: "lack-table", f: fixture("lack-table", LACK as AuthoredExports, LACK_PARTS) },
+  { id: "bekvam-stool", f: fixture("bekvam-stool", BEKVAM as AuthoredExports, BEKVAM_PARTS) },
+  { id: "dalfred-stool", f: fixture("dalfred-stool", DALFRED as AuthoredExports, DALFRED_PARTS) },
+  { id: "eket-cabinet", f: fixture("eket-cabinet", EKET as AuthoredExports, EKET_PARTS) },
 ];
 
 // deterministic PRNG so a fuzz failure reproduces from its seed
@@ -187,7 +187,7 @@ function assertClean(id: string, label: string, r: RunResult): void {
 
 // The rod bridges BOTH frames' cradles, but its liaison frontier is an OR (dowel edges) — only the authored requires stop it seating against one frame with the other side floating. Pin them so a requires cleanup can't silently regress it.
 test("EKET: stabiliser rod take-out waits for the back panel and both frames", () => {
-  const f = FIXTURES.find((x) => x.id === "EKET")!.f;
+  const f = FIXTURES.find((x) => x.id === "eket-cabinet")!.f;
   for (const s of ["1", "2"]) {
     const stage = f.actions.find((a) => a.actionId === (`stage_stabilizerRod_${s}` as ActionId));
     assert.ok(stage, `stage_stabilizerRod_${s} exists`);
@@ -210,7 +210,7 @@ test("no cluster-bearing reorient beats exist", () => {
 
 // DALFRED supportPin: slides down through circleUpp's centre hole — gated by its slide frontier (the plate must be up), never offered on an empty scene.
 test("DALFRED: supportPin waits for circleUpp, then unlocks", () => {
-  const f = FIXTURES.find((x) => x.id === "DALFRED")!.f;
+  const f = FIXTURES.find((x) => x.id === "dalfred-stool")!.f;
   const pin = "place_supportPin" as ActionId;
   assert.ok(!availableActions(f, new Set()).some((a) => a.actionId === pin), "pin offered with no plate up");
   const done = new Set<ActionId>(["place_circleUpp" as ActionId]);

@@ -1,6 +1,8 @@
 // Demo seed data for the in-memory adapter: a fake "me" plus demo friends, each with a profile and a room. Doubles as demo data (the DEV panel) and test fixtures.
 import type { FurnitureId } from "@/src/game/core/type";
-import type { ShopItemId } from "../shopItems";
+import type { LevelRow } from "../levels";
+import type { ShopCategory, ShopItem, ShopItemId } from "../shopItems";
+import type { BuildCatalogRow } from "../repos";
 import type { BuildSave, Friend, Profile, RoomLayout, UserId } from "../types";
 
 // The fake current user for local/dev runs. Real code derives the id from Supabase auth (useAuth().user.id).
@@ -13,18 +15,37 @@ const SEED_TS = "2026-01-01T00:00:00.000Z";
 
 export function seedProfiles(): Profile[] {
   return [
-    // title (from level), itemsAssembled (from seedCompleted) and likes (from seedRoomLikes) are all derived on read — the values here are placeholders the adapter overwrites.
-    { userId: DEMO_ME, username: "You", avatarMode: "control", level: 1, coins: 120, xp: 340, onboardingCompleted: true, title: null, itemsAssembled: 0, likes: 0 },
-    { userId: DEMO_FRIEND_A, username: "Astrid", avatarMode: "visual", level: 5, coins: 410, xp: 980, onboardingCompleted: true, title: null, itemsAssembled: 0, likes: 0 },
-    { userId: DEMO_FRIEND_B, username: "Noah", avatarMode: "momentum", level: 2, coins: 60, xp: 150, onboardingCompleted: true, title: null, itemsAssembled: 0, likes: 0 },
+    // title (from level), xpIntoLevel/xpForNextLevel (from the level curve), itemsAssembled (from seedCompleted) and likes (from seedRoomLikes) are all derived on read — the values here are placeholders the adapter overwrites.
+    // level must agree with xp under seedLevelRows(), the way the reward path keeps them: 340 -> 2, 980 -> 4, 150 -> 1.
+    { userId: DEMO_ME, username: "You", avatarMode: "control", level: 2, coins: 120, xp: 340, onboardingCompleted: true, title: null, xpIntoLevel: 0, xpForNextLevel: null, itemsAssembled: 0, likes: 0 },
+    { userId: DEMO_FRIEND_A, username: "Astrid", avatarMode: "visual", level: 4, coins: 410, xp: 980, onboardingCompleted: true, title: null, xpIntoLevel: 0, xpForNextLevel: null, itemsAssembled: 0, likes: 0 },
+    { userId: DEMO_FRIEND_B, username: "Noah", avatarMode: "momentum", level: 1, coins: 60, xp: 150, onboardingCompleted: true, title: null, xpIntoLevel: 0, xpForNextLevel: null, itemsAssembled: 0, likes: 0 },
+  ];
+}
+
+// Dev stand-in for the levels table, which is the real source and the place to TUNE levelling — edit it there, not here. This copy exists only so the in-memory adapter can resolve a level and title without a backend; keep it roughly in step, but the table wins. A null title inherits the tier below it.
+export function seedLevelRows(): LevelRow[] {
+  return [
+    { level: 1, xpRequired: 0, title: "an ambitious newbie" },
+    { level: 2, xpRequired: 200, title: "a budding builder" },
+    { level: 3, xpRequired: 450, title: "a steady hand" },
+    { level: 4, xpRequired: 750, title: null },
+    { level: 5, xpRequired: 1100, title: "a seasoned builder" },
+    { level: 6, xpRequired: 1500, title: null },
+    { level: 7, xpRequired: 1950, title: null },
+    { level: 8, xpRequired: 2450, title: "a master assembler" },
+    { level: 9, xpRequired: 3000, title: null },
+    { level: 10, xpRequired: 3600, title: null },
+    { level: 11, xpRequired: 4250, title: null },
+    { level: 12, xpRequired: 4950, title: null },
   ];
 }
 
 export function seedRooms(): RoomLayout[] {
   return [
     { ownerId: DEMO_ME, placements: [], updatedAt: SEED_TS },
-    { ownerId: DEMO_FRIEND_A, placements: [{ instanceId: "a1", furnitureId: "LACK", position: { x: 0.3, y: 0.4 }, rotation: 0 }], updatedAt: SEED_TS },
-    { ownerId: DEMO_FRIEND_B, placements: [{ instanceId: "b1", furnitureId: "DALFRED", position: { x: 0.6, y: 0.5 }, rotation: 1.57 }], updatedAt: SEED_TS },
+    { ownerId: DEMO_FRIEND_A, placements: [{ instanceId: "a1", furnitureId: "lack-table", position: { x: 0.3, y: 0.4 }, rotation: 0 }], updatedAt: SEED_TS },
+    { ownerId: DEMO_FRIEND_B, placements: [{ instanceId: "b1", furnitureId: "dalfred-stool", position: { x: 0.6, y: 0.5 }, rotation: 1.57 }], updatedAt: SEED_TS },
   ];
 }
 
@@ -41,21 +62,60 @@ export function seedBuilds(): BuildSave[] {
   return [];
 }
 
+// Dev stand-in for the item_build catalogue rows the picker displays. The real source is item_build joined to furniture_types; keep this roughly in step, but the table wins.
+export function seedBuildCatalog(): BuildCatalogRow[] {
+  return [
+    { id: "dalfred-stool", name: "DALFRED Stool", brand: "IKEA", type: "Table & Chair", durationMin: 10 },
+    { id: "lack-table", name: "LACK Table", brand: "IKEA", type: "Table & Chair", durationMin: 8 },
+    { id: "eket-cabinet", name: "EKET Cabinet", brand: "IKEA", type: "Shelf & Cabinet", durationMin: 35 },
+    { id: "bekvam-stool", name: "BEKVÄM Stool", brand: "IKEA", type: "Other", durationMin: 15 },
+    { id: "tutorial", name: "Tutorial", brand: "Others", type: "Shelf & Cabinet", durationMin: 5 },
+  ];
+}
+
+// Dev stand-in for the item_build catalog rows the inventory displays. The real source is item_build (see the furniture_catalog migration) — these names mirror it, so dev and prod show the same text. Rename in the DB, not here.
+export function seedBuiltItems(): Record<FurnitureId, { name: string; category: ShopCategory }> {
+  return {
+    "eket-cabinet": { name: "EKET Cabinet", category: "fur" },
+    "bekvam-stool": { name: "BEKVÄM Stool", category: "fur" },
+    "dalfred-stool": { name: "DALFRED Stool", category: "fur" },
+    "lack-table": { name: "LACK Table", category: "fur" },
+    tutorial: { name: "Tutorial", category: "fur" },
+  };
+}
+
 // Completed furniture per user — the source of the derived itemsAssembled count.
 export function seedCompleted(): Record<UserId, FurnitureId[]> {
   return {
-    [DEMO_ME]: ["LACK"],
-    [DEMO_FRIEND_A]: ["LACK", "DALFRED", "EKET", "BEKVAM"],
+    [DEMO_ME]: ["lack-table"],
+    [DEMO_FRIEND_A]: ["lack-table", "dalfred-stool", "eket-cabinet", "bekvam-stool"],
     [DEMO_FRIEND_B]: [],
   };
 }
 
-// Shop items each user already owns — the checkmarks in the shop grid, and the contents of
-// their inventory. "me" owns two to match the mock (the two ticked cards).
+// The purchasable catalog — the in-memory mirror of the item_buy seed in migration 20260724030000.
+// Ids, prices and min_levels are copied from it verbatim: this is the stand-in players see when
+// EXPO_PUBLIC_DATA_BACKEND is not "supabase", so it is only useful insofar as it matches the real thing.
+// (It had drifted to a disjoint set — shelving-units-wooden / bed-slattum-white — which meant the demo
+// inventory silently rendered fewer items than it claimed to own.)
+// NOTE: every item_buy row is currently category "fur", so the wall/floor/deco tabs are legitimately
+// empty here — that is the catalog's state, not a gap in the fixture.
+export function seedShopItems(): ShopItem[] {
+  return [
+    { id: "malm-chest", name: "MALM Chest", category: "fur", price: 150, minLevel: 1 },
+    { id: "neiden-bedframe", name: "NEIDEN Bedframe", category: "fur", price: 120, minLevel: 1 },
+    { id: "rosentorp-table", name: "ROSENTORP Table", category: "fur", price: 100, minLevel: 1 },
+  ];
+}
+
+// Shop items each user already owns — the checkmarks in the shop grid, and the contents of their
+// inventory. Ids MUST exist in seedShopItems above: the inventory renders by filtering the catalogue
+// down to owned ids, so an id with no catalogue row is silently dropped rather than shown.
+// "me" owns two to match the mock (the two ticked cards), leaving one still buyable.
 export function seedInventory(): Record<UserId, ShopItemId[]> {
   return {
-    [DEMO_ME]: ["shelving-units-wooden", "stool-black-adjustable"],
-    [DEMO_FRIEND_A]: ["sofa-navy", "table", "chair"],
+    [DEMO_ME]: ["malm-chest", "rosentorp-table"],
+    [DEMO_FRIEND_A]: ["malm-chest", "neiden-bedframe", "rosentorp-table"],
     [DEMO_FRIEND_B]: [],
   };
 }

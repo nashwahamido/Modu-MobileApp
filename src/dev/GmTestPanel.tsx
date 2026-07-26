@@ -2,8 +2,7 @@ import { router } from "expo-router";
 import type { Href } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { furnitureForProfile } from "@/src/game/core/profile";
-import { useGameStore } from "@/src/game/core/store";
+import { AccountSwitcher } from "./AccountSwitcher";
 
 type GmTarget = {
   label: string;
@@ -20,7 +19,7 @@ const targets: GmTarget[] = [
     note: "Recommendation result",
   },
   { label: "Tutorial", route: "/tutorial" as Href, note: "Mascot guide task" },
-  { label: "Task", route: "/play" as Href, note: "Assembly task" },
+  { label: "Task", route: "/catalogue" as Href, note: "Task catalogue" },
   { label: "Room", route: "/room" as Href, note: "Virtual room" },
   { label: "Profile", route: "/profile" as Href, note: "Profile & friends" },
   { label: "Engine", route: "/engine-test" as Href, note: "Engine test (dev)" },
@@ -29,13 +28,10 @@ const targets: GmTarget[] = [
 export function GmTestPanel() {
   const [open, setOpen] = useState(false);
 
+  // The catalogue picks the furniture now, so nothing here needs the old "/play + an id chosen from
+  // the active profile" special case — that guessed one piece when the point was to choose.
   const jumpTo = (route: Href) => {
     setOpen(false);
-    if (route === "/play") {
-      const profile = useGameStore.getState().profile;
-      router.replace({ pathname: "/play", params: { id: furnitureForProfile(profile) } });
-      return;
-    }
     router.replace(route);
   };
 
@@ -65,6 +61,8 @@ export function GmTestPanel() {
               </Pressable>
             ))}
           </View>
+          {/* Renders nothing unless a roster is live in this build. Closes the panel before it navigates. */}
+          <AccountSwitcher onDone={() => setOpen(false)} />
         </View>
       ) : null}
       <Pressable
@@ -80,13 +78,18 @@ export function GmTestPanel() {
 }
 
 const styles = StyleSheet.create({
+  // Sits above the room's bottom-left rotate controls (left:24, bottom:78, 44px tall) rather than in the
+  // corner, which the joystick claims on the assembly screen. This panel is mounted globally, so the slot
+  // has to be clear on every screen.
   root: {
     position: "absolute",
-    left: 18,
-    bottom: 18,
+    left: 24,
+    bottom: 132,
     zIndex: 999,
     alignItems: "flex-start",
   },
+  // Faint at rest: a dev affordance riding on top of the real UI should read as an overlay, not as a game
+  // control. Opening it brings it back to full strength.
   fab: {
     width: 48,
     height: 48,
@@ -94,6 +97,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#231F20",
+    opacity: 0.4,
     borderWidth: 2,
     borderColor: "rgba(251, 248, 243, 0.94)",
     shadowColor: "#000",
@@ -103,6 +107,7 @@ const styles = StyleSheet.create({
   },
   fabOpen: {
     backgroundColor: "#8FA876",
+    opacity: 1,
   },
   fabText: {
     color: "#FBF8F3",

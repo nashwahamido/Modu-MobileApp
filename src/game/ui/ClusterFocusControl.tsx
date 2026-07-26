@@ -1,5 +1,5 @@
 import * as Haptics from "expo-haptics";
-import { Fragment } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useRouter } from "expo-router";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import {
@@ -15,12 +15,9 @@ import { useGameStore } from "@/src/game/core/store";
 import { brandFor } from "@/src/game/content/brands";
 import { ResumeIcon, StarBadge } from "@/src/game/ui/Icons";
 import { Theme, useStyles, useTheme } from "@/src/game/ui/theme";
+import { useRepos } from "@/src/data";
+import { useCatalogRow } from "@/src/data/catalogStore";
 import type { ClusterId } from "@/src/game/core/type";
-
-/** Coins awarded per completed step. A placeholder RATE, not a placeholder number: there
- *  is no wallet or shop in the data model yet, so nothing spends these. When an economy
- *  exists this is the one line to replace. */
-const COINS_PER_STEP = 3;
 
 export function BuildMap() {
   const styles = useStyles(makeStyles);
@@ -31,6 +28,27 @@ export function BuildMap() {
   const activeCluster = useGameStore((s) => s.activeCluster);
   const mapOpen = useGameStore((s) => s.mapOpen);
   const mapSeen = useGameStore((s) => s.mapSeen);
+  const repos = useRepos();
+
+  // The reward is DB-authored (item_build, granted by reward_build), so read it rather than
+  // recomputing a rate here — what this panel promises and what the grant applies cannot drift.
+  // Above the early return: the map unmounts between builds, so these hooks must stay unconditional.
+  const furnitureId = furniture?.meta.id ?? null;
+  // Name and brand are DB-authored too; read from the boot-loaded catalogue rather than the bundle. Synchronous by design — this panel opens mid-build and cannot wait on a fetch.
+  const catalogRow = useCatalogRow(furnitureId);
+  const [reward, setReward] = useState({ coins: 0, xp: 0 });
+  useEffect(() => {
+    if (!furnitureId) return;
+    let alive = true;
+    repos.builds
+      .buildReward(furnitureId)
+      .then((r) => alive && setReward(r))
+      // Showing zero beats blocking the map on a reward lookup — the grant is server-side regardless.
+      .catch((err) => console.warn("[BuildMap] reward lookup failed", err));
+    return () => {
+      alive = false;
+    };
+  }, [furnitureId, repos]);
 
   if (!furniture) return null;
 
@@ -117,7 +135,8 @@ export function BuildMap() {
       ...clusterNodes,
       {
         key: "combine",
-        label: `Combine ${furniture.meta.name.split(" ").pop()}`,
+        // Last word of the catalogue name ("…Cabinet"), falling back to a generic verb before the catalogue lands.
+        label: catalogRow ? `Combine ${catalogRow.name.split(" ").pop()}` : "Combine",
         actions: combineActions,
         doneCount: combineDone,
         thumb: furniture.meta.thumbnail.light,
@@ -135,12 +154,9 @@ export function BuildMap() {
 
     const totalSteps = furniture.actions.length;
     const pct = totalSteps ? Math.round((done.size / totalSteps) * 100) : 0;
-    const totalXp = totalSteps * furniture.xpPerStep;
-    // There is no economy in the data model yet — no wallet, no prices, nothing that
-    // spends these. COINS_PER_STEP is the single place that changes when one exists, so
-    // the number on screen stays tied to the size of the build rather than being typed in.
-    const coins = totalSteps * COINS_PER_STEP;
-    const brand = brandFor(furniture.meta.brand);
+    // Both come straight from the DB row — zero until the lookup lands, or if it failed.
+    const { coins, xp: totalXp } = reward;
+    const brand = catalogRow ? brandFor(catalogRow.brand) : null;
 
     return (
       <View style={styles.scrim}>
@@ -157,13 +173,15 @@ export function BuildMap() {
           </Pressable>
 
           <View style={styles.titleRow}>
-            <Text style={styles.title}>{furniture.meta.name}</Text>
-            <Image
-              source={brand.logo}
-              style={styles.brandLogo}
-              resizeMode="contain"
-              accessibilityLabel={brand.name}
-            />
+            <Text style={styles.title}>{catalogRow?.name ?? ""}</Text>
+            {brand ? (
+              <Image
+                source={brand.logo}
+                style={styles.brandLogo}
+                resizeMode="contain"
+                accessibilityLabel={brand.name}
+              />
+            ) : null}
           </View>
 
           <View style={styles.nodeRow}>

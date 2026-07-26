@@ -36,5 +36,6 @@ export function useCurrentUserId(): UserId {
 export * from "./types";
 export * from "./repos";
 export * from "./shopItems";
+export * from "./catalogAssets";
 export { createInMemoryRepos } from "./adapters/inMemory";
 export { DEMO_ME } from "./adapters/seed";

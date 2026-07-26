@@ -17,16 +17,6 @@ import { PARTS } from "./parts.gen";
 
 const P = PARTS;
 
-export const META = {
-  // IKEA product names are always set in caps.
-  name: "DALFRED Stool",
-  brand: "IKEA",
-  category: "Table & Chair",
-  difficulty: 2,
-  duration: 10,
-  link: "https://www.ikea.com/ie/en/p/dalfred-bar-stool-birch-80613091/#content",
-} as const;
-
 export const LABELS = {
   leg: { standard: "Leg" },
   circleUpp: { standard: "Top plate", simple: "Top circle" },

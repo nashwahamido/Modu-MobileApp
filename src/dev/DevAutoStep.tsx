@@ -5,7 +5,7 @@ import { engageAxis } from "@/src/game/core/evaluation/engagement";
 import { targetPositionForAction } from "@/src/game/core/scene/targets";
 import { HOVER_LIFT_M, looseDelta, spawnDelta } from "@/src/game/core/geometry/staging";
 import { TIGHTEN_TOTAL_DEG, useGameStore } from "@/src/game/core/store";
-import { animateDriver, OffsetDriver } from "../scene/offsetDriver";
+import { animateDriver, OffsetDriver } from "@/src/game/scene/offsetDriver";
 
 interface Props {
   heldDriver: OffsetDriver;

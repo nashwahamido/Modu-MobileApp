@@ -1,11 +1,10 @@
 // In-memory adapter for the repo seam. Values are cloned on the way in and out so callers can't mutate the backing store by reference — the same isolation a network round-trip gives you.
 import type { FurnitureId } from "@/src/game/core/type";
-import type { BuildProgressRepo, FriendsRepo, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo } from "../repos";
+import type { BuildProgressRepo, CatalogRepo, FriendsRepo, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo } from "../repos";
 import type { BuildSave, Friend, Profile, ProfilePatch, RoomLayout, UserId } from "../types";
 import type { ShopItemId } from "../shopItems";
-import { DEFAULT_SHOP_ITEMS } from "../shopItems";
-import { titleForLevel } from "../levelTitles";
-import { seedBuilds, seedCompleted, seedFriends, seedInventory, seedProfiles, seedRoomLikes, seedRooms } from "./seed";
+import { levelForXp, levelSpan, titleForLevel } from "../levels";
+import { seedBuildCatalog, seedBuilds, seedBuiltItems, seedCompleted, seedFriends, seedInventory, seedLevelRows, seedProfiles, seedRoomLikes, seedRooms, seedShopItems } from "./seed";
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 
@@ -16,6 +15,15 @@ export interface InMemoryReposOptions {
   // Simulated round-trip latency in ms, to exercise loading states. Default 0 keeps tests fast.
   latencyMs?: number;
 }
+
+// Mirror of item_build' generated xp_reward/coin_reward totals (the reward-catalog seed) — keep in sync with the 20260724030000 migration. Furnitures not listed reward 0 (matches the DB).
+// Each row is steps × the DB-authored rates (coins_per_step=3, xp_per_step=6, xp_bonus=0), with steps = the recipe's actions.length, exactly what sync_furniture_counts writes into step_count: lack 14, bekvam 35, dalfred 58, eket 147. Recompose a recipe and these go stale — the real adapter re-syncs, this table does not.
+const DEFAULT_BUILT_REWARDS: Record<string, { coins: number; xp: number }> = {
+  "eket-cabinet": { coins: 441, xp: 882 },
+  "bekvam-stool": { coins: 105, xp: 210 },
+  "dalfred-stool": { coins: 174, xp: 348 },
+  "lack-table": { coins: 42, xp: 84 },
+};
 
 export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
   const latency = options.latencyMs ?? 0;
@@ -29,6 +37,9 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
   const completed = new Map<UserId, Set<FurnitureId>>(
     Object.entries(seedCompleted()).map(([id, list]) => [id, new Set(list)] as [UserId, Set<FurnitureId>]),
   );
+  // Which builds have been rewarded — mirrors the transaction one-per-build unique index, so a
+  // repeat reward() is an idempotent no-op just like the Supabase RPC.
+  const rewarded = new Map<UserId, Set<FurnitureId>>();
   const roomLikes = new Map<UserId, Set<UserId>>(
     Object.entries(seedRoomLikes()).map(([id, list]) => [id, new Set(list)] as [UserId, Set<UserId>]),
   );
@@ -37,13 +48,28 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
     Object.entries(seedInventory()).map(([id, list]) => [id, new Set(list)] as [UserId, Set<ShopItemId>]),
   );
 
-  // Fill the derived fields (title from level, itemsAssembled/likes from the sets) — mirrors what the Supabase adapter reads back from the level_titles table and the trigger-cached counters.
-  const withDerived = (p: Profile): Profile => ({
-    ...clone(p),
-    title: titleForLevel(p.level),
-    itemsAssembled: completed.get(p.userId)?.size ?? 0,
-    likes: roomLikes.get(p.userId)?.size ?? 0,
-  });
+  // The dev stand-in for the levels table. Tune levelling in the migration, not here.
+  const levels = seedLevelRows();
+
+  // Fill the derived fields (title and the xp span from the levels table, itemsAssembled/likes from the sets) — mirrors what the Supabase adapter reads back from the reference tables and the trigger-cached counters.
+  const withDerived = (p: Profile): Profile => {
+    const span = levelSpan(p.level, p.xp, levels);
+    return {
+      ...clone(p),
+      title: titleForLevel(p.level, levels),
+      xpIntoLevel: span.xpIntoLevel,
+      xpForNextLevel: span.xpForNextLevel,
+      itemsAssembled: completed.get(p.userId)?.size ?? 0,
+      likes: roomLikes.get(p.userId)?.size ?? 0,
+    };
+  };
+
+  const catalogRepo: CatalogRepo = {
+    async listBuilds() {
+      await delay(latency);
+      return clone(seedBuildCatalog());
+    },
+  };
 
   const profileRepo: ProfileRepo = {
     async get(userId) {
@@ -126,9 +152,43 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
       completed.set(ownerId, set);
       builds.delete(buildKey(ownerId, furnitureId));
     },
+    async reward(ownerId, furnitureId) {
+      await delay(latency);
+      const profile = profiles.get(ownerId);
+      if (!profile) throw new Error(`No profile for ${ownerId}`);
+      // Server-authoritative amount, mirrored from the item_build seed (0 if not configured).
+      const { coins, xp } = DEFAULT_BUILT_REWARDS[furnitureId] ?? { coins: 0, xp: 0 };
+      const set = rewarded.get(ownerId) ?? new Set<FurnitureId>();
+      // Idempotent: already rewarded → return current totals unchanged (mirrors the DB no-op).
+      if (set.has(furnitureId)) return { coins: profile.coins, xp: profile.xp, alreadyRewarded: true };
+      set.add(furnitureId);
+      rewarded.set(ownerId, set);
+      // level is DERIVED from the new xp total, not incremented — mirrors reward_build in the migration.
+      const nextXp = profile.xp + xp;
+      const next = { ...profile, coins: profile.coins + coins, xp: nextXp, level: levelForXp(nextXp, levels) };
+      profiles.set(ownerId, next);
+      return { coins: next.coins, xp: next.xp, alreadyRewarded: false };
+    },
+    async buildReward(furnitureId) {
+      await delay(latency);
+      return DEFAULT_BUILT_REWARDS[furnitureId] ?? { coins: 0, xp: 0 };
+    },
+    async syncCounts() {
+      // No-op: the in-memory fixtures use pre-computed flat rewards (DEFAULT_BUILT_REWARDS), so there is no catalog row to mirror counts into. Only the Supabase adapter tracks the live recipe.
+      await delay(latency);
+    },
     async listCompleted(ownerId) {
       await delay(latency);
       return [...(completed.get(ownerId) ?? [])];
+    },
+    async listCompletedItems(ownerId) {
+      await delay(latency);
+      // Mirrors the Supabase join: a completed id with no catalog row is dropped, not rendered nameless.
+      const catalog = seedBuiltItems();
+      return [...(completed.get(ownerId) ?? [])].flatMap((id) => {
+        const row = catalog[id];
+        return row ? [{ id, name: row.name, category: row.category }] : [];
+      });
     },
   };
 
@@ -153,10 +213,14 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
     },
   };
 
+  // The purchasable catalog. Read once into a local like every other seed above, rather than calling
+  // seedShopItems() per request — purchase() and listItems() must agree on one set of rows.
+  const shopItems = seedShopItems();
+
   const storeRepo: StoreRepo = {
     async listItems() {
       await delay(latency);
-      return clone(DEFAULT_SHOP_ITEMS);
+      return clone(shopItems);
     },
     async listOwned(userId) {
       await delay(latency);
@@ -166,10 +230,11 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
       await delay(latency);
       const owned = inventory.get(userId) ?? new Set<ShopItemId>();
       if (owned.has(itemId)) return { ok: false, reason: "already_owned" };
-      const item = DEFAULT_SHOP_ITEMS.find((i) => i.id === itemId);
+      const item = shopItems.find((i) => i.id === itemId);
       if (!item) throw new Error(`No shop item ${itemId}`);
       const profile = profiles.get(userId);
       if (!profile) throw new Error(`No profile for ${userId}`);
+      if (profile.level < item.minLevel) return { ok: false, reason: "level_locked" };
       if (profile.coins < item.price) return { ok: false, reason: "insufficient_coins" };
       // Spend the coins and grant the item — the same two effects the Supabase RPC does atomically.
       const coinsRemaining = profile.coins - item.price;
@@ -180,5 +245,5 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
     },
   };
 
-  return { profiles: profileRepo, rooms: roomRepo, friends: friendsRepo, builds: buildsRepo, likes: likesRepo, store: storeRepo };
+  return { catalog: catalogRepo, profiles: profileRepo, rooms: roomRepo, friends: friendsRepo, builds: buildsRepo, likes: likesRepo, store: storeRepo };
 }

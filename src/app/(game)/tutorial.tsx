@@ -28,6 +28,7 @@ import { Theme, useStyles } from "@/src/game/ui/theme";
 import { useStepObjective } from "@/src/game/core/presentation/useStepObjective";
 
 import { useGameStore } from "@/src/game/core/store";
+import { useCurrentUserId, useRepos } from "@/src/data";
 import {
   pressParkInfo,
   screwParkOffset,
@@ -102,7 +103,7 @@ function TutorialScreen() {
       softHints: state.settings.softHints,
       oneFingerPanEnabled: state.settings.canvasStrafe,
     });
-    loadFurnitureById("TUTORIAL").then((f) => {
+    loadFurnitureById("tutorial").then((f) => {
       if (active) useGameStore.getState().loadFurniture(f);
     });
     return () => {
@@ -204,6 +205,25 @@ function TutorialScreen() {
   const guideStepCount = useTutorialStore((s) => s.steps.length);
   const orientationActionId = useGameStore((s) => s.orientationActionId);
   const totalCount = furniture?.actions.length ?? 0;
+
+  // Record the tutorial furniture as a completed build once it's assembled — so the player owns it
+  // (it's a placeable built_item) and it counts toward assembly_count, like any build. Fires once.
+  const repos = useRepos();
+  const me = useCurrentUserId();
+  const tutorialRecorded = useRef(false);
+  const tutorialBuilt = totalCount > 0 && completedCount >= totalCount;
+  useEffect(() => {
+    if (tutorialBuilt && !tutorialRecorded.current) {
+      tutorialRecorded.current = true;
+      repos.builds.complete(me, "tutorial").catch((err) => {
+        // Re-arm so a later render can retry: the flag is set BEFORE the call to keep the effect from
+        // firing twice, which would otherwise turn a transient failure into a permanently unrecorded
+        // tutorial (and a missing placeable item).
+        tutorialRecorded.current = false;
+        console.warn("[tutorial] could not record the completed build", err);
+      });
+    }
+  }, [tutorialBuilt, me, repos]);
   const displayedCompletedCount = guideCompleted
     ? guideStepCount + completedCount
     : completedCount;

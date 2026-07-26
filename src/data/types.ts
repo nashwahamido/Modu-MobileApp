@@ -4,6 +4,10 @@ import type { ProfileId } from "@/src/game/core/profile";
 
 export type UserId = string;
 
+// The open id space of EVERY catalog furniture — buildable (a FurnitureId) or store-only (e.g. "malm-chest").
+// Room placements and store/catalog ownership span this; the assembly engine uses the narrower FurnitureId (⊂ CatalogId).
+export type CatalogId = string;
+
 // A player's profile: shown on your own profile page and when visiting a friend's.
 export interface Profile {
   userId: UserId;
@@ -14,27 +18,36 @@ export interface Profile {
   coins: number;
   xp: number;
   onboardingCompleted: boolean;
-  // A short flavour rank shown under the avatar. DERIVED from level via the level_titles tiers (see levelTitles.ts) and filled by the adapter on read — never stored per user.
+  // A short flavour rank shown under the avatar. DERIVED from level via the levels table (see levels.ts) and filled by the adapter on read — never stored per user.
   title: string | null;
-  // Cached aggregate — count of completed_builds. Change it via builds.complete(), not update().
+  // How far xp has climbed into the current level. DERIVED from xp via the same levels table, and filled by the adapter on read exactly like title.
+  xpIntoLevel: number;
+  // The xp span of the current level, or null at the top of the curve — where a progress bar should read as full, not as 0%.
+  xpForNextLevel: number | null;
+  // Cached aggregate — count of user_build. Change it via builds.complete(), not update().
   itemsAssembled: number;
   // Cached aggregate — count of room_likes. Change it via likes.like()/unlike(), not update().
   likes: number;
 }
 
-// The directly-writable profile fields. title/itemsAssembled/likes are excluded: they are derived (title) or cached aggregates maintained by their own repos.
+// The directly-writable profile fields. Two groups are excluded, for two different reasons.
+// Derived / cached aggregates (title, xpIntoLevel, xpForNextLevel, itemsAssembled, likes) are maintained by their own repos.
+// coins/xp/level are ECONOMY state and deliberately NOT writable here: they move only through purchase_item and reward_build, which price the transaction server-side from auth.uid(). A client-writable patch would let a modded client mint its own balance, and the DB now revokes those columns to match (migration 20260726040000).
 export type ProfilePatch = Partial<
-  Pick<Profile, "username" | "avatarMode" | "level" | "coins" | "xp" | "onboardingCompleted">
+  Pick<Profile, "username" | "avatarMode" | "onboardingCompleted">
 >;
 
 // One furniture instance placed in a room. Position is normalized room-space, NOT screen pixels.
 export interface PlacedFurniture {
   instanceId: string;
-  furnitureId: FurnitureId;
+  // A placed piece can be ANY catalog furniture — buildable or store-only — so this is CatalogId, not the narrow FurnitureId.
+  furnitureId: CatalogId;
   position: { x: number; y: number };
   // Yaw around the vertical axis, in radians.
   rotation: number;
   scale?: number;
+  // The chosen color variant (a colors.id, e.g. "white"). Undefined = the furniture's default variant / no color axis.
+  color?: string;
 }
 
 // The persisted contents of a room, keyed by its owner. Fetched by ownerId so one RoomScene renders yours (editable) or a friend's (read-only).

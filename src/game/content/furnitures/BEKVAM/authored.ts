@@ -16,15 +16,6 @@ import { PARTS } from "./parts.gen";
 
 const P = PARTS;
 
-export const META = {
-  name: "Bekväm Step Stool",
-  brand: "IKEA",
-  category: "Other",
-  difficulty: 2,
-  duration: 15,
-  link: "https://www.ikea.com/us/en/p/bekvaem-step-stool-beech-30178884/",
-} as const;
-
 export const LABELS = {
   legL: { standard: "Left side panel", simple: "Left side" },
   legR: { standard: "Right side panel", simple: "Right side" },

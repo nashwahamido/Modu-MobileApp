@@ -19,15 +19,6 @@ import {
 } from "@/src/game/core/type";
 import { PARTS } from "./parts.gen";
 
-export const META = {
-  name: "Eket Cabinet with 2 Drawers",
-  brand: "IKEA",
-  category: "Shelf & Cabinet",
-  difficulty: 3,
-  duration: 35,
-  link: "https://www.ikea.com/us/en/p/eket-cabinet-with-2-drawers-00333947/",
-} as const;
-
 export const LABELS = {
   topPanel: { standard: "Top panel" },
   bottomPanel: { standard: "Bottom panel" },

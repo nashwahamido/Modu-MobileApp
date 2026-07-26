@@ -7,9 +7,9 @@ import { applyStructure } from "@/src/game/core/model/liaisons";
 import { FurnitureMeta } from "@/src/game/core/type";
 import { HARDWARE } from "@/src/game/content/hardware";
 import {
+  CLUSTERS,
   FASTENER_RULES,
   FINISHING_ACTION,
-  META,
   PLACEMENT_ACTIONS,
   STRUCTURE,
 } from "./authored";
@@ -27,13 +27,7 @@ export const ACTIONS = withOrder(
 );
 
 export const TUTORIAL_META: FurnitureMeta = {
-  id: "TUTORIAL",
-  name: META.name,
+  id: "tutorial",
   thumbnail,
-  brand: META.brand,
-  category: META.category,
-  difficulty: META.difficulty,
-  duration: META.duration,
-  ...metaCounts(ALL_PART_IDS, ACTIONS),
-  engineOnly: true,
+  ...metaCounts(ALL_PART_IDS, ACTIONS, CLUSTERS),
 };

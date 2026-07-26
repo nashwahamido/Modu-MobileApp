@@ -43,7 +43,7 @@ import {
 
 const LEVELS: TextLevel[] = ["standard", "simple"];
 const TEST_DENSITY = 0.74;
-const DEFAULT_FURNITURE_ID: FurnitureId = "DALFRED";
+const DEFAULT_FURNITURE_ID: FurnitureId = "dalfred-stool";
 
 function loadHarnessFurniture(id: FurnitureId) {
   loadFurnitureById(id).then((f) => useGameStore.getState().loadFurniture(f));
@@ -127,7 +127,7 @@ export default function EngineTestScreen() {
       ]}
     >
       {}
-      <Text style={{ color: C.text, fontSize: t.title, fontWeight: "800" }}>{furniture.meta.name}</Text>
+      <Text style={{ color: C.text, fontSize: t.title, fontWeight: "800" }}>{furniture.meta.id}</Text>
       <View style={styles.chipRow}>
         {chip(`${completedCount}/${totalCount} steps`, C.primary, C.onPrimary)}
         {chip(`★ ${completedCount * furniture.xpPerStep} XP`, C.cardAlt, C.text)}
@@ -183,7 +183,7 @@ export default function EngineTestScreen() {
                   fontWeight: "700",
                 }}
               >
-                {meta.name}
+                {meta.id}
               </Text>
             </Pressable>
           );

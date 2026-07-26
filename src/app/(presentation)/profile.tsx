@@ -23,7 +23,7 @@ import { useCurrentUserId, useRepos } from "@/src/data";
 import type { Profile } from "@/src/data";
 
 // The "/N" denominator for items assembled: the same buildable set the catalogue counts.
-const TOTAL_BUILDS = FURNITURE_METAS.filter((m) => !m.engineOnly).length;
+const TOTAL_BUILDS = FURNITURE_METAS.length;
 
 // avatarMode -> avatar image, mirroring avatar-recommendation. Falls back to "control" when unset.
 const AVATARS: Record<ProfileId, ImageSourcePropType> = {
@@ -46,6 +46,8 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [friends, setFriends] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [tab, setTab] = useState<FriendsTab>("friends");
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -53,33 +55,66 @@ export default function ProfileScreen() {
   useEffect(() => {
     let alive = true;
     setLoading(true);
+    setLoadError(false);
     (async () => {
-      const p = await repos.profiles.get(me);
-      const edges = await repos.friends.list(me);
-      const cards = await repos.profiles.getMany(edges.map((e) => e.userId));
-      if (!alive) return;
-      setProfile(p);
-      setFriends(cards);
-      setLoading(false);
+      try {
+        // The profile and the friend EDGES are independent; only the friend CARDS depend on the edges.
+        const [p, edges] = await Promise.all([repos.profiles.get(me), repos.friends.list(me)]);
+        const cards = await repos.profiles.getMany(edges.map((e) => e.userId));
+        if (!alive) return;
+        setProfile(p);
+        setFriends(cards);
+      } catch (err) {
+        // The repos THROW on any Postgrest error, and the guard below renders a spinner whenever
+        // profile is null — so without this the screen hangs on a dropped connection.
+        console.warn("[profile] could not load:", (err as Error).message);
+        if (alive) setLoadError(true);
+      } finally {
+        if (alive) setLoading(false);
+      }
     })();
     return () => {
       alive = false;
     };
-  }, [me, repos]);
+  }, [me, repos, reloadKey]);
 
   const saveName = async () => {
     const name = draft.trim();
     setEditing(false);
     if (!profile || !name || name === profile.username) return;
-    const next = await repos.profiles.update(me, { username: name });
-    setProfile(next);
+    try {
+      const next = await repos.profiles.update(me, { username: name });
+      setProfile(next);
+    } catch (err) {
+      // The username column is NOT NULL + UNIQUE, so a collision is an ordinary outcome here, not an
+      // exceptional one. Leaving `profile` untouched reverts the field to the stored name.
+      console.warn("[profile] could not save the name:", (err as Error).message);
+    }
   };
 
   const removeFriend = async (id: string) => {
     // Optimistic: drop the row, then persist. The repo is the source of truth on next load.
+    const previous = friends;
     setFriends((list) => list.filter((f) => f.userId !== id));
-    await repos.friends.remove(me, id);
+    try {
+      await repos.friends.remove(me, id);
+    } catch (err) {
+      // Put them back. Without the rollback the friend stays gone on screen but is still in the DB,
+      // so the list silently disagrees with the backend until the next load.
+      console.warn("[profile] could not remove the friend:", (err as Error).message);
+      setFriends(previous);
+    }
   };
+
+  if (!loading && loadError && !profile) {
+    return (
+      <View style={[styles.root, styles.center]}>
+        <Text style={styles.errorText}>Couldn&apos;t load your profile. Check your connection.</Text>
+        <Button label="Try again" variant="primary" onPress={() => setReloadKey((k) => k + 1)} />
+        <Button label="Home" onPress={() => router.dismissTo("/room")} />
+      </View>
+    );
+  }
 
   if (loading || !profile) {
     return (
@@ -97,7 +132,8 @@ export default function ProfileScreen() {
           <Text style={styles.settingsText}>Account & App settings</Text>
           <Text style={styles.caret}>›</Text>
         </Pressable>
-        <Button label="Home" onPress={() => router.replace("/room")} />
+        {/* dismissTo, not replace: pops back to the room already under the modal so it never remounts. */}
+        <Button label="Home" onPress={() => router.dismissTo("/room")} />
       </View>
 
       <View style={styles.body}>
@@ -214,7 +250,8 @@ const makeStyles = (t: Theme) =>
       backgroundColor: t.bg,
       paddingBottom: SPACE.md,
     },
-    center: { alignItems: "center", justifyContent: "center" },
+    center: { alignItems: "center", justifyContent: "center", gap: SPACE.md },
+    errorText: { ...TYPE.body, color: t.textFaint, textAlign: "center", padding: SPACE.lg },
     header: {
       flexDirection: "row",
       alignItems: "center",
