@@ -68,8 +68,19 @@ function TutorialScreen() {
   const insets = useSafeAreaInsets();
   const styles = useStyles(makeStyles);
 
+  const sceneState = useSceneState();
+  const {
+    heldDriver,
+    sinkDriver,
+    clusterDriver,
+    pushDrivers,
+    slideDriver,
+    carryShared,
+    stickShared,
+  } = useAssemblyDrivers();
   const {
     manipulator,
+    stickActive,
     onStickStart,
     onStickMove,
     onStickEnd,
@@ -79,7 +90,7 @@ function TutorialScreen() {
     onPanEnd,
     resetCamera,
     getFocusPoint,
-  } = useOrbitCamera({ stableFraming: true });
+  } = useOrbitCamera({ stableFraming: true, stickShared });
   const lastScale = useRef(1);
   const joystickTutorialStartedAt = useRef<number | null>(null);
 
@@ -114,15 +125,6 @@ function TutorialScreen() {
     onStickEnd();
   }, [onStickEnd]);
   const oneFingerPanStartedAt = useRef<{ x: number; y: number } | null>(null);
-  const sceneState = useSceneState();
-  const {
-    heldDriver,
-    sinkDriver,
-    clusterDriver,
-    pushDrivers,
-    slideDriver,
-    carryShared,
-  } = useAssemblyDrivers();
 
   useEffect(() => {
     let active = true;
@@ -445,6 +447,8 @@ function TutorialScreen() {
               pushDrivers={pushDrivers}
               slideDriver={slideDriver}
               carryShared={carryShared}
+              stickShared={stickShared}
+              stickActive={stickActive}
             />
           </TutorialTarget>
         </View>

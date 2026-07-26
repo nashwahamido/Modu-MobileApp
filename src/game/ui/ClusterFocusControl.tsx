@@ -13,7 +13,8 @@ import {
 } from "@/src/game/core/evaluation/clusters";
 import { useGameStore } from "@/src/game/core/store";
 import { brandFor } from "@/src/game/content/brands";
-import { ResumeIcon, StarBadge } from "@/src/game/ui/Icons";
+import { StarBadge } from "@/src/game/ui/Icons";
+import { GrainOverlay } from "@/src/game/ui/Button";
 import { Theme, useStyles, useTheme } from "@/src/game/ui/theme";
 import { useRepos } from "@/src/data";
 import { useCatalogRow } from "@/src/data/catalogStore";
@@ -161,6 +162,7 @@ export function BuildMap() {
     return (
       <View style={styles.scrim}>
         <View style={styles.card}>
+          <GrainOverlay radius={22} />
           <Pressable
             style={styles.close}
             // Paused mid-build → resume. Nothing chosen yet → there is nothing to resume
@@ -235,9 +237,11 @@ export function BuildMap() {
                       with steps behind it that is not yet finished. A play badge on an
                       untouched stage would be claiming progress that does not exist. */}
                   {n.doneCount > 0 && !n.finished ? (
-                    <View style={styles.resumeBadge} pointerEvents="none">
-                      <ResumeIcon size={13} color={t.onAccent} />
-                    </View>
+                    <Image
+                      source={require("@/src/assets/ui/icons/icon-play.png")}
+                      style={styles.playBadgeImg}
+                      resizeMode="contain"
+                    />
                   ) : null}
 
                   <View style={styles.starWrap} pointerEvents="none">
@@ -507,18 +511,21 @@ const makeStyles = (t: Theme) =>
     // number sits on the star's true centre — a ★ text glyph rides low in its em box and
     // never quite lines up.
     // Bottom-left of the circle, opposite the XP star.
-    resumeBadge: {
+    // Standalone play icon (no chip), sitting where the resume badge was — bottom-left of
+    // the cluster tile, opposite the XP star. Soft shadow so it lifts like the HUD icons.
+    playBadgeImg: {
       position: "absolute",
-      bottom: 18,
-      left: 8,
-      width: 22,
-      height: 22,
-      borderRadius: 11,
-      backgroundColor: t.accent,
-      alignItems: "center",
-      justifyContent: "center",
+      bottom: 14,
+      left: 6,
+      width: 26,
+      height: 26,
+      pointerEvents: "none",
+      shadowColor: "#000",
+      shadowOpacity: 0.3,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 3 },
+      elevation: 5,
     },
-
     starWrap: {
       position: "absolute",
       top: -4,

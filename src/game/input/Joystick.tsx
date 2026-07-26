@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
+import { GrainOverlay } from '@/src/game/ui/Button';
 
 const RADIUS = 46;      // travel radius of the knob
 const THUMB = 52;       // the knob itself — bigger than the travel, as in the reference
@@ -47,6 +48,10 @@ function JoystickImpl({ onStart, onMove, onEnd }: Props) {
           const clamp = len > RADIUS ? RADIUS / len : 1;
           tx.value = e.translationX * clamp;
           ty.value = e.translationY * clamp;
+          // onMove (JS hop) keeps API compatibility and updates any JS-side listeners.
+          // OrbitDrive reads stickShared on the render thread; writing it here via the same
+          // hop is a single cheap assignment (not the old per-frame integration), so even
+          // under drag load the camera keeps orbiting at the latest deflection.
           scheduleOnRN(onMove, tx.value / RADIUS, ty.value / RADIUS);
         })
         .onFinalize(() => {
@@ -64,11 +69,13 @@ function JoystickImpl({ onStart, onMove, onEnd }: Props) {
   return (
     <GestureDetector gesture={pan}>
       <View style={styles.base}>
+        <GrainOverlay radius={BASE / 2} />
         <Text style={[styles.arrow, styles.arrowUp]}>▲</Text>
         <Text style={[styles.arrow, styles.arrowDown]}>▼</Text>
         <Text style={[styles.arrow, styles.arrowLeft]}>◀</Text>
         <Text style={[styles.arrow, styles.arrowRight]}>▶</Text>
         <Animated.View style={[styles.thumb, thumbStyle]}>
+          <GrainOverlay radius={THUMB / 2} />
           {/* A lighter cap over the top half reads as a gloss highlight. */}
           <View style={styles.thumbGloss} />
         </Animated.View>

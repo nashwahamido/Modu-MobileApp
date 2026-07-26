@@ -7,6 +7,7 @@ import { Animated, Easing, Pressable, StyleSheet, Text, View, useWindowDimension
 
 import { CloseIcon } from "@/src/components/Icons";
 import { ELEVATION, RADIUS, SPACE, Theme, TYPE, useStyles, useTheme } from "./theme";
+import { GrainOverlay } from "@/src/game/ui/Button";
 
 // "panel" = a large near-full card (lists, grids). "dialog" = a small centered card (confirmations).
 type SheetSize = "panel" | "dialog";
@@ -65,6 +66,7 @@ export function OverlaySheet({
           { opacity: anim, transform: [{ translateY }] },
         ]}
       >
+        <GrainOverlay radius={RADIUS.panel} />
         {title ? (
           <View style={styles.header}>
             <View style={styles.headerText}>

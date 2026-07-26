@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { GrainOverlay } from "@/src/game/ui/Button";
 import { StyleSheet, Text, View } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
 import { Theme, useStyles } from "@/src/game/ui/theme";
@@ -22,6 +23,7 @@ export function HintToast() {
   return (
     <View style={styles.wrap} pointerEvents="none">
       <View style={styles.bubble}>
+        <GrainOverlay radius={14} />
         <Text style={[styles.text, { fontSize: Math.round(14 * fontScale) }]}>{hint}</Text>
       </View>
     </View>

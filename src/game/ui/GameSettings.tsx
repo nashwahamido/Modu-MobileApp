@@ -15,8 +15,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Theme, useStyles } from "@/src/game/ui/theme";
 import { SettingsControls } from "@/src/game/ui/SettingsControls";
+import { GrainOverlay } from "@/src/game/ui/Button";
 
-const SETTINGS_ICON = require("@/src/assets/ui/icons/setting_icon.png");
+const SETTINGS_ICON = require("@/src/assets/ui/icons/icon-settings.png");
 
 interface GameSettingsProps {
   headerContent?: ReactNode;
@@ -45,7 +46,7 @@ export function GameSettings({
     <>
       {/* Settings icon — rounded-square chip with a minimalist sliders glyph. subject to change*/}
       <Pressable
-        style={[styles.gear]}
+        style={({ pressed }) => [styles.gear, pressed && { opacity: 0.6 }]}
         onPress={() => setOpen(true)}
         hitSlop={8}
         accessibilityLabel="Settings"
@@ -76,6 +77,7 @@ export function GameSettings({
             onPress={closeSettings}
           />
           <View style={[styles.card, { maxHeight: cardMaxHeight }]}>
+            <GrainOverlay radius={18} />
             <Text style={styles.title}>Settings</Text>
             {headerContent}
             <ScrollView
@@ -93,7 +95,14 @@ export function GameSettings({
                 hitSlop={8}
                 accessibilityLabel="Return to home"
               >
-                <Text style={styles.homeText}>⌂ Home</Text>
+                <View style={styles.homeRow}>
+                  <Image
+                    source={require("@/src/assets/ui/icons/icon-home.png")}
+                    style={styles.homeIcon}
+                    resizeMode="contain"
+                  />
+                  <Text style={styles.homeText}>Home</Text>
+                </View>
               </Pressable>
               <Pressable
                 style={[styles.done, confirmDisabled && styles.doneDisabled]}
@@ -127,14 +136,20 @@ const makeStyles = (t: Theme) =>
     // gear, the hint, and undo/redo below all sit on the same grid.
     width: 36,
     height: 36,
-    borderRadius: 14,
-    backgroundColor: t.surface,
     alignItems: "center",
     justifyContent: "center",
   },
   // 22 in a 36 box leaves the same breathing room as the glyphs in undo/redo; at 30 the
   // gear filled its button edge to edge once the box came down to 36.
-  icon: { width: 22, height: 22 },
+  icon: {
+    width: 30,
+    height: 30,
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+  },
   // The PNG is dark artwork; invert it (tint white) for the dark chip.
   backdrop: {
     ...StyleSheet.absoluteFillObject,
@@ -163,6 +178,8 @@ const makeStyles = (t: Theme) =>
     marginTop: 12,
   },
   homeText: { fontSize: 14, fontWeight: "700", color: t.textDim },
+  homeRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  homeIcon: { width: 20, height: 20 },
   done: {
     // Purple, not green: Done is an ACTION, and every action in this palette is the accent.
     // Green is reserved for a COMPLETED step.

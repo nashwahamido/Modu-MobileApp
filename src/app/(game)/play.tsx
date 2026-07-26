@@ -59,10 +59,9 @@ import { DevMenu } from "@/src/dev/DevMenu";
 import { ToggleChips } from "@/src/game/ui/ToggleChips";
 import { BuildMap, ClusterFocusControl } from "@/src/game/ui/ClusterFocusControl";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
-import { Button, IconButton } from "@/src/game/ui/Button";
-import { PauseIcon } from "@/src/game/ui/Icons";
+import { Button } from "@/src/game/ui/Button";
 import { ObjectiveBar } from "@/src/game/ui/ObjectiveBar";
-import { HintButton, RecenterButton } from "@/src/game/ui/HudControls";
+import { HintButton, HUD_ICON, IconButtonBare, RecenterButton } from "@/src/game/ui/HudControls";
 import { SPACE, Theme, useTheme } from "@/src/game/ui/theme";
 import {
   buildPhase,
@@ -79,18 +78,6 @@ function GameScreen() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
   const insets = useSafeAreaInsets();
 
-  const {
-    manipulator,
-    onStickStart,
-    onStickMove,
-    onStickEnd,
-    onZoomDelta,
-    onPanStart,
-    onPanMove,
-    onPanEnd,
-    resetCamera,
-    getFocusPoint,
-  } = useOrbitCamera();
   const lastScale = useRef(1);
   const sceneState = useSceneState();
   const {
@@ -100,7 +87,21 @@ function GameScreen() {
     pushDrivers,
     slideDriver,
     carryShared,
+    stickShared,
   } = useAssemblyDrivers();
+  const {
+    manipulator,
+    stickActive,
+    onStickStart,
+    onStickMove,
+    onStickEnd,
+    onZoomDelta,
+    onPanStart,
+    onPanMove,
+    onPanEnd,
+    resetCamera,
+    getFocusPoint,
+  } = useOrbitCamera({ stickShared });
 
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
@@ -372,6 +373,8 @@ function GameScreen() {
             pushDrivers={pushDrivers}
             slideDriver={slideDriver}
             carryShared={carryShared}
+            stickShared={stickShared}
+            stickActive={stickActive}
             onModelReady={() => setModelReady(true)}
           />
         </View>
@@ -392,10 +395,10 @@ function GameScreen() {
         {/* Pause sits to the LEFT of the progress bar, grouped with it so the pair stays
             centred together whatever width the bar takes. */}
         <View style={styles.topRow} pointerEvents="box-none">
-          <IconButton
-            icon={<PauseIcon size={18} color={t.text} />}
+          <IconButtonBare
+            source={require("@/src/assets/ui/icons/icon-pause.png")}
+            size={HUD_ICON}
             onPress={() => useGameStore.getState().setMapOpen(true)}
-            small
             accessibilityLabel="Pause and show the build map"
           />
           {/* Instructions hidden → only the progress bar stays (slim pill). */}
@@ -603,7 +606,10 @@ const makeStyles = (t: Theme) =>
     // The row owns the position now; the bar is just a flex child of it.
     topRow: {
       position: "absolute",
-      top: 10,
+      // top:3 puts the pause icon's centre (3 + 30/2 = 18... but it centres against the
+      // taller ObjectiveBar) on the same line as the settings gear and hint, whose centres
+      // sit at 8 + their box height. Tuned so pause reads as level with the top-left grid.
+      top: 3,
       alignSelf: "center",
       flexDirection: "row",
       alignItems: "center",

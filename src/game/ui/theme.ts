@@ -106,7 +106,7 @@ const DARK: Theme = {
   textDim: PALETTE.stone,
   textFaint: PALETTE.stoneDim,
 
-  accent: PALETTE.lavender,
+  accent: PALETTE.lavenderLight,
   accentPressed: PALETTE.lavenderDim,
   onAccent: "#ffffff",
 
@@ -158,7 +158,7 @@ const HIGH_CONTRAST: Theme = {
   text: "#ffffff",
   textDim: "#ddd6cd",
   textFaint: "#b0a89f",
-  accent: PALETTE.lavenderLift,
+  accent: PALETTE.lavenderLight,
   accentPressed: PALETTE.lavender,
   success: "#9db488",
   gold: "#e8bd80",
