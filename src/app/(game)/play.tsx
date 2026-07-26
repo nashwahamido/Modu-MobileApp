@@ -138,28 +138,34 @@ function GameScreen() {
   }, [loaderVisible, loadError, modelReady, retryKey]);
   // The objective bar reports the BUILD MAP's phase (base → seat → combine), not the authored stage number — those count beats across the whole build and would read
   // "Stage 4" on a three-node map.
-  const stage = useGameStore((s) => {
-    const f = s.furniture;
-    return f ? buildPhase(f, new Set(s.completed), s.activeCluster).index : 1;
-  });
+  // These two derivations walk the whole action graph. Subscribing to `completed` by
+  // REFERENCE and deriving in a useMemo keeps them off the hot path: as written inside
+  // selectors they re-ran on every store write, including each setDragFit during a drag.
+  const completed = useGameStore((s) => s.completed);
+  const completedSet = useMemo(() => new Set(completed), [completed]);
+  const activeCluster = useGameStore((s) => s.activeCluster);
+  const mode = useGameStore((s) => s.mode);
+  const stage = useMemo(
+    () => (furniture ? buildPhase(furniture, completedSet, activeCluster).index : 1),
+    [furniture, completedSet, activeCluster],
+  );
   const settings = useGameStore((s) => s.settings);
   // Dev-setting: float mode vs auto return
   const heldActionId = useGameStore((s) => s.heldActionId);
   const renderStyle = useGameStore((s) => s.renderStyle);
   const backdrop = useGameStore((s) => s.backdrop);
   const theme = useGameStore((s) => s.theme);
-  const activeCluster = useGameStore((s) => s.activeCluster);
-  const mode = useGameStore((s) => s.mode);
   const focus = settings.focusMode;
   const dark = theme === "dark";
   const t = useTheme();
   const styles = useMemo(() => makeStyles(t), [t]);
-  const firstAvailable = useGameStore((s) => {
-    const f = s.furniture;
-    if (!f) return undefined;
-    return availableInMode(f, new Set(s.completed), s.mode, s.activeCluster)[0]
-      ?.actionId;
-  });
+  const firstAvailable = useMemo(
+    () =>
+      furniture
+        ? availableInMode(furniture, completedSet, mode, activeCluster)[0]?.actionId
+        : undefined,
+    [furniture, completedSet, mode, activeCluster],
+  );
   const completedCount = useGameStore((s) => s.completed.length);
   const orientationActionId = useGameStore((s) => s.orientationActionId);
   const totalCount = furniture?.actions.length ?? 0;

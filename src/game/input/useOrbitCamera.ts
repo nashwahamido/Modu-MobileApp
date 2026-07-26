@@ -232,8 +232,24 @@ export function useOrbitCamera(
   const stick = useRef({ x: 0, y: 0 });
   const grab = useRef({ active: false, x: 0, y: 0 });
 
+  // DIAGNOSTIC: worst interval gap seen since the stick was grabbed. This loop lives on the
+  // JS thread, so it cannot fire while a runOnJS drag is saturating that thread — which is
+  // the leading explanation for "the stick does nothing until I let go of the part".
+  // Reported once on release rather than logged per tick, because console.log over Metro is
+  // itself expensive enough to cause the starvation it is trying to measure.
+  const lastTick = useRef(0);
+  const worstGap = useRef(0);
+
   useEffect(() => {
     const tick = setInterval(() => {
+      if (__DEV__) {
+        const now = Date.now();
+        if (lastTick.current !== 0) {
+          const gap = now - lastTick.current;
+          if (gap > worstGap.current) worstGap.current = gap;
+        }
+        lastTick.current = now;
+      }
       const g = grab.current;
       if (!g.active || !manipulator || panning.current) return;
       g.x += stick.current.x * ORBIT_RATE * 0.016;
@@ -244,6 +260,15 @@ export function useOrbitCamera(
   }, [manipulator]);
 
   const onStickStart = useCallback(() => {
+    // Symmetric with onPanStart's `if (grab.current.active) return`. One Filament
+    // manipulator supports a single grab session: without this guard an overlapping
+    // two-finger pan and stick touch issue two grabBegins against one grabEnd and the
+    // camera wedges until the next manipulator swap.
+    if (panning.current) return;
+    if (__DEV__) {
+      lastTick.current = 0;
+      worstGap.current = 0;
+    }
     grab.current = { active: true, x: 0, y: 0 };
     manipulator?.grabBegin(0, 0, false);
   }, [manipulator]);
@@ -253,6 +278,13 @@ export function useOrbitCamera(
   }, []);
 
   const onStickEnd = useCallback(() => {
+    if (__DEV__ && worstGap.current > 50) {
+      console.log(
+        `[orbit] worst tick gap ${worstGap.current}ms while stick held ` +
+          `(held part: ${useGameStore.getState().heldActionId ?? "none"})`,
+      );
+    }
+    if (!grab.current.active) return;
     grab.current.active = false;
     stick.current = { x: 0, y: 0 };
     manipulator?.grabEnd();

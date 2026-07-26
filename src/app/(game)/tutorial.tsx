@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { router } from "expo-router";
 import { OrientationLock } from "expo-screen-orientation";
 import { Image, StyleSheet, View } from "react-native";
@@ -82,6 +82,37 @@ function TutorialScreen() {
   } = useOrbitCamera({ stableFraming: true });
   const lastScale = useRef(1);
   const joystickTutorialStartedAt = useRef<number | null>(null);
+
+  // Stabilised with useCallback so <Joystick>'s internal gesture memo actually holds.
+  // The tutorial needs to wrap the raw camera callbacks to drive step tracking; passing
+  // fresh inline arrows would hand Joystick new props every render, defeating its memo
+  // and reattaching the native pan handler mid-drag — the very stutter the memo prevents
+  // on the play screen. getState() and the ref read are non-reactive, so the underlying
+  // camera callback is the only real dependency.
+  const handleStickStart = useCallback(() => {
+    joystickTutorialStartedAt.current = Date.now();
+    onStickStart();
+  }, [onStickStart]);
+
+  const handleStickMove = useCallback(
+    (x: number, y: number) => {
+      onStickMove(x, y);
+      const startedAt = joystickTutorialStartedAt.current;
+      if (
+        startedAt &&
+        Date.now() - startedAt > 800 &&
+        Math.hypot(x, y) > 0.15
+      ) {
+        useTutorialStore.getState().completeEvent("joystick_moved");
+      }
+    },
+    [onStickMove],
+  );
+
+  const handleStickEnd = useCallback(() => {
+    joystickTutorialStartedAt.current = null;
+    onStickEnd();
+  }, [onStickEnd]);
   const oneFingerPanStartedAt = useRef<{ x: number; y: number } | null>(null);
   const sceneState = useSceneState();
   const {
@@ -176,30 +207,37 @@ function TutorialScreen() {
   );
 
   const furniture = useGameStore((s) => s.furniture);
-  const stage = useGameStore((s) => {
-    const f = s.furniture;
-    return f
-      ? currentStageForClusterFocus(f, new Set(s.completed), s.activeCluster)
-      : 1;
-  });
+  // Subscribe to `completed` by REFERENCE and derive in a useMemo, rather than rebuilding
+  // `new Set(s.completed)` and walking the graph inside the selector on every store write.
+  // Matters most during a drag, where setDragFit fires per frame — same fix as play.tsx.
+  const completed = useGameStore((s) => s.completed);
+  const completedSet = useMemo(() => new Set(completed), [completed]);
+  const activeCluster = useGameStore((s) => s.activeCluster);
+  const mode = useGameStore((s) => s.mode);
+  const stage = useMemo(
+    () =>
+      furniture
+        ? currentStageForClusterFocus(furniture, completedSet, activeCluster)
+        : 1,
+    [furniture, completedSet, activeCluster],
+  );
   const settings = useGameStore((s) => s.settings);
   const renderStyle = useGameStore((s) => s.renderStyle);
   const backdrop = useGameStore((s) => s.backdrop);
   const theme = useGameStore((s) => s.theme);
-  const activeCluster = useGameStore((s) => s.activeCluster);
-  const mode = useGameStore((s) => s.mode);
   const focus = settings.focusMode;
   // Recenter means nothing until there IS a build on the canvas — same rule as play.tsx.
   const sceneHasParts = Object.values(sceneState.modes).some(
     (m) => m !== "hidden" && m !== "socket_hint",
   );
   const dark = theme === "dark";
-  const firstAvailable = useGameStore((s) => {
-    const f = s.furniture;
-    if (!f) return undefined;
-    return availableInMode(f, new Set(s.completed), s.mode, s.activeCluster)[0]
-      ?.actionId;
-  });
+  const firstAvailable = useMemo(
+    () =>
+      furniture
+        ? availableInMode(furniture, completedSet, mode, activeCluster)[0]?.actionId
+        : undefined,
+    [furniture, completedSet, mode, activeCluster],
+  );
   const completedCount = useGameStore((s) => s.completed.length);
   const guideCompleted = useTutorialStore((s) => s.completed);
   const guideStepCount = useTutorialStore((s) => s.steps.length);
@@ -543,27 +581,9 @@ function TutorialScreen() {
         ) : null}
         <TutorialTarget id="joystick" style={styles.joystickZone}>
           <Joystick
-            onStart={() => {
-              joystickTutorialStartedAt.current = Date.now();
-              onStickStart();
-            }}
-            onMove={(x, y) => {
-              onStickMove(x, y);
-              const startedAt = joystickTutorialStartedAt.current;
-              if (
-                startedAt &&
-                Date.now() - startedAt > 800 &&
-                Math.hypot(x, y) > 0.15
-              ) {
-                useTutorialStore
-                  .getState()
-                  .completeEvent("joystick_moved");
-              }
-            }}
-            onEnd={() => {
-              joystickTutorialStartedAt.current = null;
-              onStickEnd();
-            }}
+            onStart={handleStickStart}
+            onMove={handleStickMove}
+            onEnd={handleStickEnd}
             dark={dark}
           />
         </TutorialTarget>
