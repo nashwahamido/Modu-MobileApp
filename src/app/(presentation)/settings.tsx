@@ -2,6 +2,7 @@
 import { router } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AccountSwitcher } from "@/src/dev/AccountSwitcher";
 import { SettingsControls } from "@/src/game/ui/SettingsControls";
 import { SPACE, Theme, TYPE, useStyles } from "@/src/game/ui/theme";
 
@@ -33,6 +34,8 @@ export default function SettingsScreen() {
         showsVerticalScrollIndicator={false}
       >
         <SettingsControls />
+        {/* Renders null outside showcase builds, so it can be mounted unconditionally. Last on the screen: it is test tooling, not a setting. */}
+        <AccountSwitcher />
       </ScrollView>
     </View>
   );

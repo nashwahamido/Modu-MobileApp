@@ -1,7 +1,7 @@
-// Shop catalog reference data: the purchasable items, same for everyone (like avatars / level_titles).
-// A shop item is bought with coins and, once owned, appears in the player's inventory.
-// Keep DEFAULT_SHOP_ITEMS in sync with the shop_items seed in the shop/inventory migration.
-export type ShopCategory = "furniture" | "wallpapers" | "floors" | "decorations" | "windows";
+// The shop VIEW-MODEL: what a purchasable item is, and how the two catalogue surfaces (Shop and
+// Inventory) filter and sort one. No data lives here — the rows come from item_buy through the repo
+// seam, and the in-memory stand-in is seedShopItems() in adapters/seed.ts with every other fixture.
+export type ShopCategory = "fur" | "wall" | "floor" | "deco";
 
 export type ShopItemId = string;
 
@@ -11,19 +11,36 @@ export interface ShopItem {
   category: ShopCategory;
   // Price in coins (the same currency as Profile.coins).
   price: number;
+  // Minimum user level required to purchase. 1 = no restriction. Below it, the store shows the item locked.
+  minLevel: number;
 }
 
 // The tab order shown in the store — "all" first, then the categories from the mock.
-export const SHOP_CATEGORIES: ShopCategory[] = ["furniture", "wallpapers", "floors", "decorations", "windows"];
+// Not exported: CATEGORY_FILTERS below is the list every caller actually wants.
+const SHOP_CATEGORIES: ShopCategory[] = ["fur", "wall", "floor", "deco"];
 
 // A category tab value, including the "all" tab that shows everything.
 export type CategoryFilter = ShopCategory | "all";
 export const CATEGORY_FILTERS: CategoryFilter[] = ["all", ...SHOP_CATEGORIES];
 
+// Display labels for the tabs — the ids are short (fur/deco/wall/floor); the tabs show these.
+export const CATEGORY_LABELS: Record<CategoryFilter, string> = {
+  all: "All",
+  fur: "Furniture",
+  wall: "Wallpaper",
+  floor: "Floor",
+  deco: "Decorations",
+};
+
 // Sort modes offered by the catalogue chrome, and their short pill labels.
 export type ShopSort = "name" | "priceAsc" | "priceDesc";
-export const SHOP_SORTS: ShopSort[] = ["name", "priceAsc", "priceDesc"];
-export const SORT_LABELS: Record<ShopSort, string> = { name: "A–Z", priceAsc: "Price ↑", priceDesc: "Price ↓" };
+// Not exported: the cycle order is nextSort's business, and SORT_LABELS is what the UI renders.
+const SHOP_SORTS: ShopSort[] = ["name", "priceAsc", "priceDesc"];
+export const SORT_LABELS: Record<ShopSort, string> = {
+  name: "A–Z",
+  priceAsc: "Price ↑",
+  priceDesc: "Price ↓",
+};
 
 // The next sort in the cycle — powers the single tap-to-cycle sort pill.
 export function nextSort(sort: ShopSort): ShopSort {
@@ -31,25 +48,19 @@ export function nextSort(sort: ShopSort): ShopSort {
 }
 
 // Apply the category filter and sort to a list of items — shared by the Shop and Inventory so both view the catalogue the same way.
-export function viewCatalogue(items: ShopItem[], category: CategoryFilter, sort: ShopSort): ShopItem[] {
-  const filtered = category === "all" ? items : items.filter((i) => i.category === category);
+export function viewCatalogue<T extends { category: ShopCategory; name: string; price?: number }>(
+  items: T[],
+  category: CategoryFilter,
+  sort: ShopSort,
+): T[] {
+  const filtered =
+    category === "all" ? items : items.filter((i) => i.category === category);
   return [...filtered].sort((a, b) =>
-    sort === "name" ? a.name.localeCompare(b.name) : sort === "priceAsc" ? a.price - b.price : b.price - a.price,
+    sort === "name"
+      ? a.name.localeCompare(b.name)
+      : sort === "priceAsc"
+        ? (a.price ?? 0) - (b.price ?? 0)
+        : (b.price ?? 0) - (a.price ?? 0),
   );
 }
 
-// Canonical catalog. Mirror of the shop_items rows seeded in the migration.
-export const DEFAULT_SHOP_ITEMS: ShopItem[] = [
-  { id: "shelving-units-wooden", name: "Shelving Units Wooden", category: "furniture", price: 150 },
-  { id: "bed-slattum-white", name: "Bed Slattum White", category: "furniture", price: 150 },
-  { id: "table", name: "Table", category: "furniture", price: 150 },
-  { id: "chair", name: "Chair", category: "furniture", price: 150 },
-  { id: "shelves", name: "Shelves", category: "furniture", price: 150 },
-  { id: "kids-desk", name: "Kids Desk", category: "furniture", price: 150 },
-  { id: "stool-black-adjustable", name: "Stool Black Adjustable", category: "furniture", price: 150 },
-  { id: "sofa-navy", name: "Sofa Navy", category: "furniture", price: 150 },
-  { id: "cream-wallpaper", name: "Cream Wallpaper", category: "wallpapers", price: 80 },
-  { id: "oak-floor", name: "Oak Floor", category: "floors", price: 90 },
-  { id: "round-rug", name: "Round Rug", category: "decorations", price: 60 },
-  { id: "classic-window", name: "Classic Window", category: "windows", price: 120 },
-];
