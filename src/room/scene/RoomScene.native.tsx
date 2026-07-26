@@ -1,11 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  PanResponder,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import {
   Camera,
   EnvironmentalLight,
@@ -31,7 +25,6 @@ const ROOM_MODEL = require("../../assets/models/room/virtualroom_empty.glb");
 export type RoomSceneProps = {
   rotationY: number;
   zoom: number;
-  onRotationChange: (rotationY: number) => void;
   furniture?: {
     itemId: string;
     position: { x: number; y: number };
@@ -76,7 +69,8 @@ function PlacedFurnitureModel({
   }, [definition, model, transformManager]);
 
   useEffect(() => {
-    if (!definition || model.state !== "loaded" || !unitTransform.current) return;
+    if (!definition || model.state !== "loaded" || !unitTransform.current)
+      return;
 
     const localScale = definition.sceneScale * perspectiveScale;
     const renderedHeight = normalizedHeight.current * localScale;
@@ -127,7 +121,11 @@ function RoomModel({
     const initialControls = controlsRef.current;
     const initialTransform = unitTransform.current
       .rotate(initialControls.rotationY, [0, 1, 0])
-      .scaling([initialControls.zoom, initialControls.zoom, initialControls.zoom]);
+      .scaling([
+        initialControls.zoom,
+        initialControls.zoom,
+        initialControls.zoom,
+      ]);
     transformManager.setTransform(model.rootEntity, initialTransform);
 
     onReady();
@@ -203,32 +201,9 @@ function RoomFilamentScene({
   );
 }
 
-export function RoomScene({
-  rotationY,
-  zoom,
-  onRotationChange,
-  furniture,
-}: RoomSceneProps) {
+export function RoomScene({ rotationY, zoom, furniture }: RoomSceneProps) {
   const [loaded, setLoaded] = useState(false);
-  const rotationStart = useRef(0);
-  const rotationRef = useRef(rotationY);
-  rotationRef.current = rotationY;
   const handleReady = useCallback(() => setLoaded(true), []);
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: (_, gesture) =>
-          Math.abs(gesture.dx) > 2,
-        onPanResponderGrant: () => {
-          rotationStart.current = rotationRef.current;
-        },
-        onPanResponderMove: (_, gesture) => {
-          onRotationChange(rotationStart.current + gesture.dx * 0.009);
-        },
-      }),
-    [onRotationChange],
-  );
 
   return (
     <View style={styles.container}>
@@ -240,11 +215,6 @@ export function RoomScene({
           furniture={furniture}
         />
       </FilamentScene>
-      <View
-        accessibilityLabel="Drag horizontally to rotate room"
-        style={styles.gestureLayer}
-        {...panResponder.panHandlers}
-      />
       {!loaded ? (
         <View style={styles.loading} pointerEvents="none">
           <ActivityIndicator color="#666" />
@@ -258,7 +228,6 @@ export function RoomScene({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "transparent" },
   filament: { flex: 1 },
-  gestureLayer: { ...StyleSheet.absoluteFillObject, zIndex: 2 },
   loading: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 3,

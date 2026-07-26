@@ -101,11 +101,9 @@ export function RoomExperience() {
         onStartShouldSetPanResponder: () => placing,
         onStartShouldSetPanResponderCapture: () => placing,
         onMoveShouldSetPanResponder: (_, gesture) =>
-          placing &&
-          (Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2),
+          placing && (Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2),
         onMoveShouldSetPanResponderCapture: (_, gesture) =>
-          placing &&
-          (Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2),
+          placing && (Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2),
         onShouldBlockNativeResponder: () => true,
         onPanResponderTerminationRequest: () => false,
 
@@ -197,9 +195,6 @@ export function RoomExperience() {
     );
     applyRoomControls(roomRotationRef.current, nextZoom);
   };
-  const handleRoomRotationChange = (nextRotation: number) => {
-    applyRoomControls(nextRotation, roomZoomRef.current);
-  };
   const handleConfirmPlacement = () => {
     if (placementWarning) return;
     confirmPlacement(
@@ -214,7 +209,6 @@ export function RoomExperience() {
           <RoomScene
             rotationY={roomRotation}
             zoom={roomZoom}
-            onRotationChange={handleRoomRotationChange}
             furniture={
               roomFurniture && (placing || placed)
                 ? {
@@ -327,27 +321,47 @@ export function RoomExperience() {
       <DevMenu placement="roomFloat" />
 
       {(placing || placed) && roomFurniture ? (
-        <Pressable
-          pointerEvents="box-only"
-          collapsable={false}
-          delayLongPress={420}
-          hitSlop={placed && !placing ? 18 : 0}
-          pressRetentionOffset={20}
-          onLongPress={placed && !placing ? editPlacement : undefined}
-          {...(placing ? panResponder.panHandlers : {})}
-          style={[
-            s.furnitureWrap,
-            {
-              transform: [
-                { translateX: furnitureTranslateX },
-                { translateY: furnitureTranslateY },
-                { scale: furnitureScale },
-              ],
-            },
-            placing && s.furnitureActive,
-            placementWarning && s.furnitureBlocked,
-          ]}
-        />
+        placing ? (
+          <View
+            collapsable={false}
+            pointerEvents="box-only"
+            {...panResponder.panHandlers}
+            style={[
+              s.furnitureWrap,
+              {
+                transform: [
+                  { translateX: furnitureTranslateX },
+                  { translateY: furnitureTranslateY },
+                  { scale: furnitureScale },
+                ],
+              },
+              s.furnitureActive,
+              placementWarning && s.furnitureBlocked,
+            ]}
+          />
+        ) : (
+          <Pressable
+            pointerEvents="box-only"
+            collapsable={false}
+            delayLongPress={420}
+            hitSlop={18}
+            pressRetentionOffset={20}
+            onLongPress={() => {
+              console.log("[furniture] longPress fired");
+              editPlacement();
+            }}
+            style={[
+              s.furnitureWrap,
+              {
+                transform: [
+                  { translateX: furnitureTranslateX },
+                  { translateY: furnitureTranslateY },
+                  { scale: furnitureScale },
+                ],
+              },
+            ]}
+          />
+        )
       ) : null}
 
       {firstPlacementGuide ? (
