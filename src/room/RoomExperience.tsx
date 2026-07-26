@@ -85,6 +85,8 @@ export function RoomExperience() {
   );
   const placementPointRef = useRef(placementPoint);
   const dragStart = useRef(placementPoint);
+  const editHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isDraggingFurniture = useRef(false);
 
   const updatePlacementPoint = (nextPoint: { x: number; y: number }) => {
     placementPointRef.current = nextPoint;
@@ -94,11 +96,19 @@ export function RoomExperience() {
   const roomFurniture = getRoomFurnitureDefinition(itemId);
   const collisionFootprint =
     roomFurniture?.footprint ?? DEFAULT_FURNITURE_FOOTPRINT;
+
+  useEffect(
+    () => () => {
+      if (editHoldTimer.current) clearTimeout(editHoldTimer.current);
+    },
+    [],
+  );
+
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        // The responder exists only on the selected furniture box. No long press
-        // is required: touching the selected box starts dragging immediately.
+        // New furniture can be positioned immediately. A confirmed item needs a
+        // deliberate long press before it re-enters edit mode.
         onStartShouldSetPanResponder: () => placing || placed,
         onStartShouldSetPanResponderCapture: () => placing || placed,
         onMoveShouldSetPanResponder: (_, gesture) =>
@@ -116,14 +126,30 @@ export function RoomExperience() {
           // drag start from {0, 0}.
           dragStart.current = { ...placementPointRef.current };
 
+          isDraggingFurniture.current = placing;
           if (placed && !placing) {
-            editPlacement();
+            editHoldTimer.current = setTimeout(() => {
+              editHoldTimer.current = null;
+              isDraggingFurniture.current = true;
+              editPlacement();
+            }, 450);
           }
 
           setPlacementWarning(null);
         },
 
         onPanResponderMove: (_, gesture) => {
+          if (!isDraggingFurniture.current) {
+            if (
+              editHoldTimer.current &&
+              (Math.abs(gesture.dx) > 5 || Math.abs(gesture.dy) > 5)
+            ) {
+              clearTimeout(editHoldTimer.current);
+              editHoldTimer.current = null;
+            }
+            return;
+          }
+
           const candidate = {
             x: dragStart.current.x + gesture.dx,
             y: dragStart.current.y + gesture.dy,
@@ -144,8 +170,18 @@ export function RoomExperience() {
           updatePlacementPoint(candidate);
         },
 
-        onPanResponderRelease: () => setPlacementWarning(null),
-        onPanResponderTerminate: () => setPlacementWarning(null),
+        onPanResponderRelease: () => {
+          if (editHoldTimer.current) clearTimeout(editHoldTimer.current);
+          editHoldTimer.current = null;
+          isDraggingFurniture.current = false;
+          setPlacementWarning(null);
+        },
+        onPanResponderTerminate: () => {
+          if (editHoldTimer.current) clearTimeout(editHoldTimer.current);
+          editHoldTimer.current = null;
+          isDraggingFurniture.current = false;
+          setPlacementWarning(null);
+        },
       }),
     [collisionFootprint, editPlacement, height, placed, placing, width],
   );

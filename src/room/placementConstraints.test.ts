@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   denormalizePlacementPoint,
+  getRoomFloorPoint,
   getPlacementIssue,
   getPlacementPerspectiveScale,
   normalizePlacementPoint,
@@ -24,6 +25,12 @@ test('placement coordinates survive viewport normalization', () => {
 test('perspective scale is clamped at the near and far limits', () => {
   assert.equal(getPlacementPerspectiveScale(0, viewport.height), 0.55);
   assert.equal(getPlacementPerspectiveScale(viewport.height, viewport.height), 1.18);
+});
+
+test('furniture origin is raised by half its height to sit on the room floor', () => {
+  const floorPoint = getRoomFloorPoint({ x: 0.5, y: 0.62 }, 0.2);
+
+  assert.deepEqual(floorPoint, { x: 0, y: -0.4, z: 0 });
 });
 
 test('placement accepts a clear floor position', () => {

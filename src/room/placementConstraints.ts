@@ -12,6 +12,12 @@ export type RoomPlacementMetadata = {
   staticObstacles: PlacementObstacle[];
 };
 
+export type RoomFloorPoint = {
+  x: number;
+  y: number;
+  z: number;
+};
+
 export const DEFAULT_FURNITURE_FOOTPRINT: FurnitureFootprint = {
   width: 0.12,
   depth: 0.07,
@@ -29,6 +35,16 @@ export const EMPTY_ROOM_PLACEMENT: RoomPlacementMetadata = {
   ],
   staticObstacles: [],
 };
+
+// The floor plane used by virtualroom_empty.glb after its unit-cube transform.
+// Keep this in the placement module so collision validation and the rendered
+// furniture position always share the same room-space coordinates.
+const ROOM_FLOOR = {
+  width: 0.9,
+  depth: 0.9,
+  centerY: 0.62,
+  surfaceY: -0.5,
+} as const;
 
 function pointInPolygon(
   point: NormalizedPlacementPoint,
@@ -75,6 +91,19 @@ export function denormalizePlacementPoint(
   height: number,
 ): PlacementPoint {
   return { x: point.x * width, y: point.y * height };
+}
+
+export function getRoomFloorPoint(
+  point: NormalizedPlacementPoint,
+  furnitureHeight: number,
+): RoomFloorPoint {
+  return {
+    x: (point.x - 0.5) * ROOM_FLOOR.width,
+    // A unit-cube furniture model is centered at its origin, so offset it by
+    // half its rendered height to rest its base exactly on the floor.
+    y: ROOM_FLOOR.surfaceY + furnitureHeight / 2,
+    z: (point.y - ROOM_FLOOR.centerY) * ROOM_FLOOR.depth,
+  };
 }
 
 export function getPlacementPerspectiveScale(pointY: number, height: number) {

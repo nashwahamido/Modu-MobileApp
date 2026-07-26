@@ -22,6 +22,7 @@ import {
   getRoomFurnitureDefinition,
   getRoomFurnitureModel,
 } from "../furnitureCatalog";
+import { getRoomFloorPoint } from "../placementConstraints";
 
 // Metro exposes bundled GLBs through the React Native numeric asset module.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -68,17 +69,15 @@ function PlacedFurnitureModel({
     if (!definition || model.state !== "loaded" || !unitTransform.current) return;
 
     const localScale = definition.sceneScale * perspectiveScale;
-    // UI placement points are normalized to the complete room viewport. Convert
-    // them once to the room model's normalized floor plane, then apply the same
-    // room rotation and zoom used by the room GLB.
-    const floorX = (position.x - 0.5) * 0.9;
-    const floorZ = (position.y - 0.62) * 0.9;
-    const floorY = -0.5 + localScale / 2;
+    const floorPoint = getRoomFloorPoint(position, localScale);
+
+    // Apply the local furniture scale last. Previously it preceded translate,
+    // which scaled the translation as well and made models hover or jump.
     const transform = unitTransform.current
-      .scaling([localScale, localScale, localScale])
-      .translate([floorX, floorY, floorZ])
       .rotate(roomRotation, [0, 1, 0])
-      .scaling([roomZoom, roomZoom, roomZoom]);
+      .scaling([roomZoom, roomZoom, roomZoom])
+      .translate([floorPoint.x, floorPoint.y, floorPoint.z])
+      .scaling([localScale, localScale, localScale]);
     transformManager.setTransform(model.rootEntity, transform);
   }, [
     definition,
