@@ -30,8 +30,9 @@ import { useStepObjective } from "@/src/game/core/presentation/useStepObjective"
 import { useGameStore } from "@/src/game/core/store";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import {
-  parkForDrive,
+  pressParkInfo,
   screwParkOffset,
+  slideParkInfo,
 } from "@/src/game/core/evaluation/engagement";
 import {
   loadFurnitureById,
@@ -242,7 +243,11 @@ function TutorialScreen() {
     : null;
   const drivePark =
     furniture && driveAction
-      ? parkForDrive(furniture, driveAction, new Set(useGameStore.getState().completed))
+      ? (driveKind === "slide" ? slideParkInfo : pressParkInfo)(
+          furniture,
+          driveAction,
+          new Set(useGameStore.getState().completed),
+        )
       : null;
   const needsFocusChoice =
     mode !== "strict" &&

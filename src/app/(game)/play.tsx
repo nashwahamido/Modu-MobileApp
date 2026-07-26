@@ -35,8 +35,9 @@ import { useStepObjective } from "@/src/game/core/presentation/useStepObjective"
 import { useGameStore } from "@/src/game/core/store";
 import { useBuildPersistence } from "@/src/hooks/useBuildPersistence";
 import {
-  parkForDrive,
+  pressParkInfo,
   screwParkOffset,
+  slideParkInfo,
 } from "@/src/game/core/evaluation/engagement";
 import {
   isPlayable,
@@ -182,7 +183,11 @@ function GameScreen() {
     : null;
   const drivePark =
     furniture && driveAction
-      ? parkForDrive(furniture, driveAction, new Set(useGameStore.getState().completed))
+      ? (driveKind === "press" ? pressParkInfo : slideParkInfo)(
+          furniture,
+          driveAction,
+          new Set(useGameStore.getState().completed),
+        )
       : null;
   // which telescoping level the active beat tests, when it's one of the authored drag-out-to-test beats (spec.testActionIds)
   const pushTestLevel = Object.entries(furniture?.pushOpen?.testActionIds ?? {}).find(

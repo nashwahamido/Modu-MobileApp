@@ -265,15 +265,6 @@ export function pressParkInfo(
   return withLock(part, parkInfo(travelAxis(part, partners), part.parkBackoff ?? PRESS_BACKOFF_M));
 }
 
-/** Staging for however this action drives home. Both legs return null on a kind mismatch, so the chain IS the dispatch — a caller never has to know the drive kind, and cluster combines (which slideParkInfo owns, screw variant included) are covered without a special case. */
-export function parkForDrive(
-  f: Furniture,
-  action: AssemblyAction,
-  done: ReadonlySet<ActionId>,
-): ParkInfo | null {
-  return pressParkInfo(f, action, done) ?? slideParkInfo(f, action, done);
-}
-
 /** SIGNED engage axis for a fastener — points from its seat toward the side it backs out of (= toward the MISSING endpoint). The baked `engageDir` assumes the fastener drives into `attached[0]`; when the OTHER endpoint is the one placed (the reverse path: bolt into the LEG instead of the table), the fastener enters from the opposite side, so the axis flips. */
 export function engageAxis(part: PartDef, done: ReadonlySet<ActionId>): Vec3 {
   const e = part.engageDir ?? [0, 0, 0];
