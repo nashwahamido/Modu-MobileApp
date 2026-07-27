@@ -1,10 +1,9 @@
 // Supabase adapter for the repo seam — the ONE place that maps snake_case rows <-> the camelCase domain types. Everything above the seam (features, the game store) is unchanged when this replaces the in-memory adapter.
 import type { PostgrestError } from "@supabase/supabase-js";
 import { supabase } from "@/src/config/supabase";
-import type { AssemblyMode, BrandId } from "@/src/game/core/type";
-import type { FurnitureId } from "@/src/game/core/type";
-import type { BuildProgressRepo, CatalogRepo, FriendsRepo, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo } from "../repos";
-import type { BuildSave, Friend, Profile, ProfilePatch, RoomLayout, UserId } from "../types";
+import type { AssemblyMode, BrandId, FurnitureId } from "@/src/game/core/type";
+import type { BuildProgressRepo, CatalogRepo, FriendsRepo, ItemVariant, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo, VariantsRepo } from "../repos";
+import type { BuildSave, Profile, ProfilePatch, RoomLayout } from "../types";
 import type { ShopCategory, ShopItem } from "../shopItems";
 import type { AvatarRef } from "../avatars";
 import { idForMode, modeForId } from "../avatars";
@@ -164,20 +163,31 @@ const catalogRepo: CatalogRepo = {
 
 // --- rooms ------------------------------------------------------------------
 
-type RoomRow = { owner_id: string; placements: RoomLayout["placements"]; updated_at: string };
+// The jsonb column carries a versioned envelope: { version, placements }. Legacy rows hold a bare
+// array from the pre-grid model — those coordinates are meaningless on the grid, so any shape
+// other than the current envelope reads as an empty room rather than a mis-placed one.
+type RoomEnvelope = { version: number; placements: RoomLayout["placements"] };
+type RoomRow = { owner_id: string; placements: RoomEnvelope | unknown[]; updated_at: string };
 
 const roomRepo: RoomLayoutRepo = {
   async get(ownerId) {
     const { data, error } = await supabase.from("user_room").select("*").eq("owner_id", ownerId).maybeSingle();
     check(error);
-    if (!data) return { ownerId, placements: [], updatedAt: new Date().toISOString() };
+    if (!data) return { ownerId, version: 1, placements: [], updatedAt: new Date().toISOString() };
     const row = data as RoomRow;
-    return { ownerId: row.owner_id, placements: row.placements ?? [], updatedAt: row.updated_at };
+    const envelope = row.placements;
+    // Version AND shape: a malformed row ({version:1} with no/null placements) must read as an
+    // empty room, not hand `undefined` to the store to throw on later.
+    const placements =
+      !Array.isArray(envelope) && envelope?.version === 1 && Array.isArray(envelope.placements)
+        ? envelope.placements
+        : [];
+    return { ownerId: row.owner_id, version: 1, placements, updatedAt: row.updated_at };
   },
   async save(ownerId, layout) {
     const { error } = await supabase.from("user_room").upsert({
       owner_id: ownerId,
-      placements: layout.placements,
+      placements: { version: 1, placements: layout.placements } satisfies RoomEnvelope,
       updated_at: new Date().toISOString(),
     });
     check(error);
@@ -403,6 +413,25 @@ const storeRepo: StoreRepo = {
   },
 };
 
+// --- variants ---------------------------------------------------------------
+
+const variantsRepo: VariantsRepo = {
+  async list() {
+    // Whole table, no filter: reference data of a few rows per item, cached client-side by variantStore.
+    // Ordered so the picker's swatch row is stable across sessions rather than following the DB's whim.
+    const { data, error } = await supabase
+      .from("item_variants")
+      .select("item_id, variation, is_default")
+      .order("item_id")
+      .order("variation");
+    check(error);
+    type Row = { item_id: string; variation: string | null; is_default: boolean };
+    return ((data ?? []) as Row[]).map(
+      (r): ItemVariant => ({ itemId: r.item_id, variation: r.variation, isDefault: r.is_default }),
+    );
+  },
+};
+
 export function createSupabaseRepos(): Repos {
-  return { catalog: catalogRepo, profiles: profileRepo, rooms: roomRepo, friends: friendsRepo, builds: buildRepo, likes: likesRepo, store: storeRepo };
+  return { catalog: catalogRepo, profiles: profileRepo, rooms: roomRepo, friends: friendsRepo, builds: buildRepo, likes: likesRepo, store: storeRepo, variants: variantsRepo };
 }
