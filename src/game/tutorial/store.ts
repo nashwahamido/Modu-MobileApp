@@ -13,7 +13,6 @@ const DEFAULT_CONTEXT: TutorialContext = {
   mode: "free",
   manualTools: true,
   softHints: true,
-  oneFingerPanEnabled: false,
 };
 
 // How long a completed step shows its reward before advancing. The event cooldown
