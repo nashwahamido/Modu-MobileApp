@@ -63,16 +63,17 @@ export function ToolBar({ neededTool }: { neededTool: ToolId | null }) {
         : null}
       <Pressable
         onPress={() => setOpen((o) => !o)}
-        style={[
+        style={({ pressed }) => [
           styles.toggle,
           needsAttention && styles.slotWanted,
           open && styles.toggleOpen,
+          pressed && { opacity: 0.6 },
         ]}
         hitSlop={8}
       >
         <Image
-          source={require("../../assets/ui/icons/icon-toolBar.png")}
-          style={styles.toolboxIcon}
+          source={require("../../assets/ui/icons/icon-tools.png")}
+          style={[styles.toolboxIcon, styles.toolboxIconShadow]}
           resizeMode="contain"
         />
       </Pressable>
@@ -92,17 +93,15 @@ const makeStyles = (t: Theme) =>
     gap: 8,
   },
   toggle: {
-    // 36 to match the auto button (controlHeightSm), down from 46.
+    // Bare icon: no chip fill/border, just a generous tap box. Size kept for the hit area.
     width: 36,
     height: 36,
-    borderRadius: 12,
-    backgroundColor: t.surface,
-    borderWidth: 2,
-    borderColor: t.border,
     alignItems: "center",
     justifyContent: "center",
   },
-  toggleOpen: { backgroundColor: t.surfaceRaised },
+  // "Open" no longer swaps a chip fill (there's no chip); the tray's own open state reads
+  // the change instead. Kept as a no-op hook in case a future open affordance is wanted.
+  toggleOpen: {},
   slot: {
     width: 36,
     height: 36,
@@ -121,6 +120,13 @@ const makeStyles = (t: Theme) =>
   // The toolbox glyph is flat black artwork, so it takes a tint. This is deliberately a
   // SEPARATE style from `icon`: that one is shared by the tool THUMBNAILS above, which are
   // illustrated images — tinting those would flatten them into purple silhouettes.
-  toolboxIcon: { width: 26, height: 26, tintColor: t.accent },
+  toolboxIconShadow: {
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+  },
+  toolboxIcon: { width: 30, height: 30 },
   prompt: { fontSize: 11, fontWeight: "700", color: t.textDim, marginRight: 2 },
   });

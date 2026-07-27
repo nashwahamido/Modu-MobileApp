@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { GrainOverlay } from "@/src/game/ui/Button";
 import { Image, StyleSheet, Text, View } from "react-native";
 import { GestureDetector, GestureType } from "react-native-gesture-handler";
 import { availableActions } from "@/src/game/core/evaluation/availability";
@@ -89,6 +90,7 @@ export function ClusterTray({ clusterDriver, clusterGestureFor }: Props) {
               dragging && styles.cardDragging,
             ]}
           >
+            <GrainOverlay radius={12} />
             {thumb ? (
               <Image source={thumb} style={styles.thumb} resizeMode="contain" />
             ) : (
