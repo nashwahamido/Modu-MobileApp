@@ -10,7 +10,7 @@
 // lists — the only thing they share is the plumbing below.
 import { supabase } from "@/src/config/supabase";
 import { useGameStore } from "@/src/game/core/store";
-import { usePlacementStore } from "@/src/room/placement";
+import { usePlacementStore } from "@/src/room/core/placement";
 import { signIn } from "@/src/services/auth";
 
 export interface TestAccount {
