@@ -58,7 +58,13 @@ export default function InventoryScreen() {
           category: i.category,
           source: "built" as const,
         }));
-        setOwned([...built, ...bought]);
+        // De-dupe by id: built/bought disjointness is a DB convention, not a constraint, and a
+        // shared id would render duplicate React keys. Built wins (it is the rarer acquisition).
+        const merged = new Map<string, OwnedItem>();
+        for (const item of [...built, ...bought]) {
+          if (!merged.has(item.id)) merged.set(item.id, item);
+        }
+        setOwned([...merged.values()]);
         setCoins(profile?.coins ?? 0);
       } catch (err) {
         // The repos THROW on any Postgrest error. Without this the spinner runs forever and the
