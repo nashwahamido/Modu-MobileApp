@@ -1,19 +1,21 @@
 // The shop. Browse the catalogue by category/sort and buy items with coins. Reads the catalogue,
 // the player's coin balance and their owned items through the repo seam (src/data), and buys
 // through repos.store.purchase — so it runs on fixtures today and on Supabase when the flag flips.
-// Twin of the Inventory route — the two catalogue surfaces share one set of components (src/shop).
+// Twin of the Inventory route — the two catalogue surfaces share one set of components and one stylesheet (src/shop).
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/src/game/ui/Button";
-import { SPACE, Theme, TYPE, useStyles, useTheme } from "@/src/game/ui/theme";
+import { SPACE, useStyles, useTheme } from "@/src/game/ui/theme";
 import { nextSort, useCurrentUserId, useRepos, viewCatalogue } from "@/src/data";
 import type { CategoryFilter, ShopItem, ShopItemId, ShopSort } from "@/src/data";
 import { CatalogueChrome } from "@/src/shop/CatalogueChrome";
 import { ItemCard } from "@/src/shop/ItemCard";
+import { CatalogThumb } from "@/src/components/CatalogThumb";
 import { PurchaseConfirmDialog, PurchaseNoticeDialog, PurchaseBlock } from "@/src/shop/PurchaseNoticeDialog";
+import { makeStyles } from "@/src/shop/catalogueScreen.styles";
 
 export default function StoreScreen() {
   const styles = useStyles(makeStyles);
@@ -148,6 +150,9 @@ export default function StoreScreen() {
                 // Level-locked → the tile shows a level star; no inline status. Everything stays
                 // tappable, and the tap explains a block (or asks to confirm) via the dialogs below.
                 lockLevel={locked ? item.minLevel : undefined}
+                // Every shop row is an item_buy row, so the picture always comes from the buy subtree;
+                // a level-locked tile shows the star instead (ItemCard's own rule).
+                preview={<CatalogThumb source="bought" itemId={item.id} size={82} />}
                 onPress={() => requestBuy(item)}
                 disabled={isOwned || busyId === item.id}
               />
@@ -162,6 +167,8 @@ export default function StoreScreen() {
           price={notice.item.price}
           minLevel={notice.item.minLevel}
           block={notice.block}
+          // Bigger than the tile's: the dialog's well is the item's close-up.
+          preview={<CatalogThumb source="bought" itemId={notice.item.id} size={152} />}
           onClose={() => setNotice(null)}
         />
       ) : null}
@@ -169,6 +176,7 @@ export default function StoreScreen() {
         <PurchaseConfirmDialog
           name={confirm.name}
           price={confirm.price}
+          preview={<CatalogThumb source="bought" itemId={confirm.id} size={152} />}
           onConfirm={() => buy(confirm)}
           onClose={() => setConfirm(null)}
         />
@@ -176,12 +184,3 @@ export default function StoreScreen() {
     </View>
   );
 }
-
-const makeStyles = (t: Theme) =>
-  StyleSheet.create({
-    root: { flex: 1, backgroundColor: t.bg, paddingBottom: SPACE.md },
-    center: { flex: 1, alignItems: "center", justifyContent: "center", gap: SPACE.md },
-    note: { ...TYPE.label, color: t.accent, marginBottom: SPACE.sm },
-    empty: { ...TYPE.body, color: t.textFaint, textAlign: "center", padding: SPACE.lg },
-    grid: { flexDirection: "row", flexWrap: "wrap", gap: SPACE.md, paddingBottom: SPACE.xl },
-  });

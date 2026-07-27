@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { router } from "expo-router";
 import { OrientationLock } from "expo-screen-orientation";
-import { Image, StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -10,7 +10,6 @@ import { FilamentScene } from "react-native-filament";
 import { AssemblyScene } from "@/src/game/scene/AssemblyScene";
 import { useAssemblyDrivers } from "@/src/game/scene/useAssemblyDrivers";
 import { useSceneState } from "@/src/game/scene/useSceneState";
-import { SCENE_BACKGROUND } from "@/src/game/scene/lighting";
 
 import { Joystick } from "@/src/game/input/Joystick";
 import { useOrbitCamera } from "@/src/game/input/useOrbitCamera";
@@ -23,8 +22,12 @@ import { SlideControl } from "@/src/game/input/SlideControl";
 import { PressControl } from "@/src/game/input/PressControl";
 import { ToolBar } from "@/src/game/ui/ToolBar";
 import { ObjectiveBar } from "@/src/game/ui/ObjectiveBar";
-import { HintButton, RecenterButton } from "@/src/game/ui/HudControls";
-import { Theme, useStyles } from "@/src/game/ui/theme";
+import {
+  HintButton,
+  RecenterButton,
+  hudControlStyles as hudControls,
+  tutorialChrome as styles,
+} from "@/src/game/ui/hudChrome";
 import { useStepObjective } from "@/src/game/core/presentation/useStepObjective";
 
 import { useGameStore } from "@/src/game/core/store";
@@ -47,7 +50,7 @@ import { ClusterTray } from "@/src/game/ui/ClusterTray";
 import { UndoButton } from "@/src/game/ui/UndoButton";
 import { TutorialGameSettings } from "@/src/game/tutorial/TutorialGameSettings";
 import { ClusterFocusControl } from "@/src/game/ui/ClusterFocusControl";
-import { backdropSource } from "@/src/game/ui/backdrops";
+import { SceneBackdrop } from "@/src/game/ui/SceneBackdrop";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 import {
   currentStageForClusterFocus,
@@ -66,7 +69,6 @@ import {
 function TutorialScreen() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
   const insets = useSafeAreaInsets();
-  const styles = useStyles(makeStyles);
 
   const {
     manipulator,
@@ -101,11 +103,12 @@ function TutorialScreen() {
       mode: state.mode,
       manualTools: state.settings.manualTools,
       softHints: state.settings.softHints,
-      oneFingerPanEnabled: state.settings.canvasStrafe,
     });
-    loadFurnitureById("tutorial").then((f) => {
-      if (active) useGameStore.getState().loadFurniture(f);
-    });
+    loadFurnitureById("tutorial")
+      .then((f) => {
+        if (active) useGameStore.getState().loadFurniture(f);
+      })
+      .catch((err) => console.warn("[tutorial] furniture load failed", err));
     return () => {
       active = false;
     };
@@ -211,19 +214,24 @@ function TutorialScreen() {
   const repos = useRepos();
   const me = useCurrentUserId();
   const tutorialRecorded = useRef(false);
-  const tutorialBuilt = totalCount > 0 && completedCount >= totalCount;
+  // The store may still hold a FINISHED build from a previous play session on the first frames
+  // (before loadFurnitureById lands), so "built" only counts when the loaded furniture IS the
+  // tutorial — otherwise entering here right after any completed build records a free tutorial.
+  const tutorialBuilt =
+    furniture?.meta.id === "tutorial" && totalCount > 0 && completedCount >= totalCount;
+  // A failed write re-arms via this counter: bumping it re-fires the effect, which a ref reset
+  // alone never does. Capped so a permanent backend failure cannot loop forever.
+  const [recordAttempt, setRecordAttempt] = useState(0);
   useEffect(() => {
     if (tutorialBuilt && !tutorialRecorded.current) {
       tutorialRecorded.current = true;
       repos.builds.complete(me, "tutorial").catch((err) => {
-        // Re-arm so a later render can retry: the flag is set BEFORE the call to keep the effect from
-        // firing twice, which would otherwise turn a transient failure into a permanently unrecorded
-        // tutorial (and a missing placeable item).
-        tutorialRecorded.current = false;
         console.warn("[tutorial] could not record the completed build", err);
+        tutorialRecorded.current = false;
+        setRecordAttempt((n) => (n < 3 ? n + 1 : n));
       });
     }
-  }, [tutorialBuilt, me, repos]);
+  }, [tutorialBuilt, me, repos, recordAttempt]);
   const displayedCompletedCount = guideCompleted
     ? guideStepCount + completedCount
     : completedCount;
@@ -320,7 +328,8 @@ function TutorialScreen() {
     [onPanStart, onPanMove, onPanEnd],
   );
 
-  // Canvas strafe when NOTHING is held — one-finger drag pans the camera, gated by the canvasStrafe setting in plain JS (a strafe that "activates" with the toggle off is a harmless no-op; there is no competing gesture). While a part IS held, the canvas gesture from usePartDrag owns the finger and routes: floating part → re-grab, else → these same strafe callbacks.
+  // Canvas strafe when NOTHING is held — one-finger drag pans the camera (always on, no toggle). While a part IS held, the canvas gesture from usePartDrag owns the finger and routes: floating part → re-grab, else → these same strafe callbacks.
+  // strafing guards onFinalize: a Pan that FAILS (lost the race) still finalizes, and that must not fire a spurious onPanEnd.
   const strafing = useRef(false);
   const strafePan = useMemo(
     () =>
@@ -330,11 +339,9 @@ function TutorialScreen() {
         .activeOffsetX([-12, 12])
         .activeOffsetY([-12, 12])
         .onStart((e) => {
-          if (useGameStore.getState().settings.canvasStrafe) {
-            strafing.current = true;
-            oneFingerPanStartedAt.current = { x: e.x, y: e.y };
-            onPanStart(e.x, e.y);
-          }
+          strafing.current = true;
+          oneFingerPanStartedAt.current = { x: e.x, y: e.y };
+          onPanStart(e.x, e.y);
         })
         .onUpdate((e) => {
           if (strafing.current) {
@@ -368,32 +375,26 @@ function TutorialScreen() {
     onPanEnd,
   });
 
-  // Composition identity changes ONLY when the held action or the canvas toggles change (touch-free moments), never on ordinary re-renders. Canvas gestures are attached ONLY when they can do something — with float and canvas-strafe both off, this is byte-identical to the classic pinch + two-finger-pan tree, so a no-op canvas gesture can never win the race and block a pinch (sloppy two-finger starts, zoom mid-drag).
+  // Composition identity changes ONLY when the held action changes (touch-free moments), never on ordinary re-renders. The one-finger canvas gesture is always live: held → usePartDrag's canvas gesture (re-grab or strafe fallback), empty scene → strafePan.
   const heldAction = sceneState.heldAction;
-  const canvasStrafeOn = settings.canvasStrafe;
-  const floatOn = settings.releaseBehavior === "float";
   const sceneGesture = useMemo(() => {
-    if (heldAction && (floatOn || canvasStrafeOn)) {
+    if (heldAction) {
       return Gesture.Race(pinch, pan, canvasGestureFor(heldAction));
     }
-    if (!heldAction && canvasStrafeOn) {
-      return Gesture.Race(pinch, pan, strafePan);
-    }
-    return Gesture.Race(pinch, pan);
-  }, [heldAction, floatOn, canvasStrafeOn, pinch, pan, strafePan, canvasGestureFor]);
+    return Gesture.Race(pinch, pan, strafePan);
+  }, [heldAction, pinch, pan, strafePan, canvasGestureFor]);
 
-  if (!furniture) return <View style={styles.root} />;
+  // Also holds while the store still shows a PREVIOUS session's furniture: rendering that here
+  // would flash the wrong build (and its finished ObjectiveBar) until the tutorial recipe lands.
+  if (!furniture || furniture.meta.id !== "tutorial")
+    return <View style={styles.root} />;
 
   return (
-    <View style={[styles.root, theme === "dark" && styles.rootDark]}>
-      {/* "clear": no image — the milk-white root (SCENE_BACKGROUND) / dark root shows through. Every other backdrop is a full-bleed image. */}
-      {backdropSource(backdrop, theme === "dark") ? (
-        <Image
-          source={backdropSource(backdrop, theme === "dark")}
-          style={StyleSheet.absoluteFill}
-          resizeMode="cover"
-        />
-      ) : null}
+    <SceneBackdrop
+      backdrop={backdrop}
+      dark={theme === "dark"}
+      style={[styles.root, theme === "dark" && styles.rootDark]}
+    >
       <GestureDetector gesture={sceneGesture}>
         <View style={styles.sceneWrap}>
           <TutorialTarget id="scene" style={styles.sceneTarget}>
@@ -484,7 +485,7 @@ function TutorialScreen() {
           pointerEvents="none"
         />
         {mode === "free" && !focus ? (
-          <TutorialTarget id="hint" style={styles.hintButton}>
+          <TutorialTarget id="hint" style={hudControls.hintButton}>
             <HintButton
               onPress={() => {
                 useGameStore.getState().suggestNext();
@@ -567,7 +568,7 @@ function TutorialScreen() {
             dark={dark}
           />
         </TutorialTarget>
-        <TutorialTarget id="recenter" style={styles.recenterButton}>
+        <TutorialTarget id="recenter" style={hudControls.recenterButton}>
           <RecenterButton
             enabled={sceneHasParts}
             onPress={() => {
@@ -610,7 +611,7 @@ function TutorialScreen() {
           });
         }}
       />
-    </View>
+    </SceneBackdrop>
   );
 }
 
@@ -621,61 +622,3 @@ export default function TutorialRoute() {
     </FilamentScene>
   );
 }
-
-/** Theme-driven, mirroring play.tsx: shared HUD elements copy the game screen's themed styles so the two HUDs look identical. */
-const makeStyles = (t: Theme) =>
-  StyleSheet.create({
-    root: { flex: 1, backgroundColor: SCENE_BACKGROUND },
-    rootDark: { backgroundColor: "#17140f" },
-    sceneWrap: { ...StyleSheet.absoluteFillObject },
-    sceneTarget: { flex: 1 },
-    assemblyTarget: {
-      position: "absolute",
-      left: "22%",
-      top: "24%",
-      width: "50%",
-      height: "52%",
-    },
-    chrome: { position: "absolute" },
-    // The pill itself is the shared ObjectiveBar (ui/ObjectiveBar); this just centres it, as in play.tsx.
-    objectiveWrap: { position: "absolute", top: 10, alignSelf: "center" },
-    // Beside the gear on play.tsx's 36px grid: gear 36 wide at left:14, +8 gap → 58 (HintButton owns the square sizing).
-    hintButton: { position: "absolute", left: 58, top: 8 },
-    joystickZone: { position: "absolute", left: 14, bottom: 16 },
-    partsTrayTarget: {
-      position: "absolute",
-      right: 10,
-      top: 70,
-      bottom: 70,
-      width: 124,
-    },
-    toolbarTarget: {
-      position: "absolute",
-      alignSelf: "center",
-      bottom: 16,
-      width: 118,
-      height: 48,
-    },
-    toolTarget: {
-      position: "absolute",
-      right: 150,
-      bottom: 28,
-      width: 140,
-      height: 160,
-    },
-    undoTarget: {
-      position: "absolute",
-      top: 54,
-      left: 14,
-      width: 92,
-      height: 36,
-    },
-    settingsTarget: {
-      position: "absolute",
-      top: 8,
-      left: 92,
-      width: 42,
-      height: 36,
-    },
-    recenterButton: { position: "absolute", left: 14, top: 102 },
-  });

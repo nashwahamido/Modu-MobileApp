@@ -1,9 +1,10 @@
 // General settings, reached from the homepage. Edits the global store, so choices made here become the defaults when you enter a build. Same controls as the in-game gear panel (SettingsControls).
 import { router } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SettingsControls } from "@/src/game/ui/SettingsControls";
-import { SPACE, Theme, TYPE, useStyles } from "@/src/game/ui/theme";
+import { useStyles } from "@/src/game/ui/theme";
+import { makeStyles } from "./settings.styles";
 
 export default function SettingsScreen() {
   const styles = useStyles(makeStyles);
@@ -37,22 +38,3 @@ export default function SettingsScreen() {
     </View>
   );
 }
-
-const makeStyles = (t: Theme) =>
-  StyleSheet.create({
-  root: { flex: 1, backgroundColor: t.bg },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingBottom: SPACE.md,
-    borderBottomWidth: StyleSheet.hairlineWidth * 2,
-    borderBottomColor: t.border,
-  },
-  back: { minWidth: 64 },
-  // The back affordance is the only pressable thing in the header, so it carries the
-  // accent — nothing else here should look tappable.
-  backText: { ...TYPE.label, fontSize: 16, color: t.accent },
-  title: { ...TYPE.title, color: t.text },
-  scroll: { paddingTop: SPACE.sm },
-  });

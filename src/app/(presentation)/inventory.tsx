@@ -1,15 +1,19 @@
-// The inventory, as a route — a (presentation) modal like the Shop, so it gets the same OS slide-up and the exact same page styling (the Shop route is its twin). Shows OWNED items with the shared chrome + tiles, straight from the backend catalog. Placement is not wired here yet: there is no per-item room model, so a "tap to place" would be a promise nothing can keep.
+// The inventory, as a route — a (presentation) modal like the Shop, so it gets the same OS slide-up and the exact same page styling (the Shop route is its twin). Shows OWNED items with the shared chrome + tiles, straight from the backend catalog. Items with a room model offer "tap to place": start the shared placement store's ghost, then return to the room, whose scene renders it on the grid.
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/src/game/ui/Button";
-import { SPACE, Theme, TYPE, useStyles, useTheme } from "@/src/game/ui/theme";
+import { SPACE, useStyles, useTheme } from "@/src/game/ui/theme";
 import { nextSort, useCurrentUserId, useRepos, viewCatalogue } from "@/src/data";
 import type { CategoryFilter, ShopCategory, ShopSort } from "@/src/data";
+import { usePlacementStore } from "@/src/room/core/placement";
+import { getRoomItem } from "@/src/room/core/placeableItems";
 import { CatalogueChrome } from "@/src/shop/CatalogueChrome";
 import { ItemCard } from "@/src/shop/ItemCard";
+import { CatalogThumb } from "@/src/components/CatalogThumb";
+import { makeStyles } from "@/src/shop/catalogueScreen.styles";
 
 // What the inventory owns = user_build (built furniture, described by item_build) ∪ user_buy (bought items, described by item_buy). Both halves get their name and category from the backend; built furniture has no price because it is earned. One shape for both.
 type OwnedItem = { id: string; name: string; category: ShopCategory; price?: number; source: "built" | "bought" };
@@ -102,25 +106,31 @@ export default function InventoryScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.grid}>
-          {visible.map((item) => (
-            <ItemCard
-              key={item.id}
-              name={item.name}
-              price={item.price}
-              owned
-              status="owned"
-            />
-          ))}
+          {visible.map((item) => {
+            // Only items with an authored room model are placeable; the rest stay passive rather
+            // than promising a placement that would produce an invisible ghost.
+            const placeable = getRoomItem(item.id) !== null;
+            const place = () => {
+              if (!usePlacementStore.getState().startPlacing(item.id)) return;
+              router.dismissTo("/room");
+            };
+            return (
+              <ItemCard
+                key={item.id}
+                name={item.name}
+                price={item.price}
+                owned
+                // The tile shows the item's DEFAULT colour; the player picks a different one while
+                // placing (the room's swatch row), not here — one item, one tile, whatever it owns.
+                preview={<CatalogThumb source={item.source} itemId={item.id} size={82} />}
+                status={placeable ? "tap to place" : "owned"}
+                statusTone={placeable ? "action" : "muted"}
+                onPress={placeable ? place : undefined}
+              />
+            );
+          })}
         </ScrollView>
       )}
     </View>
   );
 }
-
-const makeStyles = (t: Theme) =>
-  StyleSheet.create({
-    root: { flex: 1, backgroundColor: t.bg, paddingBottom: SPACE.md },
-    center: { flex: 1, alignItems: "center", justifyContent: "center", gap: SPACE.md },
-    empty: { ...TYPE.body, color: t.textFaint, textAlign: "center", padding: SPACE.lg },
-    grid: { flexDirection: "row", flexWrap: "wrap", gap: SPACE.md, paddingBottom: SPACE.xl },
-  });
