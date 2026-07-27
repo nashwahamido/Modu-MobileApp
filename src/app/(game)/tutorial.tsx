@@ -28,6 +28,7 @@ import {
   hudControlStyles as hudControls,
   tutorialChrome as styles,
 } from "@/src/game/ui/hudChrome";
+import { Button } from "@/src/game/ui/Button";
 import { useStepObjective } from "@/src/game/core/presentation/useStepObjective";
 
 import { useGameStore } from "@/src/game/core/store";
@@ -186,6 +187,7 @@ function TutorialScreen() {
       : 1;
   });
   const settings = useGameStore((s) => s.settings);
+  const heldActionId = useGameStore((s) => s.heldActionId);
   const renderStyle = useGameStore((s) => s.renderStyle);
   const backdrop = useGameStore((s) => s.backdrop);
   const theme = useGameStore((s) => s.theme);
@@ -257,7 +259,8 @@ function TutorialScreen() {
     : null;
   const drivePark =
     furniture && driveAction
-      ? (driveKind === "slide" ? slideParkInfo : pressParkInfo)(
+      ? // Same branch as play.tsx: press → pressParkInfo, everything else (slide, screw) → slideParkInfo.
+        (driveKind === "press" ? pressParkInfo : slideParkInfo)(
           furniture,
           driveAction,
           new Set(useGameStore.getState().completed),
@@ -579,7 +582,17 @@ function TutorialScreen() {
             }}
           />
         </TutorialTarget>
-
+        {heldActionId && settings.releaseBehavior === "float" ? (
+          // Same control as play.tsx: the settings walkthrough invites switching to Float, so the
+          // way back to the tray must exist here too or a dropped part soft-locks the tutorial.
+          <Button
+            label="↩ Put back"
+            small
+            variant="primary"
+            style={styles.putBackButton}
+            onPress={() => useGameStore.getState().cancelHeld()}
+          />
+        ) : null}
       </View>
       {ringOverlay}
       <GreenFlash trigger={completedCount} />
