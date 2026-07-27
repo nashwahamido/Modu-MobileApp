@@ -1,5 +1,5 @@
 // Per-backdrop images (from the on-release engine's set), each with a dark variant. The Background setting picks the key; Dark mode picks the variant.
-// Shared by the assembly game (play.tsx) and the tutorial so both stay in sync — see backdropSource for the "clear" / studio-fallback rules.
+// Consumed only through ui/SceneBackdrop, which renders the image identically on every screen (play, tutorial, room) — see backdropSource for the "clear" / studio-fallback rules.
 import type { BackdropId } from "@/src/game/core/type";
 
 const BACKDROPS: Record<string, { light: number; dark: number }> = {
