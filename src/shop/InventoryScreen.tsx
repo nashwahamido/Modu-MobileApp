@@ -1,21 +1,34 @@
 // The inventory, as a route — a (presentation) modal like the Shop, so it gets the same OS
-// slide-up and the exact same page styling (StoreScreen is its twin). Shows OWNED items with the
-// shared chrome + tiles. Tapping the placeable item starts placement via the shared placement
-// store and returns to the room, where the draggable furniture appears.
+// slide-up and the exact same page styling (StoreScreen is its twin). Shows task-reward items with
+// the shared chrome + tiles. Selecting a reward allows the user to place it in the room.
 import { router } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { RADIUS, SPACE, Theme, TYPE, useStyles, useTheme } from "@/src/game/ui/theme";
-import { nextSort, useCurrentUserId, useRepos, viewCatalogue } from "@/src/data";
-import type { CategoryFilter, ShopItem, ShopSort } from "@/src/data";
-import { PLACEABLE_ITEM_ID, usePlacementStore } from "@/src/room/placement";
+import {
+  RADIUS,
+  SPACE,
+  Theme,
+  TYPE,
+  useStyles,
+  useTheme,
+} from "@/src/game/ui/theme";
+import { nextSort, useCurrentUserId, useRepos } from "@/src/data";
+import type { CategoryFilter, ShopSort } from "@/src/data";
+import { usePlacementStore } from "@/src/room/placement";
 import {
   getTaskFurnitureImage,
   useTaskRewardInventory,
 } from "@/src/room/taskRewardInventory";
-import { Cabinet } from "@/src/room/Cabinet";
 import { CatalogueChrome } from "./CatalogueChrome";
 import { ItemCard } from "./ItemCard";
 
@@ -27,12 +40,13 @@ export default function InventoryScreen() {
   const insets = useSafeAreaInsets();
   const repos = useRepos();
   const me = useCurrentUserId();
-  const startPlacing = usePlacementStore((s) => s.startPlacing);
+
   const taskRewards = useTaskRewardInventory((s) => s.items);
   const guideItemId = useTaskRewardInventory((s) => s.guideItemId);
-  const finishInventoryGuide = useTaskRewardInventory((s) => s.finishInventoryGuide);
+  const finishInventoryGuide = useTaskRewardInventory(
+    (s) => s.finishInventoryGuide,
+  );
 
-  const [owned, setOwned] = useState<ShopItem[]>([]);
   const [coins, setCoins] = useState(0);
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState<CategoryFilter>("all");
@@ -42,47 +56,56 @@ export default function InventoryScreen() {
   useEffect(() => {
     let alive = true;
     setLoading(true);
+
     (async () => {
-      const [catalogue, ownedIds, profile] = await Promise.all([
-        repos.store.listItems(),
-        repos.store.listOwned(me),
-        repos.profiles.get(me),
-      ]);
+      const profile = await repos.profiles.get(me);
       if (!alive) return;
-      const ownedSet = new Set(ownedIds);
-      setOwned(catalogue.filter((i) => ownedSet.has(i.id)));
+
       setCoins(profile?.coins ?? 0);
       setLoading(false);
     })();
+
     return () => {
       alive = false;
     };
   }, [me, repos]);
 
-  const visible = useMemo(() => viewCatalogue(owned, category, sort), [owned, category, sort]);
-
-  const place = (item: ShopItem) => {
-    startPlacing(item.id);
-    router.replace("/room");
-  };
-  const selectedReward = taskRewards.find((item) => item.id === selectedRewardId);
+  const selectedReward = taskRewards.find(
+    (item) => item.id === selectedRewardId,
+  );
   const guideReward = taskRewards.find((item) => item.id === guideItemId);
+
   const placeTaskReward = () => {
     if (!selectedReward) return;
+
     finishInventoryGuide();
-    usePlacementStore.getState().startFirstPlacement(selectedReward.id, selectedReward.name);
+    usePlacementStore
+      .getState()
+      .startFirstPlacement(selectedReward.id, selectedReward.name);
     router.replace("/room");
   };
+
   const selectTaskReward = (itemId: string) => {
     setSelectedRewardId(itemId);
+
     if (itemId === guideItemId) {
       finishInventoryGuide();
     }
   };
-  const inventoryEmpty = taskRewards.length === 0 && owned.length === 0;
+
+  const inventoryEmpty = taskRewards.length === 0;
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top + SPACE.sm, paddingLeft: Math.max(insets.left, SPACE.xl), paddingRight: Math.max(insets.right, SPACE.xl) }]}>
+    <View
+      style={[
+        styles.root,
+        {
+          paddingTop: insets.top + SPACE.sm,
+          paddingLeft: Math.max(insets.left, SPACE.xl),
+          paddingRight: Math.max(insets.right, SPACE.xl),
+        },
+      ]}
+    >
       <CatalogueChrome
         title="Inventory"
         backLabel="Room"
@@ -96,9 +119,15 @@ export default function InventoryScreen() {
 
       {guideReward ? (
         <View style={styles.guide}>
-          <Image source={mascot} style={styles.guideMascot} resizeMode="contain" />
+          <Image
+            source={mascot}
+            style={styles.guideMascot}
+            resizeMode="contain"
+          />
           <View style={styles.guideCopy}>
-            <Text style={styles.guideTitle}>Here is your new {guideReward.name}</Text>
+            <Text style={styles.guideTitle}>
+              Here is your new {guideReward.name}
+            </Text>
             <Text style={styles.guideBody}>
               Tap the highlighted card, then choose Place in room.
             </Text>
@@ -107,11 +136,19 @@ export default function InventoryScreen() {
       ) : selectedReward ? (
         <View style={styles.placePrompt}>
           <View style={styles.placePromptCopy}>
-            <Text style={styles.placePromptTitle}>{selectedReward.name} selected</Text>
-            <Text style={styles.placePromptBody}>Ready to choose a spot in your room?</Text>
+            <Text style={styles.placePromptTitle}>
+              {selectedReward.name} selected
+            </Text>
+            <Text style={styles.placePromptBody}>
+              Ready to choose a spot in your room?
+            </Text>
           </View>
+
           <Pressable
-            style={({ pressed }) => [styles.placeButton, pressed && styles.placeButtonPressed]}
+            style={({ pressed }) => [
+              styles.placeButton,
+              pressed && styles.placeButtonPressed,
+            ]}
             onPress={placeTaskReward}
             accessibilityLabel={`Place ${selectedReward.name} in room`}
           >
@@ -127,9 +164,7 @@ export default function InventoryScreen() {
         </View>
       ) : inventoryEmpty ? (
         <View style={styles.center}>
-          <Text style={styles.empty}>
-            {owned.length === 0 ? "No items yet — visit the Shop to buy some." : "Nothing in this category."}
-          </Text>
+          <Text style={styles.empty}>No task reward items yet.</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.grid}>
@@ -137,12 +172,21 @@ export default function InventoryScreen() {
             const image = getTaskFurnitureImage(item.id);
             const highlighted = item.id === guideItemId;
             const selected = item.id === selectedRewardId;
+
             return (
               <ItemCard
                 key={`task-reward-${item.id}`}
                 name={item.name}
                 owned
-                preview={image ? <Image source={image} style={styles.rewardImage} resizeMode="contain" /> : undefined}
+                preview={
+                  image ? (
+                    <Image
+                      source={image}
+                      style={styles.rewardImage}
+                      resizeMode="contain"
+                    />
+                  ) : undefined
+                }
                 status={selected ? "selected" : "tap to select"}
                 statusTone="action"
                 badge={highlighted ? "NEW" : undefined}
@@ -150,23 +194,6 @@ export default function InventoryScreen() {
                 selected={selected}
                 dimmed={!!guideItemId && !highlighted}
                 onPress={() => selectTaskReward(item.id)}
-              />
-            );
-          })}
-          {visible.map((item) => {
-            const placeable = item.id === PLACEABLE_ITEM_ID;
-            return (
-              <ItemCard
-                key={item.id}
-                name={item.name}
-                price={item.price}
-                owned
-                preview={placeable ? <Cabinet /> : undefined}
-                status={placeable ? "tap to place" : "owned"}
-                statusTone={placeable ? "action" : "muted"}
-                onPress={placeable ? () => place(item) : undefined}
-                disabled={!placeable}
-                dimmed={!!guideItemId}
               />
             );
           })}
@@ -178,11 +205,32 @@ export default function InventoryScreen() {
 
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
-    root: { flex: 1, backgroundColor: t.bg, paddingBottom: SPACE.md },
-    center: { flex: 1, alignItems: "center", justifyContent: "center" },
-    empty: { ...TYPE.body, color: t.textFaint, textAlign: "center", padding: SPACE.lg },
-    grid: { flexDirection: "row", flexWrap: "wrap", gap: SPACE.md, paddingBottom: SPACE.xl },
-    rewardImage: { width: "92%", height: "92%" },
+    root: {
+      flex: 1,
+      backgroundColor: t.bg,
+      paddingBottom: SPACE.md,
+    },
+    center: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    empty: {
+      ...TYPE.body,
+      color: t.textFaint,
+      textAlign: "center",
+      padding: SPACE.lg,
+    },
+    grid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: SPACE.md,
+      paddingBottom: SPACE.xl,
+    },
+    rewardImage: {
+      width: "92%",
+      height: "92%",
+    },
     guide: {
       minHeight: 70,
       flexDirection: "row",
@@ -200,10 +248,23 @@ const makeStyles = (t: Theme) =>
       shadowRadius: 8,
       shadowOffset: { width: 0, height: 3 },
     },
-    guideMascot: { width: 54, height: 54, borderRadius: RADIUS.control },
-    guideCopy: { flex: 1, gap: 2 },
-    guideTitle: { ...TYPE.label, color: t.text },
-    guideBody: { ...TYPE.body, color: t.textDim },
+    guideMascot: {
+      width: 54,
+      height: 54,
+      borderRadius: RADIUS.control,
+    },
+    guideCopy: {
+      flex: 1,
+      gap: 2,
+    },
+    guideTitle: {
+      ...TYPE.label,
+      color: t.text,
+    },
+    guideBody: {
+      ...TYPE.body,
+      color: t.textDim,
+    },
     placePrompt: {
       minHeight: 70,
       flexDirection: "row",
@@ -216,9 +277,18 @@ const makeStyles = (t: Theme) =>
       paddingHorizontal: SPACE.lg,
       paddingVertical: SPACE.sm,
     },
-    placePromptCopy: { flex: 1, gap: 2 },
-    placePromptTitle: { ...TYPE.label, color: t.text },
-    placePromptBody: { ...TYPE.body, color: t.textDim },
+    placePromptCopy: {
+      flex: 1,
+      gap: 2,
+    },
+    placePromptTitle: {
+      ...TYPE.label,
+      color: t.text,
+    },
+    placePromptBody: {
+      ...TYPE.body,
+      color: t.textDim,
+    },
     placeButton: {
       minWidth: 150,
       minHeight: 48,
@@ -229,12 +299,18 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       justifyContent: "center",
     },
-    placeButtonPressed: { transform: [{ scale: 0.97 }], backgroundColor: t.accentPressed },
+    placeButtonPressed: {
+      transform: [{ scale: 0.97 }],
+      backgroundColor: t.accentPressed,
+    },
     placeButtonKicker: {
       color: t.success,
       fontSize: 8,
       fontWeight: "900",
       letterSpacing: 0.6,
     },
-    placeButtonText: { ...TYPE.label, color: t.text },
+    placeButtonText: {
+      ...TYPE.label,
+      color: t.text,
+    },
   });

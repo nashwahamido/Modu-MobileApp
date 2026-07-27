@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { router, useRootNavigationState } from "expo-router";
 import type { Href } from "expo-router";
 import {
@@ -8,8 +8,8 @@ import {
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from "react-native";
+import type { LayoutChangeEvent } from "react-native";
 import {
   CartIcon,
   CheckIcon,
@@ -33,17 +33,56 @@ import { getRoomFurnitureDefinition } from "./furnitureCatalog";
 import { useGameStore } from "../game/core/store";
 import {
   DEFAULT_FURNITURE_FOOTPRINT,
-  denormalizePlacementPoint,
-  getPlacementIssue,
-  getPlacementPerspectiveScale,
-  normalizePlacementPoint,
+  getNormalizedFloorPlacementIssue,
+  screenPointToNormalizedFloor,
+} from "./placementConstraints";
+import type {
+  NormalizedPlacementPoint,
+  ProjectedFurnitureBounds,
+  ProjectedRoomFloor,
 } from "./placementConstraints";
 
 const mascot = require("../assets/images/mascot/mascot.png");
 
-const placementStart = (width: number, height: number) => ({
-  x: width * 0.35,
-  y: height * 0.68,
+const PROJECTION_EPSILON = 0.25;
+
+function sameFurnitureProjection(
+  current: ProjectedFurnitureBounds | null,
+  next: ProjectedFurnitureBounds | null,
+) {
+  if (current === next) return true;
+  if (!current || !next) return false;
+
+  const currentValues = [
+    current.floorAnchor.x,
+    current.floorAnchor.y,
+    current.center.x,
+    current.center.y,
+    current.bounds.left,
+    current.bounds.right,
+    current.bounds.top,
+    current.bounds.bottom,
+  ];
+  const nextValues = [
+    next.floorAnchor.x,
+    next.floorAnchor.y,
+    next.center.x,
+    next.center.y,
+    next.bounds.left,
+    next.bounds.right,
+    next.bounds.top,
+    next.bounds.bottom,
+  ];
+
+  return currentValues.every(
+    (value, index) => Math.abs(value - nextValues[index]) <= PROJECTION_EPSILON,
+  );
+}
+
+const placementStart = (): NormalizedPlacementPoint => ({
+  // Preserves the old default model location in room space.
+  x: 0.65,
+  y: 0.8,
 });
 
 // Routes that run their OWN heavy Filament scene. While one of these is on top, the room's engine must be down so only one runs at a time. Lightweight layers (the (presentation) modals: settings, profile, …) are NOT here, so opening them leaves the room mounted — no reload.
@@ -56,7 +95,6 @@ export function RoomExperience() {
   const rootNav = useRootNavigationState();
   const heavySceneActive =
     !!rootNav && HEAVY_ROUTES.has(rootNav.routes[rootNav.index]?.name ?? "");
-  const { width, height } = useWindowDimensions();
   const [barOpen, setBarOpen] = useState(true);
   // Placement is shared state (src/room/placement) so the Inventory route can start it. The room
   // keeps only the view-layer drag bits (position, pan responder) local.
@@ -80,16 +118,58 @@ export function RoomExperience() {
   const roomZoomRef = useRef(roomZoom);
   const zoomPercent = Math.round(roomZoom * 100);
   const rotationDegrees = Math.round(((roomRotation * 180) / Math.PI) % 360);
-  const [placementPoint, setPlacementPoint] = useState(() =>
-    placementStart(width, height),
-  );
+  const [placementPoint, setPlacementPoint] = useState(placementStart);
   const placementPointRef = useRef(placementPoint);
-  const dragStart = useRef(placementPoint);
+  const [stageLayout, setStageLayout] = useState({
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+  });
+  const projectedFloorRef = useRef<ProjectedRoomFloor | null>(null);
+  const [furnitureProjection, setFurnitureProjection] =
+    useState<ProjectedFurnitureBounds | null>(null);
+  const furnitureProjectionRef = useRef<ProjectedFurnitureBounds | null>(null);
+  const dragStart = useRef({ x: 0, y: 0 });
 
-  const updatePlacementPoint = (nextPoint: { x: number; y: number }) => {
-    placementPointRef.current = nextPoint;
-    setPlacementPoint(nextPoint);
-  };
+  const updatePlacementPoint = useCallback(
+    (nextPoint: NormalizedPlacementPoint) => {
+      placementPointRef.current = nextPoint;
+      setPlacementPoint(nextPoint);
+    },
+    [],
+  );
+  const handleFloorProjectionChange = useCallback(
+    (nextFloor: ProjectedRoomFloor) => {
+      projectedFloorRef.current = nextFloor;
+    },
+    [],
+  );
+  const handleFurnitureProjectionChange = useCallback(
+    (nextProjection: ProjectedFurnitureBounds | null) => {
+      if (
+        sameFurnitureProjection(furnitureProjectionRef.current, nextProjection)
+      ) {
+        return;
+      }
+
+      furnitureProjectionRef.current = nextProjection;
+      setFurnitureProjection(nextProjection);
+    },
+    [],
+  );
+  const handleStageLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextLayout = event.nativeEvent.layout;
+    setStageLayout((currentLayout) => {
+      const unchanged =
+        Math.abs(currentLayout.x - nextLayout.x) < 0.5 &&
+        Math.abs(currentLayout.y - nextLayout.y) < 0.5 &&
+        Math.abs(currentLayout.width - nextLayout.width) < 0.5 &&
+        Math.abs(currentLayout.height - nextLayout.height) < 0.5;
+
+      return unchanged ? currentLayout : nextLayout;
+    });
+  }, []);
   const [placementWarning, setPlacementWarning] = useState<string | null>(null);
   const roomFurniture = getRoomFurnitureDefinition(itemId);
   const collisionFootprint =
@@ -108,70 +188,48 @@ export function RoomExperience() {
         onPanResponderTerminationRequest: () => false,
 
         onPanResponderGrant: () => {
-          dragStart.current = { ...placementPointRef.current };
+          const currentProjection = furnitureProjectionRef.current;
+          if (currentProjection) {
+            dragStart.current = { ...currentProjection.floorAnchor };
+          }
           setPlacementWarning(null);
         },
 
         onPanResponderMove: (_, gesture) => {
-          const candidate = {
+          const currentFloor = projectedFloorRef.current;
+          if (!currentFloor || !furnitureProjectionRef.current) return;
+
+          const candidateScreenPoint = {
             x: dragStart.current.x + gesture.dx,
             y: dragStart.current.y + gesture.dy,
           };
-          const candidateScale = getPlacementPerspectiveScale(
-            candidate.y,
-            height,
+          const candidateFloorPoint = screenPointToNormalizedFloor(
+            candidateScreenPoint,
+            currentFloor,
           );
-          const warning = getPlacementIssue(
-            candidate,
-            width,
-            height,
-            candidateScale,
+          if (!candidateFloorPoint) return;
+
+          const warning = getNormalizedFloorPlacementIssue(
+            candidateFloorPoint,
             collisionFootprint,
           );
-
           setPlacementWarning(warning);
-          updatePlacementPoint(candidate);
-        },
-
-        onPanResponderRelease: () => {
-          setPlacementWarning(null);
-        },
-        onPanResponderTerminate: () => {
-          setPlacementWarning(null);
+          updatePlacementPoint(candidateFloorPoint);
         },
       }),
-    [collisionFootprint, height, placing, width],
+    [collisionFootprint, placing, updatePlacementPoint],
   );
 
-  // The selection box and the 3D furniture now use the same React state.
-  // This removes the old split where the box used Animated.ValueXY while the
-  // model used placementPoint, allowing the box to move without the furniture.
-  const roomPivot = { x: width * 0.5, y: height * 0.57 };
-  const roomOffsetX = placementPoint.x - roomPivot.x;
-  const roomOffsetY = placementPoint.y - roomPivot.y;
-  const rotationCos = Math.cos(roomRotation);
-  const rotationSin = Math.sin(roomRotation);
-  const projectedOffsetX =
-    roomOffsetX * rotationCos + roomOffsetY * rotationSin * -0.52;
-  const projectedOffsetY = roomOffsetY + roomOffsetX * rotationSin * -0.18;
-  const furnitureTranslateX = roomPivot.x + projectedOffsetX * roomZoom;
-  const furnitureTranslateY = roomPivot.y + projectedOffsetY * roomZoom;
-  const furnitureScale =
-    getPlacementPerspectiveScale(placementPoint.y, height) * roomZoom;
-
-  // A fresh placement starts at the default point. A confirmed placement restores
-  // from normalized room coordinates when the room remounts or changes size.
+  // Placement is now stored in normalized room-floor coordinates. It therefore
+  // remains stable across viewport changes, room rotation, and room zoom.
   useEffect(() => {
-    const nextPosition = savedPosition
-      ? denormalizePlacementPoint(savedPosition, width, height)
-      : placementStart(width, height);
-    updatePlacementPoint(nextPosition);
+    updatePlacementPoint(savedPosition ?? placementStart());
     setPlacementWarning(null);
     if (startNonce > 0 && !savedPosition) {
       applyRoomControls(0, 1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [height, savedPosition?.x, savedPosition?.y, startNonce, width]);
+  }, [savedPosition?.x, savedPosition?.y, startNonce, updatePlacementPoint]);
   useEffect(() => {
     roomRotationRef.current = roomRotation;
     roomZoomRef.current = roomZoom;
@@ -197,14 +255,16 @@ export function RoomExperience() {
   };
   const handleConfirmPlacement = () => {
     if (placementWarning) return;
-    confirmPlacement(
-      normalizePlacementPoint(placementPointRef.current, width, height),
-    );
+    confirmPlacement(placementPointRef.current);
   };
 
   return (
     <View style={s.screen}>
-      <View style={s.stage} pointerEvents={placing ? "none" : "auto"}>
+      <View
+        style={s.stage}
+        pointerEvents={placing ? "none" : "auto"}
+        onLayout={handleStageLayout}
+      >
         {heavySceneActive ? null : (
           <RoomScene
             rotationY={roomRotation}
@@ -213,26 +273,13 @@ export function RoomExperience() {
               roomFurniture && (placing || placed)
                 ? {
                     itemId: roomFurniture.id,
-                    position: (() => {
-                      const normalized = normalizePlacementPoint(
-                        placementPoint,
-                        width,
-                        height,
-                      );
-
-                      return {
-                        x: 1 - normalized.x,
-                        y: 1 - normalized.y,
-                      };
-                    })(),
-                    perspectiveScale: getPlacementPerspectiveScale(
-                      placementPoint.y,
-                      height,
-                    ),
+                    position: placementPoint,
                     renderStyle,
                   }
                 : null
             }
+            onFloorProjectionChange={handleFloorProjectionChange}
+            onFurnitureProjectionChange={handleFurnitureProjectionChange}
           />
         )}
       </View>
@@ -320,7 +367,7 @@ export function RoomExperience() {
 
       <DevMenu placement="roomFloat" />
 
-      {(placing || placed) && roomFurniture ? (
+      {(placing || placed) && roomFurniture && furnitureProjection ? (
         placing ? (
           <View
             collapsable={false}
@@ -329,11 +376,14 @@ export function RoomExperience() {
             style={[
               s.furnitureWrap,
               {
-                transform: [
-                  { translateX: furnitureTranslateX },
-                  { translateY: furnitureTranslateY },
-                  { scale: furnitureScale },
-                ],
+                left: stageLayout.x + furnitureProjection.bounds.left,
+                top: stageLayout.y + furnitureProjection.bounds.top,
+                width:
+                  furnitureProjection.bounds.right -
+                  furnitureProjection.bounds.left,
+                height:
+                  furnitureProjection.bounds.bottom -
+                  furnitureProjection.bounds.top,
               },
               s.furnitureActive,
               placementWarning && s.furnitureBlocked,
@@ -353,11 +403,14 @@ export function RoomExperience() {
             style={[
               s.furnitureWrap,
               {
-                transform: [
-                  { translateX: furnitureTranslateX },
-                  { translateY: furnitureTranslateY },
-                  { scale: furnitureScale },
-                ],
+                left: stageLayout.x + furnitureProjection.bounds.left,
+                top: stageLayout.y + furnitureProjection.bounds.top,
+                width:
+                  furnitureProjection.bounds.right -
+                  furnitureProjection.bounds.left,
+                height:
+                  furnitureProjection.bounds.bottom -
+                  furnitureProjection.bounds.top,
               },
             ]}
           />
@@ -695,10 +748,6 @@ const makeStyles = (t: Theme) =>
     furnitureWrap: {
       position: "absolute",
       zIndex: 10,
-      left: -55,
-      top: -45,
-      width: 110,
-      height: 90,
       // Keeps the otherwise empty native view hittable on Android.
       backgroundColor: "rgba(0, 0, 0, 0.001)",
     },
