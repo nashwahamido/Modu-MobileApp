@@ -13,7 +13,9 @@ import { GrainOverlay } from "@/src/game/ui/Button";
 import { SCENE_BACKGROUND } from "@/src/game/scene/lighting";
 
 /** One shared size for every bare HUD icon so they line up on the grid. */
-export const HUD_ICON = 30;
+// 24 inside the 36 chip: the art was nearly filling its container, which read as heavy
+// against the scene. The chip size is unchanged, so the grid and the tap targets hold.
+export const HUD_ICON = 24;
 
 /**
  * A HUD icon inside a container chip — surface fill, hairline border, rounded corners, the
@@ -182,12 +184,14 @@ export const tutorialChrome = {
   },
   // The pill itself is the shared ObjectiveBar (ui/ObjectiveBar); this just centres it, as in play.tsx.
   objectiveWrap: { position: "absolute", top: 10, alignSelf: "center" },
+  // Must match PartsTray's own `column` (right:14, top:70, bottom:70, width:86) so the
+  // spotlight frames the tray exactly, not a larger box around it.
   partsTrayTarget: {
     position: "absolute",
-    right: 10,
+    right: 14,
     top: 70,
     bottom: 70,
-    width: 124,
+    width: 86,
   },
   toolbarTarget: {
     position: "absolute",
@@ -210,11 +214,13 @@ export const tutorialChrome = {
     width: 92,
     height: 36,
   },
+  // Match the real gear in GameSettings (left:14, top:8, 36×36). left:92 pointed the
+  // spotlight at the hint slot instead of the gear.
   settingsTarget: {
     position: "absolute",
     top: 8,
-    left: 92,
-    width: 42,
+    left: 14,
+    width: 36,
     height: 36,
   },
 } satisfies Record<string, ViewStyle>;

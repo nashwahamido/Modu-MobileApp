@@ -94,8 +94,6 @@ export default function CatalogueScreen() {
 
   return (
     <View style={styles.root}>
-      {/* Same clay grain as every surface in the app, laid over the screen background. */}
-      <GrainOverlay radius={0} />
       <ScrollView
         contentContainerStyle={[
           styles.content,
@@ -219,6 +217,7 @@ function FurnitureCard({
       </View>
       {/* The card is pressable end to end; Start is the visible affordance, not a second target. */}
       <View style={styles.startBtn} pointerEvents="none">
+        <GrainOverlay radius={RADIUS.pill} />
         <Text style={styles.startText}>Start ›</Text>
       </View>
     </Pressable>

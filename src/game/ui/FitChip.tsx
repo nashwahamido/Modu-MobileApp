@@ -16,10 +16,12 @@ import { Theme, useStyles, useTheme } from "@/src/game/ui/theme";
 const FIT_DONE = "#8FA876"; // Drop it! — the part is home
 const FIT_ALMOST = "#BACCA8"; // Almost — a lighter shade of done: nearly there
 const FIT_CLOSE = "#A9BFD9"; // Getting close — a step further out
+const FIT_HUNT = "#DF9B66"; // Still hunting — a softened take on the sockets' orange: present enough to register, not as loud as the scene cue
 
 const lookFor = (t: Theme): Record<FitState, { color: string; label: string } | null> => ({
   idle: null,
-  held: { color: FIT_CLOSE, label: "Find the spot" },
+  held: { color: FIT_HUNT, label: "Find the spot" },
+  approaching: { color: FIT_CLOSE, label: "Getting close" },
   nearCorrect: { color: FIT_DONE, label: "Drop it!" },
   nearRotation: { color: FIT_ALMOST, label: "Almost — drop to settle" },
   wrongTarget: { color: t.danger, label: "Belongs elsewhere" },

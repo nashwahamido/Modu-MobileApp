@@ -1,7 +1,18 @@
 import * as Haptics from "expo-haptics";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useRouter } from "expo-router";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Animated,
+  Easing,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 import {
   actionCluster,
   clusterComplete,
@@ -12,13 +23,53 @@ import {
   requiresClusterFocus,
 } from "@/src/game/core/evaluation/clusters";
 import { useGameStore } from "@/src/game/core/store";
-import { brandFor } from "@/src/game/content/brands";
+import Svg, { Circle as SvgCircle, Defs, RadialGradient, Stop } from "react-native-svg";
 import { StarBadge } from "@/src/game/ui/Icons";
-import { GrainOverlay } from "@/src/game/ui/Button";
+import { CoinMedalIcon } from "@/src/components/Icons";
 import { Theme, useStyles, useTheme } from "@/src/game/ui/theme";
 import { useRepos } from "@/src/data";
 import { useCatalogRow } from "@/src/data/catalogStore";
+import { HUD_SIDE_MARGIN, HUD_VERTICAL_MARGIN } from "@/src/hooks/use-safe-insets";
 import type { ClusterId } from "@/src/game/core/type";
+
+/**
+ * A ring that swells and fades out of an available stage, over and over. It marks what the
+ * player CAN start right now — the locked stages are already paler and the finished ones wear
+ * a solid outline, so this is the only cue that has to attract the eye rather than just
+ * describe a state, and motion is what does that without another colour.
+ *
+ * Native-driven: it runs on transform and opacity only, so the loop never touches the JS
+ * thread — the same reason the orbit driver moved off it.
+ */
+function PulseRing({ style }: { style: StyleProp<ViewStyle> }) {
+  const t = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(t, {
+        toValue: 1,
+        duration: 1700,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [t]);
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        style,
+        {
+          opacity: t.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] }),
+          transform: [
+            { scale: t.interpolate({ inputRange: [0, 1], outputRange: [1, 1.22] }) },
+          ],
+        },
+      ]}
+    />
+  );
+}
 
 export function BuildMap() {
   const styles = useStyles(makeStyles);
@@ -157,12 +208,10 @@ export function BuildMap() {
     const pct = totalSteps ? Math.round((done.size / totalSteps) * 100) : 0;
     // Both come straight from the DB row — zero until the lookup lands, or if it failed.
     const { coins, xp: totalXp } = reward;
-    const brand = catalogRow ? brandFor(catalogRow.brand) : null;
 
     return (
       <View style={styles.scrim}>
         <View style={styles.card}>
-          <GrainOverlay radius={22} />
           <Pressable
             style={styles.close}
             // Paused mid-build → resume. Nothing chosen yet → there is nothing to resume
@@ -174,34 +223,63 @@ export function BuildMap() {
             <Text style={styles.closeGlyph}>✕</Text>
           </Pressable>
 
+          <Pressable
+            style={({ pressed }) => [styles.home, pressed && { opacity: 0.6 }]}
+            onPress={() => router.dismissTo("/room")}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Back to your room"
+          >
+            <Image
+              source={require("@/src/assets/ui/icons/icon-home.png")}
+              style={styles.homeIcon}
+              resizeMode="contain"
+            />
+            <Text style={styles.homeText}>Home</Text>
+          </Pressable>
+
           <View style={styles.titleRow}>
             <Text style={styles.title}>{catalogRow?.name ?? ""}</Text>
-            {brand ? (
-              <Image
-                source={brand.logo}
-                style={styles.brandLogo}
-                resizeMode="contain"
-                accessibilityLabel={brand.name}
-              />
-            ) : null}
           </View>
 
           <View style={styles.nodeRow}>
+            {/* Every connector is drawn FIRST, in one absolutely-positioned layer, so all of
+                them sit under all of the circles. Interleaving them with the nodes could only
+                ever put a band under the node that followed it — the last one always landed on
+                top of the circle to its right, and zIndex alone did not settle it on Android. */}
+            <View
+              style={[
+                styles.connectorLayer,
+                {
+                  // The row centres its children, so a full-width layer would put the bands
+                  // off by half the slack. Pin it to the content box instead.
+                  width: nodes.length * nodeWidth + (nodes.length - 1) * 24,
+                  marginLeft: -(nodes.length * nodeWidth + (nodes.length - 1) * 24) / 2,
+                },
+              ]}
+              pointerEvents="none"
+            >
+              {nodes.map((n, i) =>
+                i === 0 ? null : (
+                  <View
+                    key={`link-${n.key}`}
+                    style={[
+                      styles.connectorLine,
+                      {
+                        // Midpoint of the two circle centres: node i-1's centre plus half a
+                        // node, plus the 24dp slot between them, less half the band's length.
+                        left:
+                          (i - 1) * (nodeWidth + 24) + nodeWidth + 12 - CONNECTOR_LEN / 2,
+                      },
+                      i % 2 === 1 ? styles.connectorDown : styles.connectorUp,
+                    ]}
+                  />
+                ),
+              )}
+            </View>
             {nodes.map((n, i) => (
               <Fragment key={n.key}>
-                {i > 0 ? (
-                  <View style={styles.connectorSlot}>
-                    {/* Tilts to meet the staggered neighbours: down into a low node, back
-                        up out of one. 28.7° is the angle between the circle edges — 62dp
-                        apart across, 34dp down. */}
-                    <View
-                      style={[
-                        styles.connectorLine,
-                        i % 2 === 1 ? styles.connectorDown : styles.connectorUp,
-                      ]}
-                    />
-                  </View>
-                ) : null}
+                {i > 0 ? <View style={styles.connectorSlot} /> : null}
                 <Pressable
                   disabled={!n.enabled || n.finished}
                   onPress={n.onPress}
@@ -214,6 +292,23 @@ export function BuildMap() {
                   ]}
                   accessibilityLabel={`${n.label}, ${n.doneCount} of ${n.actions.length} steps`}
                 >
+                  {/* Available: pulsing. Finished: a steady outline plus the tick. Both are
+                      SIBLINGS of the circle, never a border on it — the circle clips its own
+                      gradient, and a bordered view with a rounded inner overlay is what made
+                      Android flatten these into octagons before. */}
+                  {n.enabled && !n.finished ? (
+                    <PulseRing style={styles.pulseRing} />
+                  ) : null}
+                  {n.finished ? (
+                    <>
+                      <View style={styles.doneRing} pointerEvents="none" />
+                      <Image
+                        source={require("@/src/assets/ui/icons/icon-success.png")}
+                        style={styles.doneCheck}
+                        resizeMode="contain"
+                      />
+                    </>
+                  ) : null}
                   <View
                     style={[
                       styles.circle,
@@ -221,14 +316,40 @@ export function BuildMap() {
                       !n.enabled && !n.finished && styles.circleLocked,
                     ]}
                   >
+                    {/* The wireframe's sphere: a light halo in the middle falling off to a
+                        deeper cream at the rim. A flat fill read as a sticker; the gradient is
+                        what gives the node its volume. */}
+                    <Svg width={92} height={92} style={StyleSheet.absoluteFill}>
+                      <Defs>
+                        <RadialGradient id={`halo-${n.key}`} cx="50%" cy="42%" r="65%">
+                          {/* A locked stage is drawn PALER, never more transparent: dropping the
+                              view's opacity is what let the connector band show straight through
+                              the circle. The fill stays fully opaque at every state. */}
+                          <Stop offset="0" stopColor="#FBF8F3" />
+                          <Stop
+                            offset="1"
+                            stopColor={!n.enabled && !n.finished ? "#E6E0D5" : "#D9D0C2"}
+                          />
+                        </RadialGradient>
+                      </Defs>
+                      <SvgCircle cx="46" cy="46" r="46" fill={`url(#halo-${n.key})`} />
+                    </Svg>
                     {n.thumb ? (
                       <Image
                         source={n.thumb}
-                        style={styles.nodeThumb}
+                        style={[
+                          styles.nodeThumb,
+                          !n.enabled && !n.finished && styles.dimmed,
+                        ]}
                         resizeMode="contain"
                       />
                     ) : null}
-                    <Text style={styles.stepCount}>
+                    <Text
+                      style={[
+                        styles.stepCount,
+                        !n.enabled && !n.finished && styles.dimmed,
+                      ]}
+                    >
                       {n.doneCount}/{n.actions.length} steps
                     </Text>
                   </View>
@@ -238,23 +359,22 @@ export function BuildMap() {
                       untouched stage would be claiming progress that does not exist. */}
                   {n.doneCount > 0 && !n.finished ? (
                     <Image
-                      source={require("@/src/assets/ui/icons/icon-play.png")}
-                      style={styles.playBadgeImg}
+                      source={require("@/src/assets/ui/icons/icon-resume.png")}
+                      style={styles.playBadge}
                       resizeMode="contain"
                     />
                   ) : null}
 
                   <View style={styles.starWrap} pointerEvents="none">
-                    <StarBadge size={38} color={t.accent} />
+                    <StarBadge size={48} color={t.accent} />
                     <Text style={styles.starText}>
-                      +{n.actions.length * furniture.xpPerStep}
+                      {n.actions.length * furniture.xpPerStep}
                     </Text>
                   </View>
 
                   <Text
                     style={[styles.nodeLabel, !n.enabled && !n.finished && styles.nodeLabelLocked]}
                   >
-                    {n.finished ? "✓ " : ""}
                     {n.label}
                   </Text>
                 </Pressable>
@@ -279,15 +399,36 @@ export function BuildMap() {
           </View>
 
           <View style={styles.reward}>
-            <Text style={styles.rewardKicker}>COMPLETION REWARD</Text>
-            <View style={styles.rewardRow}>
-              <View style={styles.rewardItem}>
-                <Text style={styles.rewardIcon}>◉</Text>
-                <Text style={styles.rewardText}>+{coins} coins</Text>
+            {/* Rosette overlaps the banner's left end, as in the wireframe — it reads as a
+                seal pinned to the ribbon rather than a third item in the row. */}
+            <View style={styles.rewardHeaderRow}>
+              <Image
+                source={require("@/src/assets/ui/icons/icon-award.png")}
+                style={styles.awardIcon}
+                resizeMode="contain"
+              />
+              <View style={styles.rewardBanner}>
+                <Text style={styles.rewardKicker}>REWARDS</Text>
               </View>
-              <View style={styles.rewardItem}>
-                <Text style={styles.rewardIcon}>★</Text>
-                <Text style={styles.rewardText}>+{totalXp} XP</Text>
+            </View>
+            <View style={styles.rewardRow}>
+              <View style={styles.rewardTile}>
+                <CoinMedalIcon size={26} />
+                <Text style={styles.rewardText}>+ {coins}</Text>
+              </View>
+              <View style={styles.rewardTile}>
+                <View style={styles.itemWell}>
+                  <Text style={styles.itemGlyph}>?</Text>
+                </View>
+                <Text style={styles.rewardText}>+1 item</Text>
+              </View>
+              <View style={styles.rewardTile}>
+                <Image
+                  source={require("@/src/assets/ui/icons/icon-xp.png")}
+                  style={styles.xpIcon}
+                  resizeMode="contain"
+                />
+                <Text style={styles.rewardText}>+ {totalXp}</Text>
               </View>
             </View>
           </View>
@@ -385,6 +526,12 @@ export function ClusterFocusControl() {
   );
 }
 
+/** Every text on this modal, per the wireframe. */
+const INK = "#231F20";
+
+/** Centre-to-centre span of the band between two stage circles (node 116 + slot 24). */
+const CONNECTOR_LEN = 140;
+
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
     scrim: {
@@ -392,7 +539,10 @@ const makeStyles = (t: Theme) =>
       backgroundColor: t.scrim,
       alignItems: "center",
       justifyContent: "center",
-      padding: 12,
+      // The same floors the assembly HUD uses, so the modal never sits closer to the glass
+      // than the controls behind it. Immersive mode reports 0 insets, hence the constants.
+      paddingHorizontal: HUD_SIDE_MARGIN,
+      paddingVertical: HUD_VERTICAL_MARGIN,
       // zIndex only — NO elevation. On Android `elevation` draws a drop shadow around the
       // view's bounds, and a full-screen dimmer does not want one: while this sat inside
       // play.tsx's inset chrome container that shadow landed ON SCREEN as a dark band
@@ -406,10 +556,7 @@ const makeStyles = (t: Theme) =>
     card: {
       width: "100%",
       maxWidth: 560,
-      // A LITERAL cream, not a token. `surface` and `surfaceRaised` are both near-white in
-      // the light theme, and across an area this large near-white just reads as white. This
-      // is the tone of the catalogue cards' thumbnail panels, sampled from them.
-      backgroundColor: "#E3DACD",
+      backgroundColor: "#FBF8F3",
       borderRadius: 22,
       // The purple outline: this is the one modal that blocks the whole game, so it gets
       // the accent rather than the usual hairline.
@@ -431,16 +578,29 @@ const makeStyles = (t: Theme) =>
       width: 34,
       height: 34,
       borderRadius: 17,
-      backgroundColor: t.surfaceRaised,
+      backgroundColor: "#595551",
       borderWidth: 2,
-      borderColor: t.accent,
+      borderColor: "#FBF8F3",
       alignItems: "center",
       justifyContent: "center",
       zIndex: 2,
       elevation: 2,
     },
-    closeGlyph: { color: t.text, fontSize: 16, fontWeight: "800" },
+    closeGlyph: { color: "#FBF8F3", fontSize: 16, fontWeight: "800" },
 
+    // Top-left of the card, opposite the close button. Absolute so it cannot push the
+    // centred title off centre.
+    home: {
+      position: "absolute",
+      top: 12,
+      left: 16,
+      zIndex: 3,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    homeIcon: { width: 26, height: 26 },
+    homeText: { fontSize: 13, fontWeight: "700", color: INK },
     titleRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -449,7 +609,6 @@ const makeStyles = (t: Theme) =>
       marginBottom: 10,
     },
     title: { fontSize: 18, fontWeight: "800", color: t.text },
-    brandLogo: { width: 42, height: 16 },
 
     // ── the nodes ─────────────────────────────────────────────────────────
     nodeRow: {
@@ -461,19 +620,26 @@ const makeStyles = (t: Theme) =>
     // The connector's SLOT in the row is narrow; the line itself is longer and overflows
     // it deliberately, running across the empty padding either side of the circles.
     // Midpoint between the two circle centres: radius 46 + half the 34dp stagger.
-    connectorSlot: { width: 24, height: 2, marginTop: 63 },
+    // Pure spacer now — the bands live in connectorLayer, which paints before any node.
+    connectorSlot: { width: 24 },
+    connectorLayer: { position: "absolute", top: 0, bottom: 0, left: "50%", zIndex: 0 },
     // The rims are 58.8dp apart on the diagonal; drawing 44 leaves ~7dp clear at each end
     // so the line stops short of both circles instead of butting into them.
+    // Spans CENTRE to CENTRE (node 116 + slot 24 = 140), not rim to rim: the long run makes
+    // the tilt shallow (atan 34/140 ≈ 13.7°) and buries both rounded ends under the circles,
+    // which draw after it and carry elevation. A short rim-to-rim band showed its own caps.
     connectorLine: {
       position: "absolute",
-      width: 52,
-      height: 2,
-      left: -14,
-      backgroundColor: "rgba(60,50,40,0.28)",
+      // Circle centres sit at y=46 and y=80 (the 34dp stagger); their midpoint is 63.
+      top: 63 - 7,
+      width: CONNECTOR_LEN,
+      height: 14,
+      borderRadius: 7,
+      backgroundColor: "rgba(35,31,32,0.06)",
     },
-    connectorDown: { transform: [{ rotate: "35.3deg" }] },
-    connectorUp: { transform: [{ rotate: "-35.3deg" }] },
-    node: { alignItems: "center", width: 116 },
+    connectorDown: { transform: [{ rotate: "13.7deg" }] },
+    connectorUp: { transform: [{ rotate: "-13.7deg" }] },
+    node: { alignItems: "center", width: 116, zIndex: 1 },
     // The dip that turns a row into a route. Matches the wireframe, where the middle stage
     // sits below its neighbours.
     nodeLow: { marginTop: 34 },
@@ -481,10 +647,10 @@ const makeStyles = (t: Theme) =>
       width: 92,
       height: 92,
       borderRadius: 46,
-      // A SOLID tone, not the translucent `surfaceInset`: layered over cream that read as
-      // washed-out mud. And NO border — a bordered View with a rounded inner overlay is
-      // what made Android flatten the corners into an octagon.
-      backgroundColor: "#CFC4B4",
+      // Fill comes from the SVG radial gradient inside; keep the View transparent, and NO
+      // border — a bordered View with a rounded inner overlay is what made Android flatten
+      // the corners into an octagon.
+      overflow: "hidden",
       alignItems: "center",
       justifyContent: "center",
       paddingBottom: 6,
@@ -496,15 +662,52 @@ const makeStyles = (t: Theme) =>
       shadowOffset: { width: 0, height: 3 },
       elevation: 4,
     },
-    circleFinished: { backgroundColor: "#BFB3A0" },
-    circleLocked: { opacity: 0.4 },
+    circleFinished: {},
+    // Sits UNDER the circle so the swell reads as a halo growing out from behind it.
+    pulseRing: {
+      position: "absolute",
+      top: 0,
+      alignSelf: "center",
+      width: 92,
+      height: 92,
+      borderRadius: 46,
+      borderWidth: 3,
+      borderColor: "#A9BFD9",
+      zIndex: 0,
+    },
+    doneRing: {
+      position: "absolute",
+      top: 0,
+      alignSelf: "center",
+      width: 92,
+      height: 92,
+      borderRadius: 46,
+      borderWidth: 3,
+      borderColor: "#8FA876",
+      zIndex: 2,
+    },
+    // Bottom-left, where the resume badge sits on an unfinished stage — a finished stage has
+    // nothing to resume, so the two never appear together and can share the spot.
+    doneCheck: {
+      position: "absolute",
+      bottom: 14,
+      // Inset a touch more than the resume badge: that PNG carries a transparent shadow
+      // margin, this one is flush to its edge, so equal boxes would read as unequal discs.
+      left: 6,
+      width: 28,
+      height: 28,
+      zIndex: 3,
+    },
+    // NOT opacity — see the gradient comment above.
+    circleLocked: {},
+    dimmed: { opacity: 0.4 },
     nodeThumb: { width: 48, height: 48 },
     stepCount: {
       position: "absolute",
       bottom: 10,
       fontSize: 9,
       fontWeight: "700",
-      color: "#5C5347",
+      color: INK,
     },
 
     // The badge is an SVG star with the label absolutely centred over the SAME box, so the
@@ -513,25 +716,24 @@ const makeStyles = (t: Theme) =>
     // Bottom-left of the circle, opposite the XP star.
     // Standalone play icon (no chip), sitting where the resume badge was — bottom-left of
     // the cluster tile, opposite the XP star. Soft shadow so it lifts like the HUD icons.
-    playBadgeImg: {
+    // The PNG already includes the cream disc, its rim and a drop shadow, so no chip styling
+    // here — a background or elevation behind it would double both.
+    playBadge: {
       position: "absolute",
       bottom: 14,
-      left: 6,
-      width: 26,
-      height: 26,
+      left: 2,
+      width: 34,
+      height: 34,
       pointerEvents: "none",
-      shadowColor: "#000",
-      shadowOpacity: 0.3,
-      shadowRadius: 6,
-      shadowOffset: { width: 0, height: 3 },
-      elevation: 5,
     },
     starWrap: {
       position: "absolute",
-      top: -4,
-      right: 8,
-      width: 38,
-      height: 38,
+      top: -8,
+      right: 2,
+      width: 48,
+      height: 48,
+      // Above the finished outline, which would otherwise cross the star's lower arm.
+      zIndex: 4,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -547,7 +749,7 @@ const makeStyles = (t: Theme) =>
       marginTop: 8,
       fontSize: 13,
       fontWeight: "700",
-      color: t.text,
+      color: INK,
       textAlign: "center",
     },
     nodeLabelLocked: { color: t.textFaint },
@@ -564,8 +766,8 @@ const makeStyles = (t: Theme) =>
     },
     progressTrack: {
       flex: 1,
-      height: 18,
-      borderRadius: 9,
+      height: 13,
+      borderRadius: 7,
       backgroundColor: t.surfaceInset,
       justifyContent: "center",
       overflow: "hidden",
@@ -573,43 +775,83 @@ const makeStyles = (t: Theme) =>
     progressFill: {
       ...StyleSheet.absoluteFillObject,
       right: undefined,
-      backgroundColor: t.accent,
-      borderRadius: 9,
+      backgroundColor: "#8FA876",
+      borderRadius: 7,
     },
     progressLabel: {
       textAlign: "center",
       fontSize: 10,
       fontWeight: "700",
-      color: t.textDim,
+      color: INK,
     },
     progressLabelOnFill: { color: t.onAccent },
 
     // ── reward ────────────────────────────────────────────────────────────
+    // Full width now: the banner is a ribbon across the card, with the two tiles under it.
+    // Sized to the wireframe: a ribbon a bit over half the card, not a full-width bar.
     reward: {
       alignSelf: "center",
-      alignItems: "center",
-      backgroundColor: t.surfaceInset,
-      borderRadius: 12,
-      paddingVertical: 8,
-      paddingHorizontal: 18,
-      marginBottom: 10,
+      alignItems: "stretch",
+      // A hair wider now it carries three tiles rather than two.
+      width: "46%",
+      marginBottom: 8,
     },
+    // Rosette sits beside the ribbon, not over it — no part of the banner runs behind it.
+    // No gap: the rosette butts against the ribbon, as drawn.
+    rewardHeaderRow: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
+    rewardBanner: {
+      flex: 1,
+      height: 22,
+      borderRadius: 5,
+      backgroundColor: "#A97480",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    // Pulled a hair over the ribbon so there is no seam between the two.
+    // The ribbon continues beneath the rosette, as drawn — a bigger bite than a seam.
+    awardIcon: { width: 30, height: 30, marginRight: -16, zIndex: 1 },
+    // Icon ABOVE the label, per the reference — a row read as a chip, not a reward card.
+    rewardTile: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 2,
+      paddingVertical: 6,
+      borderRadius: 6,
+      backgroundColor: "#FBF8F3",
+      borderWidth: 1,
+      borderColor: "rgba(35,31,32,0.10)",
+      shadowColor: "#000",
+      shadowOpacity: 0.16,
+      shadowRadius: 4,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 3,
+    },
+    itemWell: {
+      width: 26,
+      height: 26,
+      borderRadius: 6,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(35,31,32,0.05)",
+      borderWidth: 1,
+      borderColor: "rgba(35,31,32,0.12)",
+    },
+    itemGlyph: { fontSize: 14, fontWeight: "800", color: INK },
+    xpIcon: { width: 26, height: 26 },
     rewardKicker: {
       fontSize: 9,
       fontWeight: "800",
-      letterSpacing: 0.6,
-      color: t.textDim,
-      marginBottom: 5,
+      letterSpacing: 1,
+      color: "#FBF8F3",
     },
-    rewardRow: { flexDirection: "row", gap: 20 },
-    rewardItem: { flexDirection: "row", alignItems: "center", gap: 5 },
-    rewardIcon: { fontSize: 15, color: t.gold },
-    rewardText: { fontSize: 11, fontWeight: "700", color: t.text },
+    rewardRow: { flexDirection: "row", gap: 6, alignSelf: "stretch" },
+    rewardText: { fontSize: 10, fontWeight: "700", color: INK },
 
   switcher: {
     position: "absolute",
     right: 14,
-    top: 10,
+    top: 2,
     // The stack is much narrower than the old pill row, so it sits clear of the objective
     // bar even when that bar is at full width.
     maxWidth: 190,

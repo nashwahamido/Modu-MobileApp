@@ -148,8 +148,9 @@ const makeStyles = (t: Theme) =>
   // 22 in a 36 box leaves the same breathing room as the glyphs in undo/redo; at 30 the
   // gear filled its button edge to edge once the box came down to 36.
   icon: {
-    width: 30,
-    height: 30,
+    // Matches HUD_ICON so the gear sits at the same weight as undo, recenter and pause.
+    width: 24,
+    height: 24,
     shadowColor: "#000",
     shadowOpacity: 0.3,
     shadowRadius: 6,

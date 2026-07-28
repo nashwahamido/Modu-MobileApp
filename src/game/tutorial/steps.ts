@@ -47,7 +47,7 @@ export interface TutorialStep {
   when?: (context: TutorialContext) => boolean;
 }
 
-export const TUTORIAL_REWARD_TOKENS = 50;
+export const TUTORIAL_REWARD_TOKENS = 80;
 export const TUTORIAL_STEP_REWARD_TOKENS = 10;
 
 /** The short, first-run core loop. Preference education stays contextual. */

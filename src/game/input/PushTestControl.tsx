@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
-import { useRef, useState } from "react";
-import { Animated, StyleSheet, Text, View } from "react-native";
+import { useRef, useState, useEffect } from "react";
+import { Animated, Easing, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useGameStore } from "@/src/game/core/store";
 import { popOpen, setTravel } from "@/src/game/scene/pushOpen";
@@ -32,6 +32,19 @@ export function PushTestControl({
   // Each stroke moves the drawer FROM where the last one left it (the pop leaves it part-open) — an absolute translation→travel map would snap it on the stroke's first pixel.
   const strokeBase = useRef(0);
   const squash = useRef(new Animated.Value(1)).current;
+  const pulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(pulse, {
+        toValue: 1,
+        duration: 1500,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
   const pop = Math.min(spec.popDistance ?? DEFAULT_POP_M, spec.distance);
 
   const tap = Gesture.Tap()
@@ -120,10 +133,18 @@ const styles = StyleSheet.create({
     height: PAD_SIZE,
     borderRadius: PAD_SIZE / 2,
     borderWidth: 4,
-    borderColor: "#37c871",
+    borderColor: "#8D7BA8",
     backgroundColor: "rgba(255,255,255,0.7)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  pulseRing: {
+    position: "absolute",
+    width: PAD_SIZE,
+    height: PAD_SIZE,
+    borderRadius: PAD_SIZE / 2,
+    borderWidth: 4,
+    borderColor: "#8D7BA8",
   },
   icon: { fontSize: 44 },
   track: {
@@ -131,7 +152,7 @@ const styles = StyleSheet.create({
     height: TRACK,
     borderRadius: 32,
     borderWidth: 4,
-    borderColor: "#37c871",
+    borderColor: "#8D7BA8",
     backgroundColor: "rgba(255,255,255,0.78)",
     overflow: "hidden",
   },
@@ -153,5 +174,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   thumbText: { fontSize: 26, color: "#fff", fontWeight: "800" },
-  hint: { fontSize: 12, color: "#6b6257", fontWeight: "600" },
+  hint: { fontSize: 12, color: "#FBF8F3", fontWeight: "700" },
 });

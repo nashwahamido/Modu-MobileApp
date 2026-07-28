@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { useEffect, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
 import {
   clusterComplete,
   clusterLabel,
@@ -65,7 +65,11 @@ export function ClusterCelebration() {
   return (
     <View style={styles.scrim} pointerEvents="box-none">
       <View style={styles.panel}>
-        <Text style={styles.badge}>✓</Text>
+        <Image
+          source={require("@/src/assets/ui/icons/icon-success.png")}
+          style={styles.badge}
+          resizeMode="contain"
+        />
         <Text style={styles.title}>{clusterLabel(furniture, shown)} finished</Text>
         <Button
           label={allDone ? "Put it together ›" : `Build the ${clusterLabel(furniture, next).toLowerCase()} ›`}
@@ -99,6 +103,7 @@ const makeStyles = (t: Theme) =>
       gap: 8,
       alignItems: "center",
     },
-    badge: { fontSize: 40, color: t.success, fontWeight: "800" },
+    // Sized to the 40pt glyph it replaced, so the card's rhythm is unchanged.
+    badge: { width: 48, height: 48 },
     title: { color: t.text, fontSize: 18, fontWeight: "800" },
   });
