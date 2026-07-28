@@ -14,6 +14,7 @@ import {
 import { VoiceButton } from "@/src/game/ui/VoiceButton";
 import { Button } from "@/src/game/ui/Button";
 import { SPACE, TYPE, ELEVATION, useStyles } from "@/src/game/ui/theme";
+import { useSafeInsets } from "@/src/hooks/use-safe-insets";
 import { saveOnboardingResults } from "@/src/services/onboarding";
 import type { Theme } from "@/src/game/ui/theme";
 
@@ -28,6 +29,7 @@ const optionExpressionImages = [
 
 export default function QuestionnaireScreen() {
   const styles = useStyles(makeStyles);
+  const safe = useSafeInsets();
   const [introComplete, setIntroComplete] = useState(false);
   const [handedness, setHandedness] = useState<Handedness | null>(null);
   const [index, setIndex] = useState(0);
@@ -259,7 +261,7 @@ export default function QuestionnaireScreen() {
   }
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { paddingLeft: safe.left, paddingRight: safe.right }]}>
       <View style={styles.questionHeader}>
         <Text style={styles.stepText}>
           {index + 1}/{questions.length}

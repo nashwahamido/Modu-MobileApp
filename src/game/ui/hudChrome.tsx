@@ -8,17 +8,17 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { SPACE } from "@/src/game/ui/theme";
+import { ELEVATION, RADIUS, SPACE, useTheme } from "@/src/game/ui/theme";
+import { GrainOverlay } from "@/src/game/ui/Button";
 import { SCENE_BACKGROUND } from "@/src/game/scene/lighting";
 
 /** One shared size for every bare HUD icon so they line up on the grid. */
 export const HUD_ICON = 30;
 
 /**
- * A HUD icon with NO container chip — just the image, a soft drop shadow so it still lifts
- * off the 3D scene, and a subtle dim on press. Replaces the IconButton/Button chip for
- * icons that should read as bare art rather than as pressable tiles. Touch target is kept
- * generous via hitSlop so losing the chip doesn't shrink the tappable area.
+ * A HUD icon inside a container chip — surface fill, hairline border, rounded corners, the
+ * clay grain, and a card shadow, so it reads as a pressable tile matching the app's other
+ * buttons. Dims on press. The 30px icon sits centred in a 36px chip.
  */
 export function IconButtonBare({
   source,
@@ -35,6 +35,7 @@ export function IconButtonBare({
   style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
 }) {
+  const t = useTheme();
   return (
     <Pressable
       onPress={onPress}
@@ -45,10 +46,16 @@ export function IconButtonBare({
       accessibilityState={{ disabled: !!disabled }}
       style={({ pressed }) => [
         bareStyles.wrap,
-        { opacity: disabled ? 0.4 : pressed ? 0.6 : 1 },
+        {
+          backgroundColor: t.surface,
+          borderColor: t.border,
+          opacity: disabled ? 0.4 : pressed ? 0.6 : 1,
+        },
+        ELEVATION.card,
         style,
       ]}
     >
+      <GrainOverlay radius={RADIUS.control} />
       <Image
         source={source}
         style={[bareStyles.img, { width: size, height: size }]}
@@ -99,23 +106,18 @@ export function HintButton({
 
 const bareStyles = StyleSheet.create({
   wrap: {
-    // 36px box centering a 30px icon — the same grid the gear sits on, so settings, undo,
+    // 36px chip centring a 30px icon — the same grid the gear sits on, so settings, undo,
     // recenter, hint and pause all align at left:14 with matching centres and tap targets.
     width: 36,
     height: 36,
+    borderRadius: RADIUS.control,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
+    // Clip the clay grain to the chip's rounded corners without clipping the card shadow —
+    // the GrainOverlay self-clips, so the Pressable itself must NOT set overflow:hidden.
   },
-  img: {
-    // Soft drop shadow so the bare icon still lifts off the 3D scene (same family as
-    // ELEVATION.card, tuned tighter for a glyph-sized target). On a transparent PNG the
-    // shadow follows the icon's alpha, so it hugs the shape rather than a box.
-    shadowColor: "#000",
-    shadowOpacity: 0.35,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 5,
-  },
+  img: {},
 });
 
 export const hudControlStyles = StyleSheet.create({

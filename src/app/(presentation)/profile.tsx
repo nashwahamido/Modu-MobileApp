@@ -4,10 +4,11 @@ import { useEffect, useState } from "react";
 import { StyleSheet, ActivityIndicator, Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import type { ImageSourcePropType } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN } from "@/src/hooks/use-safe-insets";
 
 import { Button } from "@/src/game/ui/Button";
 import { SettingsIcon, StarIcon } from "@/src/components/Icons";
-import { RADIUS, TYPE, ELEVATION, SPACE, useStyles, useTheme } from "@/src/game/ui/theme";
+import { RADIUS, TYPE, ELEVATION, SPACE, useStyles, useTheme, SIZE } from "@/src/game/ui/theme";
 import { FURNITURE_METAS } from "@/src/game/content/furnitures/furnitures";
 import type { ProfileId } from "@/src/game/core/profile";
 import { useCurrentUserId, useRepos } from "@/src/data";
@@ -117,7 +118,7 @@ export default function ProfileScreen() {
   }
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top + SPACE.sm, paddingLeft: Math.max(insets.left, SPACE.xl), paddingRight: Math.max(insets.right, SPACE.xl) }]}>
+    <View style={[styles.root, { paddingTop: SPACE.sm + Math.max(insets.top, SCREEN_VERTICAL_MARGIN), paddingLeft: SPACE.xl + Math.max(insets.left, SCREEN_SIDE_MARGIN), paddingRight: SPACE.xl + Math.max(insets.right, SCREEN_SIDE_MARGIN) }]}>
       <View style={styles.header}>
         <Pressable style={styles.settingsLink} onPress={() => router.push("/settings")} hitSlop={8}>
           <SettingsIcon size={24} color={t.textDim} />
@@ -279,7 +280,7 @@ const makeStyles = (t: Theme) =>
       justifyContent: "center",
       gap: SPACE.sm,
       alignSelf: "stretch",
-      height: 46,
+      height: SIZE.controlHeight,
       paddingHorizontal: SPACE.md,
       borderRadius: RADIUS.pill,
       borderWidth: 1,
@@ -303,7 +304,7 @@ const makeStyles = (t: Theme) =>
     tabs: { flexDirection: "row", gap: SPACE.md, marginBottom: SPACE.md },
     tab: {
       flex: 1,
-      height: 42,
+      height: SIZE.controlHeight,
       alignItems: "center",
       justifyContent: "center",
       borderRadius: RADIUS.pill,
@@ -332,8 +333,8 @@ const makeStyles = (t: Theme) =>
     },
     friendAvatar: {
       width: 44,
-      height: 44,
-      borderRadius: 22,
+      height: SIZE.controlHeight,
+      borderRadius: RADIUS.pill,
       backgroundColor: t.surfaceRaised,
       borderWidth: 1,
       borderColor: t.border,

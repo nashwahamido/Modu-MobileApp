@@ -12,6 +12,7 @@ import { useTutorialStore } from "@/src/game/tutorial/store";
 import { saveSelectedAvatarMode } from "@/src/services/onboarding";
 import { Button } from "@/src/game/ui/Button";
 import { RADIUS, SPACE, TYPE, useStyles } from "@/src/game/ui/theme";
+import { useSafeInsets } from "@/src/hooks/use-safe-insets";
 import type { Theme } from "@/src/game/ui/theme";
 
 const mascot = require("../../assets/images/mascot/mascot.png");
@@ -36,6 +37,7 @@ const modes = avatarModes.map((mode) => ({
 
 export default function AvatarRecommendationScreen() {
   const styles = useStyles(makeStyles);
+  const safe = useSafeInsets();
   const params = useLocalSearchParams<{ mode?: string }>();
   const initialModeId = modes.some((mode) => mode.id === params.mode) ? (params.mode as ModeId) : "momentum";
   const [selectedModeId, setSelectedModeId] = useState<ModeId>(initialModeId);
@@ -112,7 +114,7 @@ export default function AvatarRecommendationScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
+      <View style={[styles.header, { right: 42 + safe.raw.right, top: 18 + safe.raw.top }]}>
         <Pressable
           onPress={() => {
             Speech.stop();

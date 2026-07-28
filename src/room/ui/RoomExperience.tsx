@@ -17,6 +17,7 @@ import { usePlacementStore } from '../core/placement';
 import { ORBIT } from '../input/orbit';
 import type { Theme } from "@/src/game/ui/theme";
 import { clampRoomYaw } from '../core/roomShell';
+import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from '../../hooks/use-safe-insets';
 
 // The user-facing wording for each placement rejection. The grid returns reason codes; copy
 // lives here with the rest of the screen's text.
@@ -93,6 +94,9 @@ export function RoomExperience() {
     applyRoomControls(roomRotationRef.current, nextZoom);
   };
 
+  // Edge-to-edge: the room HUD is absolutely positioned, so each corner group is nudged in
+  // by the device insets (0 on a bezelled tablet, real on a notched phone in landscape).
+  const safe = useSafeInsets();
   return (
     <View style={s.screen}>
       {/* The backdrop sits UNDER a transparent Filament view, so the artwork frames the diorama without touching the 3D scene. "clear": the themed app background (screen) shows through. */}
@@ -106,7 +110,7 @@ export function RoomExperience() {
           />
         )}
       </SceneBackdrop>
-      <View style={s.stats}>
+      <View style={[s.stats, { left: 22 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN), top: 12 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN) }]}>
         <Pressable
           accessibilityLabel="Settings"
           style={s.settingsButton}
@@ -138,7 +142,7 @@ export function RoomExperience() {
         </View>
       </View>
 
-      <View style={[s.rail, !barOpen && s.railClosed]}>
+      <View style={[s.rail, !barOpen && s.railClosed, { right: 18 + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN) }]}>
         <Pressable
           accessibilityLabel="Toggle menu"
           style={[s.chevron, !barOpen && s.chevronClosed]}
@@ -176,7 +180,7 @@ export function RoomExperience() {
       </View>
       <Pressable
         accessibilityLabel="Tasks"
-        style={s.workbench}
+        style={[s.workbench, { right: 34 + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN), bottom: 30 + Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN) }]}
         onPress={() => router.push("/catalogue" as Href)}
       >
         <Image
@@ -189,7 +193,7 @@ export function RoomExperience() {
       {editing ? <ColourPicker /> : null}
 
       {editing ? (
-        <View style={[s.placeBar, blocked && s.placeBarBlocked]}>
+        <View style={[s.placeBar, blocked && s.placeBarBlocked, { bottom: 78 + Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN) }]}>
           <Pressable
             accessibilityLabel="Rotate furniture left"
             style={s.ghostRotate}

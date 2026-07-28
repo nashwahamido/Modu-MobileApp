@@ -13,7 +13,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Theme, useStyles } from "@/src/game/ui/theme";
+import { ELEVATION, RADIUS, Theme, useStyles } from "@/src/game/ui/theme";
 import { SettingsControls } from "@/src/game/ui/SettingsControls";
 import { GrainOverlay } from "@/src/game/ui/Button";
 
@@ -51,6 +51,7 @@ export function GameSettings({
         hitSlop={8}
         accessibilityLabel="Settings"
       >
+        <GrainOverlay radius={RADIUS.control} />
         <Image
           source={SETTINGS_ICON}
           style={[styles.icon]}
@@ -136,6 +137,11 @@ const makeStyles = (t: Theme) =>
     // gear, the hint, and undo/redo below all sit on the same grid.
     width: 36,
     height: 36,
+    borderRadius: RADIUS.control,
+    borderWidth: 1,
+    backgroundColor: t.surface,
+    borderColor: t.border,
+    ...ELEVATION.card,
     alignItems: "center",
     justifyContent: "center",
   },

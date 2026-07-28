@@ -330,10 +330,18 @@ function SocketHintGhost({
   const matchedActionId = useGameStore((s) => s.matchedActionId);
   const ghostStyle = useGameStore((s) => s.settings.ghostStyle);
   const firstDrop = useGameStore(selectFirstDrop);
+  // Parked at its seat: the part is physically AT the socket and only the finishing gesture
+  // (screw / orientation twist / slide / press) is left. A ghost at the target pose now sits
+  // exactly where the real part already is and reads as a doubled, clashing leg — same
+  // reasoning as the tighten phase, which dropped its goal ghost for this exact reason.
+  const driveActionId = useGameStore((s) => s.driveActionId);
+  const orientationActionId = useGameStore((s) => s.orientationActionId);
   const actionId =
     partActions[def.partId]?.snap ?? partActions[def.partId]?.insert;
   const isMatched = !!actionId && matchedActionId === actionId;
-  if (firstDrop || !actionId) return null;
+  const parked =
+    !!actionId && (driveActionId === actionId || orientationActionId === actionId);
+  if (firstDrop || !actionId || parked) return null;
   // "staticSockets": every open socket of the held group shows a dim pulsing marker; the proximity-matched one switches to the steady fitState-driven color (blue approaching → green seated). "movingGhost": only the matched socket gets a ghost, as before.
   if (!isMatched) {
     if (ghostStyle !== "staticSockets") return null;
