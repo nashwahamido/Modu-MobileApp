@@ -1,4 +1,4 @@
-import { StyleSheet, View } from "react-native";
+import { Image, StyleSheet, View } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
 import { Button } from "@/src/game/ui/Button";
 import { SPACE } from "@/src/game/ui/theme";
@@ -14,11 +14,18 @@ export function ToggleChips() {
   return (
     <View style={styles.row}>
       <Button
-        label="Focus"
+        icon={
+          <Image
+            source={require("@/src/assets/ui/icons/icon-focus.png")}
+            style={styles.focusIcon}
+            resizeMode="contain"
+          />
+        }
         small
         pill
         variant={settings.focusMode ? "primary" : "secondary"}
         onPress={() => setSettings({ focusMode: !settings.focusMode })}
+        accessibilityLabel="Focus mode"
       />
       {settings.focusMode ? null : (
         <Button
@@ -35,4 +42,5 @@ export function ToggleChips() {
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: SPACE.sm },
+  focusIcon: { width: 22, height: 22 },
 });

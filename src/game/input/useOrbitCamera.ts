@@ -5,6 +5,9 @@ import { buildPartStage } from "@/src/game/core/scene/targets";
 import { clusterPivot } from "@/src/game/core/geometry/staging";
 import { PartDef, Vec3 } from "@/src/game/core/type";
 import { useGameStore } from "@/src/game/core/store";
+import { useSharedValue as useWorkletSharedValue } from "react-native-worklets-core";
+import type { ISharedValue } from "react-native-worklets-core";
+import type { StickDeflection } from "@/src/game/scene/OrbitDrive";
 
 /** Drop-in replacement for the library's useCameraManipulator that fixes its swap race. On a pivot change the library hook sets its state to undefined and releases the old native manipulator while the replacement is still arriving via a promise — the Camera's render-thread callback can execute the already-released pointer in between ("Pointer ManipulatorWrapper has already been manually released!"). Here the hook keeps returning the OLD manipulator until the replacement is created (synchronously) and committed; the old wrapper's release is deferred until well after the commit that hands the render callback its replacement. */
 function useStableOrbitManipulator(
@@ -33,7 +36,6 @@ function useStableOrbitManipulator(
   return manipulator;
 }
 
-const ORBIT_RATE = 220;
 const ZOOM_RATE = 32;
 const HOME_EYE: [number, number, number] = [1.0, 0.85, 1.0];
 const QUARTER_TURN_PX = Math.PI / 2 / 0.005;
@@ -71,8 +73,19 @@ function pivotFor(
  * The orbit pivot tracks the centre of the assembly built so far (per stage). Filament manipulators take their target at construction, so a pivot change recreates the manipulator; the current eye position is carried over so only the gaze re-aims.
  */
 export function useOrbitCamera(
-  { stableFraming = false }: { stableFraming?: boolean } = {},
+  {
+    stableFraming = false,
+    stickShared,
+  }: {
+    stableFraming?: boolean;
+    /** Joystick deflection, written by the stick gesture and read by OrbitDrive on the
+     *  render thread. When provided, orbit runs off the JS thread (immune to drag load). */
+    stickShared?: ISharedValue<StickDeflection>;
+  } = {},
 ) {
+  // Whether a stick grab session is open — read by OrbitDrive's render callback. Owned
+  // here because grabBegin/grabEnd lifecycle lives on the JS side.
+  const stickActive = useWorkletSharedValue(false);
   const stage = useGameStore((s) => s.stage());
   const activeCluster = useGameStore((s) => s.activeCluster);
   const examine = useGameStore((s) => s.examine);
@@ -229,35 +242,44 @@ export function useOrbitCamera(
     );
   }, [furniture, heldActionId, framedHasPlaced]);
 
-  const stick = useRef({ x: 0, y: 0 });
-  const grab = useRef({ active: false, x: 0, y: 0 });
+  const grabbing = useRef(false);
 
-  useEffect(() => {
-    const tick = setInterval(() => {
-      const g = grab.current;
-      if (!g.active || !manipulator || panning.current) return;
-      g.x += stick.current.x * ORBIT_RATE * 0.016;
-      g.y += stick.current.y * ORBIT_RATE * 0.016;
-      manipulator.grabUpdate(g.x, g.y);
-    }, 16);
-    return () => clearInterval(tick);
-  }, [manipulator]);
+  // The per-frame orbit integration lives on the RENDER thread (scene/OrbitDrive), not a
+  // JS setInterval — a runOnJS part-drag saturating the JS thread used to starve that
+  // interval and freeze the camera until the finger lifted. Here the JS side only owns the
+  // grab SESSION (grabBegin/grabEnd); OrbitDrive feeds grabUpdate each frame while
+  // stickActive is true. If no stickShared was provided the camera simply won't orbit via
+  // the stick, which is fine for screens that don't mount OrbitDrive.
 
   const onStickStart = useCallback(() => {
-    grab.current = { active: true, x: 0, y: 0 };
+    // Symmetric with onPanStart's active guard: one manipulator supports a single grab
+    // session, so an overlapping two-finger pan and stick touch must not double-grabBegin.
+    if (panning.current || grabbing.current) return;
+    grabbing.current = true;
     manipulator?.grabBegin(0, 0, false);
-  }, [manipulator]);
+    // Open the render-thread session AFTER grabBegin so OrbitDrive's first grabUpdate lands
+    // on a live session. OrbitDrive resets its own accumulator when it sees active flip.
+    stickActive.value = true;
+  }, [manipulator, stickActive]);
 
-  const onStickMove = useCallback((x: number, y: number) => {
-    stick.current = { x, y };
-  }, []);
+  const onStickMove = useCallback(
+    (x: number, y: number) => {
+      // UI-thread write; OrbitDrive reads it on the render thread. Kept as a JS callback for
+      // API compatibility with the Joystick, but the Joystick also writes stickShared
+      // directly in its worklet so movement never depends on this JS hop.
+      if (stickShared) stickShared.value = { x, y };
+    },
+    [stickShared],
+  );
 
   const onStickEnd = useCallback(() => {
-    grab.current.active = false;
-    stick.current = { x: 0, y: 0 };
+    if (!grabbing.current) return;
+    grabbing.current = false;
+    stickActive.value = false;
+    if (stickShared) stickShared.value = { x: 0, y: 0 };
     manipulator?.grabEnd();
     captureEye();
-  }, [manipulator, captureEye]);
+  }, [manipulator, captureEye, stickActive, stickShared]);
 
   const orbitBy = useCallback(
     (dx: number, dy: number) => {
@@ -280,7 +302,9 @@ export function useOrbitCamera(
 
   const onPanStart = useCallback(
     (x: number, y: number) => {
-      if (grab.current.active) return;
+      // Don't start a pan grab while a stick grab session is open — one manipulator, one
+      // session. (Symmetric with onStickStart's panning.current guard.)
+      if (grabbing.current) return;
       panning.current = true;
       manipulator?.grabBegin(x, winH - y, true);
     },
@@ -317,6 +341,7 @@ export function useOrbitCamera(
 
   return {
     manipulator,
+    stickActive,
     getFocusPoint,
     onStickStart,
     onStickMove,

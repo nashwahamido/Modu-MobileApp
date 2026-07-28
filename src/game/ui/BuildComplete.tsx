@@ -4,6 +4,7 @@ import { StyleSheet, Image, Pressable, ScrollView, Text, View } from "react-nati
 
 import { useGameStore } from "@/src/game/core/store";
 import { useStyles } from "@/src/game/ui/theme";
+import { GrainOverlay } from "@/src/game/ui/Button";
 import { useRepos } from "@/src/data";
 import { useCatalogRow } from "@/src/data/catalogStore";
 import { usePlacementStore } from "@/src/room/core/placement";
@@ -73,6 +74,7 @@ export function BuildComplete() {
   return (
     <View style={styles.scrim}>
       <View style={styles.card}>
+        <GrainOverlay radius={22} />
         {/* The wireframe's two round buttons. Read as undo/redo, which is exactly what they
             can be here: a way back into the build if the player wants to change something
             after seeing it finished. */}
@@ -150,7 +152,11 @@ export function BuildComplete() {
               onPress={placeInRoom}
               accessibilityLabel="Place it in the room"
             >
-              <Text style={styles.actionGlyph}>⌂</Text>
+              <Image
+                source={require("@/src/assets/ui/icons/icon-home.png")}
+                style={styles.actionIcon}
+                resizeMode="contain"
+              />
               <Text style={styles.actionText}>place in the room now!</Text>
             </Pressable>
             <Pressable
@@ -265,6 +271,7 @@ const makeStyles = (t: Theme) =>
     actionsRow: { flexDirection: "row", justifyContent: "center", gap: 44 },
     action: { alignItems: "center", gap: 4, maxWidth: 150 },
     actionGlyph: { fontSize: 24, color: t.text },
+  actionIcon: { width: 40, height: 40, marginBottom: 4 },
     actionText: {
       fontSize: 11,
       fontWeight: "700",
