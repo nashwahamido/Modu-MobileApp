@@ -14,7 +14,7 @@ import {
 import { VoiceButton } from "@/src/game/ui/VoiceButton";
 import { Button } from "@/src/game/ui/Button";
 import { SPACE, TYPE, ELEVATION, useStyles } from "@/src/game/ui/theme";
-import { useSafeInsets } from "@/src/hooks/use-safe-insets";
+import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import { saveOnboardingResults } from "@/src/services/onboarding";
 import type { Theme } from "@/src/game/ui/theme";
 
@@ -261,7 +261,17 @@ export default function QuestionnaireScreen() {
   }
 
   return (
-    <View style={[styles.root, { paddingLeft: safe.left, paddingRight: safe.right }]}>
+    <View
+      style={[
+        styles.root,
+        {
+          paddingLeft: 44 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+          paddingRight: 44 + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN),
+          paddingTop: 22 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
+          paddingBottom: 22 + Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN),
+        },
+      ]}
+    >
       <View style={styles.questionHeader}>
         <Text style={styles.stepText}>
           {index + 1}/{questions.length}
@@ -276,7 +286,11 @@ export default function QuestionnaireScreen() {
           ]}
         >
           <Pressable onPress={goBack} style={styles.navButton}>
-            <Text style={styles.navText}>{"<"}</Text>
+            <Image
+              source={require("@/src/assets/ui/icons/arrow-back.png")}
+              style={styles.navArrow}
+              resizeMode="contain"
+            />
           </Pressable>
           <Pressable
             disabled={!selectedAnswer || saving}
@@ -286,7 +300,11 @@ export default function QuestionnaireScreen() {
               (!selectedAnswer || saving) && styles.disabledNavButton,
             ]}
           >
-            <Text style={styles.navText}>{">"}</Text>
+            <Image
+              source={require("@/src/assets/ui/icons/arrow-next.png")}
+              style={[styles.navArrow, (!selectedAnswer || saving) && styles.navArrowDisabled]}
+              resizeMode="contain"
+            />
           </Pressable>
         </View>
       </View>
@@ -326,8 +344,8 @@ export default function QuestionnaireScreen() {
             ) : (
               <>
                 <View style={styles.navHintArrowDemo}>
-                  <Text style={styles.navText}>{"<"}</Text>
-                  <Text style={styles.navText}>{">"}</Text>
+                  <Image source={require("@/src/assets/ui/icons/arrow-back.png")} style={styles.navArrow} resizeMode="contain" />
+                  <Image source={require("@/src/assets/ui/icons/arrow-next.png")} style={styles.navArrow} resizeMode="contain" />
                 </View>
                 <Text style={styles.navHintTitle}>Your answer is saved.</Text>
                 <Text style={styles.navHintText}>
@@ -389,6 +407,14 @@ export default function QuestionnaireScreen() {
                 selected && styles.selectedOptionCard,
               ]}
             >
+              <VoiceButton
+                onPress={(event) => {
+                  event.stopPropagation();
+                  speakAnswer(option);
+                }}
+                style={styles.optionAudioButton}
+                size="small"
+              />
               <View
                 style={[
                   styles.expressionSlot,
@@ -420,14 +446,6 @@ export default function QuestionnaireScreen() {
               >
                 {option}
               </Text>
-              <VoiceButton
-                onPress={(event) => {
-                  event.stopPropagation();
-                  speakAnswer(option);
-                }}
-                style={styles.optionAudioButton}
-                size="small"
-              />
             </Pressable>
           );
         })}
@@ -467,8 +485,8 @@ const makeStyles = (t: Theme) =>
     root: {
       flex: 1,
       backgroundColor: t.bg,
-      paddingHorizontal: 44,
-      paddingVertical: 22,
+      // Padding is applied inline (base + safe inset) so the questionnaire clears the cutout
+      // and the immersive-hidden bars the same way every other screen does.
     },
     introStage: {
       flex: 1,
@@ -578,6 +596,8 @@ const makeStyles = (t: Theme) =>
       borderRadius: SPACE.sm,
       backgroundColor: t.accent,
     },
+    navArrow: { width: 26, height: 26 },
+    navArrowDisabled: { opacity: 0.3 },
     navButtons: {
       width: 150,
       flexDirection: "row",
@@ -682,18 +702,19 @@ const makeStyles = (t: Theme) =>
       lineHeight: 19,
     },
     promptRow: {
-      minHeight: 64,
+      minHeight: 44,
       flexDirection: "row",
       alignItems: "center",
-      gap: 20,
-      paddingTop: SPACE.md,
+      gap: 14,
+      paddingTop: 0,
+      marginBottom: 4,
     },
     prompt: {
       flex: 1,
       color: t.text,
-      fontSize: 21,
+      fontSize: 15,
       fontWeight: "900",
-      lineHeight: 27,
+      lineHeight: 19,
     },
     saveErrorText: {
       ...TYPE.labelSm,
@@ -756,7 +777,7 @@ const makeStyles = (t: Theme) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      gap: 28,
+      gap: 20,
       paddingTop: 0,
     },
     manualOptionsRow: {
@@ -765,16 +786,17 @@ const makeStyles = (t: Theme) =>
     },
     optionCard: {
       flex: 1,
-      height: 258,
+      height: 176,
       alignItems: "center",
       justifyContent: "flex-start",
       borderColor: t.border,
-      borderRadius: 34,
+      borderRadius: 24,
       borderWidth: 2,
       backgroundColor: t.surface,
-      paddingHorizontal: 22,
-      paddingTop: 18,
-      paddingBottom: 58,
+      paddingHorizontal: 14,
+      // room at the top for the audio button now pinned there
+      paddingTop: 44,
+      paddingBottom: 14,
     },
     compactOptionCard: {
       height: 238,
@@ -788,17 +810,17 @@ const makeStyles = (t: Theme) =>
       backgroundColor: t.surfaceRaised,
     },
     expressionCircle: {
-      width: 104,
-      height: 104,
+      width: 66,
+      height: 66,
       alignItems: "center",
       justifyContent: "center",
       borderColor: t.gold,
-      borderRadius: 52,
+      borderRadius: 33,
       borderWidth: 1,
       backgroundColor: t.surface,
     },
     expressionSlot: {
-      height: 110,
+      height: 72,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -814,9 +836,9 @@ const makeStyles = (t: Theme) =>
       borderColor: t.accent,
     },
     optionMascot: {
-      width: 82,
-      height: 82,
-      borderRadius: 22,
+      width: 54,
+      height: 54,
+      borderRadius: 16,
     },
     compactOptionMascot: {
       width: 68,
@@ -825,11 +847,11 @@ const makeStyles = (t: Theme) =>
     },
     optionText: {
       color: t.textDim,
-      fontSize: 15,
+      fontSize: 12,
       fontWeight: "700",
-      lineHeight: 20,
-      marginTop: SPACE.sm,
-      minHeight: 82,
+      lineHeight: 15,
+      marginTop: 4,
+      minHeight: 45,
       textAlign: "center",
     },
     compactOptionText: {
@@ -841,9 +863,9 @@ const makeStyles = (t: Theme) =>
     },
     optionAudioButton: {
       position: "absolute",
-      bottom: 14,
-      left: "50%",
-      marginLeft: -18,
+      top: 10,
+      left: 10,
+      zIndex: 2,
     },
     selectedOptionText: {
       color: t.accent,
