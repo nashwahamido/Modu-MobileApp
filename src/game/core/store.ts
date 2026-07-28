@@ -156,6 +156,11 @@ interface GameState {
    *  would re-show it the instant the step was redone. */
   doneDismissed: boolean;
   setDoneDismissed: (v: boolean) => void;
+  /** The build is finished but the player has NOT yet tapped "Complete": they can still orbit
+   *  and inspect the model. The finished-build screen waits on this so the last look isn't
+   *  snatched away the instant the final part lands. */
+  completeConfirmed: boolean;
+  setCompleteConfirmed: (v: boolean) => void;
 
   setActiveCluster: (cluster: ClusterId | null) => void;
   setCombiningCluster: (cluster: ClusterId | null) => void;
@@ -185,6 +190,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
   mapOpen: false,
   mapSeen: false,
   doneDismissed: false,
+  completeConfirmed: false,
   tightenDeg: {},
   orientationActionId: null,
   orientationDeg: {},
@@ -216,6 +222,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
       combiningCluster: null,
       mapSeen: false,
       doneDismissed: false,
+      completeConfirmed: false,
       tightenDeg: {},
       orientationActionId: null,
       orientationDeg: {},
@@ -466,6 +473,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
   setMapOpen: (open) => set({ mapOpen: open }),
   setMapSeen: (seen) => set({ mapSeen: seen }),
   setDoneDismissed: (v) => set({ doneDismissed: v }),
+  setCompleteConfirmed: (v) => set({ completeConfirmed: v }),
   setActiveCluster: (cluster) => set({ activeCluster: cluster }),
   setCombiningCluster: (cluster) => set({ combiningCluster: cluster }),
 

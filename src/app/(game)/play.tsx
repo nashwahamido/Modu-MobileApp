@@ -48,6 +48,7 @@ import {
 
 // UI Elemets
 import { BuildComplete } from "@/src/game/ui/BuildComplete";
+import { FinishBuildButton } from "@/src/game/ui/FinishBuildButton";
 import { GreenFlash } from "@/src/game/ui/GreenFlash";
 import { HintToast } from "@/src/game/ui/HintToast";
 import { CenterDropRing } from "@/src/game/ui/CenterDropRing";
@@ -575,6 +576,7 @@ function GameScreen() {
       {ringOverlay}
       <GreenFlash trigger={completedCount} />
       <ClusterCelebration />
+      <FinishBuildButton />
       <BuildComplete />
       {loadingOverlay}
     </SceneBackdrop>

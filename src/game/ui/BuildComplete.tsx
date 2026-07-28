@@ -4,7 +4,6 @@ import { StyleSheet, Image, Pressable, ScrollView, Text, View } from "react-nati
 
 import { useGameStore } from "@/src/game/core/store";
 import { useStyles } from "@/src/game/ui/theme";
-import { GrainOverlay } from "@/src/game/ui/Button";
 import { useRepos } from "@/src/data";
 import { useCatalogRow } from "@/src/data/catalogStore";
 import { usePlacementStore } from "@/src/room/core/placement";
@@ -28,6 +27,7 @@ export function BuildComplete() {
   const undoLastAction = useGameStore((s) => s.undoLastAction);
   const redoLastAction = useGameStore((s) => s.redoLastAction);
   const dismissed = useGameStore((s) => s.doneDismissed);
+  const confirmed = useGameStore((s) => s.completeConfirmed);
   const [reward, setReward] = useState({ coins: 0, xp: 0 });
 
   const furnitureId = furniture?.meta.id ?? null;
@@ -49,7 +49,9 @@ export function BuildComplete() {
   if (!furniture) return null;
   const total = furniture.actions.length;
   const isDone = total > 0 && completed.length >= total;
-  if (!isDone || dismissed) return null;
+  // Wait for the player to tap "Complete" — until then the FinishBuildButton is showing
+  // and they can still orbit the finished model.
+  if (!isDone || dismissed || !confirmed) return null;
 
   const { coins, xp } = reward;
   // Two steps, not a plain replace("/inventory"). The (presentation) group is a MODAL layer that
@@ -74,7 +76,6 @@ export function BuildComplete() {
   return (
     <View style={styles.scrim}>
       <View style={styles.card}>
-        <GrainOverlay radius={22} />
         {/* The wireframe's two round buttons. Read as undo/redo, which is exactly what they
             can be here: a way back into the build if the player wants to change something
             after seeing it finished. */}
@@ -210,9 +211,10 @@ const makeStyles = (t: Theme) =>
     roundGlyph: { fontSize: 17, fontWeight: "800", color: t.accent },
 
     title: {
+      // Rosy accent for the headline, per the wireframe.
       fontSize: 19,
       fontWeight: "800",
-      color: t.accent,
+      color: "#A97480",
       textAlign: "center",
       marginBottom: 12,
     },
