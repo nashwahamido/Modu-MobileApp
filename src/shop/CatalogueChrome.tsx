@@ -1,12 +1,13 @@
 // The shared header + filter bar for catalogue surfaces (Shop, Inventory): a back button on the left, a centered title, an optional coin balance on the right, then a row of category tabs and
 // a tap-to-cycle sort pill. Both surfaces render this so their chrome is identical, not lookalike.
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, ScrollView, Text, View } from "react-native";
 
 import { CoinMedalIcon } from "@/src/components/Icons";
 import { Button } from "@/src/game/ui/Button";
-import { RADIUS, SPACE, Theme, TYPE, useStyles } from "@/src/game/ui/theme";
+import { RADIUS, SPACE, TYPE, useStyles } from "@/src/game/ui/theme";
 import { CATEGORY_FILTERS, CATEGORY_LABELS, SORT_LABELS } from "@/src/data";
 import type { CategoryFilter, ShopSort } from "@/src/data";
+import type { Theme } from "@/src/game/ui/theme";
 
 export interface CatalogueChromeProps {
   title: string;

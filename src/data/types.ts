@@ -37,22 +37,37 @@ export type ProfilePatch = Partial<
   Pick<Profile, "username" | "avatarMode" | "onboardingCompleted">
 >;
 
-// One furniture instance placed in a room. Position is normalized room-space, NOT screen pixels.
+// Which grid a placement lives on. Walls are named for the PLANE they occupy in the shell
+// (src/room/core/roomShell.ts), not by compass point — these strings persist. The furniture variant
+// (a vase on a cabinet) is reserved so adding it later is not a data migration; nothing builds it yet.
+export type PlacementSurface =
+  | { kind: "floor" }
+  | { kind: "wall"; wall: "x-min" | "z-max" }
+  | { kind: "furniture"; hostInstanceId: string; slot: string };
+
+// One furniture instance placed in a room — GRID coordinates, not screen or world space, so a
+// layout renders identically on every device and survives any camera change.
 export interface PlacedFurniture {
   instanceId: string;
   // A placed piece can be ANY catalog furniture — buildable or store-only — so this is CatalogId, not the narrow FurnitureId.
   furnitureId: CatalogId;
-  position: { x: number; y: number };
-  // Yaw around the vertical axis, in radians.
-  rotation: number;
-  scale?: number;
+  surface: PlacementSurface;
+  // Anchor cell on the surface's grid, min-corner convention.
+  cell: { x: number; y: number };
+  // Quarter turns; floor items only, wall items face outward.
+  rotSteps: 0 | 1 | 2 | 3;
   // The chosen color variant (a colors.id, e.g. "white"). Undefined = the furniture's default variant / no color axis.
   color?: string;
 }
 
+// Bump when cell dimensions or surface semantics change; loaders treat any other version as an
+// empty room rather than mis-reading old rows (user_room.placements is unvalidated jsonb).
+export const ROOM_LAYOUT_VERSION = 1;
+
 // The persisted contents of a room, keyed by its owner. Fetched by ownerId so one RoomScene renders yours (editable) or a friend's (read-only).
 export interface RoomLayout {
   ownerId: UserId;
+  version: typeof ROOM_LAYOUT_VERSION;
   placements: PlacedFurniture[];
   // ISO-8601 timestamp of the last save.
   updatedAt: string;

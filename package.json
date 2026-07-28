@@ -8,7 +8,8 @@
     "ios": "npx expo run:ios",
     "test": "tsx --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
-    "fix:ios-paths": "node scripts/fix-ios-space-paths.mjs"
+    "fix:ios-paths": "node scripts/fix-ios-space-paths.mjs",
+    "compress:room": "node scripts/compress-room-glb.mjs"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -45,10 +46,14 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@gltf-transform/core": "^4.4.2",
+    "@gltf-transform/extensions": "^4.4.2",
+    "@gltf-transform/functions": "^4.4.2",
     "@types/node": "^26.1.1",
     "@types/react": "~19.1.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
+    "sharp": "^0.34.5",
     "tsx": "^4.22.4",
     "typescript": "~5.9.2"
   },

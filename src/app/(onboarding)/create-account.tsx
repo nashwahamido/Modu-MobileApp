@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from "expo-router";
 import type { Href } from "expo-router";
 import { useMemo, useState } from "react";
-import { Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { StyleSheet, Image, Pressable, Text, TextInput, View } from "react-native";
 import {
   continueWithEmail,
   continueWithPrototypeProvider,
@@ -10,7 +10,8 @@ import {
 } from "@/src/services/auth";
 
 import { Button } from "@/src/game/ui/Button";
-import { SPACE, Theme, TYPE, useStyles, useTheme } from "@/src/game/ui/theme";
+import { SPACE, TYPE, useStyles, useTheme } from "@/src/game/ui/theme";
+import type { Theme } from "@/src/game/ui/theme";
 
 const mascot = require("../../assets/images/mascot/mascot.png");
 const loadingRoute = "/loading" as Href;

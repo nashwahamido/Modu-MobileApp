@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from "expo-router";
 import type { Href } from "expo-router";
 import * as Speech from "@/src/onboarding/speech";
-import { Animated, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Animated, Image, Pressable, Text, View } from "react-native";
 import { useEffect, useRef, useState } from "react";
 import { avatarModes } from "@/src/onboarding/avatarModes";
 import type { ModeId } from "@/src/onboarding/questionnaire";
@@ -11,7 +11,8 @@ import type { ProfileId } from "@/src/game/core/profile";
 import { useTutorialStore } from "@/src/game/tutorial/store";
 import { saveSelectedAvatarMode } from "@/src/services/onboarding";
 import { Button } from "@/src/game/ui/Button";
-import { RADIUS, SPACE, Theme, TYPE, useStyles } from "@/src/game/ui/theme";
+import { RADIUS, SPACE, TYPE, useStyles } from "@/src/game/ui/theme";
+import type { Theme } from "@/src/game/ui/theme";
 
 const mascot = require("../../assets/images/mascot/mascot.png");
 const lumiAvatar = require("../../assets/images/avatars/lumi.jpg");

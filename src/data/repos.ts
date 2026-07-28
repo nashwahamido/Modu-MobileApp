@@ -1,7 +1,7 @@
 // The data-access seam. Features depend ONLY on these interfaces; swapping the in-memory adapter for a Supabase one is a single change in ./index.
 import type { BrandId, FurnitureId } from "@/src/game/core/type";
 import type { ShopCategory, ShopItem, ShopItemId } from "./shopItems";
-import type { BuildSave, Friend, Profile, ProfilePatch, RoomLayout, UserId } from "./types";
+import type { BuildSave, CatalogId, Friend, Profile, ProfilePatch, RoomLayout, UserId } from "./types";
 
 export interface ProfileRepo {
   get(userId: UserId): Promise<Profile | null>;
@@ -79,6 +79,22 @@ export interface CatalogRepo {
   listBuilds(): Promise<BuildCatalogRow[]>;
 }
 
+// One row of item_variants: an item's colour/finish axis. `variation` is the free-form per-item key
+// that IS the storage path segment (white, oak, black, ...); null = the item has a single model, at
+// the 'default' segment. Asset paths are derived from it, never stored — see catalogAssets.ts.
+export type ItemVariant = {
+  itemId: CatalogId;
+  variation: string | null;
+  isDefault: boolean;
+};
+
+export interface VariantsRepo {
+  // The WHOLE variant table in one round trip: it is reference data, a couple of rows per item, and
+  // every consumer (a tile, a placement swatch row) needs it synchronously — so it is cached client-side
+  // rather than queried per item. See variantStore.ts.
+  list(): Promise<ItemVariant[]>;
+}
+
 export interface RoomLikesRepo {
   // Like / unlike a room. The owner's user_profile.likes is a cache kept in sync by these.
   like(roomOwnerId: UserId, likerId: UserId): Promise<void>;
@@ -111,4 +127,5 @@ export interface Repos {
   builds: BuildProgressRepo;
   likes: RoomLikesRepo;
   store: StoreRepo;
+  variants: VariantsRepo;
 }

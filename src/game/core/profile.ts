@@ -23,9 +23,6 @@ export const DEFAULT_SETTINGS: AccessibilitySettings = {
   releaseBehavior: "autoReturn",
   lightingPreset: "auto",
   snapDistance: 0.14,
-  // On everywhere. A one-finger drag on empty scene panning the camera is the
-  // behaviour people expect from a 3D view; having it off made the canvas feel dead.
-  canvasStrafe: true,
   dragPlane: "adaptive",
 };
 

@@ -1,10 +1,11 @@
 import { Link } from "expo-router";
 import type { Href } from "expo-router";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Image, Text, View } from "react-native";
 
 import { Button } from "@/src/game/ui/Button";
 import { AccountPicker } from "@/src/dev/AccountPicker";
-import { SPACE, Theme, TYPE, useStyles } from "@/src/game/ui/theme";
+import { SPACE, TYPE, useStyles } from "@/src/game/ui/theme";
+import type { Theme } from "@/src/game/ui/theme";
 
 const mascot = require("../../assets/images/mascot/mascot.png");
 const createAccountRoute = "/create-account" as Href;

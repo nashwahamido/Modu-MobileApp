@@ -1,11 +1,12 @@
-import { Theme, useStyles } from "@/src/game/ui/theme";
-import { Pressable, StyleSheet, Text } from "react-native";
+import { useStyles } from "@/src/game/ui/theme";
+import { StyleSheet, Pressable, Text } from "react-native";
 import { actionCluster } from "@/src/game/core/evaluation/clusters";
 import { engageAxis } from "@/src/game/core/evaluation/engagement";
 import { targetPositionForAction } from "@/src/game/core/scene/targets";
 import { HOVER_LIFT_M, looseDelta, spawnDelta } from "@/src/game/core/geometry/staging";
 import { TIGHTEN_TOTAL_DEG, useGameStore } from "@/src/game/core/store";
 import { animateDriver, OffsetDriver } from "@/src/game/scene/offsetDriver";
+import type { Theme } from "@/src/game/ui/theme";
 
 interface Props {
   heldDriver: OffsetDriver;

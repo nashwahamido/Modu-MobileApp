@@ -1,35 +1,41 @@
+// catalogue for assembly task
+
 import { useRouter } from "expo-router";
-import {
+import { StyleSheet,
   Image,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   useColorScheme,
   View,
 } from "react-native";
 
+// type
+import type { FurnitureMeta } from "@/src/game/core/type";
+import { type Milestone } from "@/src/game/ui/loadingProgress";
+
+// data
 import { FURNITURE_METAS } from "@/src/game/content/furnitures/furnitures";
 import { useRepos } from "@/src/data";
 import { useCatalogRow, useCatalogStore } from "@/src/data/catalogStore";
+import { brandFor } from "@/src/game/content/brands";
+
+// styling
+import { RADIUS, SPACE, TYPE, ELEVATION, useStyles } from "@/src/game/ui/theme";
 import { Button } from "@/src/game/ui/Button";
 import { LoadingScreen } from "@/src/game/ui/LoadingScreen";
-import { type Milestone } from "@/src/game/ui/loadingProgress";
-import { ELEVATION, RADIUS, SPACE, Theme, TYPE, useStyles} from "@/src/game/ui/theme";
-import { brandFor } from "@/src/game/content/brands";
-import type { FurnitureMeta } from "@/src/game/core/type";
+import type { Theme } from "@/src/game/ui/theme";
 
-// The catalogue's copy is DB-authored, so there is nothing truthful to render until it lands. Same treatment as every other wait — LoadingScreen owns the look.
+// The catalogue's copy is DB-authored.
+// needs loading screen
 function CatalogueLoading({ onBack }: { onBack: () => void }) {
   const styles = useStyles(makeStyles);
   const status = useCatalogStore((s) => s.status);
   // 0.35 from the first frame: the fetch is already in flight, so the bar opens in creep rather than a stall.
   const milestone: Milestone = status === "empty" ? 0.35 : 1;
 
-  // The way out, overlaid rather than passed as `actions` — LoadingScreen renders those only in the
-  // error state, and the assembly loader shares it. refresh() reports "error" only when it has NOTHING
-  // cached to fall back on, so a first-ever launch whose fetch never resolves sits at "empty"
-  // indefinitely; without this the player is stuck on a creeping bar with no route back to the room.
+  // Err overlaid.
+  // TO-BE-FIXED:refresh() reports "error" only when it has NOTHING cached to fall back on, so a first-ever launch whose fetch never resolves sits at "empty" indefinitely; without this the player is stuck on a creeping bar with no route back to the room.
   return (
     <View style={styles.loadingWrap}>
       <LoadingScreen milestone={milestone} />
@@ -46,11 +52,12 @@ export default function CatalogueScreen() {
   const scheme = useColorScheme();
   const repos = useRepos();
   const status = useCatalogStore((s) => s.status);
-  // Every entry in the catalog, tutorial included — it is a real buildable piece a player owns and places like any other.
+  // Every entry in the catalog
   const items = FURNITURE_METAS;
 
   // Hold the grid until the catalogue is in memory: the bundle knows the artwork and the counts, but not a single word of copy.
-  if (status === "empty") return <CatalogueLoading onBack={() => router.back()} />;
+  if (status === "empty")
+    return <CatalogueLoading onBack={() => router.back()} />;
 
   if (status === "error") {
     return (
@@ -77,7 +84,9 @@ export default function CatalogueScreen() {
           <Button label="‹ Room" onPress={() => router.back()} />
           <View>
             <Text style={styles.title}>Choose a build</Text>
-            <Text style={styles.subtitle}>{items.length} furniture available</Text>
+            <Text style={styles.subtitle}>
+              {items.length} furniture available
+            </Text>
           </View>
         </View>
         <View style={styles.grid}>
@@ -87,7 +96,9 @@ export default function CatalogueScreen() {
               meta={m}
               dark={scheme === "dark"}
               // Straight to the build. The experience/profile is set by onboarding (and adjustable in Settings) — not a per-item chooser.
-              onPress={() => router.push({ pathname: "/play", params: { id: m.id } })}
+              onPress={() =>
+                router.push({ pathname: "/play", params: { id: m.id } })
+              }
             />
           ))}
         </View>

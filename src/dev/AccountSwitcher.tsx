@@ -12,7 +12,7 @@
 // Styled with the panel's own flat palette, not the app theme: it has to read as part of the panel,
 // and the panel deliberately does not follow the product's surfaces.
 import { useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, ActivityIndicator, Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 import type { Href } from "expo-router";
 
@@ -162,8 +162,6 @@ export function AccountSwitcher({ onDone }: { onDone?: () => void }) {
   );
 }
 
-// The panel's palette, repeated here rather than imported: GmTestPanel keeps its own flat sheet, and
-// a shared token file would tie this dev chrome to the product theme it is deliberately ignoring.
 const styles = StyleSheet.create({
   root: {
     marginTop: 12,

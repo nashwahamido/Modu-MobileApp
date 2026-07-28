@@ -1,10 +1,11 @@
 // A shop/inventory item tile: a bordered card with a price+owned row, a preview well, the item name, and an optional status line. One source of truth so the Shop grid and the Inventory grid render identical cards — pass a custom `preview` (e.g. a real furniture sprite) when there is one.
 import { ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Pressable, Text, View } from "react-native";
 
 import { CoinMedalIcon } from "@/src/components/Icons";
-import { RADIUS, SPACE, Theme, TYPE, useStyles } from "@/src/game/ui/theme";
+import { RADIUS, SPACE, TYPE, useStyles } from "@/src/game/ui/theme";
 import { LevelBadge } from "./LevelBadge";
+import type { Theme } from "@/src/game/ui/theme";
 
 // Colour of the status line: "action" = a tappable prompt (buy / place), "muted" = a passive state.
 type StatusTone = "action" | "muted";

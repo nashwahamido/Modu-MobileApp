@@ -3,16 +3,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { OrientationLock } from "expo-screen-orientation";
-import { ImageBackground, StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
 import { FilamentScene } from "react-native-filament";
 
 import { AssemblyScene } from "@/src/game/scene/AssemblyScene";
 import { useAssemblyDrivers } from "@/src/game/scene/useAssemblyDrivers";
 import { useSceneState } from "@/src/game/scene/useSceneState";
 
+//Input Controls
 import { Joystick } from "@/src/game/input/Joystick";
 import { useOrbitCamera } from "@/src/game/input/useOrbitCamera";
 import { usePartDrag } from "@/src/game/input/usePartDrag";
@@ -31,19 +31,21 @@ import { PushTestControl } from "@/src/game/input/PushTestControl";
 import { clusterSink } from "@/src/game/scene/combineDriver";
 import { ToolBar } from "@/src/game/ui/ToolBar";
 import { useStepObjective } from "@/src/game/core/presentation/useStepObjective";
-
-import { useGameStore } from "@/src/game/core/store";
-import { useBuildPersistence } from "@/src/hooks/useBuildPersistence";
 import {
   pressParkInfo,
   screwParkOffset,
   slideParkInfo,
 } from "@/src/game/core/evaluation/engagement";
+
+import { useGameStore } from "@/src/game/core/store";
+import { useBuildPersistence } from "@/src/hooks/useBuildPersistence";
+
 import {
   isPlayable,
   loadFurnitureById,
 } from "@/src/game/content/furnitures/furnitures";
 
+// UI Elemets
 import { BuildComplete } from "@/src/game/ui/BuildComplete";
 import { GreenFlash } from "@/src/game/ui/GreenFlash";
 import { HintToast } from "@/src/game/ui/HintToast";
@@ -54,15 +56,20 @@ import { ClusterTray } from "@/src/game/ui/ClusterTray";
 import { ClusterCelebration } from "@/src/game/ui/ClusterCelebration";
 import { UndoButton } from "@/src/game/ui/UndoButton";
 import { GameSettings } from "@/src/game/ui/GameSettings";
-import { DevAutoStep } from "@/src/dev/DevAutoStep";
-import { DevMenu } from "@/src/dev/DevMenu";
 import { ToggleChips } from "@/src/game/ui/ToggleChips";
 import { BuildMap, ClusterFocusControl } from "@/src/game/ui/ClusterFocusControl";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 import { Button } from "@/src/game/ui/Button";
 import { ObjectiveBar } from "@/src/game/ui/ObjectiveBar";
-import { HintButton, HUD_ICON, IconButtonBare, RecenterButton } from "@/src/game/ui/HudControls";
-import { SPACE, Theme, useTheme } from "@/src/game/ui/theme";
+import {
+  HintButton,
+  HUD_ICON,
+  IconButtonBare,
+  RecenterButton,
+  hudControlStyles as hudControls,
+  hudChrome as styles,
+} from "@/src/game/ui/hudChrome";
+import { useTheme } from "@/src/game/ui/theme";
 import {
   buildPhase,
   combineReady,
@@ -72,7 +79,11 @@ import { availableInMode } from "@/src/game/core/evaluation/availability";
 import type { FurnitureId } from "@/src/game/core/type";
 import { LoadingOverlay } from "@/src/game/ui/LoadingOverlay";
 import type { Milestone } from "@/src/game/ui/loadingProgress";
-import { backdropSource } from "@/src/game/ui/backdrops";
+import { SceneBackdrop } from "@/src/game/ui/SceneBackdrop";
+
+// Dev
+import { DevAutoStep } from "@/src/dev/DevAutoStep";
+import { DevMenu } from "@/src/dev/DevMenu";
 
 function GameScreen() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
@@ -105,7 +116,7 @@ function GameScreen() {
 
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
-  // Loading overlay state: covers the scene from target change until data + model are ready (spec: 2026-07-18-loading-screen-design.md). retryKey remounts AssemblyScene to restart a failed GLB load.
+  // Loading screen: covers the scene from target change until data + model are ready. retryKey remounts AssemblyScene to restart a failed GLB load.
   const [modelReady, setModelReady] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [loaderVisible, setLoaderVisible] = useState(true);
@@ -131,7 +142,8 @@ function GameScreen() {
   const furniture = useGameStore((s) => s.furniture);
   const furnitureMatches = furniture?.meta.id === target;
   const milestone: Milestone = !furnitureMatches ? 0 : modelReady ? 1 : 0.35;
-  // RNF's useModel has NO error state — a failed GLB just stays "loading" forever — so a stuck model is only detectable by time. 45 s is generous for the 66 MB EKET streaming from Metro in dev.
+
+  //Loading err handling: RNF's useModel has NO error state — a failed GLB just stays "loading" forever — so a stuck model is only detectable by time. 45 s is generous for the 66 MB EKET streaming from Metro in dev.
   useEffect(() => {
     if (!loaderVisible || loadError || modelReady) return;
     const watchdog = setTimeout(() => setLoadError(true), 45000);
@@ -151,6 +163,7 @@ function GameScreen() {
     [furniture, completedSet, activeCluster],
   );
   const settings = useGameStore((s) => s.settings);
+
   // Dev-setting: float mode vs auto return
   const heldActionId = useGameStore((s) => s.heldActionId);
   const renderStyle = useGameStore((s) => s.renderStyle);
@@ -159,7 +172,7 @@ function GameScreen() {
   const focus = settings.focusMode;
   const dark = theme === "dark";
   const t = useTheme();
-  const styles = useMemo(() => makeStyles(t), [t]);
+  const rootStyle = useMemo(() => [styles.root, { backgroundColor: t.bg }], [t]);
   const firstAvailable = useMemo(
     () =>
       furniture
@@ -195,7 +208,7 @@ function GameScreen() {
           new Set(useGameStore.getState().completed),
         )
       : null;
-  // which telescoping level the active beat tests, when it's one of the authored drag-out-to-test beats (spec.testActionIds)
+  // which telescoping level the active beat tests, when it's one of the authored drag-out-to-test beats
   const pushTestLevel = Object.entries(
     furniture?.pushOpen?.testActionIds ?? {},
   ).find(([, id]) => id === sceneState.activeBeat?.actionId)?.[0];
@@ -222,10 +235,9 @@ function GameScreen() {
     totalCount,
   });
 
-  // Recenter re-frames the camera on the build, so it means nothing until there IS a build:
-  // on an empty canvas it just jumps the view for no visible reason. `modes` is the honest
-  // source — "hidden" is a part still in the tray, and socket_hint is only a ghost preview
-  // of where a held part will go, not a part on the canvas.
+  // Recenter re-frames the camera on the build, on an empty canvas it just jumps the view for no visible reason.
+  // `modes` is the honest source — "hidden" is a part still in the tray
+  // socket_hint is only a ghost preview of where a held part will go, not a part on the canvas.
   const sceneHasParts = Object.values(sceneState.modes).some(
     (m) => m !== "hidden" && m !== "socket_hint",
   );
@@ -233,10 +245,9 @@ function GameScreen() {
   const hintGroup = useGameStore((s) => s.hintGroup);
   const hintPulse = useGameStore((s) => s.hintPulse);
 
+  // select tool
   const selectedTool = useGameStore((s) => s.selectedTool);
   const rawTool = sceneState.activeTighten?.tool ?? driveAction?.tool ?? null;
-  // "hand" is not equippable, so it is not NEEDED — otherwise the step would sit there
-  // waiting for a tool the player has no way to pick up.
   const neededTool =
     settings.manualTools && rawTool !== "hand" ? rawTool : null;
   const toolReady = !neededTool || selectedTool === neededTool;
@@ -272,7 +283,8 @@ function GameScreen() {
     [onPanStart, onPanMove, onPanEnd],
   );
 
-  // Canvas strafe when NOTHING is held — one-finger drag pans the camera, gated by the canvasStrafe setting in plain JS (a strafe that "activates" with the toggle off is a harmless no-op; there is no competing gesture). While a part IS held, the canvas gesture from usePartDrag owns the finger and routes: floating part → re-grab, else → these same strafe callbacks.
+  // Canvas strafe when NOTHING is held — one-finger drag pans the camera (always on, no toggle). While a part IS held, the canvas gesture from usePartDrag owns the finger and routes: floating part → re-grab, else → these same strafe callbacks.
+  // strafing guards onFinalize: a Pan that FAILS (lost the race) still finalizes, and that must not fire a spurious onPanEnd.
   const strafing = useRef(false);
   const strafePan = useMemo(
     () =>
@@ -282,10 +294,8 @@ function GameScreen() {
         .activeOffsetX([-12, 12])
         .activeOffsetY([-12, 12])
         .onStart((e) => {
-          if (useGameStore.getState().settings.canvasStrafe) {
-            strafing.current = true;
-            onPanStart(e.x, e.y);
-          }
+          strafing.current = true;
+          onPanStart(e.x, e.y);
         })
         .onUpdate((e) => {
           if (strafing.current) onPanMove(e.x, e.y);
@@ -311,27 +321,14 @@ function GameScreen() {
       onPanEnd,
     });
 
-  // Composition identity changes ONLY when the held action or the canvas toggles change (touch-free moments), never on ordinary re-renders. Canvas gestures are attached ONLY when they can do something — with float and canvas-strafe both off, this is byte-identical to the classic pinch + two-finger-pan tree, so a no-op canvas gesture can never win the race and block a pinch (sloppy two-finger starts, zoom mid-drag).
+  // Composition identity changes ONLY when the held action changes (touch-free moments), never on ordinary re-renders. The one-finger canvas gesture is always live: held → usePartDrag's canvas gesture (re-grab or strafe fallback), empty scene → strafePan.
   const heldAction = sceneState.heldAction;
-  const canvasStrafeOn = settings.canvasStrafe;
-  const floatOn = settings.releaseBehavior === "float";
   const sceneGesture = useMemo(() => {
-    if (heldAction && (floatOn || canvasStrafeOn)) {
+    if (heldAction) {
       return Gesture.Race(pinch, pan, canvasGestureFor(heldAction));
     }
-    if (!heldAction && canvasStrafeOn) {
-      return Gesture.Race(pinch, pan, strafePan);
-    }
-    return Gesture.Race(pinch, pan);
-  }, [
-    heldAction,
-    floatOn,
-    canvasStrafeOn,
-    pinch,
-    pan,
-    strafePan,
-    canvasGestureFor,
-  ]);
+    return Gesture.Race(pinch, pan, strafePan);
+  }, [heldAction, pinch, pan, strafePan, canvasGestureFor]);
 
   // The overlay must cover BOTH returns: the furniture-null early return IS the data-loading window it exists for.
   const loadingOverlay = loaderVisible ? (
@@ -349,17 +346,13 @@ function GameScreen() {
     />
   ) : null;
 
-  if (!furniture) return <View style={styles.root}>{loadingOverlay}</View>;
+  if (!furniture) return <View style={rootStyle}>{loadingOverlay}</View>;
 
   return (
-    <ImageBackground
-      // Focus Mode renders its backdrop this way (ImageBackground as the root).
-      // A separate <Image style={absoluteFill}> here scaled the artwork
-      // differently for the same file, so mirror the working structure exactly.
-      // "clear": no source — the milk-white root (SCENE_BACKGROUND) / dark root shows through.
-      source={backdropSource(backdrop, theme === "dark")}
-      resizeMode="cover"
-      style={styles.root}
+    <SceneBackdrop
+      backdrop={backdrop}
+      dark={theme === "dark"}
+      style={rootStyle}
     >
       <GestureDetector gesture={sceneGesture}>
         <View style={styles.sceneWrap}>
@@ -449,7 +442,7 @@ function GameScreen() {
         <ToolBar neededTool={neededTool} />
         {mode === "free" && !focus ? (
           <HintButton
-            style={styles.hintButton}
+            style={hudControls.hintButton}
             onPress={() => useGameStore.getState().suggestNext()}
           />
         ) : null}
@@ -557,7 +550,7 @@ function GameScreen() {
           <RecenterButton
             enabled={sceneHasParts}
             onPress={resetCamera}
-            style={styles.recenterButton}
+            style={hudControls.recenterButton}
           />
         )}
 
@@ -583,7 +576,7 @@ function GameScreen() {
       <ClusterCelebration />
       <BuildComplete />
       {loadingOverlay}
-    </ImageBackground>
+    </SceneBackdrop>
   );
 }
 
@@ -594,50 +587,3 @@ export default function PlayRoute() {
     </FilamentScene>
   );
 }
-
-/** Theme-driven: every colour comes from ui/theme.ts, so the HUD follows the palette and
- *  the hand-rolled `…Dark` variants that used to shadow every rule are gone. */
-const makeStyles = (t: Theme) =>
-  StyleSheet.create({
-    root: { flex: 1, backgroundColor: t.bg },
-    sceneWrap: { ...StyleSheet.absoluteFillObject },
-    chrome: { position: "absolute" },
-
-    // The row owns the position now; the bar is just a flex child of it.
-    topRow: {
-      position: "absolute",
-      // top:3 puts the pause icon's centre (3 + 30/2 = 18... but it centres against the
-      // taller ObjectiveBar) on the same line as the settings gear and hint, whose centres
-      // sit at 8 + their box height. Tuned so pause reads as level with the top-left grid.
-      top: 3,
-      alignSelf: "center",
-      flexDirection: "row",
-      alignItems: "center",
-      gap: SPACE.sm,
-    },
-    // The bar itself (pill + XP row) is the shared ObjectiveBar component (ui/ObjectiveBar).
-
-    // Row 1, beside the gear: the gear is 36 wide at left:14, +8 gap → 58 (HintButton owns the square sizing).
-    hintButton: { position: "absolute", left: 58, top: 8 },
-    // Its own row, directly under undo (top:54 + 36 + 12 gap). Icon-only, so it is the same
-    // 36x36 square as everything else in the column rather than a wide text pill.
-    recenterButton: { position: "absolute", left: 14, top: 102 },
-
-    // The way back to the tray in float mode. PRIMARY: while a part is in the air, this is
-    // the one thing the player might need, so it is the one thing that carries the accent.
-    // Below Recenter. Only visible in float mode, while a part is in the air.
-    putBackButton: { position: "absolute", left: 14, top: 150 },
-
-    // Left edge aligned with Recenter and the gear (all left:14); bottom aligned with the
-    // toolbar row (bottom:16) so the left column and the bottom row share their corner.
-    joystickZone: { position: "absolute", left: 14, bottom: 16 },
-    togglesRow: {
-      position: "absolute",
-      right: 14,
-      bottom: 16,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: SPACE.sm,
-      zIndex: 15,
-    },
-  });

@@ -101,5 +101,4 @@ const makeStyles = (t: Theme) =>
     },
     badge: { fontSize: 40, color: t.success, fontWeight: "800" },
     title: { color: t.text, fontSize: 18, fontWeight: "800" },
-    subtitle: { color: t.textDim, fontSize: 13, lineHeight: 18, textAlign: "center", marginBottom: 6 },
   });

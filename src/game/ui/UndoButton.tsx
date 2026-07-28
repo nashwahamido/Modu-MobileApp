@@ -1,6 +1,6 @@
 import { StyleSheet } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
-import { HUD_ICON, IconButtonBare } from "@/src/game/ui/HudControls";
+import { HUD_ICON, IconButtonBare } from "@/src/game/ui/hudChrome";
 
 /** Back one step. Disabled dims rather than disappears — "not yet", not "gone". */
 export function UndoButton() {

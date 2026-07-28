@@ -1,19 +1,7 @@
 import { useEffect } from "react";
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { StyleSheet, Pressable, ScrollView, Text, View } from "react-native";
 
-import {
-  Radius,
-  Spacing,
-  Status,
-  Surface,
-  typeScale,
-} from "./theme";
+import { Radius, Spacing, Status, Surface, typeScale } from "./theme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "@/src/hooks/use-color-scheme";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";

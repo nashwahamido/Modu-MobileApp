@@ -2,7 +2,7 @@ import { StatusBar } from "expo-status-bar";
 import { Component } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { RoomExperience } from "@/src/room/RoomExperience";
+import { RoomExperience } from "@/src/room/ui/RoomExperience";
 
 class RoomErrorBoundary extends Component<
   { children: ReactNode },
@@ -43,7 +43,6 @@ export default function RoomRoute() {
   );
 }
 
-// Static sheet on purpose: the error boundary is a class component and cannot call the useStyles hook.
 const styles = StyleSheet.create({
   fallback: {
     flex: 1,

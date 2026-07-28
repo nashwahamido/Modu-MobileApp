@@ -2,7 +2,7 @@
 import type { FurnitureId } from "@/src/game/core/type";
 import type { LevelRow } from "../levels";
 import type { ShopCategory, ShopItem, ShopItemId } from "../shopItems";
-import type { BuildCatalogRow } from "../repos";
+import type { BuildCatalogRow, ItemVariant } from "../repos";
 import type { BuildSave, Friend, Profile, RoomLayout, UserId } from "../types";
 
 // The fake current user for local/dev runs. Real code derives the id from Supabase auth (useAuth().user.id).
@@ -43,9 +43,9 @@ export function seedLevelRows(): LevelRow[] {
 
 export function seedRooms(): RoomLayout[] {
   return [
-    { ownerId: DEMO_ME, placements: [], updatedAt: SEED_TS },
-    { ownerId: DEMO_FRIEND_A, placements: [{ instanceId: "a1", furnitureId: "lack-table", position: { x: 0.3, y: 0.4 }, rotation: 0 }], updatedAt: SEED_TS },
-    { ownerId: DEMO_FRIEND_B, placements: [{ instanceId: "b1", furnitureId: "dalfred-stool", position: { x: 0.6, y: 0.5 }, rotation: 1.57 }], updatedAt: SEED_TS },
+    { ownerId: DEMO_ME, version: 1, placements: [], updatedAt: SEED_TS },
+    { ownerId: DEMO_FRIEND_A, version: 1, placements: [{ instanceId: "a1", furnitureId: "lack-table", surface: { kind: "floor" }, cell: { x: 3, y: 4 }, rotSteps: 0 }], updatedAt: SEED_TS },
+    { ownerId: DEMO_FRIEND_B, version: 1, placements: [{ instanceId: "b1", furnitureId: "dalfred-stool", surface: { kind: "floor" }, cell: { x: 7, y: 5 }, rotSteps: 1 }], updatedAt: SEED_TS },
   ];
 }
 
@@ -118,6 +118,33 @@ export function seedInventory(): Record<UserId, ShopItemId[]> {
     [DEMO_FRIEND_A]: ["malm-chest", "neiden-bedframe", "rosentorp-table"],
     [DEMO_FRIEND_B]: [],
   };
+}
+
+// The colour/finish axis per item — the in-memory mirror of the item_variants seed in migration
+// 20260724030000, copied verbatim for the same reason seedShopItems is: this is what the picker offers
+// when the backend is not "supabase", so it is only useful insofar as it matches the real table.
+// Exactly one is_default per item id, like the partial unique index enforces.
+export function seedItemVariants(): ItemVariant[] {
+  const v = (itemId: string, variation: string | null, isDefault = false): ItemVariant => ({ itemId, variation, isDefault });
+  return [
+    v("tutorial", null, true),
+    v("eket-cabinet", "black", true),
+    v("eket-cabinet", "white"),
+    v("eket-cabinet", "wooden"),
+    v("bekvam-stool", "white", true),
+    v("bekvam-stool", "black"),
+    v("bekvam-stool", "wooden"),
+    v("dalfred-stool", "birch", true),
+    v("dalfred-stool", "black"),
+    v("lack-table", "wooden", true),
+    v("lack-table", "black"),
+    v("lack-table", "white"),
+    v("malm-chest", "white", true),
+    v("malm-chest", "wooden"),
+    v("neiden-bedframe", "wooden", true),
+    v("rosentorp-table", "black", true),
+    v("rosentorp-table", "white"),
+  ];
 }
 
 // Likers per room owner — the source of the derived likes count. Ids are synthetic.

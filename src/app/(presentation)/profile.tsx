@@ -1,26 +1,18 @@
 // The player's profile hub: their card (avatar, level, editable nickname, stats) beside a friends list. Reads/writes entirely through the repo seam (src/data), so it works on fixtures today and swaps to Supabase untouched.
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { StyleSheet, ActivityIndicator, Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import type { ImageSourcePropType } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/src/game/ui/Button";
 import { SettingsIcon, StarIcon } from "@/src/components/Icons";
-import { ELEVATION, RADIUS, SPACE, Theme, TYPE, useStyles, useTheme } from "@/src/game/ui/theme";
+import { RADIUS, TYPE, ELEVATION, SPACE, useStyles, useTheme } from "@/src/game/ui/theme";
 import { FURNITURE_METAS } from "@/src/game/content/furnitures/furnitures";
 import type { ProfileId } from "@/src/game/core/profile";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import type { Profile } from "@/src/data";
+import type { Theme } from "@/src/game/ui/theme";
 
 // The "/N" denominator for items assembled: the same buildable set the catalogue counts.
 const TOTAL_BUILDS = FURNITURE_METAS.length;

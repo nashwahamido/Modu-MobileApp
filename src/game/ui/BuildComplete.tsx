@@ -1,12 +1,14 @@
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Image, Pressable, ScrollView, Text, View } from "react-native";
 
 import { useGameStore } from "@/src/game/core/store";
-import { Theme, useStyles } from "@/src/game/ui/theme";
+import { useStyles } from "@/src/game/ui/theme";
 import { GrainOverlay } from "@/src/game/ui/Button";
 import { useRepos } from "@/src/data";
 import { useCatalogRow } from "@/src/data/catalogStore";
+import { usePlacementStore } from "@/src/room/core/placement";
+import type { Theme } from "@/src/game/ui/theme";
 
 /**
  * The finished-build screen.
@@ -50,10 +52,6 @@ export function BuildComplete() {
   if (!isDone || dismissed) return null;
 
   const { coins, xp } = reward;
-  // BOTH buttons land on the inventory, where the finished piece now shows up (user_build joined to
-  // the catalog). They stay two buttons because they will diverge again once placement is wired —
-  // "place in the room now!" is meant to drop straight into placing, which nothing can do yet.
-  //
   // Two steps, not a plain replace("/inventory"). The (presentation) group is a MODAL layer that
   // floats over whatever scene is beneath it, and every other entry into it is a push from the room —
   // inventory's own back button is dismissTo("/room") and needs the room to actually be there.
@@ -62,6 +60,15 @@ export function BuildComplete() {
   const goToInventory = () => {
     router.replace("/room");
     router.push("/inventory");
+  };
+  // Straight into the room with the ghost already in hand; falls back to the inventory for the
+  // rare furniture with no room model (the tutorial).
+  const placeInRoom = () => {
+    if (!furnitureId || !usePlacementStore.getState().startPlacing(furnitureId, { firstPlacementGuide: true })) {
+      goToInventory();
+      return;
+    }
+    router.replace("/room");
   };
 
   return (
@@ -142,7 +149,7 @@ export function BuildComplete() {
           <View style={styles.actionsRow}>
             <Pressable
               style={styles.action}
-              onPress={goToInventory}
+              onPress={placeInRoom}
               accessibilityLabel="Place it in the room"
             >
               <Image

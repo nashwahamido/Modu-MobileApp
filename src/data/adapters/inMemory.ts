@@ -1,10 +1,10 @@
 // In-memory adapter for the repo seam. Values are cloned on the way in and out so callers can't mutate the backing store by reference — the same isolation a network round-trip gives you.
 import type { FurnitureId } from "@/src/game/core/type";
-import type { BuildProgressRepo, CatalogRepo, FriendsRepo, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo } from "../repos";
+import type { BuildProgressRepo, CatalogRepo, FriendsRepo, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo, VariantsRepo } from "../repos";
 import type { BuildSave, Friend, Profile, ProfilePatch, RoomLayout, UserId } from "../types";
 import type { ShopItemId } from "../shopItems";
 import { levelForXp, levelSpan, titleForLevel } from "../levels";
-import { seedBuildCatalog, seedBuilds, seedBuiltItems, seedCompleted, seedFriends, seedInventory, seedLevelRows, seedProfiles, seedRoomLikes, seedRooms, seedShopItems } from "./seed";
+import { seedBuildCatalog, seedBuilds, seedBuiltItems, seedCompleted, seedFriends, seedInventory, seedLevelRows, seedProfiles, seedItemVariants, seedRoomLikes, seedRooms, seedShopItems } from "./seed";
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 
@@ -100,7 +100,7 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
       const found = rooms.get(ownerId);
       if (found) return clone(found);
       // No room yet: hand back an empty one so callers never special-case null.
-      return { ownerId, placements: [], updatedAt: new Date().toISOString() };
+      return { ownerId, version: 1, placements: [], updatedAt: new Date().toISOString() };
     },
     async save(ownerId, layout) {
       await delay(latency);
@@ -245,5 +245,15 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
     },
   };
 
-  return { catalog: catalogRepo, profiles: profileRepo, rooms: roomRepo, friends: friendsRepo, builds: buildsRepo, likes: likesRepo, store: storeRepo };
+  // Reference data, identical for every player — read once like shopItems above.
+  const itemVariants = seedItemVariants();
+
+  const variantsRepo: VariantsRepo = {
+    async list() {
+      await delay(latency);
+      return clone(itemVariants);
+    },
+  };
+
+  return { catalog: catalogRepo, profiles: profileRepo, rooms: roomRepo, friends: friendsRepo, builds: buildsRepo, likes: likesRepo, store: storeRepo, variants: variantsRepo };
 }

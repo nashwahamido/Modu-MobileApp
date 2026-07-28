@@ -36,7 +36,6 @@ export interface TutorialContext {
   mode: "free" | "guide" | "strict";
   manualTools: boolean;
   softHints: boolean;
-  oneFingerPanEnabled: boolean;
 }
 
 export interface TutorialStep {
@@ -118,7 +117,6 @@ export const CONTEXTUAL_TUTORIAL_STEPS: TutorialStep[] = [
     targetId: "scene",
     message: "Drag one finger across empty space to pan the camera.",
     event: "one_finger_panned",
-    when: ({ oneFingerPanEnabled }) => oneFingerPanEnabled,
   },
   {
     id: "undo-step",
@@ -170,7 +168,7 @@ export const SETTINGS_TUTORIAL_STEPS: TutorialStep[] = [
 export const FUTURE_TUTORIAL_REQUIREMENTS = {
   saveProgress: "Future requirement — do not implement yet.",
   floatPushBack:
-    "Blocked on the final push-back control or gesture; keep it out of user-facing copy.",
+    "The Put back button now exists in BOTH play and the tutorial fork; this entry only tracks whether a dedicated tutorial step should teach it.",
 } as const;
 
 export const TUTORIAL_CONTENT_DECISIONS = {

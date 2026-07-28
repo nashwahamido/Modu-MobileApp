@@ -2,14 +2,7 @@ import { router } from "expo-router";
 import type { Href } from "expo-router";
 import * as Speech from "@/src/onboarding/speech";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Animated,
-  Image,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { StyleSheet, Animated, Image, Pressable, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import {
   getRecommendedModes,
@@ -20,8 +13,9 @@ import {
 } from "@/src/onboarding/questionnaire";
 import { VoiceButton } from "@/src/game/ui/VoiceButton";
 import { Button } from "@/src/game/ui/Button";
-import { ELEVATION, SPACE, Theme, TYPE, useStyles } from "@/src/game/ui/theme";
+import { SPACE, TYPE, ELEVATION, useStyles } from "@/src/game/ui/theme";
 import { saveOnboardingResults } from "@/src/services/onboarding";
+import type { Theme } from "@/src/game/ui/theme";
 
 const mascot = require("../../assets/images/mascot/mascot.png");
 const q3ManualReference = require("../../assets/images/questionnaire/q3-manual-reference.png");
