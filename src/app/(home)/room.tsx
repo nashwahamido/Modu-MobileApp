@@ -1,9 +1,8 @@
 import { StatusBar } from "expo-status-bar";
 import { Component } from "react";
 import type { ErrorInfo, ReactNode } from "react";
-import { Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { RoomExperience } from "@/src/room/ui/RoomExperience";
-import { styles } from "./room.styles";
 
 class RoomErrorBoundary extends Component<
   { children: ReactNode },
@@ -43,3 +42,16 @@ export default function RoomRoute() {
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  fallback: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    backgroundColor: "#F3ECE0",
+    padding: 28,
+  },
+  title: { color: "#231F20", fontSize: 22, fontWeight: "900", textAlign: "center" },
+  message: { color: "#665f55", fontSize: 14, fontWeight: "700", textAlign: "center" },
+});

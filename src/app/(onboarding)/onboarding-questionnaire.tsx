@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import type { Href } from "expo-router";
 import * as Speech from "@/src/onboarding/speech";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Image, Pressable, Text, View } from "react-native";
+import { StyleSheet, Animated, Image, Pressable, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import {
   getRecommendedModes,
@@ -13,9 +13,9 @@ import {
 } from "@/src/onboarding/questionnaire";
 import { VoiceButton } from "@/src/game/ui/VoiceButton";
 import { Button } from "@/src/game/ui/Button";
-import { useStyles } from "@/src/game/ui/theme";
+import { SPACE, TYPE, ELEVATION, useStyles } from "@/src/game/ui/theme";
 import { saveOnboardingResults } from "@/src/services/onboarding";
-import { makeStyles } from "./onboarding-questionnaire.styles";
+import type { Theme } from "@/src/game/ui/theme";
 
 const mascot = require("../../assets/images/mascot/mascot.png");
 const q3ManualReference = require("../../assets/images/questionnaire/q3-manual-reference.png");
@@ -459,3 +459,433 @@ export default function QuestionnaireScreen() {
     </View>
   );
 }
+
+const makeStyles = (t: Theme) =>
+  StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor: t.bg,
+      paddingHorizontal: 44,
+      paddingVertical: 22,
+    },
+    introStage: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 28,
+    },
+    mascotCircle: {
+      width: 190,
+      height: 190,
+      alignItems: "center",
+      justifyContent: "center",
+      overflow: "hidden",
+      borderColor: t.border,
+      borderRadius: 95,
+      borderWidth: 2,
+      backgroundColor: t.surface,
+    },
+    introMascot: {
+      width: 128,
+      height: 128,
+      borderRadius: 30,
+    },
+    introMascotModel: {
+      ...StyleSheet.absoluteFillObject,
+    },
+    speechBubble: {
+      width: 560,
+      minHeight: 216,
+      borderRadius: 42,
+      backgroundColor: t.surface,
+      paddingHorizontal: 44,
+      paddingVertical: 28,
+      gap: 18,
+    },
+    introText: {
+      color: t.text,
+      fontSize: 17,
+      fontWeight: "600",
+      lineHeight: 24,
+    },
+    introPrompt: {
+      color: t.text,
+      fontSize: 18,
+      fontStyle: "italic",
+      fontWeight: "800",
+      textAlign: "center",
+    },
+    handOptions: {
+      flexDirection: "row",
+      justifyContent: "center",
+      gap: 28,
+    },
+    handButton: {
+      width: 70,
+      height: 74,
+      alignItems: "center",
+      justifyContent: "center",
+      borderColor: t.border,
+      borderRadius: 18,
+      borderWidth: 2,
+      backgroundColor: t.surface,
+    },
+    selectedHandButton: {
+      borderColor: t.accent,
+      backgroundColor: t.surfaceRaised,
+    },
+    handIcon: {
+      color: t.text,
+      fontSize: 28,
+      fontWeight: "900",
+    },
+    handText: {
+      ...TYPE.labelSm,
+      color: t.textDim,
+      fontWeight: "800",
+    },
+    // Layout only — the fill, radius, and padding now come from the shared Button.
+    introNextButton: {
+      position: "absolute",
+      right: 54,
+      bottom: 30,
+      minWidth: 116,
+    },
+    questionHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 18,
+    },
+    stepText: {
+      width: 52,
+      color: t.text,
+      fontSize: 18,
+      fontWeight: "900",
+      textAlign: "right",
+    },
+    progressTrack: {
+      flex: 1,
+      height: 10,
+      overflow: "hidden",
+      borderRadius: SPACE.sm,
+      backgroundColor: t.surfaceInset,
+    },
+    progressFill: {
+      height: "100%",
+      borderRadius: SPACE.sm,
+      backgroundColor: t.accent,
+    },
+    navButtons: {
+      width: 150,
+      flexDirection: "row",
+      justifyContent: "flex-end",
+      gap: SPACE.lg,
+      borderRadius: 24,
+      paddingHorizontal: 6,
+    },
+    highlightedNavButtons: {
+      borderColor: t.accent,
+      borderWidth: 3,
+      backgroundColor: t.surfaceRaised,
+    },
+    navButton: {
+      width: 54,
+      height: 42,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    disabledNavButton: {
+      opacity: 0.35,
+    },
+    navText: {
+      color: t.text,
+      fontSize: 42,
+      fontWeight: "900",
+      lineHeight: 42,
+    },
+    guidedOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      zIndex: 20,
+      alignItems: "flex-end",
+      backgroundColor: t.scrim,
+      paddingRight: 52,
+      paddingTop: 68,
+    },
+    navHintCard: {
+      width: 320,
+      borderColor: t.accent,
+      borderRadius: 22,
+      borderWidth: 3,
+      backgroundColor: t.surface,
+      paddingHorizontal: 18,
+      paddingVertical: 14,
+      ...ELEVATION.card,
+    },
+    voiceHintCard: {
+      width: 330,
+      borderColor: t.accent,
+      borderRadius: 22,
+      borderWidth: 3,
+      backgroundColor: t.surface,
+      paddingHorizontal: 18,
+      paddingVertical: SPACE.lg,
+      ...ELEVATION.card,
+    },
+    voiceHintIconWrap: {
+      width: 54,
+      height: 54,
+      alignItems: "center",
+      justifyContent: "center",
+      borderColor: t.border,
+      borderRadius: 27,
+      borderWidth: 1,
+      backgroundColor: t.surface,
+      marginBottom: 10,
+    },
+    navHintArrowDemo: {
+      alignSelf: "flex-end",
+      flexDirection: "row",
+      gap: 14,
+      borderColor: t.accent,
+      borderRadius: 20,
+      borderWidth: 2,
+      backgroundColor: t.surfaceRaised,
+      paddingHorizontal: 10,
+      marginBottom: SPACE.sm,
+    },
+    navHint: {
+      position: "absolute",
+      right: 54,
+      top: 74,
+      zIndex: 10,
+      width: 300,
+      borderColor: t.accent,
+      borderRadius: 20,
+      borderWidth: 2,
+      backgroundColor: t.surface,
+      paddingHorizontal: 18,
+      paddingVertical: 14,
+    },
+    navHintTitle: {
+      color: t.accent,
+      fontSize: 15,
+      fontWeight: "900",
+      marginBottom: SPACE.xs,
+    },
+    navHintText: {
+      color: t.text,
+      fontSize: 14,
+      fontWeight: "700",
+      lineHeight: 19,
+    },
+    promptRow: {
+      minHeight: 64,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 20,
+      paddingTop: SPACE.md,
+    },
+    prompt: {
+      flex: 1,
+      color: t.text,
+      fontSize: 21,
+      fontWeight: "900",
+      lineHeight: 27,
+    },
+    saveErrorText: {
+      ...TYPE.labelSm,
+      marginLeft: 72,
+      color: t.danger,
+      fontWeight: "800",
+    },
+    savingText: {
+      ...TYPE.labelSm,
+      marginLeft: 72,
+      color: t.success,
+      fontWeight: "800",
+    },
+    referencePanel: {
+      width: 230,
+      height: 252,
+      alignItems: "center",
+      justifyContent: "center",
+      overflow: "hidden",
+      borderColor: t.border,
+      borderRadius: SPACE.md,
+      borderWidth: 2,
+      backgroundColor: t.surface,
+      paddingHorizontal: SPACE.sm,
+      paddingVertical: SPACE.sm,
+    },
+    referencePanelImage: {
+      width: "100%",
+      height: 210,
+    },
+    referenceZoomPill: {
+      minWidth: 116,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 5,
+      borderColor: t.border,
+      borderRadius: 14,
+      borderWidth: 1,
+      backgroundColor: t.surface,
+      paddingHorizontal: 10,
+      paddingVertical: SPACE.xs,
+      marginTop: 6,
+    },
+    referenceZoomIcon: {
+      color: t.accent,
+      fontSize: 14,
+      fontWeight: "900",
+      lineHeight: 14,
+    },
+    referencePanelText: {
+      color: t.accent,
+      fontSize: 10,
+      fontWeight: "900",
+      lineHeight: 12,
+      textAlign: "center",
+    },
+    optionsRow: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 28,
+      paddingTop: 0,
+    },
+    manualOptionsRow: {
+      alignItems: "center",
+      gap: 22,
+    },
+    optionCard: {
+      flex: 1,
+      height: 258,
+      alignItems: "center",
+      justifyContent: "flex-start",
+      borderColor: t.border,
+      borderRadius: 34,
+      borderWidth: 2,
+      backgroundColor: t.surface,
+      paddingHorizontal: 22,
+      paddingTop: 18,
+      paddingBottom: 58,
+    },
+    compactOptionCard: {
+      height: 238,
+      justifyContent: "flex-start",
+      paddingHorizontal: 14,
+      paddingTop: 14,
+      paddingBottom: 44,
+    },
+    selectedOptionCard: {
+      borderColor: t.accent,
+      backgroundColor: t.surfaceRaised,
+    },
+    expressionCircle: {
+      width: 104,
+      height: 104,
+      alignItems: "center",
+      justifyContent: "center",
+      borderColor: t.gold,
+      borderRadius: 52,
+      borderWidth: 1,
+      backgroundColor: t.surface,
+    },
+    expressionSlot: {
+      height: 110,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    compactExpressionSlot: {
+      height: 92,
+    },
+    compactExpressionCircle: {
+      width: 86,
+      height: 86,
+      borderRadius: 43,
+    },
+    selectedExpressionCircle: {
+      borderColor: t.accent,
+    },
+    optionMascot: {
+      width: 82,
+      height: 82,
+      borderRadius: 22,
+    },
+    compactOptionMascot: {
+      width: 68,
+      height: 68,
+      borderRadius: 18,
+    },
+    optionText: {
+      color: t.textDim,
+      fontSize: 15,
+      fontWeight: "700",
+      lineHeight: 20,
+      marginTop: SPACE.sm,
+      minHeight: 82,
+      textAlign: "center",
+    },
+    compactOptionText: {
+      minHeight: 76,
+      fontSize: 13,
+      lineHeight: 17,
+      marginTop: 6,
+      paddingHorizontal: 2,
+    },
+    optionAudioButton: {
+      position: "absolute",
+      bottom: 14,
+      left: "50%",
+      marginLeft: -18,
+    },
+    selectedOptionText: {
+      color: t.accent,
+    },
+    referenceOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      zIndex: 30,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 38,
+      paddingVertical: SPACE.xl,
+    },
+    referenceOverlayBackdrop: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: t.scrim,
+    },
+    referenceExpandedCard: {
+      width: "84%",
+      height: "88%",
+      overflow: "hidden",
+      borderColor: t.gold,
+      borderRadius: 24,
+      borderWidth: 3,
+      backgroundColor: t.surface,
+    },
+    referenceExpandedImage: {
+      width: "100%",
+      height: "100%",
+    },
+    referenceExpandedHint: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: SPACE.md,
+      alignItems: "center",
+    },
+    referenceExpandedHintText: {
+      ...TYPE.labelSm,
+      overflow: "hidden",
+      borderRadius: 14,
+      backgroundColor: t.scrim,
+      color: t.onAccent,
+      fontWeight: "800",
+      paddingHorizontal: SPACE.md,
+      paddingVertical: 6,
+    },
+  });
