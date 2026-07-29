@@ -300,7 +300,7 @@ export function RoomExperience() {
 
           <Animated.View layout={BAR_LAYOUT} style={s.assembleWrap}>
             {/* Bar-coloured collar, sized bigger than the button and centred on the same
-                point: it's what makes the pill's top edge read as curving UP around the
+                point: it's makes the pill's top edge read as curving UP around the
                 button rather than the button just sitting on top of a flat edge. A plain
                 View can only stroke its FULL edge, but the lower half of this circle sits
                 inside the bar — visible only on top — so the stroke is a single SVG arc
