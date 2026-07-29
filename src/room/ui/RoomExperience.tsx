@@ -1,23 +1,74 @@
 import { useEffect, useRef, useState } from 'react';
 import { router, useRootNavigationState } from 'expo-router';
 import type { Href } from 'expo-router';
-import { StyleSheet, Image, Pressable, Text, View } from "react-native";
-import { CartIcon, CheckIcon, ChevronIcon, CoinMedalIcon, FriendsIcon, InventoryIcon, LevelStarIcon, RotateLeftIcon, RotateRightIcon, SettingsIcon, TrashIcon } from '../../components/Icons';
+import {
+  StyleSheet,
+  Pressable,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
+import {
+  useFonts,
+  Lexend_400Regular,
+  Lexend_600SemiBold,
+  Lexend_700Bold,
+  Lexend_800ExtraBold,
+  Lexend_900Black,
+} from "@expo-google-fonts/lexend";
+import { CheckIcon, RotateLeftIcon, RotateRightIcon, TrashIcon } from '../../components/Icons';
 import { Button } from '../../game/ui/Button';
 import { OverlaySheet } from '../../game/ui/OverlaySheet';
 import { SceneBackdrop } from '../../game/ui/SceneBackdrop';
 import { useGameStore } from '../../game/core/store';
 import { useStyles, useTheme } from "@/src/game/ui/theme";
-import { levelProgressFraction } from '../../data/levels';
-import { useProfileHud } from '../../hooks/useProfileHud';
 import { useCurrentUserId } from '../../data';
 import { RoomScene } from '../scene/RoomScene';
 import { ColourPicker } from './ColourPicker';
+import { RoomBottomBar } from './RoomBottomBar';
+import { RoomTopStats } from './RoomTopStats';
 import { usePlacementStore } from '../core/placement';
 import { ORBIT } from '../input/orbit';
 import type { Theme } from "@/src/game/ui/theme";
 import { clampRoomYaw } from '../core/roomShell';
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from '../../hooks/use-safe-insets';
+
+// This screen's text is pinned to the mockup's exact ink colour and to Lexend, rather than
+// the theme's t.text/system-font pair — a deliberate override for this redesign, not an
+// oversight, so it does not shift with the light/dark/high-contrast theme.
+const TEXT_COLOR = '#231F20';
+const LEXEND = {
+  regular: 'Lexend_400Regular',
+  semibold: 'Lexend_600SemiBold',
+  bold: 'Lexend_700Bold',
+  extrabold: 'Lexend_800ExtraBold',
+  black: 'Lexend_900Black',
+} as const;
+
+// A stand-in for icon art that hasn't been delivered yet (star, coins, settings, and every
+// bottom-bar glyph). Decorative only — the Pressable it sits in carries the accessibility
+// label, so this is hidden from screen readers rather than announced as an unlabeled square.
+function Placeholder({ size = 28, style }: { size?: number; style?: StyleProp<ViewStyle> }) {
+  const t = useTheme();
+  return (
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={[
+        {
+          width: size,
+          height: size,
+          borderRadius: 6,
+          backgroundColor: t.surface,
+          borderWidth: 1.5,
+          borderColor: t.borderStrong,
+        },
+        style,
+      ]}
+    />
+  );
+}
 
 // The user-facing wording for each placement rejection. The grid returns reason codes; copy
 // lives here with the rest of the screen's text.
@@ -37,16 +88,18 @@ const HEAVY_ROUTES = new Set(['play', 'tutorial', 'visit']);
 export function RoomExperience() {
   const s = useStyles(makeStyles);
   const t = useTheme();
+  // Text renders in the system font until this resolves, then re-renders once — no splash
+  // gate, since this is the persistent hub screen and the flash is a single cold-start frame.
+  useFonts({
+    Lexend_400Regular,
+    Lexend_600SemiBold,
+    Lexend_700Bold,
+    Lexend_800ExtraBold,
+    Lexend_900Black,
+  });
   // Tear the 3D view down only when a heavy scene is on top, not on every blur. The room screen stays mounted throughout (its placement/zoom UI state survives); only the Filament view unmounts under play/visit and rebuilds on return.
   const rootNav = useRootNavigationState();
   const heavySceneActive = !!rootNav && HEAVY_ROUTES.has(rootNav.routes[rootNav.index]?.name ?? '');
-  // Null until the first fetch lands — render an em dash rather than a placeholder number that would read as real.
-  const profile = useProfileHud();
-  // The bar reads full at the top of the curve, where xpForNextLevel is null and there is nothing left to climb to.
-  const levelPercent = profile
-    ? Math.round(levelProgressFraction({ xpIntoLevel: profile.xpIntoLevel, xpForNextLevel: profile.xpForNextLevel }) * 100)
-    : 0;
-  const [barOpen, setBarOpen] = useState(true);
   // The room's own backdrop axis (Settings → Display → "Room background"), separate from the assembly scene's.
   const roomBackdrop = useGameStore((s) => s.roomBackdrop);
   const darkTheme = useGameStore((s) => s.theme) === 'dark';
@@ -110,85 +163,24 @@ export function RoomExperience() {
           />
         )}
       </SceneBackdrop>
-      <View style={[s.stats, { left: 22 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN), top: 12 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN) }]}>
-        <Pressable
-          accessibilityLabel="Settings"
-          style={s.settingsButton}
-          onPress={() => router.push("/settings" as Href)}
-        >
-          <SettingsIcon size={40} color={t.textDim} />
-        </Pressable>
-        <Pressable
-          accessibilityLabel="Profile"
-          style={s.levelGroup}
-          onPress={() => router.push("/profile" as Href)}
-        >
-          <View style={s.levelBadge}>
-            <LevelStarIcon size={48} />
-            <Text style={s.levelNumber}>{profile?.level ?? "–"}</Text>
-          </View>
-          <View style={s.progress}>
-            <View style={[s.progressFill, { width: `${levelPercent}%` }]} />
-            <Text style={s.progressText}>{levelPercent}%</Text>
-          </View>
-        </Pressable>
-        <View style={s.currencyGroup}>
-          <View style={s.coinBadge}>
-            <CoinMedalIcon size={44} />
-          </View>
-          <View style={s.currency}>
-            <Text style={s.currencyText}>{profile?.coins ?? "–"}</Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={[s.rail, !barOpen && s.railClosed, { right: 18 + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN) }]}>
-        <Pressable
-          accessibilityLabel="Toggle menu"
-          style={[s.chevron, !barOpen && s.chevronClosed]}
-          onPress={() => setBarOpen((x) => !x)}
-        >
-          <ChevronIcon size={barOpen ? 28 : 34} up={barOpen} />
-        </Pressable>
-        {barOpen ? (
-          <>
-            <Pressable
-              style={s.railButton}
-              onPress={() => router.push("/store" as Href)}
-            >
-              <CartIcon size={31} />
-              <Text style={s.railLabel}>shop</Text>
-            </Pressable>
-            <Pressable
-              style={s.railButton}
-              onPress={() => router.push("/inventory" as Href)}
-            >
-              <InventoryIcon size={32} />
-              <Text style={s.railLabel}>inventory</Text>
-            </Pressable>
-            <Pressable
-              style={s.railButton}
-              onPress={() => router.push("/profile" as Href)}
-            >
-              <FriendsIcon size={34} />
-              <Text style={s.railLabel}>visit friends</Text>
-            </Pressable>
-          </>
-        ) : (
-          <View style={s.collapsedPill} />
-        )}
-      </View>
       <Pressable
-        accessibilityLabel="Tasks"
-        style={[s.workbench, { right: 34 + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN), bottom: 30 + Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN) }]}
-        onPress={() => router.push("/catalogue" as Href)}
+        accessibilityRole="button"
+        accessibilityLabel="Settings"
+        style={[
+          s.settingsButton,
+          {
+            top: 12 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
+            left: 22 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+          },
+        ]}
+        onPress={() => router.push("/settings" as Href)}
       >
-        <Image
-          source={require("../../assets/ui/icons/Assemble.png")}
-          style={s.workbenchIcon}
-          resizeMode="contain"
-        />
+        <Placeholder size={26} />
       </Pressable>
+
+      <RoomTopStats />
+
+      <RoomBottomBar />
 
       {editing ? <ColourPicker /> : null}
 
@@ -257,8 +249,10 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   // inset here becomes a hard clip line through the 3D scene the moment the room is zoomed or
   // orbited near an edge — framing belongs to the camera (src/room/input/orbit.ts), not to this view's
   // margins.
-  screen:{flex:1,backgroundColor:t.bg,overflow:'hidden'},stage:StyleSheet.absoluteFillObject,stats:{position:'absolute',zIndex:12,left:22,top:12,flexDirection:'row',alignItems:'center',gap:18},settingsButton:{width:42,height:42,alignItems:'center',justifyContent:'center',shadowColor:'#50464b',shadowOpacity:.17,shadowRadius:3.5,shadowOffset:{width:0,height:2}},levelGroup:{flexDirection:'row',alignItems:'center'},levelBadge:{zIndex:2,width:50,height:50,alignItems:'center',justifyContent:'center',shadowColor:'#4f4264',shadowOpacity:.24,shadowRadius:3.7,shadowOffset:{width:-1,height:3}},levelNumber:{position:'absolute',color:t.onAccent,fontSize:15,fontWeight:'600',textShadowColor:'rgba(68,53,85,.22)',textShadowOffset:{width:0,height:1},textShadowRadius:1.2},progress:{width:126,height:21,marginLeft:-6,borderRadius:12,backgroundColor:t.surfaceInset,overflow:'hidden',justifyContent:'center'},progressFill:{position:'absolute',left:0,top:0,bottom:0,backgroundColor:t.accent},progressText:{alignSelf:'center',color:t.textDim,fontSize:11,fontWeight:'600'},currencyGroup:{flexDirection:'row',alignItems:'center'},coinBadge:{zIndex:2,width:46,height:46,alignItems:'center',justifyContent:'center',shadowColor:'#76642e',shadowOpacity:.2,shadowRadius:3.5,shadowOffset:{width:-1,height:3}},currency:{width:126,height:21,marginLeft:-5,borderRadius:12,backgroundColor:t.surfaceInset,alignItems:'center',justifyContent:'center'},currencyText:{color:t.text,fontSize:12,fontWeight:'700'},
-  rail:{position:'absolute',zIndex:14,right:18,top:58,width:78,height:238,paddingVertical:15,borderWidth:1.2,borderColor:t.border,borderRadius:18,backgroundColor:t.surface,alignItems:'center',justifyContent:'space-between',shadowColor:'#8d8190',shadowOpacity:.17,shadowRadius:7,shadowOffset:{width:-3,height:6}},railClosed:{top:22,width:78,height:52,paddingVertical:0,borderWidth:0,backgroundColor:'transparent',shadowOpacity:0},chevron:{position:'absolute',top:-34,width:48,height:34,alignItems:'center',justifyContent:'center'},chevronClosed:{top:0,width:58,height:30},collapsedPill:{position:'absolute',top:39,width:58,height:9,borderRadius:6,backgroundColor:t.surface,borderWidth:.65,borderColor:t.border,shadowColor:'#8d8190',shadowOpacity:.18,shadowRadius:4,shadowOffset:{width:-2,height:3}},railButton:{width:74,minHeight:58,alignItems:'center',justifyContent:'center'},railLabel:{fontSize:10.5,lineHeight:13,color:t.text,marginTop:1,fontWeight:'400',textAlign:'center'},workbench:{position:'absolute',zIndex:13,right:34,bottom:30,width:88,height:88,alignItems:'center',justifyContent:'center'},workbenchIcon:{width:88,height:88},
-  placeBar:{position:'absolute',zIndex:12,bottom:78,alignSelf:'center',flexDirection:'row',alignItems:'center',gap:10,borderRadius:22,backgroundColor:t.surface,paddingLeft:18,paddingRight:6,paddingVertical:6,shadowColor:'#000',shadowOpacity:.18,shadowRadius:8},placeBarBlocked:{borderWidth:2,borderColor:t.danger},placeHint:{flexShrink:1,color:t.textDim,fontWeight:'600'},placeHintBlocked:{color:t.danger,fontSize:11},ghostRotate:{width:36,height:36,borderRadius:18,backgroundColor:t.surfaceRaised,alignItems:'center',justifyContent:'center'},cancelGlyph:{color:t.textDim,fontSize:16,fontWeight:'800'},confirmDisabled:{opacity:.35},deleteButton:{width:36,height:36,borderRadius:18,backgroundColor:t.surfaceRaised,alignItems:'center',justifyContent:'center'},confirm:{width:36,height:36,borderRadius:18,backgroundColor:t.success,alignItems:'center',justifyContent:'center'},
-  comingSoonTitle:{fontSize:22,fontWeight:'900',color:t.text,textAlign:'center'},comingSoonBody:{marginTop:8,fontSize:14,fontWeight:'600',color:t.textDim,textAlign:'center'},comingSoonButton:{marginTop:18,minWidth:120},
+  screen:{flex:1,backgroundColor:t.bg,overflow:'hidden'},stage:StyleSheet.absoluteFillObject,
+  // Settings sits on its own, self-positioned at the top-left — RoomTopStats (coins + level)
+  // is the equivalent cluster at the top-right, now in its own file.
+  settingsButton:{position:'absolute',zIndex:12,width:42,height:42,alignItems:'center',justifyContent:'center',shadowColor:'#50464b',shadowOpacity:.17,shadowRadius:3.5,shadowOffset:{width:0,height:2}},
+  placeBar:{position:'absolute',zIndex:16,bottom:78,alignSelf:'center',flexDirection:'row',alignItems:'center',gap:10,borderRadius:22,backgroundColor:t.surface,paddingLeft:18,paddingRight:6,paddingVertical:6,shadowColor:'#000',shadowOpacity:.18,shadowRadius:8},placeBarBlocked:{borderWidth:2,borderColor:t.danger},placeHint:{flexShrink:1,color:TEXT_COLOR,fontFamily:LEXEND.semibold},placeHintBlocked:{color:t.danger,fontSize:11},ghostRotate:{width:36,height:36,borderRadius:18,backgroundColor:t.surfaceRaised,alignItems:'center',justifyContent:'center'},cancelGlyph:{color:TEXT_COLOR,fontFamily:LEXEND.extrabold,fontSize:16},confirmDisabled:{opacity:.35},deleteButton:{width:36,height:36,borderRadius:18,backgroundColor:t.surfaceRaised,alignItems:'center',justifyContent:'center'},confirm:{width:36,height:36,borderRadius:18,backgroundColor:t.success,alignItems:'center',justifyContent:'center'},
+  comingSoonTitle:{fontFamily:LEXEND.black,fontSize:22,color:TEXT_COLOR,textAlign:'center'},comingSoonBody:{marginTop:8,fontFamily:LEXEND.semibold,fontSize:14,color:TEXT_COLOR,textAlign:'center'},comingSoonButton:{marginTop:18,minWidth:120},
 });
