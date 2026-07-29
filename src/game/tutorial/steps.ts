@@ -17,6 +17,9 @@ export type TutorialEvent =
   | "one_finger_panned"
   | "part_picked_up"
   | "part_snapped"
+  | "all_legs_installed"
+  | "connector_placed"
+  | "connector_tightened"
   | "step_undone"
   | "step_redone"
   | "display_preferences_confirmed"
@@ -55,46 +58,35 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: "long-press-part",
     targetId: "partsTray",
-    message: "Long-press a panel card to pick it up.",
+    message: "Long-press the LACK table top or a leg card to pick it up.",
     event: "part_picked_up",
   },
   {
     id: "drag-and-snap",
     targetId: "assemblyArea",
     message:
-      "Keep holding and drag the panel into the cabinet frame. Release when it lines up to snap.",
+      "Keep holding, drag the part into position, then release when it lines up to snap.",
     event: "part_snapped",
   },
   {
-    id: "choose-display-settings",
-    targetId: "settings",
+    id: "install-four-legs",
+    targetId: "partsTray",
     message:
-      "Open Settings, preview Background and Lighting, then confirm your choices.",
-    event: "display_preferences_confirmed",
+      "Install all four legs. Long-press each leg, drag it into place, and release to snap.",
+    event: "all_legs_installed",
   },
   {
-    id: "rotate-with-joystick",
-    targetId: "joystick",
-    message: "Use the left joystick to rotate around the cabinet.",
-    event: "joystick_moved",
+    id: "place-connector",
+    targetId: "partsTray",
+    message:
+      "Long-press a bolt, drag it to a leg connection, and release to place it.",
+    event: "connector_placed",
   },
   {
-    id: "recenter-camera",
-    targetId: "recenter",
-    message: "Lost your view? Tap Recenter to return to the default angle.",
-    event: "camera_recentered",
-  },
-  {
-    id: "pinch-to-zoom",
-    targetId: "scene",
-    message: "Pinch with two fingers to zoom in and check the details.",
-    event: "pinch_zoomed",
-  },
-  {
-    id: "secure-with-tool",
+    id: "tighten-connector",
     targetId: "tool",
-    message: "Use the highlighted control to secure the part.",
-    event: "tool_used",
+    message: "Use the highlighted control to tighten the bolt.",
+    event: "connector_tightened",
   },
 ];
 
@@ -191,7 +183,7 @@ export const settingsTutorialStepsFor = (
 
 export function messageForToolStep(kind: ToolTutorialKind | null) {
   if (kind === "press")
-    return "Tap the hand four times to press the panel into place.";
+    return "Tap the hand four times to press the part into place.";
   if (kind === "tap") return "Tap repeatedly to drive it in.";
   if (kind === "beat") return "Swipe up or down to continue.";
   return "Trace the circle clockwise to tighten the connector.";

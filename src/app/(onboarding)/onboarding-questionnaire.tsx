@@ -18,13 +18,12 @@ import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src
 import { saveOnboardingResults } from "@/src/services/onboarding";
 import type { Theme } from "@/src/game/ui/theme";
 
-const mascot = require("../../assets/images/mascot/mascot.png");
+const mascot = require("../../assets/images/questionnaire/whole.png");
 const q3ManualReference = require("../../assets/images/questionnaire/q3-manual-reference.png");
 const optionExpressionImages = [
-  require("../../assets/images/mascot/expressions/luna-expression-1.png"),
-  require("../../assets/images/mascot/expressions/luna-expression-2.png"),
-  require("../../assets/images/mascot/expressions/luna-expression-3.png"),
-  require("../../assets/images/mascot/expressions/luna-expression-4.png"),
+  require("../../assets/images/questionnaire/smile.png"),
+  require("../../assets/images/questionnaire/peace.png"),
+  require("../../assets/images/questionnaire/curious.png"),
 ];
 
 export default function QuestionnaireScreen() {
@@ -507,9 +506,9 @@ const makeStyles = (t: Theme) =>
       backgroundColor: t.surface,
     },
     introMascot: {
-      width: 128,
-      height: 128,
-      borderRadius: 30,
+      width: "100%",
+      height: "100%",
+      transform: [{ scale: 1.55 }],
     },
     introMascotModel: {
       ...StyleSheet.absoluteFillObject,
@@ -814,6 +813,7 @@ const makeStyles = (t: Theme) =>
       height: 66,
       alignItems: "center",
       justifyContent: "center",
+      overflow: "hidden",
       borderColor: t.gold,
       borderRadius: 33,
       borderWidth: 1,
@@ -836,14 +836,13 @@ const makeStyles = (t: Theme) =>
       borderColor: t.accent,
     },
     optionMascot: {
-      width: 54,
-      height: 54,
-      borderRadius: 16,
+      width: "100%",
+      height: "100%",
+      transform: [{ scale: 1.55 }],
     },
     compactOptionMascot: {
-      width: 68,
-      height: 68,
-      borderRadius: 18,
+      width: "100%",
+      height: "100%",
     },
     optionText: {
       color: t.textDim,

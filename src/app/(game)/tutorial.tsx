@@ -68,6 +68,8 @@ import {
   type ToolTutorialKind,
 } from "@/src/game/tutorial/steps";
 
+const TUTORIAL_FURNITURE_ID = "lack-table";
+
 function TutorialScreen() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
   const insets = useSafeAreaInsets();
@@ -139,7 +141,7 @@ function TutorialScreen() {
       manualTools: state.settings.manualTools,
       softHints: state.settings.softHints,
     });
-    loadFurnitureById("tutorial")
+    loadFurnitureById(TUTORIAL_FURNITURE_ID)
       .then((f) => {
         if (active) useGameStore.getState().loadFurniture(f);
       })
@@ -219,6 +221,9 @@ function TutorialScreen() {
   // Matters most during a drag, where setDragFit fires per frame — same fix as play.tsx.
   const completed = useGameStore((s) => s.completed);
   const completedSet = useMemo(() => new Set(completed), [completed]);
+  const tutorialStepEvent = useTutorialStore(
+    (s) => s.steps[s.currentIndex]?.event,
+  );
   const activeCluster = useGameStore((s) => s.activeCluster);
   const mode = useGameStore((s) => s.mode);
   const stage = useMemo(
@@ -252,29 +257,64 @@ function TutorialScreen() {
   const orientationActionId = useGameStore((s) => s.orientationActionId);
   const totalCount = furniture?.actions.length ?? 0;
 
-  // Record the tutorial furniture as a completed build once it's assembled — so the player owns it
+  // LACK-specific milestones are derived from completed actions so they remain
+  // correct even if the player installs parts in a different legal order.
+  useEffect(() => {
+    if (furniture?.meta.id !== TUTORIAL_FURNITURE_ID) return;
+    const completedActions = furniture.actions.filter((action) =>
+      completedSet.has(action.actionId),
+    );
+    const completeEvent = useTutorialStore.getState().completeEvent;
+
+    if (
+      tutorialStepEvent === "all_legs_installed" &&
+      completedActions.filter(
+        (action) =>
+          action.type === "placePart" && action.partId?.startsWith("leg_"),
+      ).length >= 4
+    ) {
+      completeEvent("all_legs_installed");
+    } else if (
+      tutorialStepEvent === "connector_placed" &&
+      completedActions.some(
+        (action) =>
+          action.type === "placeFastener" ||
+          action.type === "insertFastener",
+      )
+    ) {
+      completeEvent("connector_placed");
+    } else if (
+      tutorialStepEvent === "connector_tightened" &&
+      completedActions.some((action) => action.type === "tightenFastener")
+    ) {
+      completeEvent("connector_tightened");
+    }
+  }, [completedSet, furniture, tutorialStepEvent]);
+
+  // Record the LACK table as a completed build once it's assembled — so the player owns it
   // (it's a placeable built_item) and it counts toward assembly_count, like any build. Fires once.
   const repos = useRepos();
   const me = useCurrentUserId();
-  const tutorialRecorded = useRef(false);
+  const lackRecorded = useRef(false);
   // The store may still hold a FINISHED build from a previous play session on the first frames
-  // (before loadFurnitureById lands), so "built" only counts when the loaded furniture IS the
-  // tutorial — otherwise entering here right after any completed build records a free tutorial.
-  const tutorialBuilt =
-    furniture?.meta.id === "tutorial" && totalCount > 0 && completedCount >= totalCount;
+  // (before loadFurnitureById lands), so "built" only counts when the loaded furniture is LACK.
+  const lackBuilt =
+    furniture?.meta.id === TUTORIAL_FURNITURE_ID &&
+    totalCount > 0 &&
+    completedCount >= totalCount;
   // A failed write re-arms via this counter: bumping it re-fires the effect, which a ref reset
   // alone never does. Capped so a permanent backend failure cannot loop forever.
   const [recordAttempt, setRecordAttempt] = useState(0);
   useEffect(() => {
-    if (tutorialBuilt && !tutorialRecorded.current) {
-      tutorialRecorded.current = true;
-      repos.builds.complete(me, "tutorial").catch((err) => {
-        console.warn("[tutorial] could not record the completed build", err);
-        tutorialRecorded.current = false;
+    if (lackBuilt && !lackRecorded.current) {
+      lackRecorded.current = true;
+      repos.builds.complete(me, TUTORIAL_FURNITURE_ID).catch((err) => {
+        console.warn("[tutorial] could not record the completed LACK build", err);
+        lackRecorded.current = false;
         setRecordAttempt((n) => (n < 3 ? n + 1 : n));
       });
     }
-  }, [tutorialBuilt, me, repos, recordAttempt]);
+  }, [lackBuilt, me, repos, recordAttempt]);
   const displayedCompletedCount = guideCompleted
     ? guideStepCount + completedCount
     : completedCount;
@@ -430,7 +470,7 @@ function TutorialScreen() {
 
   // Also holds while the store still shows a PREVIOUS session's furniture: rendering that here
   // would flash the wrong build (and its finished ObjectiveBar) until the tutorial recipe lands.
-  if (!furniture || furniture.meta.id !== "tutorial")
+  if (!furniture || furniture.meta.id !== TUTORIAL_FURNITURE_ID)
     return <View style={styles.root} />;
 
   return (
@@ -482,7 +522,7 @@ function TutorialScreen() {
             line={
               settings.showInstructions
                 ? guideCompleted
-                  ? `Finish the tutorial cabinet · ${displayedCompletedCount}/${displayedTotalCount}`
+                  ? `Finish the LACK table · ${displayedCompletedCount}/${displayedTotalCount}`
                   : `Stage ${stage} · ${objective} · ${completedCount}/${totalCount}`
                 : null
             }

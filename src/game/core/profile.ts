@@ -31,9 +31,7 @@ export type ProfileId = "visual" | "momentum" | "clearPath" | "control";
 /** Default onboarding task for each support profile. Catalogue choices still override this. */
 // idk if we should keep this - Ge
 export function furnitureForProfile(profile: ProfileId): FurnitureId {
-  return profile === "momentum" || profile === "clearPath"
-    ? "lack-table"
-    : "dalfred-stool";
+  return "dalfred-stool";
 }
 
 export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>> = {
