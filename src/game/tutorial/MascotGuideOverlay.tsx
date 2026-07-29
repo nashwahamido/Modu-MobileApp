@@ -10,7 +10,7 @@ import { useTutorialStore } from './store';
 import { useTutorialTargets, type TutorialFrame } from './targetRegistry';
 import { useTutorialAudio } from './useTutorialAudio';
 import { Button } from '@/src/game/ui/Button';
-import { ELEVATION, RADIUS, Theme, useStyles } from '@/src/game/ui/theme';
+import { ELEVATION, RADIUS, Theme, TYPE, useStyles } from '@/src/game/ui/theme';
 const mascotImage = require("../../assets/images/mascot/mascot.png");
 const PADDING = 0;
 
@@ -148,20 +148,30 @@ export function MascotGuideOverlay({
           <Image source={mascotImage} style={styles.rewardMascot} resizeMode="contain" />
           <View style={styles.rewardCopy}>
             <Text style={styles.rewardTitle}>Tutorial completed!</Text>
-            <Text style={styles.rewardMessage}>Now entering the assembly task. You also earned +{TUTORIAL_REWARD_TOKENS} tokens.</Text>
-            <Button
-              label="Enter assembly task"
-              variant="primary"
-              small
-              style={styles.primaryAction}
-              onPress={() => {
-                const tutorial = useTutorialStore.getState();
-                if (!tutorial.completed || tutorial.currentIndex !== tutorial.steps.length - 1) return;
-                onClaimReward();
-                dismissReward();
-                onContinueToAssembly?.();
-              }}
-            />
+            <Text style={styles.rewardMessage}>Now entering the assembly task.</Text>
+            {/* XP on the left, the CTA on the right, sharing one baseline row. */}
+            <View style={styles.rewardActionRow}>
+              <View style={styles.rewardXpRow}>
+                <Image
+                  source={require("@/src/assets/ui/icons/icon-xp.png")}
+                  style={styles.rewardXpIcon}
+                  resizeMode="contain"
+                />
+                <Text style={styles.rewardXpValue}>+{TUTORIAL_REWARD_TOKENS}</Text>
+              </View>
+              <Button
+                label="Enter assembly task"
+                variant="primary"
+                small
+                onPress={() => {
+                  const tutorial = useTutorialStore.getState();
+                  if (!tutorial.completed || tutorial.currentIndex !== tutorial.steps.length - 1) return;
+                  onClaimReward();
+                  dismissReward();
+                  onContinueToAssembly?.();
+                }}
+              />
+            </View>
           </View>
         </View>
       </View>
@@ -294,7 +304,7 @@ const makeStyles = (t: Theme) =>
       position: 'absolute',
       borderRadius: 18,
       borderWidth: 3,
-      borderColor: t.success,
+      borderColor: '#8D7BA8',
       backgroundColor: 'rgba(255,255,255,0.08)',
     },
     bubble: {
@@ -367,6 +377,15 @@ const makeStyles = (t: Theme) =>
     rewardCopy: { flex: 1 },
     rewardTitle: { fontSize: 20, fontWeight: '800', color: t.text },
     rewardMessage: { marginTop: 5, fontSize: 14, lineHeight: 19, fontWeight: '600', color: t.textDim },
-    // Positioning only — the shared Button owns the primary action's fill and label.
+    rewardActionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 12,
+    },
+    rewardXpRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    rewardXpValue: { ...TYPE.numeric, fontSize: 18, color: t.gold },
     primaryAction: { marginTop: 12, alignSelf: 'flex-start' },
+    rewardXpIcon: { width: 24, height: 24 },
+    // Positioning only — the shared Button owns the primary action's fill and label.
   });

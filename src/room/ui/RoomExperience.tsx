@@ -9,7 +9,6 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   useFonts,
   Lexend_400Regular,
@@ -33,6 +32,7 @@ import { usePlacementStore } from '../core/placement';
 import { ORBIT } from '../input/orbit';
 import type { Theme } from "@/src/game/ui/theme";
 import { clampRoomYaw } from '../core/roomShell';
+import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from '../../hooks/use-safe-insets';
 
 // This screen's text is pinned to the mockup's exact ink colour and to Lexend, rather than
 // the theme's t.text/system-font pair — a deliberate override for this redesign, not an
@@ -97,12 +97,6 @@ export function RoomExperience() {
     Lexend_800ExtraBold,
     Lexend_900Black,
   });
-  // Landscape Android with edge-to-edge puts the notch/gesture bar on the LEFT and RIGHT,
-  // not just the top (see settings.tsx for the same pattern) — this screen used to ignore
-  // insets entirely, which is the most likely visual bug on a notched device.
-  const insets = useSafeAreaInsets();
-  const padL = Math.max(insets.left, 22);
-  const padTop = Math.max(insets.top, 12);
   // Tear the 3D view down only when a heavy scene is on top, not on every blur. The room screen stays mounted throughout (its placement/zoom UI state survives); only the Filament view unmounts under play/visit and rebuilds on return.
   const rootNav = useRootNavigationState();
   const heavySceneActive = !!rootNav && HEAVY_ROUTES.has(rootNav.routes[rootNav.index]?.name ?? '');
@@ -153,6 +147,9 @@ export function RoomExperience() {
     applyRoomControls(roomRotationRef.current, nextZoom);
   };
 
+  // Edge-to-edge: the room HUD is absolutely positioned, so each corner group is nudged in
+  // by the device insets (0 on a bezelled tablet, real on a notched phone in landscape).
+  const safe = useSafeInsets();
   return (
     <View style={s.screen}>
       {/* The backdrop sits UNDER a transparent Filament view, so the artwork frames the diorama without touching the 3D scene. "clear": the themed app background (screen) shows through. */}
@@ -169,7 +166,13 @@ export function RoomExperience() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Settings"
-        style={[s.settingsButton, { top: padTop, left: padL }]}
+        style={[
+          s.settingsButton,
+          {
+            top: 12 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
+            left: 22 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+          },
+        ]}
         onPress={() => router.push("/settings" as Href)}
       >
         <Placeholder size={26} />
@@ -182,7 +185,7 @@ export function RoomExperience() {
       {editing ? <ColourPicker /> : null}
 
       {editing ? (
-        <View style={[s.placeBar, blocked && s.placeBarBlocked]}>
+        <View style={[s.placeBar, blocked && s.placeBarBlocked, { bottom: 78 + Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN) }]}>
           <Pressable
             accessibilityLabel="Rotate furniture left"
             style={s.ghostRotate}

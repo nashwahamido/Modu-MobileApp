@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { useEffect, useRef } from "react";
-import { Animated, StyleSheet, Text, View } from "react-native";
+import { Animated, Easing, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { PRESS_TAPS, useGameStore } from "@/src/game/core/store";
 import { AssemblyAction, Vec3 } from "@/src/game/core/type";
@@ -23,6 +23,19 @@ export function PressControl({ action, driver, park }: Props) {
   const struck = action.tool === "mallet" || action.tool === "hammer";
   const driven = action.tool === "screwdriver";
   const squash = useRef(new Animated.Value(1)).current;
+  const pulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(pulse, {
+        toValue: 1,
+        duration: 1500,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
   const parked = useRef<Vec3 | null>(null);
 
   useEffect(() => {
@@ -60,6 +73,18 @@ export function PressControl({ action, driver, park }: Props) {
 
   return (
     <View style={styles.wrap} pointerEvents="box-none">
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.pulseRing,
+          {
+            opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.7, 0] }),
+            transform: [
+              { scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.25] }) },
+            ],
+          },
+        ]}
+      />
       <GestureDetector gesture={tap}>
         <Animated.View style={[styles.pad, { transform: [{ scale: squash }] }]}>
           <Text style={styles.icon}>{struck ? "🔨" : driven ? "🪛" : "✋"}</Text>
@@ -86,11 +111,19 @@ const styles = StyleSheet.create({
     height: SIZE,
     borderRadius: SIZE / 2,
     borderWidth: 4,
-    borderColor: "#37c871",
+    borderColor: "#8D7BA8",
     backgroundColor: "rgba(255,255,255,0.7)",
     alignItems: "center",
     justifyContent: "center",
   },
+  pulseRing: {
+    position: "absolute",
+    width: SIZE,
+    height: SIZE,
+    borderRadius: SIZE / 2,
+    borderWidth: 4,
+    borderColor: "#8D7BA8",
+  },
   icon: { fontSize: 44 },
-  hint: { fontSize: 12, color: "#6b6257", fontWeight: "600" },
+  hint: { fontSize: 12, color: "#FBF8F3", fontWeight: "700" },
 });
