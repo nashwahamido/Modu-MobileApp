@@ -46,7 +46,9 @@ export function ToolsIcon({ size = 31, color = '#807277' }: Props) {
   </Svg>;
 }
 export function ChevronIcon({ size = 28, color = '#807277', up = false }: Props & { up?: boolean }) {
-  return <Svg {...base(size)}><Path d={up ? 'M2.6 17.2 12 6.8l9.4 10.4H2.6Z' : 'M2.6 6.8 12 17.2l9.4-10.4H2.6Z'} fill={color}/></Svg>;
+  // fill + a same-colour stroke with a round linejoin softens the triangle's corners — a plain
+  // fill-only path has no linejoin to round, since there's no stroke outline to apply it to.
+  return <Svg {...base(size)}><Path d={up ? 'M2.6 17.2 12 6.8l9.4 10.4H2.6Z' : 'M2.6 6.8 12 17.2l9.4-10.4H2.6Z'} fill={color} stroke={color} strokeWidth={2} strokeLinejoin="round"/></Svg>;
 }
 export function CheckIcon({ size, color = '#555' }: Props) { return <Svg {...base(size)} fill="none" stroke={color} strokeWidth="2.5"><Polyline points="4,12 9,17 20,6"/></Svg> }
 export function CloseIcon({ size, color = '#555' }: Props) { return <Svg {...base(size)} fill="none" stroke={color} strokeWidth="2.5"><Line x1="5" y1="5" x2="19" y2="19"/><Line x1="19" y1="5" x2="5" y2="19"/></Svg> }
