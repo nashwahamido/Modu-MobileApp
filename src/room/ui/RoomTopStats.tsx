@@ -10,6 +10,7 @@ import { useStyles, useTheme } from "@/src/game/ui/theme";
 import type { Theme } from "@/src/game/ui/theme";
 import { levelProgressFraction } from '../../data/levels';
 import { useProfileHud } from '../../hooks/useProfileHud';
+import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN } from '../../hooks/use-safe-insets';
 
 // This bar's text is pinned to the mockup's exact ink colour and to Lexend, rather than the
 // theme's t.text/system-font pair — a deliberate override for this redesign, not an
@@ -49,12 +50,12 @@ function Placeholder({ size = 28, style }: { size?: number; style?: StyleProp<Vi
 
 export function RoomTopStats() {
   const s = useStyles(makeStyles);
-  // Landscape Android with edge-to-edge puts the notch/gesture bar on the LEFT and RIGHT, not
-  // just the top (see settings.tsx for the same pattern) — mirrors RoomExperience's own inset
-  // handling so this cluster clears the same edges the rest of the HUD does.
+  // Edge-to-edge: immersive mode reports 0 insets even on a notched phone, so the true fix is
+  // a floor UNDER the design's own resting offset (12/18), not a replacement for it — see
+  // src/hooks/use-safe-insets.ts for why (tuned against a Galaxy S22 Ultra + a bezelled tablet).
   const insets = useSafeAreaInsets();
-  const padTop = Math.max(insets.top, 12);
-  const padR = Math.max(insets.right, 18);
+  const padTop = 12 + Math.max(insets.top, SCREEN_VERTICAL_MARGIN);
+  const padR = 18 + Math.max(insets.right, SCREEN_SIDE_MARGIN);
   // Null until the first fetch lands — render an em dash rather than a placeholder number that would read as real.
   const profile = useProfileHud();
   // The bar reads full at the top of the curve, where xpForNextLevel is null and there is nothing left to climb to.

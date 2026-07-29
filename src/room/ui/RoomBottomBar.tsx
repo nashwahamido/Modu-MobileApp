@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChevronIcon } from '../../components/Icons';
 import { useStyles, useTheme } from "@/src/game/ui/theme";
 import type { Theme } from "@/src/game/ui/theme";
+import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN } from '../../hooks/use-safe-insets';
 
 // This bar's text is pinned to the mockup's exact ink colour and to Lexend, rather than the
 // theme's t.text/system-font pair — a deliberate override for this redesign, not an
@@ -81,12 +82,12 @@ function Placeholder({ size = 28, style }: { size?: number; style?: StyleProp<Vi
 
 export function RoomBottomBar() {
   const s = useStyles(makeStyles);
-  // Landscape Android with edge-to-edge puts the notch/gesture bar on the LEFT and RIGHT, not
-  // just the top (see settings.tsx for the same pattern) — mirrors RoomExperience's own inset
-  // handling so the bar clears the same edges the rest of the HUD does.
+  // Edge-to-edge: immersive mode reports 0 insets even on a notched phone, so the true fix is
+  // a floor UNDER the design's own resting offset (22), not a replacement for it — see
+  // src/hooks/use-safe-insets.ts for why (tuned against a Galaxy S22 Ultra + a bezelled tablet).
   const insets = useSafeAreaInsets();
-  const padL = Math.max(insets.left, 22);
-  const padBottom = Math.max(insets.bottom, 22);
+  const padL = 22 + Math.max(insets.left, SCREEN_SIDE_MARGIN);
+  const padBottom = 22 + Math.max(insets.bottom, SCREEN_VERTICAL_MARGIN);
   const [barOpen, setBarOpen] = useState(true);
 
   return (
