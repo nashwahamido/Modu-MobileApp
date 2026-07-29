@@ -3,11 +3,11 @@
 // never by the assembly engine's FurnitureId.
 //
 // Dimensions are MEASURED from the GLBs (world AABB after node transforms), not typed in. The
-// furniture is authored in real-world meters; the room shell is authored OVERSIZED — its window is
-// 2.7 m wide (real ~1.7), its floor-to-cornice wall 3.9 m (real ~2.5), both ≈ 1.6× real. Real-meter
-// furniture in that shell reads doll-sized, so every piece is scaled by the ONE factor that
-// converts furniture-meters into shell-units. Proportions between pieces stay true: a stool is
-// still stool-sized next to a cabinet — per-item hand-tuned scales (the old sceneScale) stay dead.
+// furniture is authored in real-world meters, and since 2026-07-29 the shell is TOO — it was
+// rescaled against real-size furniture, so shell-units ARE meters and the world factor is 1.
+// The factor stays in the code path so proportions between pieces remain governed by ONE number:
+// a stool is still stool-sized next to a cabinet — per-item hand-tuned scales (the old sceneScale)
+// stay dead, and if a future shell ever ships off-scale again only this constant moves.
 import type { ItemSource } from "../../data/catalogAssets";
 import { variantModelUrl } from "../../data/catalogUrls";
 import type { AssetSrc } from "../../game/core/type";
@@ -25,15 +25,15 @@ export type RoomItemModel = {
 
 const CELL = ROOM_SHELL.cellSize;
 
-// How much bigger than real life the shell is authored (window/wall ratios above). If the shell is
-// re-exported at true scale, set to 1 and re-derive the footprints.
-export const FURNITURE_WORLD_SCALE = 1.6;
+// Shell-units per furniture-meter. 1 since the shell went true-scale; see the header note. If the
+// shell is ever re-exported off-scale, set the measured ratio here and re-derive the footprints.
+export const FURNITURE_WORLD_SCALE = 1;
 
 // footprint = ceil(size × FURNITURE_WORLD_SCALE / cellSize) per axis — the cells a piece claims at
 // its rendered size. ceil, so collision may over-claim a sliver but never lets two pieces touch.
 const ITEMS: Record<string, RoomItemModel> = {
   "dalfred-stool": {
-    def: { itemId: "dalfred-stool", footprint: { w: 2, d: 2 }, allowedSurfaces: ["floor"] },
+    def: { itemId: "dalfred-stool", footprint: { w: 1, d: 1 }, allowedSurfaces: ["floor"] },
     size: { x: 0.5, y: 0.79, z: 0.5 },
     baseOffsetY: 0.007,
   },
@@ -43,12 +43,12 @@ const ITEMS: Record<string, RoomItemModel> = {
     baseOffsetY: 0,
   },
   "eket-cabinet": {
-    def: { itemId: "eket-cabinet", footprint: { w: 2, d: 3 }, allowedSurfaces: ["floor"] },
+    def: { itemId: "eket-cabinet", footprint: { w: 1, d: 2 }, allowedSurfaces: ["floor"] },
     size: { x: 0.37, y: 0.35, z: 0.75 },
     baseOffsetY: 0.175,
   },
   "bekvam-stool": {
-    def: { itemId: "bekvam-stool", footprint: { w: 2, d: 2 }, allowedSurfaces: ["floor"] },
+    def: { itemId: "bekvam-stool", footprint: { w: 1, d: 1 }, allowedSurfaces: ["floor"] },
     size: { x: 0.39, y: 0.5, z: 0.43 },
     baseOffsetY: 0,
   },

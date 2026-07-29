@@ -63,9 +63,9 @@ const place = (over: Partial<GridPlacement> = {}): GridPlacement => ({
 });
 
 test("floor grid is derived from the measured shell, not hand-authored", () => {
-  // 6.0 x 5.9988 authored units at 0.5 per cell — the shell was authored to make this land clean.
-  assert.deepEqual({ w: FLOOR_CELLS.w, d: FLOOR_CELLS.d }, { w: 12, d: 12 });
-  assert.deepEqual(surfaceExtent({ kind: "floor" }), { w: 12, h: 12 });
+  // 4.5 x 4.4989 authored metres at 0.5 per cell — the shell was authored to make this land clean.
+  assert.deepEqual({ w: FLOOR_CELLS.w, d: FLOOR_CELLS.d }, { w: 9, d: 9 });
+  assert.deepEqual(surfaceExtent({ kind: "floor" }), { w: 9, h: 9 });
 });
 
 test("the grid covers the whole floor, to within a fraction of a cell", () => {

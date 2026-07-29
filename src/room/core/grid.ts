@@ -9,6 +9,7 @@ import {
   FLOOR_CELLS,
   ROOM_SHELL,
   WALL_CELLS,
+  WALL_CELL_SIZE,
   type Vec3,
   type WallId,
 } from "./roomShell";
@@ -219,15 +220,15 @@ export function floorCellToRoom(cell: Cell, footprint: Footprint): Vec3 {
 }
 
 // The centre of a wall placement — on the wall's inner face, so a frame hangs flat against it.
+// Wall grids run at WALL_CELL_SIZE (0.25), finer than the floor's cellSize — see roomShell.
 export function wallCellToRoom(
   wall: WallId,
   cell: Cell,
   footprint: Footprint,
 ): Vec3 {
-  const { cellSize } = ROOM_SHELL;
   const spec = ROOM_SHELL.walls[wall];
-  const along = spec.from + (cell.x + footprint.w / 2) * cellSize;
-  const up = spec.bottom + (cell.y + footprint.d / 2) * cellSize;
+  const along = spec.from + (cell.x + footprint.w / 2) * WALL_CELL_SIZE;
+  const up = spec.bottom + (cell.y + footprint.d / 2) * WALL_CELL_SIZE;
   return wall === "x-min"
     ? { x: spec.innerFace, y: up, z: along }
     : { x: along, y: up, z: spec.innerFace };
