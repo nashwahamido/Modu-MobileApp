@@ -63,9 +63,9 @@ const place = (over: Partial<GridPlacement> = {}): GridPlacement => ({
 });
 
 test("floor grid is derived from the measured shell, not hand-authored", () => {
-  // 5.50 x 5.48 authored units at 0.5 per cell.
-  assert.deepEqual({ w: FLOOR_CELLS.w, d: FLOOR_CELLS.d }, { w: 11, d: 11 });
-  assert.deepEqual(surfaceExtent({ kind: "floor" }), { w: 11, h: 11 });
+  // 6.0 x 5.9988 authored units at 0.5 per cell — the shell was authored to make this land clean.
+  assert.deepEqual({ w: FLOOR_CELLS.w, d: FLOOR_CELLS.d }, { w: 12, d: 12 });
+  assert.deepEqual(surfaceExtent({ kind: "floor" }), { w: 12, h: 12 });
 });
 
 test("the grid covers the whole floor, to within a fraction of a cell", () => {
@@ -77,8 +77,8 @@ test("the grid covers the whole floor, to within a fraction of a cell", () => {
   };
   assert.ok(Math.abs(slack.x) < cellSize / 2, `x slack ${slack.x}`);
   assert.ok(Math.abs(slack.z) < cellSize / 2, `z slack ${slack.z}`);
-  // Overhang is only acceptable while it stays behind the walls' inner faces.
-  assert.ok(floor.minZ + FLOOR_CELLS.d * cellSize <= ROOM_SHELL.walls["z-max"].innerFace);
+  // Overhang is only acceptable while it stays invisible. The current shell's floor abuts the z-max wall's inner face exactly, so the rounding remainder sinks INTO the wall body rather than hiding in a slab-to-wall gap — allow it a hair past the inner face, but never enough to poke out as a visible ledge.
+  assert.ok(floor.minZ + FLOOR_CELLS.d * cellSize <= ROOM_SHELL.walls["z-max"].innerFace + 0.01);
 });
 
 test("scene mapping round-trips and matches Filament's unit cube", () => {
