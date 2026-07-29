@@ -4,6 +4,7 @@ import { OrientationLock } from "expo-screen-orientation";
 import { View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { HUD_SIDE_MARGIN, HUD_VERTICAL_MARGIN } from "@/src/hooks/use-safe-insets";
 
 import { FilamentScene } from "react-native-filament";
 
@@ -466,11 +467,11 @@ function TutorialScreen() {
         style={[
           styles.chrome,
           {
-            top: insets.top,
-            // Full landscape notch insets (~48dp) push the HUD too far in; zero (her layout) sits under the notch. Cap at 16dp — with each element's own 14dp offset that lands ~30dp from the screen edge.
-            left: Math.min(insets.left, 16),
-            right: Math.min(insets.right, 16),
-            bottom: insets.bottom,
+            top: Math.max(insets.top, HUD_VERTICAL_MARGIN),
+            // The app runs immersive (status + nav bars hidden in _layout), and Android reports ZERO insets once those bars are gone — even though the display cutout is still physically there. So the side margin cannot come from the inset alone: HUD_SIDE_MARGIN is the floor that actually clears a landscape cutout, and max() still honours a larger inset if a device reports one.
+            left: Math.max(insets.left, HUD_SIDE_MARGIN),
+            right: Math.max(insets.right, HUD_SIDE_MARGIN),
+            bottom: Math.max(insets.bottom, HUD_VERTICAL_MARGIN),
           },
         ]}
         pointerEvents="box-none"
@@ -659,4 +660,3 @@ export default function TutorialRoute() {
     </FilamentScene>
   );
 }
-

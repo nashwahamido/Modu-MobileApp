@@ -24,10 +24,10 @@ import {
 
 import { ELEVATION, RADIUS, SIZE, SPACE, Theme, TYPE, useTheme } from "./theme";
 
-const PAPER_GRAIN = require("@/src/assets/ui/icons/paper-grain.png");
+const CLAY_PATTERN = require("@/src/assets/textures/clay-pattern.png");
 /** How strong the paper grain reads over a surface's colour. The source texture is already
  *  a low-opacity dark overlay; this scales it further. One knob — dial after seeing it. */
-const GRAIN_OPACITY = 0.5;
+const GRAIN_OPACITY = 0.3;
 
 /**
  * The clay grain, laid over a surface WITHOUT changing its colour. An absolutely-filled,
@@ -42,7 +42,7 @@ export function GrainOverlay({ radius }: { radius: number }) {
       style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: "hidden" }]}
     >
       <Image
-        source={PAPER_GRAIN}
+        source={CLAY_PATTERN}
         resizeMode="cover"
         style={[StyleSheet.absoluteFill, { opacity: GRAIN_OPACITY }]}
       />

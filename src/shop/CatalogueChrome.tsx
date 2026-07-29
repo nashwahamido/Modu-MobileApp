@@ -4,7 +4,7 @@ import { StyleSheet, ScrollView, Text, View } from "react-native";
 
 import { CoinMedalIcon } from "@/src/components/Icons";
 import { Button } from "@/src/game/ui/Button";
-import { RADIUS, SPACE, TYPE, useStyles } from "@/src/game/ui/theme";
+import { RADIUS, SPACE, TYPE, useStyles, SIZE } from "@/src/game/ui/theme";
 import { CATEGORY_FILTERS, CATEGORY_LABELS, SORT_LABELS } from "@/src/data";
 import type { CategoryFilter, ShopSort } from "@/src/data";
 import type { Theme } from "@/src/game/ui/theme";
@@ -97,7 +97,7 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       gap: SPACE.xs,
       paddingHorizontal: SPACE.md,
-      height: 38,
+      height: SIZE.controlHeightSm,
       borderRadius: RADIUS.pill,
       borderWidth: 1,
       borderColor: t.border,
@@ -115,8 +115,8 @@ const makeStyles = (t: Theme) =>
     tab: {
       overflow: "hidden",
       paddingHorizontal: SPACE.md,
-      height: 34,
-      lineHeight: 34,
+      height: SIZE.controlHeightSm,
+      lineHeight: SIZE.controlHeightSm,
       borderRadius: RADIUS.pill,
       borderWidth: 1,
       borderColor: t.border,
@@ -133,8 +133,8 @@ const makeStyles = (t: Theme) =>
     sort: {
       overflow: "hidden",
       paddingHorizontal: SPACE.md,
-      height: 34,
-      lineHeight: 34,
+      height: SIZE.controlHeightSm,
+      lineHeight: SIZE.controlHeightSm,
       borderRadius: RADIUS.pill,
       borderWidth: 1,
       borderColor: t.border,

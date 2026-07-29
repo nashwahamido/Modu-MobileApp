@@ -6,6 +6,7 @@ import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN } from "@/src/hooks/use-safe-insets";
 
 import { Button } from "@/src/game/ui/Button";
 import { SPACE, useStyles, useTheme } from "@/src/game/ui/theme";
@@ -113,7 +114,7 @@ export default function StoreScreen() {
   };
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top + SPACE.sm, paddingLeft: Math.max(insets.left, SPACE.xl), paddingRight: Math.max(insets.right, SPACE.xl) }]}>
+    <View style={[styles.root, { paddingTop: SPACE.sm + Math.max(insets.top, SCREEN_VERTICAL_MARGIN), paddingLeft: SPACE.xl + Math.max(insets.left, SCREEN_SIDE_MARGIN), paddingRight: SPACE.xl + Math.max(insets.right, SCREEN_SIDE_MARGIN) }]}>
       <CatalogueChrome
         title="Shop"
         backLabel="Room"

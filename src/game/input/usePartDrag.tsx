@@ -28,7 +28,7 @@ import type { ParkInfo } from "@/src/game/core/evaluation/engagement";
 import type { ISharedValue } from "react-native-worklets-core";
 import type { OffsetSink } from "../scene/combineDriver";
 import type { CarryOffset } from "../scene/CombineCarry";
-import { computeFit } from "@/src/game/core/geometry/fit";
+import { computeFit, APPROACH_FACTOR } from "@/src/game/core/geometry/fit";
 import { isStaged } from "@/src/game/core/model/staging";
 import { isPickupType } from "@/src/game/core/ids";
 import { quatSlerp, screenPointOnPlane } from "@/src/game/core/geometry/math";
@@ -815,7 +815,12 @@ export function usePartDrag({
           );
           // the carry glides in the horizontal plane (o[1] is structurally 0), so a VERTICAL park offset (DALFRED's seat parks 0.15 straight up) must not count against the snap — measure the miss in-plane only
           const d = Math.hypot(o[0] - target[0], o[2] - target[2]);
-          const fit = d <= snapDist ? "nearCorrect" : "held";
+          const fit =
+            d <= snapDist
+              ? "nearCorrect"
+              : d <= snapDist * APPROACH_FACTOR
+                ? "approaching"
+                : "held";
           if (fit !== useGameStore.getState().fitState) {
             useGameStore.getState().setDragFit(fit, null);
           }

@@ -5,6 +5,7 @@ import { StyleSheet, Image, Text, View } from "react-native";
 import { Button } from "@/src/game/ui/Button";
 import { AccountPicker } from "@/src/dev/AccountPicker";
 import { SPACE, TYPE, useStyles } from "@/src/game/ui/theme";
+import { useSafeInsets } from "@/src/hooks/use-safe-insets";
 import type { Theme } from "@/src/game/ui/theme";
 
 const mascot = require("../../assets/images/mascot/mascot.png");
@@ -13,8 +14,9 @@ const loginRoute = "/create-account?mode=login" as Href;
 
 export default function AuthScreen() {
   const styles = useStyles(makeStyles);
+  const safe = useSafeInsets();
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { paddingLeft: safe.left, paddingRight: safe.right }]}>
       <View style={styles.content}>
         <View style={styles.intro}>
           <View style={styles.header}>

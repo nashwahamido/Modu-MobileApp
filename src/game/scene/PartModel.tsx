@@ -35,14 +35,24 @@ import type { PartMode } from "./useSceneState";
 // dev-setting
 /** Ghost colors follow the PDD color language; emissive glow is used because the DALFRED materials are opaque near-black glTF — runtime alpha is ignored and base-color tints are swallowed by the dark albedo. */
 const FIT_GLOW: Record<FitState, [number, number, number]> = {
-  idle: [0.08, 0.3, 0.85],
-  held: [0.08, 0.3, 0.85],
+  // ORANGE, not the old blue: this is the "here is the next slot" cue, and it has to win the
+  // player's eye against a warm cream HUD and a teal work plane — a cool blue sat back into
+  // both. Green still means seated, so the approach → land transition stays readable.
+  // Three tiers on the way in: ORANGE while hunting, BLUE once the right socket is close,
+  // GREEN the moment it would land. Warm → cool → go, so the change of hue alone tells the
+  // player they are getting warmer without reading a word.
+  idle: [1.0, 0.42, 0.0],
+  held: [1.0, 0.42, 0.0],
+  approaching: [0.15, 0.5, 0.95],
   nearCorrect: [0.05, 0.8, 0.3],
   nearRotation: [0.95, 0.45, 0.08],
   wrongTarget: [0.85, 0.12, 0.12],
 };
-/** Static-socket mode: dim green marker pulsing at every open socket. */
-const GLOW_MARK: [number, number, number] = [0.16, 0.62, 0.3];
+/** Static-socket mode: the marker pulsing at every open socket. ORANGE — this is the cue that
+ *  has to be found, and the old teal-green sank into the teal work plane instead of standing
+ *  off it. Slightly deeper than FIT_GLOW.idle so the proximity-MATCHED socket still reads as
+ *  the brighter of the two. */
+const GLOW_MARK: [number, number, number] = [0.85, 0.33, 0.0];
 
 const EPSILON = 1e-6;
 
@@ -278,30 +288,34 @@ function Ghost({
         mi.changeAlpha(subtle ? 0.5 : 1);
       } catch {}
     }
-    if (glowOverride) {
-      // Static-socket marker: tint the albedo too, so the marker reads on light-albedo parts (LACK) where emissive alone washes out. No-op on near-black materials (DALFRED), which swallow base-color tints.
-      for (let i = 0; i < primitives; i++) {
-        const mi = renderableManager.getMaterialInstanceAt(entity, i);
-        try {
-          mi.setFloat4Parameter("baseColorFactor", [
-            glow[0],
-            glow[1],
-            glow[2],
-            1,
-          ]);
-        } catch {}
-      }
+    for (let i = 0; i < primitives; i++) {
+      const mi = renderableManager.getMaterialInstanceAt(entity, i);
+      try {
+        // Tint the albedo to the SAME colour as the emissive, always — not just for static
+        // markers. Tinting is what makes a ghost read on light-albedo parts (LACK), where
+        // emissive alone washes out; and because the tint persists on the material, writing it
+        // only sometimes left an old orange albedo under a new blue emissive, which is why the
+        // approach cue pulsed two colours. Clearing it to white instead just bleached the
+        // ghost. Matching it to `glow` keeps every state one colour. No-op on near-black
+        // materials (DALFRED), which swallow base-colour tints.
+        mi.setFloat4Parameter("baseColorFactor", [glow[0], glow[1], glow[2], 1]);
+      } catch {}
     }
-    if (!pulse) {
+    // Arrived: hold it STEADY. A socket that stops flashing the instant the part would land
+    // is the clearest "yes, here" the scene can give, and it stops the green competing with
+    // the orange markers still pulsing elsewhere.
+    if (!pulse || fitState === "nearCorrect") {
       setEmissive(glow);
       return;
     }
-    // Gentle breathing pulse on the emissive glow.
+    // Breathing pulse. Deeper swing the FURTHER out the part is: hunting needs to be found
+    // from across the canvas, whereas the blue approach cue is already where the eye is.
+    const deep = fitState === "held" || fitState === "idle";
     let timer: ReturnType<typeof setTimeout>;
     const t0 = Date.now();
     const tick = () => {
-      const k = 0.5 + 0.5 * Math.sin(((Date.now() - t0) / 1000) * 2.6);
-      const s = 0.15 + 0.5 * k;
+      const k = 0.5 + 0.5 * Math.sin(((Date.now() - t0) / 1000) * (deep ? 3.4 : 2.6));
+      const s = deep ? 0.3 + 1.05 * k : 0.25 + 0.75 * k;
       setEmissive([glow[0] * s, glow[1] * s, glow[2] * s]);
       timer = setTimeout(tick, 70);
     };
@@ -330,10 +344,18 @@ function SocketHintGhost({
   const matchedActionId = useGameStore((s) => s.matchedActionId);
   const ghostStyle = useGameStore((s) => s.settings.ghostStyle);
   const firstDrop = useGameStore(selectFirstDrop);
+  // Parked at its seat: the part is physically AT the socket and only the finishing gesture
+  // (screw / orientation twist / slide / press) is left. A ghost at the target pose now sits
+  // exactly where the real part already is and reads as a doubled, clashing leg — same
+  // reasoning as the tighten phase, which dropped its goal ghost for this exact reason.
+  const driveActionId = useGameStore((s) => s.driveActionId);
+  const orientationActionId = useGameStore((s) => s.orientationActionId);
   const actionId =
     partActions[def.partId]?.snap ?? partActions[def.partId]?.insert;
   const isMatched = !!actionId && matchedActionId === actionId;
-  if (firstDrop || !actionId) return null;
+  const parked =
+    !!actionId && (driveActionId === actionId || orientationActionId === actionId);
+  if (firstDrop || !actionId || parked) return null;
   // "staticSockets": every open socket of the held group shows a dim pulsing marker; the proximity-matched one switches to the steady fitState-driven color (blue approaching → green seated). "movingGhost": only the matched socket gets a ghost, as before.
   if (!isMatched) {
     if (ghostStyle !== "staticSockets") return null;
@@ -347,7 +369,7 @@ function SocketHintGhost({
       />
     );
   }
-  return <Ghost model={model} def={def} atLoosePose={atLoosePose} />;
+  return <Ghost model={model} def={def} atLoosePose={atLoosePose} pulse />;
 }
 
 /** A part whose offset is animated imperatively via an OffsetDriver, using the primary (instance 0) entity. */

@@ -63,9 +63,10 @@ export function SlideControl({ action, driver, park }: Props) {
     <View style={styles.wrap} pointerEvents="box-none">
       <GestureDetector gesture={pan}>
         <View style={styles.track}>
-          <View style={[styles.fill, { height: TRACK * progress }]} />
-          <View style={[styles.thumb, { top: (TRACK - 44) * progress }]}>
-            <Text style={styles.thumbText}>⇣</Text>
+          {/* The fill IS the indicator now — it grows from the top as you drag down, no
+              separate knob. The arrow rides the fill's leading (bottom) edge. */}
+          <View style={[styles.fill, { height: TRACK * progress }]}>
+            <Text style={styles.arrow}>↓</Text>
           </View>
         </View>
       </GestureDetector>
@@ -89,27 +90,21 @@ const styles = StyleSheet.create({
     height: TRACK,
     borderRadius: 32,
     borderWidth: 4,
-    borderColor: "#37c871",
+    borderColor: "#8D7BA8",
     backgroundColor: "rgba(255,255,255,0.78)",
     overflow: "hidden",
   },
+  // Grows DOWN from the top, so the filled portion tracks how far the part has slid in.
   fill: {
     position: "absolute",
-    bottom: 0,
+    top: 0,
     left: 0,
     right: 0,
-    backgroundColor: "rgba(55, 200, 113, 0.25)",
-  },
-  thumb: {
-    position: "absolute",
-    left: 6,
-    right: 6,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#37c871",
+    backgroundColor: "#8D7BA8",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-end",
+    paddingBottom: 8,
   },
-  thumbText: { fontSize: 26, color: "#fff", fontWeight: "800" },
+  arrow: { fontSize: 26, color: "#FBF8F3", fontWeight: "800" },
   hint: { fontSize: 12, color: "#6b6257", fontWeight: "700" },
 });

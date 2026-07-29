@@ -11,6 +11,7 @@ import {
 
 import { Button } from "@/src/game/ui/Button";
 import { SPACE, TYPE, useStyles, useTheme } from "@/src/game/ui/theme";
+import { useSafeInsets } from "@/src/hooks/use-safe-insets";
 import type { Theme } from "@/src/game/ui/theme";
 
 const mascot = require("../../assets/images/mascot/mascot.png");
@@ -24,6 +25,7 @@ const authMethods = [
 
 export default function CreateAccountScreen() {
   const styles = useStyles(makeStyles);
+  const safe = useSafeInsets();
   const t = useTheme();
   const params = useLocalSearchParams<{ mode?: string }>();
   const initialMode = params.mode === "login" ? "login" : "create";
@@ -72,7 +74,7 @@ export default function CreateAccountScreen() {
   };
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { paddingLeft: safe.left, paddingRight: safe.right }]}>
       <View style={styles.panel}>
         <View style={styles.intro}>
           <Image source={mascot} style={styles.mascot} />

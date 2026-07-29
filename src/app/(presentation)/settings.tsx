@@ -2,6 +2,7 @@
 import { router } from "expo-router";
 import { StyleSheet, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN } from "@/src/hooks/use-safe-insets";
 import { SettingsControls } from "@/src/game/ui/SettingsControls";
 import { SPACE, TYPE, useStyles } from "@/src/game/ui/theme";
 import type { Theme } from "@/src/game/ui/theme";
@@ -10,14 +11,14 @@ export default function SettingsScreen() {
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   // Landscape: the notch / home-indicator sit on the sides, so left/right insets matter as much as top. Pad the header and scroll content by them.
-  const padL = Math.max(insets.left, 16);
-  const padR = Math.max(insets.right, 16);
+  const padL = 16 + Math.max(insets.left, SCREEN_SIDE_MARGIN);
+  const padR = 16 + Math.max(insets.right, SCREEN_SIDE_MARGIN);
   return (
     <View style={styles.root}>
       <View
         style={[
           styles.header,
-          { paddingTop: insets.top + 10, paddingLeft: padL, paddingRight: padR },
+          { paddingTop: 10 + Math.max(insets.top, SCREEN_VERTICAL_MARGIN), paddingLeft: padL, paddingRight: padR },
         ]}
       >
         <Pressable onPress={() => router.back()} hitSlop={12} style={styles.back}>
