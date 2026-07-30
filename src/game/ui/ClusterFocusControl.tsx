@@ -216,7 +216,9 @@ export function BuildMap() {
             style={styles.close}
             // Paused mid-build → resume. Nothing chosen yet → there is nothing to resume
             // to, so the only way out is back to the catalogue.
-            onPress={() => (mustChoose ? router.back() : closeMap())}
+            onPress={() =>
+              mustChoose ? router.dismissTo("/catalogue") : closeMap()
+            }
             hitSlop={10}
             accessibilityLabel={mustChoose ? "Leave this build" : "Start building"}
           >

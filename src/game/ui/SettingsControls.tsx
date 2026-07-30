@@ -7,7 +7,6 @@ import { useStyles, useTheme } from "@/src/game/ui/theme";
 import type {
   DragPlane,
   GhostStyle,
-  LightingPreset,
   ReleaseBehavior,
   SnapStyle,
 } from "@/src/game/core/accessibility";
@@ -62,13 +61,6 @@ const BACKDROPS: { value: BackdropId; label: string }[] = [
   { value: "clear", label: "Clear" },
   { value: "cozy", label: "Cozy" },
   { value: "cartoon", label: "Cartoon" },
-];
-const LIGHTING: { value: LightingPreset; label: string }[] = [
-  { value: "auto", label: "Auto" },
-  { value: "studio", label: "Studio" },
-  { value: "warm", label: "Warm" },
-  { value: "soft", label: "Soft" },
-  { value: "golden", label: "Golden" },
 ];
 const LEVELS: { value: TextLevel; label: string }[] = [
   { value: "standard", label: "Standard" },
@@ -203,44 +195,6 @@ function SectionHeader({ children }: { children: string }) {
   return <Text style={styles.section}>{children}</Text>;
 }
 
-export function SceneAppearanceControls({
-  onPreferenceChange,
-}: {
-  onPreferenceChange?: (preference: "background" | "lighting") => void;
-} = {}) {
-  const styles = useStyles(makeStyles);
-  const settings = useGameStore((s) => s.settings);
-  const backdrop = useGameStore((s) => s.backdrop);
-  const setSettings = useGameStore((s) => s.setSettings);
-  const setBackdrop = useGameStore((s) => s.setBackdrop);
-
-  return (
-    <View style={styles.list}>
-      <SectionHeader>Scene appearance</SectionHeader>
-      <Choice
-        label="Background"
-        desc="Preview the scene behind your furniture"
-        value={backdrop}
-        options={BACKDROPS}
-        onChange={(value) => {
-          setBackdrop(value);
-          onPreferenceChange?.("background");
-        }}
-      />
-      <Choice
-        label="Lighting"
-        desc="Preview how the furniture is lit"
-        value={settings.lightingPreset}
-        options={LIGHTING}
-        onChange={(value) => {
-          setSettings({ lightingPreset: value });
-          onPreferenceChange?.("lighting");
-        }}
-      />
-    </View>
-  );
-}
-
 // ── the shared controls ──────────────────────────────────────────────────────
 export function SettingsControls() {
   const styles = useStyles(makeStyles);
@@ -348,13 +302,6 @@ export function SettingsControls() {
         value={roomBackdrop}
         options={BACKDROPS}
         onChange={setRoomBackdrop}
-      />
-      <Choice
-        label="Lighting"
-        desc="Auto = each model look's natural rig"
-        value={settings.lightingPreset}
-        options={LIGHTING}
-        onChange={(v) => setSettings({ lightingPreset: v })}
       />
       <Row
         label="Dark mode"

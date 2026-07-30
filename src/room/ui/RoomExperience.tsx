@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { router, useRootNavigationState } from 'expo-router';
 import type { Href } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
+  Image,
   StyleSheet,
   Pressable,
   Text,
@@ -38,6 +40,8 @@ import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from '../..
 // the theme's t.text/system-font pair — a deliberate override for this redesign, not an
 // oversight, so it does not shift with the light/dark/high-contrast theme.
 const TEXT_COLOR = '#231F20';
+const ROOM_EDIT_GUIDE_KEY = 'modu.room-edit-guide-seen.v1';
+const ROOM_GUIDE_MASCOT = require('../../assets/images/mascot/mascot.png');
 const LEXEND = {
   regular: 'Lexend_400Regular',
   semibold: 'Lexend_600SemiBold',
@@ -111,6 +115,8 @@ export function RoomExperience() {
   // Primitive selectors on purpose: this screen re-renders the whole HUD, so it must NOT be
   // subscribed to the activeEdit object, which changes on every cell the ghost crosses.
   const editing = usePlacementStore((p) => p.activeEdit !== null);
+  const roomHydrated = usePlacementStore((p) => p.hydrated);
+  const placedFurnitureCount = usePlacementStore((p) => p.layout.length);
   const blockedReason = usePlacementStore((p) =>
     p.activeEdit && !p.activeEdit.check.ok ? p.activeEdit.check.reason : null,
   );
@@ -123,6 +129,7 @@ export function RoomExperience() {
   }, [hydrate, me]);
   const blocked = blockedReason !== null;
   const [unavailableFeature, setUnavailableFeature] = useState<string | null>(null);
+  const [showRoomEditGuide, setShowRoomEditGuide] = useState(false);
   const [roomRotation, setRoomRotation] = useState(0);
   const [roomZoom, setRoomZoom] = useState(1);
   const roomRotationRef = useRef(roomRotation);
@@ -131,6 +138,24 @@ export function RoomExperience() {
     roomRotationRef.current = roomRotation;
     roomZoomRef.current = roomZoom;
   }, [roomRotation, roomZoom]);
+  useEffect(() => {
+    if (!roomHydrated || editing || placedFurnitureCount === 0) return;
+    let active = true;
+    AsyncStorage.getItem(ROOM_EDIT_GUIDE_KEY)
+      .then((seen) => {
+        if (active && !seen) setShowRoomEditGuide(true);
+      })
+      .catch((err) => console.warn('[room] edit guide state load failed', err));
+    return () => {
+      active = false;
+    };
+  }, [editing, placedFurnitureCount, roomHydrated]);
+  const dismissRoomEditGuide = () => {
+    setShowRoomEditGuide(false);
+    AsyncStorage.setItem(ROOM_EDIT_GUIDE_KEY, '1').catch((err) =>
+      console.warn('[room] edit guide state save failed', err),
+    );
+  };
   // Every path into the view goes through here — orbit drag, pinch — so the diorama's open corner and the zoom range are enforced once and cannot be forgotten by a new input path.
   const applyRoomControls = (nextRotation: number, nextZoom: number) => {
     const clampedRotation = clampRoomYaw(nextRotation);
@@ -240,6 +265,26 @@ export function RoomExperience() {
           />
         </OverlaySheet>
       ) : null}
+
+      {showRoomEditGuide ? (
+        <OverlaySheet size="dialog" onClose={dismissRoomEditGuide}>
+          <Image
+            source={ROOM_GUIDE_MASCOT}
+            style={s.roomGuideMascot}
+            resizeMode="contain"
+          />
+          <Text style={s.roomGuideTitle}>Make the room your own</Text>
+          <Text style={s.roomGuideBody}>
+            Press and hold any furniture to move, rotate, recolour, or remove it.
+          </Text>
+          <Button
+            label="Got it"
+            variant="primary"
+            style={s.roomGuideButton}
+            onPress={dismissRoomEditGuide}
+          />
+        </OverlaySheet>
+      ) : null}
     </View>
   );
 }
@@ -255,4 +300,8 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   settingsButton:{position:'absolute',zIndex:12,width:42,height:42,alignItems:'center',justifyContent:'center',shadowColor:'#50464b',shadowOpacity:.17,shadowRadius:3.5,shadowOffset:{width:0,height:2}},
   placeBar:{position:'absolute',zIndex:16,bottom:78,alignSelf:'center',flexDirection:'row',alignItems:'center',gap:10,borderRadius:22,backgroundColor:t.surface,paddingLeft:18,paddingRight:6,paddingVertical:6,shadowColor:'#000',shadowOpacity:.18,shadowRadius:8},placeBarBlocked:{borderWidth:2,borderColor:t.danger},placeHint:{flexShrink:1,color:TEXT_COLOR,fontFamily:LEXEND.semibold},placeHintBlocked:{color:t.danger,fontSize:11},ghostRotate:{width:36,height:36,borderRadius:18,backgroundColor:t.surfaceRaised,alignItems:'center',justifyContent:'center'},cancelGlyph:{color:TEXT_COLOR,fontFamily:LEXEND.extrabold,fontSize:16},confirmDisabled:{opacity:.35},deleteButton:{width:36,height:36,borderRadius:18,backgroundColor:t.surfaceRaised,alignItems:'center',justifyContent:'center'},confirm:{width:36,height:36,borderRadius:18,backgroundColor:t.success,alignItems:'center',justifyContent:'center'},
   comingSoonTitle:{fontFamily:LEXEND.black,fontSize:22,color:TEXT_COLOR,textAlign:'center'},comingSoonBody:{marginTop:8,fontFamily:LEXEND.semibold,fontSize:14,color:TEXT_COLOR,textAlign:'center'},comingSoonButton:{marginTop:18,minWidth:120},
+  roomGuideMascot:{width:104,height:90,alignSelf:'center'},
+  roomGuideTitle:{marginTop:8,fontFamily:LEXEND.black,fontSize:22,color:TEXT_COLOR,textAlign:'center'},
+  roomGuideBody:{marginTop:8,fontFamily:LEXEND.semibold,fontSize:14,lineHeight:20,color:TEXT_COLOR,textAlign:'center'},
+  roomGuideButton:{marginTop:18,minWidth:120,alignSelf:'center'},
 });

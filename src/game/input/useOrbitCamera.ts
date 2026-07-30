@@ -338,6 +338,19 @@ export function useOrbitCamera(
   }, [stage, framingCluster, heldFocusPoint, focusPartId, focusCluster, pivot]);
 
   const getFocusPoint = useCallback((): Vec3 => targetRef.current, []);
+  const isViewingUnderside = useCallback((): boolean => {
+    const lookAt = manipulator?.getLookAt();
+    if (!lookAt) return false;
+    const eye = lookAt[0];
+    const target = lookAt[1];
+    const horizontalDistance = Math.hypot(
+      eye[0] - target[0],
+      eye[2] - target[2],
+    );
+    // At this shallow elevation the camera is level with, or below, the
+    // assembly pivot and the underside of a horizontal tabletop is visible.
+    return eye[1] - target[1] <= horizontalDistance * 0.15;
+  }, [manipulator]);
 
   return {
     manipulator,
@@ -351,6 +364,7 @@ export function useOrbitCamera(
     onPanMove,
     onPanEnd,
     resetCamera,
+    isViewingUnderside,
     orbitBy,
     rotateQuarter: (direction: -1 | 1) => orbitBy(QUARTER_TURN_PX * direction, 0),
   };

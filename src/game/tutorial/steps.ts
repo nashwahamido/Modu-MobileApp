@@ -15,14 +15,15 @@ export type TutorialEvent =
   | "camera_recentered"
   | "pinch_zoomed"
   | "one_finger_panned"
+  | "underside_view_reached"
   | "part_picked_up"
   | "part_snapped"
   | "all_legs_installed"
   | "connector_placed"
   | "connector_tightened"
+  | "assembly_reoriented"
   | "step_undone"
   | "step_redone"
-  | "display_preferences_confirmed"
   | "release_behavior_changed"
   | "instruction_preferences_changed"
   | "auto_view_toggled"
@@ -58,37 +59,60 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: "long-press-part",
     targetId: "partsTray",
-    message: "Long-press the LACK table top or a leg card to pick it up.",
+    message: "Long-press a part card to pick it up.",
     event: "part_picked_up",
   },
   {
     id: "drag-and-snap",
     targetId: "assemblyArea",
-    message:
-      "Keep holding, drag the part into position, then release when it lines up to snap.",
+    message: "Drag the part into place. Release when it lines up.",
     event: "part_snapped",
+  },
+  {
+    id: "view-under-table",
+    targetId: "joystick",
+    message:
+      "Use the joystick to lower the view until you can clearly see underneath the tabletop.",
+    event: "underside_view_reached",
+  },
+  {
+    id: "place-connector",
+    targetId: "partsTray",
+    message: "Long-press a bolt, then place it into the highlighted hole.",
+    event: "connector_placed",
+  },
+  {
+    id: "select-allen-key",
+    targetId: "toolbar",
+    message: "Open the toolbox and select the Allen key.",
+    event: "toolbar_used",
+  },
+  {
+    id: "tighten-connector",
+    targetId: "tool",
+    message: "Turn clockwise to tighten the bolt with the Allen key.",
+    event: "connector_tightened",
   },
   {
     id: "install-four-legs",
     targetId: "partsTray",
     message:
-      "Install all four legs. Long-press each leg, drag it into place, and release to snap.",
+      "Install the leg onto the bolt. Repeat the bolt, tool, and leg steps for all four legs.",
     event: "all_legs_installed",
   },
   {
-    id: "place-connector",
-    targetId: "partsTray",
+    id: "stand-table-upright",
+    targetId: "scene",
     message:
-      "Long-press a bolt, drag it to a leg connection, and release to place it.",
-    event: "connector_placed",
-  },
-  {
-    id: "tighten-connector",
-    targetId: "tool",
-    message: "Use the highlighted control to tighten the bolt.",
-    event: "connector_tightened",
+      "All four legs are installed. Swipe down on the orange card to stand the table upright and finish.",
+    event: "assembly_reoriented",
   },
 ];
+
+/** Canonical short copy for recording voice-over; audio assets can be attached later. */
+export const TUTORIAL_VOICE_OVER_SCRIPT = TUTORIAL_STEPS.map(
+  ({ id, message }) => ({ id, text: message }),
+);
 
 /**
  * Content ready for later, contextual moments. These are deliberately not part
@@ -165,7 +189,7 @@ export const FUTURE_TUTORIAL_REQUIREMENTS = {
 
 export const TUTORIAL_CONTENT_DECISIONS = {
   display:
-    "Teach Background and Lighting through the real Settings panel after the first placed part.",
+    "Teach Background through the real Settings panel after the first placed part.",
   guidedInstructions:
     "Teach Standard/Simple as the primary choice and mention Show instructions.",
   sequencing:

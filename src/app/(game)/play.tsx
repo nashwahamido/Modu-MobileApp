@@ -73,7 +73,6 @@ import {
 } from "@/src/game/ui/hudChrome";
 import { useTheme } from "@/src/game/ui/theme";
 import {
-  buildPhase,
   combineReady,
   requiresClusterFocus,
 } from "@/src/game/core/evaluation/clusters";
@@ -151,19 +150,12 @@ function GameScreen() {
     const watchdog = setTimeout(() => setLoadError(true), 45000);
     return () => clearTimeout(watchdog);
   }, [loaderVisible, loadError, modelReady, retryKey]);
-  // The objective bar reports the BUILD MAP's phase (base → seat → combine), not the authored stage number — those count beats across the whole build and would read
-  // "Stage 4" on a three-node map.
-  // These two derivations walk the whole action graph. Subscribing to `completed` by
-  // REFERENCE and deriving in a useMemo keeps them off the hot path: as written inside
-  // selectors they re-ran on every store write, including each setDragFit during a drag.
+  // Subscribe to `completed` by REFERENCE and derive from it off the hot path:
+  // setDragFit writes on every drag frame.
   const completed = useGameStore((s) => s.completed);
   const completedSet = useMemo(() => new Set(completed), [completed]);
   const activeCluster = useGameStore((s) => s.activeCluster);
   const mode = useGameStore((s) => s.mode);
-  const stage = useMemo(
-    () => (furniture ? buildPhase(furniture, completedSet, activeCluster).index : 1),
-    [furniture, completedSet, activeCluster],
-  );
   const settings = useGameStore((s) => s.settings);
 
   // Dev-setting: float mode vs auto return
@@ -400,7 +392,7 @@ function GameScreen() {
           <ObjectiveBar
             line={
               settings.showInstructions
-                ? `Stage ${stage} · ${objective} · ${completedCount}/${totalCount}`
+                ? `${objective} · ${completedCount}/${totalCount}`
                 : null
             }
             fontSize={objectiveFontSize}

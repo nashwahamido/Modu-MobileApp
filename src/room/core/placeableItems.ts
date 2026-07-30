@@ -88,7 +88,7 @@ export function getRoomItemVariantUrl(itemId: string, variation: string | null |
 
 // No assembly→room id map: FurnitureId already IS the kebab catalog id on this branch, so a
 // finished build's meta.id can be handed straight to startPlacing. Items with no room model
-// ("tutorial") simply miss this catalog and are refused by the store.
+// simply miss this catalog and are refused by the store.
 export function getRoomItem(itemId: string | null | undefined): RoomItemModel | null {
   if (!itemId) return null;
   return ITEMS[itemId] ?? null;

@@ -20,10 +20,32 @@ import type { Theme } from "@/src/game/ui/theme";
 
 const mascot = require("../../assets/images/questionnaire/whole.png");
 const q3ManualReference = require("../../assets/images/questionnaire/q3-manual-reference.png");
-const optionExpressionImages = [
-  require("../../assets/images/questionnaire/smile.png"),
-  require("../../assets/images/questionnaire/peace.png"),
-  require("../../assets/images/questionnaire/curious.png"),
+const questionOptionImages = [
+  [
+    require("../../assets/images/questionnaire/cry.png"),
+    require("../../assets/images/questionnaire/starteye.png"),
+    require("../../assets/images/questionnaire/calm.png"),
+  ],
+  [
+    require("../../assets/images/questionnaire/cry.png"),
+    require("../../assets/images/questionnaire/curious.png"),
+    require("../../assets/images/questionnaire/happy.png"),
+  ],
+  [
+    require("../../assets/images/questionnaire/cry.png"),
+    require("../../assets/images/questionnaire/curious.png"),
+    require("../../assets/images/questionnaire/happy.png"),
+  ],
+  [
+    require("../../assets/images/questionnaire/starteye.png"),
+    require("../../assets/images/questionnaire/calm.png"),
+    require("../../assets/images/questionnaire/happy.png"),
+  ],
+  [
+    require("../../assets/images/questionnaire/cry.png"),
+    require("../../assets/images/questionnaire/curious.png"),
+    require("../../assets/images/questionnaire/starteye.png"),
+  ],
 ];
 
 export default function QuestionnaireScreen() {
@@ -393,8 +415,7 @@ export default function QuestionnaireScreen() {
         )}
         {question.options.map((option, optionIndex) => {
           const selected = option === selectedAnswer;
-          const expressionImage =
-            optionExpressionImages[optionIndex % optionExpressionImages.length];
+          const expressionImage = questionOptionImages[index][optionIndex];
           return (
             <Pressable
               key={option}

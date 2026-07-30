@@ -50,12 +50,11 @@ import { FitChip } from "@/src/game/ui/FitChip";
 import { PartsTray } from "@/src/game/ui/PartsTray";
 import { ClusterTray } from "@/src/game/ui/ClusterTray";
 import { UndoButton } from "@/src/game/ui/UndoButton";
-import { TutorialGameSettings } from "@/src/game/tutorial/TutorialGameSettings";
+import { GameSettings } from "@/src/game/ui/GameSettings";
 import { ClusterFocusControl } from "@/src/game/ui/ClusterFocusControl";
 import { SceneBackdrop } from "@/src/game/ui/SceneBackdrop";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 import {
-  currentStageForClusterFocus,
   requiresClusterFocus,
 } from "@/src/game/core/evaluation/clusters";
 import { availableInMode } from "@/src/game/core/evaluation/availability";
@@ -96,9 +95,11 @@ function TutorialScreen() {
     onPanEnd,
     resetCamera,
     getFocusPoint,
+    isViewingUnderside,
   } = useOrbitCamera({ stableFraming: true, stickShared });
   const lastScale = useRef(1);
   const joystickTutorialStartedAt = useRef<number | null>(null);
+  const [guideCollapsed, setGuideCollapsed] = useState(false);
 
   // Stabilised with useCallback so <Joystick>'s internal gesture memo actually holds.
   // The tutorial needs to wrap the raw camera callbacks to drive step tracking; passing
@@ -121,9 +122,14 @@ function TutorialScreen() {
         Math.hypot(x, y) > 0.15
       ) {
         useTutorialStore.getState().completeEvent("joystick_moved");
+        if (isViewingUnderside()) {
+          useTutorialStore
+            .getState()
+            .completeEvent("underside_view_reached");
+        }
       }
     },
-    [onStickMove],
+    [isViewingUnderside, onStickMove],
   );
 
   const handleStickEnd = useCallback(() => {
@@ -156,6 +162,11 @@ function TutorialScreen() {
       useGameStore.subscribe((state, previous) => {
         const tutorial = useTutorialStore.getState();
         if (!previous.heldActionId && state.heldActionId) {
+          if (
+            tutorial.steps[tutorial.currentIndex]?.id === "install-four-legs"
+          ) {
+            setGuideCollapsed(true);
+          }
           tutorial.completeEvent("part_picked_up");
         }
         if (state.completed.length < previous.completed.length) {
@@ -182,6 +193,9 @@ function TutorialScreen() {
             }
             if (action?.type === "tightenFastener") {
               tutorial.completeEvent("tool_used");
+            }
+            if (action?.type === "reorient") {
+              tutorial.completeEvent("assembly_reoriented");
             }
           }
         }
@@ -224,15 +238,14 @@ function TutorialScreen() {
   const tutorialStepEvent = useTutorialStore(
     (s) => s.steps[s.currentIndex]?.event,
   );
+  const tutorialStepId = useTutorialStore(
+    (s) => s.steps[s.currentIndex]?.id,
+  );
+  const tutorialAdvancing = useTutorialStore(
+    (s) => s.pendingAdvanceStepId !== null,
+  );
   const activeCluster = useGameStore((s) => s.activeCluster);
   const mode = useGameStore((s) => s.mode);
-  const stage = useMemo(
-    () =>
-      furniture
-        ? currentStageForClusterFocus(furniture, completedSet, activeCluster)
-        : 1,
-    [furniture, completedSet, activeCluster],
-  );
   const settings = useGameStore((s) => s.settings);
   const heldActionId = useGameStore((s) => s.heldActionId);
   const renderStyle = useGameStore((s) => s.renderStyle);
@@ -256,6 +269,50 @@ function TutorialScreen() {
   const guideStepCount = useTutorialStore((s) => s.steps.length);
   const orientationActionId = useGameStore((s) => s.orientationActionId);
   const totalCount = furniture?.actions.length ?? 0;
+  const installedLegCount = useMemo(
+    () =>
+      furniture?.actions.filter(
+        (action) =>
+          completedSet.has(action.actionId) &&
+          action.type === "placePart" &&
+          action.partId?.startsWith("leg_"),
+      ).length ?? 0,
+    [completedSet, furniture],
+  );
+  const collapsedLegGuide =
+    guideCollapsed && tutorialStepId === "install-four-legs";
+  const tutorialTrayItems = useMemo(() => {
+    if (
+      tutorialAdvancing &&
+      (tutorialStepId === "install-four-legs" ||
+        tutorialStepId === "view-under-table" ||
+        tutorialStepId === "place-connector" ||
+        tutorialStepId === "select-allen-key" ||
+        tutorialStepId === "tighten-connector")
+    ) {
+      return [];
+    }
+    if (tutorialStepId === "install-four-legs") {
+      // After the first taught bolt → tool → leg cycle, expose the normal
+      // legal sequence so the remaining three cycles can alternate correctly.
+      return sceneState.trayItems;
+    }
+    if (tutorialStepId === "view-under-table") return [];
+    if (tutorialStepId === "place-connector") {
+      return sceneState.trayItems.filter(
+        (item) =>
+          item.action?.type === "placeFastener" ||
+          item.action?.type === "insertFastener",
+      );
+    }
+    if (tutorialStepId === "select-allen-key") return [];
+    if (tutorialStepId === "tighten-connector") return [];
+    return sceneState.trayItems;
+  }, [sceneState.trayItems, tutorialAdvancing, tutorialStepId]);
+
+  useEffect(() => {
+    setGuideCollapsed(false);
+  }, [tutorialStepId]);
 
   // LACK-specific milestones are derived from completed actions so they remain
   // correct even if the player installs parts in a different legal order.
@@ -364,9 +421,10 @@ function TutorialScreen() {
   });
 
   const selectedTool = useGameStore((s) => s.selectedTool);
-  const neededTool = settings.manualTools
-    ? (sceneState.activeTighten?.tool ?? driveAction?.tool ?? null)
-    : null;
+  const rawTool = sceneState.activeTighten?.tool ?? driveAction?.tool ?? null;
+  // Hand-driven fasteners have no toolbar entry; LACK explicitly uses the
+  // Allen key, so manual-tools mode waits until it is selected.
+  const neededTool = rawTool !== "hand" ? rawTool : null;
   const toolReady = !neededTool || selectedTool === neededTool;
   const activeToolKind: ToolTutorialKind | null =
     driveKind === "press"
@@ -521,9 +579,11 @@ function TutorialScreen() {
           <ObjectiveBar
             line={
               settings.showInstructions
-                ? guideCompleted
+                ? collapsedLegGuide
+                  ? `Install all four legs · ${installedLegCount}/4`
+                  : guideCompleted
                   ? `Finish the LACK table · ${displayedCompletedCount}/${displayedTotalCount}`
-                  : `Stage ${stage} · ${objective} · ${completedCount}/${totalCount}`
+                  : `${objective} · ${completedCount}/${totalCount}`
                 : null
             }
             fontSize={objectiveFontSize}
@@ -541,7 +601,7 @@ function TutorialScreen() {
           style={styles.undoTarget}
           pointerEvents="none"
         />
-        <TutorialGameSettings />
+        <GameSettings />
         <TutorialTarget
           id="settings"
           style={styles.settingsTarget}
@@ -549,7 +609,7 @@ function TutorialScreen() {
         />
         {mode !== "strict" ? <ClusterFocusControl /> : null}
         <PartsTray
-          items={sceneState.trayItems}
+          items={tutorialTrayItems}
           gestureFor={gestureFor}
           thumbs={furniture.thumbs}
           header={
@@ -564,7 +624,7 @@ function TutorialScreen() {
           style={styles.partsTrayTarget}
           pointerEvents="none"
         />
-        <ToolBar neededTool={neededTool} />
+        <ToolBar neededTool={neededTool} forceVisible />
         <TutorialTarget
           id="toolbar"
           style={styles.toolbarTarget}
@@ -574,6 +634,10 @@ function TutorialScreen() {
           <TutorialTarget id="hint" style={hudControls.hintButton}>
             <HintButton
               onPress={() => {
+                if (collapsedLegGuide) {
+                  setGuideCollapsed(false);
+                  return;
+                }
                 useGameStore.getState().suggestNext();
                 useTutorialStore.getState().completeEvent("hint_requested");
               }}
@@ -665,6 +729,7 @@ function TutorialScreen() {
         activeToolKind={activeToolKind}
         assemblyComplete={totalCount > 0 && completedCount >= totalCount}
         audioEnabled={settings.audio}
+        blocked={collapsedLegGuide}
         onClaimReward={() => {}}
         onSimulatePinch={() => {
           if (!manipulator) return;
