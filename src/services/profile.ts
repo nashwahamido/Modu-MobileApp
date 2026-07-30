@@ -30,7 +30,7 @@ export async function getProfile(userId: string) {
 }
 
 // A SAFETY NET, not the provisioning path. The row is created by the on_auth_user_created trigger
-// (migration 20260724100000), which covers every sign-in route including ones that never reach this
+// (migration 007_auth_provisioning.sql), which covers every sign-in route including ones that never reach this
 // code. This stays for accounts that predate the trigger, and to stamp last_login on each sign-in.
 export async function createProfileIfMissing(userId: string, email?: string | null) {
   const now = new Date().toISOString();

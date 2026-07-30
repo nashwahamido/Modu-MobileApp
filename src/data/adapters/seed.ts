@@ -93,7 +93,7 @@ export function seedCompleted(): Record<UserId, FurnitureId[]> {
   };
 }
 
-// The purchasable catalog — the in-memory mirror of the item_buy seed in migration 20260724030000.
+// The purchasable catalog — the in-memory mirror of the item_buy seed in migration 003_catalog.sql.
 // Ids, prices and min_levels are copied from it verbatim: this is the stand-in players see when
 // EXPO_PUBLIC_DATA_BACKEND is not "supabase", so it is only useful insofar as it matches the real thing.
 // (It had drifted to a disjoint set — shelving-units-wooden / bed-slattum-white — which meant the demo
@@ -121,7 +121,7 @@ export function seedInventory(): Record<UserId, ShopItemId[]> {
 }
 
 // The colour/finish axis per item — the in-memory mirror of the item_variants seed in migration
-// 20260724030000, copied verbatim for the same reason seedShopItems is: this is what the picker offers
+// 003_catalog.sql, copied verbatim for the same reason seedShopItems is: this is what the picker offers
 // when the backend is not "supabase", so it is only useful insofar as it matches the real table.
 // Exactly one is_default per item id, like the partial unique index enforces.
 export function seedItemVariants(): ItemVariant[] {
@@ -148,7 +148,7 @@ export function seedItemVariants(): ItemVariant[] {
 }
 
 // Room-placement metadata per item — the in-memory mirror of the size seeds in migration
-// 20260729000000_placeable_metadata, copied verbatim like seedShopItems is. Sizes are measured
+// 003_catalog.sql, copied verbatim like seedShopItems is. Sizes are measured
 // world-AABB extents in authored meters; tutorial has no room model, so it has no row here.
 export function seedPlaceableItems(): PlaceableRoomRow[] {
   return [

@@ -16,7 +16,7 @@ export interface InMemoryReposOptions {
   latencyMs?: number;
 }
 
-// Mirror of item_build' generated xp_reward/coin_reward totals (the reward-catalog seed) — keep in sync with the 20260724030000 migration. Furnitures not listed reward 0 (matches the DB).
+// Mirror of item_build' generated xp_reward/coin_reward totals (the reward-catalog seed) — keep in sync with the 003_catalog.sql migration. Furnitures not listed reward 0 (matches the DB).
 // Each row is steps × the DB-authored rates (coins_per_step=3, xp_per_step=6, xp_bonus=0), with steps = the recipe's actions.length, exactly what sync_furniture_counts writes into step_count: lack 14, bekvam 35, dalfred 58, eket 147. Recompose a recipe and these go stale — the real adapter re-syncs, this table does not.
 const DEFAULT_BUILT_REWARDS: Record<string, { coins: number; xp: number }> = {
   "eket-cabinet": { coins: 441, xp: 882 },

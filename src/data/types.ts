@@ -32,7 +32,7 @@ export interface Profile {
 
 // The directly-writable profile fields. Two groups are excluded, for two different reasons.
 // Derived / cached aggregates (title, xpIntoLevel, xpForNextLevel, itemsAssembled, likes) are maintained by their own repos.
-// coins/xp/level are ECONOMY state and deliberately NOT writable here: they move only through purchase_item and reward_build, which price the transaction server-side from auth.uid(). A client-writable patch would let a modded client mint its own balance, and the DB now revokes those columns to match (migration 20260726040000).
+// coins/xp/level are ECONOMY state and deliberately NOT writable here: they move only through purchase_item and reward_build, which price the transaction server-side from auth.uid(). A client-writable patch would let a modded client mint its own balance, and the DB now revokes those columns to match (migration 009_grants.sql).
 export type ProfilePatch = Partial<
   Pick<Profile, "username" | "avatarMode" | "onboardingCompleted">
 >;

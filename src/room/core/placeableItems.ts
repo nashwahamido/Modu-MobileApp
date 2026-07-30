@@ -3,7 +3,7 @@
 // never by the assembly engine's FurnitureId.
 //
 // The catalog is DB-DRIVEN: placeable_items carries each item's measured size + base offset (see
-// migration 20260729000000), and registerPlaceables() feeds those rows in (placeableStore syncs them,
+// migration 003_catalog.sql), and registerPlaceables() feeds those rows in (placeableStore syncs them,
 // cache-then-network). The BUILT set is also baked in below as the offline fallback — those items
 // ship bundled models, so a first launch with no network still places what it can render. Bought
 // items exist only via the DB rows; their models live in storage (room/bought/...).
@@ -58,7 +58,7 @@ function toModel(row: PlaceableRoomRow): RoomItemModel {
   };
 }
 
-// The baked-in BUILT set: sizes mirror the DB seed (20260729000000) the same way seed.ts does, so
+// The baked-in BUILT set: sizes mirror the DB seed (003_catalog.sql) the same way seed.ts does, so
 // offline placement matches what the catalog will say once it loads.
 const BUNDLED_ROWS: PlaceableRoomRow[] = [
   { id: "dalfred-stool", source: "built", size: { x: 0.5, y: 0.79, z: 0.5 }, baseOffsetY: 0.007 },
