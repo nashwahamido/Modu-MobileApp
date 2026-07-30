@@ -4,7 +4,7 @@ import type { BuildProgressRepo, CatalogRepo, FriendsRepo, ProfileRepo, Repos, R
 import type { BuildSave, Friend, Profile, ProfilePatch, RoomLayout, UserId } from "../types";
 import type { ShopItemId } from "../shopItems";
 import { levelForXp, levelSpan, titleForLevel } from "../levels";
-import { seedBuildCatalog, seedBuilds, seedBuiltItems, seedCompleted, seedFriends, seedInventory, seedLevelRows, seedProfiles, seedItemVariants, seedRoomLikes, seedRooms, seedShopItems } from "./seed";
+import { seedBuildCatalog, seedBuilds, seedBuiltItems, seedCompleted, seedFriends, seedInventory, seedLevelRows, seedPlaceableItems, seedProfiles, seedItemVariants, seedRoomLikes, seedRooms, seedShopItems } from "./seed";
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 
@@ -68,6 +68,10 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
     async listBuilds() {
       await delay(latency);
       return clone(seedBuildCatalog());
+    },
+    async listPlaceables() {
+      await delay(latency);
+      return clone(seedPlaceableItems());
     },
   };
 

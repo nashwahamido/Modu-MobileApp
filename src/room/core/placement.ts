@@ -18,7 +18,7 @@ import {
   type PlacementCheck,
   type RotSteps,
 } from "./grid";
-import { ROOM_ITEM_DEFS } from "./placeableItems";
+import { getRoomItemDef, roomItemDefs } from "./placeableItems";
 
 // The persisted shape and the grid's working shape are the same thing under two names; keep the
 // conversion in one visible place so they cannot drift silently.
@@ -84,8 +84,8 @@ const nextInstanceId = (itemId: string, layout: GridPlacement[]): string => {
 const validate = (placement: GridPlacement, layout: GridPlacement[]): PlacementCheck =>
   canPlace(
     placement,
-    ROOM_ITEM_DEFS.get(placement.itemId),
-    buildOccupancy(layout, ROOM_ITEM_DEFS, placement.instanceId),
+    getRoomItemDef(placement.itemId),
+    buildOccupancy(layout, roomItemDefs(), placement.instanceId),
   );
 
 // Saves are queued so two quick commits cannot land out of order (the later snapshot must win
@@ -143,7 +143,7 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
   },
 
   startPlacing(itemId, opts) {
-    const def = ROOM_ITEM_DEFS.get(itemId);
+    const def = getRoomItemDef(itemId);
     // No room model for this item: refuse to enter placement rather than drag an invisible ghost.
     if (!def) return false;
     set((s) => {
@@ -206,7 +206,7 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
   moveGhost(cell) {
     set((s) => {
       if (!s.activeEdit) return s;
-      const def = ROOM_ITEM_DEFS.get(s.activeEdit.placement.itemId);
+      const def = getRoomItemDef(s.activeEdit.placement.itemId);
       if (!def) return s;
       const footprint = rotatedFootprint(def.footprint, s.activeEdit.placement.rotSteps);
       const clamped = clampToSurface(cell, s.activeEdit.placement.surface, footprint);
@@ -223,7 +223,7 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
   rotateGhost(direction) {
     set((s) => {
       if (!s.activeEdit) return s;
-      const def = ROOM_ITEM_DEFS.get(s.activeEdit.placement.itemId);
+      const def = getRoomItemDef(s.activeEdit.placement.itemId);
       if (!def) return s;
       const rotSteps = ((((s.activeEdit.placement.rotSteps + direction) % 4) + 4) % 4) as RotSteps;
       const placement = {

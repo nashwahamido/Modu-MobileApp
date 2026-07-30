@@ -1,22 +1,31 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { beforeEach, test } from "node:test";
 
 import {
   FURNITURE_WORLD_SCALE,
-  ROOM_ITEM_DEFS,
   fitScale,
   getRoomItem,
-  getRoomItemVariantUrl,
+  getRoomItemStoragePath,
+  registerPlaceables,
+  roomItemDefs,
   roomItemSource,
 } from "./placeableItems";
 import { ROOM_SHELL } from "./roomShell";
 
 const CELL = ROOM_SHELL.cellSize;
 
+// The registry is module state; every test starts from the same catalog — the bundled built set
+// plus one bought row shaped like the DB seed (malm-chest, measured from its storage GLB).
+beforeEach(() => {
+  registerPlaceables([
+    { id: "malm-chest", source: "bought", size: { x: 0.804, y: 1.004, z: 0.483 }, baseOffsetY: 0 },
+  ]);
+});
+
 test("every item renders at the one world scale — no per-item drift", () => {
   // The whole point of the factor: pieces keep their true proportions relative to EACH OTHER.
-  // If this fails, someone hand-shrank a footprint below the piece's scaled size.
-  for (const [itemId] of ROOM_ITEM_DEFS) {
+  // With ceil-derived footprints the fitScale guard can never bind, bought rows included.
+  for (const [itemId] of roomItemDefs()) {
     const item = getRoomItem(itemId)!;
     assert.equal(
       fitScale(item),
@@ -27,7 +36,7 @@ test("every item renders at the one world scale — no per-item drift", () => {
 });
 
 test("footprints are the ceil of the scaled size — claimed cells always contain the piece", () => {
-  for (const [itemId, def] of ROOM_ITEM_DEFS) {
+  for (const [itemId, def] of roomItemDefs()) {
     const item = getRoomItem(itemId)!;
     const scaledX = item.size.x * FURNITURE_WORLD_SCALE;
     const scaledZ = item.size.z * FURNITURE_WORLD_SCALE;
@@ -39,23 +48,49 @@ test("footprints are the ceil of the scaled size — claimed cells always contai
   }
 });
 
+test("the bundled built set survives any catalog the DB sends", () => {
+  // A row list that lost an item must never strand an already-placed bundled piece invisible.
+  registerPlaceables([]);
+  for (const id of ["dalfred-stool", "lack-table", "eket-cabinet", "bekvam-stool"]) {
+    assert.ok(getRoomItem(id), `${id} fell out of the registry`);
+  }
+  assert.equal(getRoomItem("malm-chest"), null);
+});
+
+test("a registered bought item is placeable, with its footprint derived from the measured size", () => {
+  const item = getRoomItem("malm-chest")!;
+  // 0.804 × 1.6 / 0.5 = 2.57 → 3 cells; 0.483 × 1.6 / 0.5 = 1.55 → 2 cells.
+  assert.deepEqual(item.def.footprint, { w: 3, d: 2 });
+  assert.equal(item.source, "bought");
+  assert.ok(roomItemDefs().has("malm-chest"));
+});
+
 test("unknown items resolve to null, never to a default model", () => {
   assert.equal(getRoomItem("tutorial"), null);
   assert.equal(getRoomItem(null), null);
 });
 
-test("asset subtree follows acquisition — bundled ids are built, everything else is bought", () => {
-  // The bundle IS the built set: every buildable furniture ships a model, store-only items never do.
-  for (const [itemId] of ROOM_ITEM_DEFS) {
-    assert.equal(roomItemSource(itemId), "built", `${itemId} is buildable, so its assets are in room/built/`);
+test("asset subtree follows acquisition — the catalog row decides, the bundle is the fallback rule", () => {
+  // Every buildable furniture ships a model, store-only items never do.
+  for (const id of ["dalfred-stool", "lack-table", "eket-cabinet", "bekvam-stool"]) {
+    assert.equal(roomItemSource(id), "built", `${id} is buildable, so its assets are in room/built/`);
   }
   assert.equal(roomItemSource("malm-chest"), "bought");
+  // An id the catalog has never seen still resolves by the bundle rule.
+  assert.equal(roomItemSource("some-future-item"), "bought");
 });
 
-test("a variant URL needs BOTH a colour and a known item — otherwise the bundled model is used", () => {
-  // Null is the caller's signal to fall back (variantModel.ts). No colour axis, or an id the room cannot
-  // place, must never produce a path that would 404 at load time.
-  assert.equal(getRoomItemVariantUrl("eket-cabinet", null), null);
-  assert.equal(getRoomItemVariantUrl("eket-cabinet", undefined), null);
-  assert.equal(getRoomItemVariantUrl("not-an-item", "black"), null);
+test("built items need a colour for a storage path — no colour means the bundled model", () => {
+  // Null is the caller's signal to fall back (variantModel.ts). An id the room cannot place must
+  // never produce a path that would 404 at load time.
+  assert.equal(getRoomItemStoragePath("eket-cabinet", null), null);
+  assert.equal(getRoomItemStoragePath("eket-cabinet", undefined), null);
+  assert.equal(getRoomItemStoragePath("not-an-item", "black"), null);
+  assert.equal(getRoomItemStoragePath("eket-cabinet", "black"), "room/built/eket-cabinet/black.glb");
+});
+
+test("bought items always resolve to storage — the 'default' segment when no colour is picked", () => {
+  // A bought item has no bundled fallback, so even without a colour axis it must load from storage.
+  assert.equal(getRoomItemStoragePath("malm-chest", null), "room/bought/malm-chest/default.glb");
+  assert.equal(getRoomItemStoragePath("malm-chest", "white"), "room/bought/malm-chest/white.glb");
 });

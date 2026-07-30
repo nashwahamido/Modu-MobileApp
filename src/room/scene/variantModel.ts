@@ -39,8 +39,9 @@ function probe(url: string): Promise<boolean> {
   return p;
 }
 
-// The model source for one item in one colour. Starts on the bundled model so a piece is NEVER invisible,
-// and upgrades to the variant the moment its URL is known good.
+// The model source for one item in one colour. Starts on the bundled model so a built piece is NEVER
+// invisible, and upgrades to the variant the moment its URL is known good. A BOUGHT item has no
+// bundle: this returns null until its storage URL is confirmed, and the caller renders nothing.
 export function useVariantModelSource(
   itemId: string,
   variation: string | null | undefined,

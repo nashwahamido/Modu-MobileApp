@@ -2,7 +2,7 @@
 import type { PostgrestError } from "@supabase/supabase-js";
 import { supabase } from "@/src/config/supabase";
 import type { AssemblyMode, BrandId, FurnitureId } from "@/src/game/core/type";
-import type { BuildProgressRepo, CatalogRepo, FriendsRepo, ItemVariant, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo, VariantsRepo } from "../repos";
+import type { BuildProgressRepo, CatalogRepo, FriendsRepo, ItemVariant, PlaceableRoomRow, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo, VariantsRepo } from "../repos";
 import type { BuildSave, Profile, ProfilePatch, RoomLayout } from "../types";
 import type { ShopCategory, ShopItem } from "../shopItems";
 import type { AvatarRef } from "../avatars";
@@ -158,6 +158,25 @@ const catalogRepo: CatalogRepo = {
         ...(r.link ? { link: r.link } : {}),
       };
     });
+  },
+
+  async listPlaceables() {
+    // The union view spans both item tables; a null size means "no room model authored", so those
+    // rows are filtered server-side — the room never sees an item it could not place.
+    const { data, error } = await supabase
+      .from("placeable_items")
+      .select("id, source, size_x, size_y, size_z, base_offset_y")
+      .not("size_x", "is", null);
+    check(error);
+    type Row = { id: string; source: "built" | "bought"; size_x: number; size_y: number; size_z: number; base_offset_y: number };
+    return ((data ?? []) as Row[]).map(
+      (r): PlaceableRoomRow => ({
+        id: r.id,
+        source: r.source,
+        size: { x: r.size_x, y: r.size_y, z: r.size_z },
+        baseOffsetY: r.base_offset_y,
+      }),
+    );
   },
 };
 

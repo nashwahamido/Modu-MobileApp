@@ -2,7 +2,7 @@
 import type { FurnitureId } from "@/src/game/core/type";
 import type { LevelRow } from "../levels";
 import type { ShopCategory, ShopItem, ShopItemId } from "../shopItems";
-import type { BuildCatalogRow, ItemVariant } from "../repos";
+import type { BuildCatalogRow, ItemVariant, PlaceableRoomRow } from "../repos";
 import type { BuildSave, Friend, Profile, RoomLayout, UserId } from "../types";
 
 // The fake current user for local/dev runs. Real code derives the id from Supabase auth (useAuth().user.id).
@@ -144,6 +144,21 @@ export function seedItemVariants(): ItemVariant[] {
     v("neiden-bedframe", "wooden", true),
     v("rosentorp-table", "black", true),
     v("rosentorp-table", "white"),
+  ];
+}
+
+// Room-placement metadata per item — the in-memory mirror of the size seeds in migration
+// 20260729000000_placeable_metadata, copied verbatim like seedShopItems is. Sizes are measured
+// world-AABB extents in authored meters; tutorial has no room model, so it has no row here.
+export function seedPlaceableItems(): PlaceableRoomRow[] {
+  return [
+    { id: "dalfred-stool", source: "built", size: { x: 0.5, y: 0.79, z: 0.5 }, baseOffsetY: 0.007 },
+    { id: "lack-table", source: "built", size: { x: 0.55, y: 0.45, z: 0.55 }, baseOffsetY: 0 },
+    { id: "eket-cabinet", source: "built", size: { x: 0.37, y: 0.35, z: 0.75 }, baseOffsetY: 0.175 },
+    { id: "bekvam-stool", source: "built", size: { x: 0.39, y: 0.5, z: 0.43 }, baseOffsetY: 0 },
+    { id: "malm-chest", source: "bought", size: { x: 0.804, y: 1.004, z: 0.483 }, baseOffsetY: 0 },
+    { id: "neiden-bedframe", source: "bought", size: { x: 0.96, y: 0.647, z: 1.95 }, baseOffsetY: 0 },
+    { id: "rosentorp-table", source: "bought", size: { x: 1.101, y: 0.751, z: 1.101 }, baseOffsetY: 0 },
   ];
 }
 

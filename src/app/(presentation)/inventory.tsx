@@ -10,7 +10,7 @@ import { SPACE, useStyles, useTheme } from "@/src/game/ui/theme";
 import { nextSort, useCurrentUserId, useRepos, viewCatalogue } from "@/src/data";
 import type { CategoryFilter, ShopCategory, ShopSort } from "@/src/data";
 import { usePlacementStore } from "@/src/room/core/placement";
-import { getRoomItem } from "@/src/room/core/placeableItems";
+import { useRoomCatalogStore } from "@/src/room/core/placeableItems";
 import { CatalogueChrome } from "@/src/shop/CatalogueChrome";
 import { ItemCard } from "@/src/shop/ItemCard";
 import { CatalogThumb } from "@/src/components/CatalogThumb";
@@ -34,6 +34,8 @@ export default function InventoryScreen() {
   const [reloadKey, setReloadKey] = useState(0);
   const [category, setCategory] = useState<CategoryFilter>("all");
   const [sort, setSort] = useState<ShopSort>("name");
+  // Subscribed so "tap to place" lights up the moment the placeable catalog syncs in.
+  const roomItems = useRoomCatalogStore((s) => s.items);
 
   useEffect(() => {
     let alive = true;
@@ -114,9 +116,9 @@ export default function InventoryScreen() {
       ) : (
         <ScrollView contentContainerStyle={styles.grid}>
           {visible.map((item) => {
-            // Only items with an authored room model are placeable; the rest stay passive rather
-            // than promising a placement that would produce an invisible ghost.
-            const placeable = getRoomItem(item.id) !== null;
+            // Only items the placeable catalog knows (an authored size + a room model) offer
+            // placement; the rest stay passive rather than promising an invisible ghost.
+            const placeable = roomItems[item.id] !== undefined;
             const place = () => {
               if (!usePlacementStore.getState().startPlacing(item.id)) return;
               router.dismissTo("/room");

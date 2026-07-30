@@ -20,7 +20,13 @@ import {
   floorCellToRoom,
   type GridPlacement,
 } from "../core/grid";
-import { fitScale, getRoomItem, ROOM_ITEM_DEFS } from "../core/placeableItems";
+import {
+  fitScale,
+  getRoomItemDef,
+  useRoomCatalogStore,
+  useRoomItem,
+  type RoomItemModel,
+} from "../core/placeableItems";
 import { useVariantModelSource } from "./variantModel";
 import { GridOverlay } from "./GridOverlay";
 import { usePlacementStore } from "../core/placement";
@@ -79,15 +85,34 @@ const PlacedItem = memo(function PlacedItem({
   placement: GridPlacement;
   tint?: "valid" | "blocked";
 }) {
-  const item = getRoomItem(placement.itemId);
+  // Reactive: a bought piece in a saved layout only gets its item row once the catalog syncs.
+  const item = useRoomItem(placement.itemId);
   // The colour the player chose, when that variant GLB is in storage; the bundled single-colour model
   // otherwise. Swapping colour swaps this source, and the transform effect below re-runs on the new model.
   const source = useVariantModelSource(placement.itemId, placement.variation);
-  const model = useModel(source ?? ROOM_MODEL);
+  // No model yet — a bought item whose storage URL is still being probed (it has no bundled
+  // fallback) — must render NOTHING: useModel has no empty source, and feeding it the room shell
+  // would briefly draw a second whole room as the "piece".
+  if (!item || !source) return null;
+  return <LoadedItem item={item} source={source} placement={placement} tint={tint} />;
+});
+
+const LoadedItem = memo(function LoadedItem({
+  item,
+  source,
+  placement,
+  tint,
+}: {
+  item: RoomItemModel;
+  source: NonNullable<ReturnType<typeof useVariantModelSource>>;
+  placement: GridPlacement;
+  tint?: "valid" | "blocked";
+}) {
+  const model = useModel(source);
   const { renderableManager, transformManager } = useFilamentContext();
 
   useEffect(() => {
-    if (!item || model.state !== "loaded") return;
+    if (model.state !== "loaded") return;
 
     // transformToUnitCube = scaling(2/maxExtent) · translation(-center) — a KNOWN matrix, used
     // here as a normalization base so the algebra below is exact for any GLB origin.
@@ -112,7 +137,7 @@ const PlacedItem = memo(function PlacedItem({
   // ALWAYS written, including the no-tint reset: if the engine ever hands two components the same
   // asset, the committed sibling heals any tint the ghost left behind.
   useEffect(() => {
-    if (!item || model.state !== "loaded") return;
+    if (model.state !== "loaded") return;
     const factor = TINTS[tint ?? "none"];
     for (const entity of model.asset.getRenderableEntities()) {
       const count = renderableManager.getPrimitiveCount(entity);
@@ -172,6 +197,8 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange }: R
 
   const layout = usePlacementStore((s) => s.layout);
   const activeEdit = usePlacementStore((s) => s.activeEdit);
+  // Subscribed (not getState) so pieces whose item rows arrive with the catalog sync appear then.
+  const roomItems = useRoomCatalogStore((s) => s.items);
   // The ghost re-renders through the store on every cell change; committed pieces only when the
   // layout itself changes.
   const editing = activeEdit !== null;
@@ -200,7 +227,7 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange }: R
     const state = usePlacementStore.getState();
     const edit = state.activeEdit;
     if (!edit) return;
-    const def = ROOM_ITEM_DEFS.get(edit.placement.itemId);
+    const def = getRoomItemDef(edit.placement.itemId);
     if (!def) return;
     const pointed = screenPointToFloorCell(px, py, viewportRef.current, orbit.value.smoothed);
     if (!pointed) return;
@@ -215,7 +242,7 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange }: R
     const pointed = screenPointToFloorCell(px, py, viewportRef.current, orbit.value.smoothed);
     if (!pointed) return;
     const under = state.layout.find((p) => {
-      const def = ROOM_ITEM_DEFS.get(p.itemId);
+      const def = getRoomItemDef(p.itemId);
       if (!def || p.surface.kind !== "floor") return false;
       return cellsFor(p, def).some((c) => c.x === pointed.x && c.y === pointed.y);
     });
@@ -320,10 +347,9 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange }: R
             direction={[0.3, -0.25, 0.85]}
           />
           <RoomModel onReady={handleReady} />
-          {/* An id no longer in the catalog has no model or dimensions — skip it, or the null
-              source falls back to loading the entire room shell as the "piece". */}
+          {/* An id the catalog doesn't know (yet) has no model or dimensions — skip it. */}
           {layout
-            .filter((placement) => getRoomItem(placement.itemId))
+            .filter((placement) => roomItems[placement.itemId])
             .map((placement) => (
               <PlacedItem key={placement.instanceId} placement={placement} />
             ))}
@@ -343,7 +369,7 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange }: R
           angles={{ ...orbitFromControls(rotationY, zoom), phi: orbit.value.raw.phi }}
           ghostCell={activeEdit.placement.cell}
           ghostFootprint={rotatedFootprint(
-            ROOM_ITEM_DEFS.get(activeEdit.placement.itemId)?.footprint ?? { w: 1, d: 1 },
+            getRoomItemDef(activeEdit.placement.itemId)?.footprint ?? { w: 1, d: 1 },
             activeEdit.placement.rotSteps,
           )}
           ghostValid={activeEdit.check.ok}
