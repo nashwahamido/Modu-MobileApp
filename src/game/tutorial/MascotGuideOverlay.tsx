@@ -10,7 +10,9 @@ import { useTutorialStore } from './store';
 import { useTutorialTargets, type TutorialFrame } from './targetRegistry';
 import { useTutorialAudio } from './useTutorialAudio';
 import { Button } from '@/src/game/ui/Button';
+import { useGameStore } from '@/src/game/core/store';
 import { ELEVATION, RADIUS, Theme, TYPE, useStyles } from '@/src/game/ui/theme';
+import { tutorialPresentationForProfile } from './presentation';
 const mascotImage = require("../../assets/images/mascot/mascot.png");
 const PADDING = 0;
 
@@ -42,6 +44,8 @@ export function MascotGuideOverlay({
   const width = overlaySize?.width ?? windowSize.width;
   const height = overlaySize?.height ?? windowSize.height;
   const currentIndex = useTutorialStore((s) => s.currentIndex);
+  const profile = useGameStore((s) => s.profile);
+  const presentation = tutorialPresentationForProfile(profile);
   const steps = useTutorialStore((s) => s.steps);
   const phase = useTutorialStore((s) => s.phase);
   const skipped = useTutorialStore((s) => s.skipped);
@@ -226,6 +230,7 @@ export function MascotGuideOverlay({
             pointerEvents="none"
             style={[
               styles.highlight,
+              presentation.emphasizeTarget && styles.highlightEmphasized,
               { left: frame.x, top: frame.y, width: frame.width, height: frame.height },
             ]}
           />
@@ -251,10 +256,10 @@ export function MascotGuideOverlay({
           </View>
         </View>
       </View>
-      {stepRewardReady ? (
+      {stepRewardReady && presentation.showMilestoneConfirmation ? (
         <View style={styles.stepRewardToast} pointerEvents="none">
           <Text style={styles.stepRewardText}>
-            Step {lastCompletedStepLabel} complete · +{TUTORIAL_STEP_REWARD_TOKENS}
+            Milestone complete · Step {lastCompletedStepLabel} · +{TUTORIAL_STEP_REWARD_TOKENS}
           </Text>
         </View>
       ) : null}
@@ -317,6 +322,10 @@ const makeStyles = (t: Theme) =>
       borderWidth: 3,
       borderColor: '#8D7BA8',
       backgroundColor: 'rgba(255,255,255,0.08)',
+    },
+    highlightEmphasized: {
+      borderWidth: 5,
+      backgroundColor: 'rgba(118,230,219,0.22)',
     },
     bubble: {
       position: 'absolute',

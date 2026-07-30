@@ -60,8 +60,10 @@ import {
 import { availableInMode } from "@/src/game/core/evaluation/availability";
 import { TutorialTarget } from "@/src/game/tutorial/TutorialTarget";
 import { MascotGuideOverlay } from "@/src/game/tutorial/MascotGuideOverlay";
+import { TutorialStepRail } from "@/src/game/tutorial/TutorialStepRail";
 import { useTutorialStore } from "@/src/game/tutorial/store";
 import { furnitureForProfile } from "@/src/game/core/profile";
+import { tutorialPresentationForProfile } from "@/src/game/tutorial/presentation";
 import {
   TUTORIAL_STEP_REWARD_TOKENS,
   type ToolTutorialKind,
@@ -250,6 +252,8 @@ function TutorialScreen() {
   const activeCluster = useGameStore((s) => s.activeCluster);
   const mode = useGameStore((s) => s.mode);
   const settings = useGameStore((s) => s.settings);
+  const profile = useGameStore((s) => s.profile);
+  const tutorialPresentation = tutorialPresentationForProfile(profile);
   const heldActionId = useGameStore((s) => s.heldActionId);
   const renderStyle = useGameStore((s) => s.renderStyle);
   const backdrop = useGameStore((s) => s.backdrop);
@@ -585,7 +589,9 @@ function TutorialScreen() {
         <View style={styles.objectiveWrap} pointerEvents="none">
           <ObjectiveBar
             line={
-              settings.showInstructions
+              tutorialPresentation.showChecklist
+                ? null
+                : settings.showInstructions
                 ? collapsedLegGuide
                   ? `Install all four legs · ${installedLegCount}/4`
                   : guideCompleted
@@ -597,6 +603,9 @@ function TutorialScreen() {
             value={displayedCompletedCount}
             total={displayedTotalCount}
             xp={completedCount * furniture.xpPerStep}
+            header={
+              tutorialPresentation.showChecklist ? <TutorialStepRail /> : undefined
+            }
           />
         </View>
         <CenterDropRing />

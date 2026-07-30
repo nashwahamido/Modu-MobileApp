@@ -46,6 +46,7 @@ export interface TutorialStep {
   id: string;
   targetId: TutorialTargetId;
   message: string;
+  shortLabel?: string;
   event: TutorialEvent;
   audio?: TutorialAudioSource;
   when?: (context: TutorialContext) => boolean;
@@ -60,12 +61,14 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     id: "long-press-part",
     targetId: "partsTray",
     message: "Long-press a part card to pick it up.",
+    shortLabel: "Pick up the tabletop",
     event: "part_picked_up",
   },
   {
     id: "drag-and-snap",
     targetId: "assemblyArea",
     message: "Drag the part into place. Release when it lines up.",
+    shortLabel: "Place the tabletop",
     event: "part_snapped",
   },
   {
@@ -73,24 +76,28 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     targetId: "joystick",
     message:
       "Use the joystick to lower the view until you can clearly see underneath the tabletop.",
+    shortLabel: "View the underside",
     event: "underside_view_reached",
   },
   {
     id: "place-connector",
     targetId: "partsTray",
     message: "Long-press a bolt, then place it into the highlighted hole.",
+    shortLabel: "Insert the first bolt",
     event: "connector_placed",
   },
   {
     id: "select-allen-key",
     targetId: "toolbar",
     message: "Open the toolbox and select the Allen key.",
+    shortLabel: "Select the Allen key",
     event: "toolbar_used",
   },
   {
     id: "tighten-connector",
     targetId: "tool",
     message: "Turn clockwise to tighten the bolt with the Allen key.",
+    shortLabel: "Tighten the bolt",
     event: "connector_tightened",
   },
   {
@@ -98,6 +105,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     targetId: "partsTray",
     message:
       "Install the leg onto the bolt. Repeat the bolt, tool, and leg steps for all four legs.",
+    shortLabel: "Install all four legs",
     event: "all_legs_installed",
   },
   {
@@ -105,6 +113,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     targetId: "scene",
     message:
       "All four legs are installed. Swipe down on the orange card to stand the table upright and finish.",
+    shortLabel: "Stand the table upright",
     event: "assembly_reoriented",
   },
 ];

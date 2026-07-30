@@ -1,4 +1,5 @@
 // The centred objective pill: instruction line + [★ star | progress track | XP label] row. SHARED by the play screen and the tutorial fork — edit here and both stay in sync.
+import type { ReactNode } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 import { ProgressBar } from "@/src/game/ui/Button";
 import { ELEVATION, RADIUS, SPACE, Theme, TYPE, useStyles } from "@/src/game/ui/theme";
@@ -13,23 +14,36 @@ interface Props {
   total: number;
   /** Running XP total shown beside the track. */
   xp: number;
+  /** Optional structured content replacing the objective sentence. */
+  header?: ReactNode;
 }
 
-export function ObjectiveBar({ line, fontSize, value, total, xp }: Props) {
+export function ObjectiveBar({ line, fontSize, value, total, xp, header }: Props) {
   const styles = useStyles(makeStyles);
+  const expanded = line !== null || header != null;
   return (
     <View
-      style={[styles.objectiveBar, line === null && styles.objectiveBarSlim]}
+      style={[
+        styles.objectiveBar,
+        header != null && styles.objectiveBarStructured,
+        !expanded && styles.objectiveBarSlim,
+      ]}
       pointerEvents="none"
     >
-      {line !== null ? (
+      {header ?? (line !== null ? (
         <Text style={[styles.objectiveText, { fontSize }]} numberOfLines={2}>
           {line}
         </Text>
-      ) : null}
+      ) : null)}
       {/* [★ star] [progress track] [XP label] — the badge sits ON the bar's left,
           the way the reference integrates the level star into the track. */}
-      <View style={[styles.progressRow, line !== null && styles.progressGap]}>
+      <View
+        style={[
+          styles.progressRow,
+          expanded && styles.progressGap,
+          header != null && styles.structuredProgressGap,
+        ]}
+      >
         <Image
           source={require("@/src/assets/ui/icons/icon-xp.png")}
           style={styles.xpBadge}
@@ -63,8 +77,13 @@ const makeStyles = (t: Theme) =>
     // paddingTop 6 + chip 32 + paddingBottom 8 = 46); both sit at top:10, so their bottom
     // edges line up at y=56. No vertical padding: the 46 is the whole height.
     objectiveBarSlim: { width: 260, height: 46, paddingVertical: 0 },
+    objectiveBarStructured: {
+      width: 360,
+      paddingVertical: 4,
+    },
     objectiveText: { ...TYPE.body, color: t.text, fontSize: 13, lineHeight: 15 },
     progressGap: { marginTop: SPACE.sm },
+    structuredProgressGap: { marginTop: 3 },
 
     // The XP badge sits INSIDE the bar, on the progress track's left — a star that overlaps
     // the track's start, with the running total beside it. (There is no level system in the

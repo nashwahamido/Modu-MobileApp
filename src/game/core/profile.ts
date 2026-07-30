@@ -81,8 +81,8 @@ export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>>
     softHints: true,
     manualTools: false,
     // dev-setting
-    snapStyle: "magnetic",
-    ghostStyle: "movingGhost",
+    snapStyle: "onRelease",
+    ghostStyle: "staticSockets",
     releaseBehavior: "autoReturn",
   },
 };
