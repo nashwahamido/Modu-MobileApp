@@ -87,7 +87,7 @@ export default function AvatarRecommendationScreen() {
   const speakSelectedMode = () => {
     Speech.stop();
     Speech.speak(
-      `Based on your choices, I recommend ${selectedMode.avatarName} in ${selectedMode.title}. ${selectedMode.avatarName} is ${selectedMode.personality}. ${selectedMode.slogan}. ${selectedMode.explanation}. ${selectedMode.bullets.join(". ")}.`,
+      `Your recommended avatar is ${selectedMode.avatarName} in ${selectedMode.title}. ${selectedMode.avatarName} is ${selectedMode.personality}. ${selectedMode.explanation}. ${selectedMode.bullets.join(". ")}.`,
       {
         language: "en-US",
         pitch: 1.08,
@@ -139,18 +139,12 @@ export default function AvatarRecommendationScreen() {
             <Image source={selectedMode.image} style={styles.avatarImage} />
           </View>
           <Text style={styles.modeTitle}>{selectedMode.title}</Text>
-          <Text style={styles.avatarName}>{selectedMode.avatarName}</Text>
         </View>
 
         <View style={styles.recommendationCopy}>
-          <Text style={styles.title}>
-            {selectedMode.id === initialModeId
-              ? "Based on your choices, I recommend..."
-              : "Other available mode"}
-          </Text>
+          <Text style={styles.title}>Your recommend avatar is...</Text>
           <Text style={styles.avatarLine}>Avatar: {selectedMode.avatarName}</Text>
           <Text style={styles.personalityLine}>{selectedMode.personality}</Text>
-          <Text style={styles.sloganLine}>“{selectedMode.slogan}”</Text>
           <Text style={styles.explanation}>{selectedMode.explanation}</Text>
           <View style={styles.bulletList}>
             {selectedMode.bullets.map((bullet) => (
@@ -274,16 +268,17 @@ const makeStyles = (t: Theme) =>
       marginTop: 42,
     },
     modeCard: {
-      width: 190,
-      height: 260,
+      width: 200,
+      height: 270,
       alignItems: "center",
-      justifyContent: "center",
+      justifyContent: "flex-start",
       borderColor: t.border,
       borderRadius: 8,
       borderWidth: 2,
       backgroundColor: t.surface,
-      gap: SPACE.sm,
-      padding: 14,
+      paddingHorizontal: 14,
+      paddingTop: 38,
+      paddingBottom: 14,
     },
     modeCardRecommended: {
       borderColor: t.success,
@@ -291,16 +286,16 @@ const makeStyles = (t: Theme) =>
       backgroundColor: t.surfaceRaised,
     },
     avatarCircle: {
-      width: 112,
-      height: 112,
+      width: 150,
+      height: 150,
       alignItems: "center",
       justifyContent: "center",
-      borderRadius: 56,
+      borderRadius: 75,
     },
     avatarImage: {
-      width: 82,
-      height: 82,
-      borderRadius: 22,
+      width: 122,
+      height: 122,
+      borderRadius: 28,
     },
     recommendedBadge: {
       position: "absolute",
@@ -321,12 +316,7 @@ const makeStyles = (t: Theme) =>
       fontSize: 21,
       fontWeight: "900",
       textAlign: "center",
-    },
-    avatarName: {
-      color: t.textDim,
-      fontSize: 14,
-      fontWeight: "800",
-      textAlign: "center",
+      marginTop: 14,
     },
     recommendationCopy: {
       flex: 1,
@@ -335,9 +325,9 @@ const makeStyles = (t: Theme) =>
     },
     title: {
       color: t.text,
-      fontSize: 26,
+      fontSize: 20,
       fontWeight: "900",
-      lineHeight: 31,
+      lineHeight: 24,
     },
     avatarLine: {
       color: t.text,
@@ -353,12 +343,6 @@ const makeStyles = (t: Theme) =>
       color: t.textDim,
       fontSize: 13,
       fontWeight: "700",
-      lineHeight: 18,
-    },
-    sloganLine: {
-      color: t.success,
-      fontSize: 14,
-      fontWeight: "800",
       lineHeight: 18,
     },
     bulletList: {
