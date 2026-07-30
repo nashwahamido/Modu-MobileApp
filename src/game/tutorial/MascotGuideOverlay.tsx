@@ -19,6 +19,7 @@ interface Props {
   assemblyComplete: boolean;
   onClaimReward: () => void;
   onContinueToAssembly?: () => void;
+  onDeferAssembly?: () => void;
   onSimulatePinch?: () => void;
   blocked?: boolean;
   audioEnabled?: boolean;
@@ -29,6 +30,7 @@ export function MascotGuideOverlay({
   assemblyComplete,
   onClaimReward,
   onContinueToAssembly,
+  onDeferAssembly,
   onSimulatePinch,
   blocked = false,
   audioEnabled = false,
@@ -48,7 +50,6 @@ export function MascotGuideOverlay({
   const settingsReady = useTutorialStore((s) => s.settingsReady);
   const stepRewardReady = useTutorialStore((s) => s.stepRewardReady);
   const lastCompletedStepLabel = useTutorialStore((s) => s.lastCompletedStepLabel);
-  const beginSettingsTutorial = useTutorialStore((s) => s.beginSettingsTutorial);
   const skipSettingsTutorial = useTutorialStore((s) => s.skipSettingsTutorial);
   const dismissStepReward = useTutorialStore((s) => s.dismissStepReward);
   const dismissReward = useTutorialStore((s) => s.dismissReward);
@@ -117,18 +118,28 @@ export function MascotGuideOverlay({
           <View style={styles.rewardCopy}>
             <Text style={styles.rewardTitle}>Core skills complete!</Text>
             <Text style={styles.rewardMessage}>
-              Want a quick tour of part return, instructions, Focus mode, and Auto-view?
+              Ready to enter your assembly task?
             </Text>
             <View style={styles.settingsActions}>
               <Button
-                label="Personalize settings"
+                label="Enter assembly task"
                 variant="primary"
                 small
                 style={styles.primaryAction}
-                onPress={beginSettingsTutorial}
+                onPress={() => {
+                  skipSettingsTutorial();
+                  onContinueToAssembly?.();
+                }}
               />
-              <Pressable onPress={skipSettingsTutorial} hitSlop={8}>
-                <Text style={styles.skipText}>Maybe later</Text>
+              <Pressable
+                onPress={() => {
+                  skipSettingsTutorial();
+                  onDeferAssembly?.();
+                }}
+                style={styles.laterAction}
+                hitSlop={8}
+              >
+                <Text style={styles.skipText}>Later</Text>
               </Pressable>
             </View>
           </View>
@@ -335,7 +346,12 @@ const makeStyles = (t: Theme) =>
     stepText: { color: t.success, fontSize: 11, fontWeight: '800', marginBottom: 4 },
     message: { color: t.text, fontSize: 14, lineHeight: 19, fontWeight: '700' },
     actions: { marginTop: 8, gap: 7, alignItems: 'flex-start' },
-    settingsActions: { marginTop: 12, gap: 10, alignItems: 'flex-start' },
+    settingsActions: {
+      marginTop: 12,
+      flexDirection: 'row',
+      gap: 14,
+      alignItems: 'center',
+    },
     actionHint: { color: t.textDim, fontSize: 11, lineHeight: 15, fontWeight: '700' },
     skipText: { color: t.textDim, fontSize: 12, fontWeight: '700' },
     stepRewardToast: {
@@ -385,7 +401,13 @@ const makeStyles = (t: Theme) =>
     },
     rewardXpRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     rewardXpValue: { ...TYPE.numeric, fontSize: 18, color: t.gold },
-    primaryAction: { marginTop: 12, alignSelf: 'flex-start' },
+    primaryAction: { alignSelf: 'flex-start' },
+    laterAction: {
+      minHeight: 36,
+      paddingHorizontal: 6,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     rewardXpIcon: { width: 24, height: 24 },
     // Positioning only — the shared Button owns the primary action's fill and label.
   });

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { router, useRootNavigationState } from 'expo-router';
+import { router, useLocalSearchParams, useRootNavigationState } from 'expo-router';
 import type { Href } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -41,6 +41,7 @@ import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from '../..
 // oversight, so it does not shift with the light/dark/high-contrast theme.
 const TEXT_COLOR = '#231F20';
 const ROOM_EDIT_GUIDE_KEY = 'modu.room-edit-guide-seen.v1';
+const ROOM_WELCOME_GUIDE_KEY = 'modu.room-welcome-guide-seen.v1';
 const ROOM_GUIDE_MASCOT = require('../../assets/images/mascot/mascot.png');
 const LEXEND = {
   regular: 'Lexend_400Regular',
@@ -92,6 +93,8 @@ const HEAVY_ROUTES = new Set(['play', 'tutorial', 'visit']);
 export function RoomExperience() {
   const s = useStyles(makeStyles);
   const t = useTheme();
+  const { welcome } = useLocalSearchParams<{ welcome?: string }>();
+  const welcomeFromTutorial = welcome === 'tutorial';
   // Text renders in the system font until this resolves, then re-renders once — no splash
   // gate, since this is the persistent hub screen and the flash is a single cold-start frame.
   useFonts({
@@ -130,6 +133,7 @@ export function RoomExperience() {
   const blocked = blockedReason !== null;
   const [unavailableFeature, setUnavailableFeature] = useState<string | null>(null);
   const [showRoomEditGuide, setShowRoomEditGuide] = useState(false);
+  const [showRoomWelcomeGuide, setShowRoomWelcomeGuide] = useState(false);
   const [roomRotation, setRoomRotation] = useState(0);
   const [roomZoom, setRoomZoom] = useState(1);
   const roomRotationRef = useRef(roomRotation);
@@ -139,7 +143,13 @@ export function RoomExperience() {
     roomZoomRef.current = roomZoom;
   }, [roomRotation, roomZoom]);
   useEffect(() => {
-    if (!roomHydrated || editing || placedFurnitureCount === 0) return;
+    if (
+      welcomeFromTutorial ||
+      !roomHydrated ||
+      editing ||
+      placedFurnitureCount === 0
+    )
+      return;
     let active = true;
     AsyncStorage.getItem(ROOM_EDIT_GUIDE_KEY)
       .then((seen) => {
@@ -149,11 +159,34 @@ export function RoomExperience() {
     return () => {
       active = false;
     };
-  }, [editing, placedFurnitureCount, roomHydrated]);
+  }, [
+    editing,
+    placedFurnitureCount,
+    roomHydrated,
+    welcomeFromTutorial,
+  ]);
+  useEffect(() => {
+    if (!welcomeFromTutorial || !roomHydrated || editing) return;
+    let active = true;
+    AsyncStorage.getItem(ROOM_WELCOME_GUIDE_KEY)
+      .then((seen) => {
+        if (active && !seen) setShowRoomWelcomeGuide(true);
+      })
+      .catch((err) => console.warn('[room] welcome guide state load failed', err));
+    return () => {
+      active = false;
+    };
+  }, [editing, roomHydrated, welcomeFromTutorial]);
   const dismissRoomEditGuide = () => {
     setShowRoomEditGuide(false);
     AsyncStorage.setItem(ROOM_EDIT_GUIDE_KEY, '1').catch((err) =>
       console.warn('[room] edit guide state save failed', err),
+    );
+  };
+  const dismissRoomWelcomeGuide = () => {
+    setShowRoomWelcomeGuide(false);
+    AsyncStorage.setItem(ROOM_WELCOME_GUIDE_KEY, '1').catch((err) =>
+      console.warn('[room] welcome guide state save failed', err),
     );
   };
   // Every path into the view goes through here — orbit drag, pinch — so the diorama's open corner and the zoom range are enforced once and cannot be forgotten by a new input path.
@@ -282,6 +315,27 @@ export function RoomExperience() {
             variant="primary"
             style={s.roomGuideButton}
             onPress={dismissRoomEditGuide}
+          />
+        </OverlaySheet>
+      ) : null}
+
+      {showRoomWelcomeGuide ? (
+        <OverlaySheet size="dialog" onClose={dismissRoomWelcomeGuide}>
+          <Image
+            source={ROOM_GUIDE_MASCOT}
+            style={s.roomGuideMascot}
+            resizeMode="contain"
+          />
+          <Text style={s.roomGuideTitle}>Welcome to your cozy home!</Text>
+          <Text style={s.roomGuideBody}>
+            Find the perfect spot for your first piece of furniture. Make it
+            yours. Long press it anytime to move it again.
+          </Text>
+          <Button
+            label="Got it"
+            variant="primary"
+            style={s.roomGuideButton}
+            onPress={dismissRoomWelcomeGuide}
           />
         </OverlaySheet>
       ) : null}

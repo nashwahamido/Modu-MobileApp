@@ -6,6 +6,8 @@ import { StyleSheet, Animated, Image, Pressable, Text, View } from "react-native
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import {
   getRecommendedModes,
+  questionnaireHandednessPrompt,
+  questionnaireIntroText,
   questionnaireIntroVoiceText,
   questions,
   type Handedness,
@@ -234,12 +236,10 @@ export default function QuestionnaireScreen() {
           <View style={styles.speechBubble}>
             <VoiceButton onPress={speakIntro} />
             <Text style={styles.introText}>
-              Hey! I am momo, your assembly assistant! Before you get started,
-              let us complete a short questionnaire to help you find the best
-              help mode!
+              {questionnaireIntroText}
             </Text>
             <Text style={styles.introPrompt}>
-              Before starting, tell me - are you left or right-handed?
+              {questionnaireHandednessPrompt}
             </Text>
             <View style={styles.handOptions}>
               <Pressable

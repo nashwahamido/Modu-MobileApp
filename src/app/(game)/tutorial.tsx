@@ -162,8 +162,11 @@ function TutorialScreen() {
       useGameStore.subscribe((state, previous) => {
         const tutorial = useTutorialStore.getState();
         if (!previous.heldActionId && state.heldActionId) {
+          const currentStepId =
+            tutorial.steps[tutorial.currentIndex]?.id;
           if (
-            tutorial.steps[tutorial.currentIndex]?.id === "install-four-legs"
+            currentStepId === "install-four-legs" ||
+            currentStepId === "place-connector"
           ) {
             setGuideCollapsed(true);
           }
@@ -281,6 +284,10 @@ function TutorialScreen() {
   );
   const collapsedLegGuide =
     guideCollapsed && tutorialStepId === "install-four-legs";
+  const collapsedActionGuide =
+    guideCollapsed &&
+    (tutorialStepId === "install-four-legs" ||
+      tutorialStepId === "place-connector");
   const tutorialTrayItems = useMemo(() => {
     if (
       tutorialAdvancing &&
@@ -634,7 +641,7 @@ function TutorialScreen() {
           <TutorialTarget id="hint" style={hudControls.hintButton}>
             <HintButton
               onPress={() => {
-                if (collapsedLegGuide) {
+                if (collapsedActionGuide) {
                   setGuideCollapsed(false);
                   return;
                 }
@@ -729,7 +736,7 @@ function TutorialScreen() {
         activeToolKind={activeToolKind}
         assemblyComplete={totalCount > 0 && completedCount >= totalCount}
         audioEnabled={settings.audio}
-        blocked={collapsedLegGuide}
+        blocked={collapsedActionGuide}
         onClaimReward={() => {}}
         onSimulatePinch={() => {
           if (!manipulator) return;
@@ -751,6 +758,12 @@ function TutorialScreen() {
           router.replace({
             pathname: "/play",
             params: { id: furnitureForProfile(game.profile) },
+          });
+        }}
+        onDeferAssembly={() => {
+          router.replace({
+            pathname: "/room",
+            params: { welcome: "tutorial" },
           });
         }}
       />
