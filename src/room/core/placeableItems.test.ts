@@ -15,10 +15,11 @@ import { ROOM_SHELL } from "./roomShell";
 const CELL = ROOM_SHELL.cellSize;
 
 // The registry is module state; every test starts from the same catalog — the bundled built set
-// plus one bought row shaped like the DB seed (malm-chest, measured from its storage GLB).
+// plus bought rows shaped like the DB seed: a floor item (malm-chest) and a wall item (a window).
 beforeEach(() => {
   registerPlaceables([
-    { id: "malm-chest", source: "bought", size: { x: 0.804, y: 1.004, z: 0.483 }, baseOffsetY: 0 },
+    { id: "malm-chest", source: "bought", category: "fur", size: { x: 0.804, y: 1.004, z: 0.483 }, baseOffsetY: 0 },
+    { id: "window-sash", source: "bought", category: "win", size: { x: 1.061, y: 1.262, z: 0.218 }, baseOffsetY: 0 },
   ]);
 });
 
@@ -35,8 +36,9 @@ test("every item renders at the one world scale — no per-item drift", () => {
   }
 });
 
-test("footprints are the ceil of the scaled size — claimed cells always contain the piece", () => {
+test("floor footprints are the ceil of the scaled size — claimed cells always contain the piece", () => {
   for (const [itemId, def] of roomItemDefs()) {
+    if (!def.allowedSurfaces.includes("floor")) continue; // wall items hole-size by a different rule below
     const item = getRoomItem(itemId)!;
     const scaledX = item.size.x * FURNITURE_WORLD_SCALE;
     const scaledZ = item.size.z * FURNITURE_WORLD_SCALE;
@@ -46,6 +48,15 @@ test("footprints are the ceil of the scaled size — claimed cells always contai
     assert.ok(scaledX <= def.footprint.w * CELL + 1e-9);
     assert.ok(scaledZ <= def.footprint.d * CELL + 1e-9);
   }
+});
+
+test("a window row routes to the wall, hole-sized to the NEAREST fine cell", () => {
+  // Nearest, not ceil: a hole smaller than the glazing shows wall through the glass. The sash is
+  // 1.061 x 1.262 — nearest quarter-metre is a 4 x 5 hole (1.0 x 1.25), matching its authoring props.
+  const def = roomItemDefs().get("window-sash")!;
+  assert.deepEqual(def.allowedSurfaces, ["wall"]);
+  assert.deepEqual(def.footprint, { w: 4, d: 1 });
+  assert.equal(def.wallHeightCells, 5);
 });
 
 test("the bundled built set survives any catalog the DB sends", () => {
@@ -59,8 +70,8 @@ test("the bundled built set survives any catalog the DB sends", () => {
 
 test("a registered bought item is placeable, with its footprint derived from the measured size", () => {
   const item = getRoomItem("malm-chest")!;
-  // 0.804 × 1.6 / 0.5 = 2.57 → 3 cells; 0.483 × 1.6 / 0.5 = 1.55 → 2 cells.
-  assert.deepEqual(item.def.footprint, { w: 3, d: 2 });
+  // At world scale 1: 0.804 / 0.5 = 1.61 → 2 cells; 0.483 / 0.5 = 0.97 → 1 cell.
+  assert.deepEqual(item.def.footprint, { w: 2, d: 1 });
   assert.equal(item.source, "bought");
   assert.ok(roomItemDefs().has("malm-chest"));
 });

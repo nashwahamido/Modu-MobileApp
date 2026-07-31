@@ -10,14 +10,20 @@ import {
   RenderCallbackContext,
   useFilamentContext,
   useModel,
+  type Entity,
 } from "react-native-filament";
 import { useSharedValue } from "react-native-worklets-core";
 
 import { ORBIT, clampOrbit, controlsFromOrbit, orbitFromControls } from "../input/orbit";
 import {
   cellsFor,
+  occupiedFootprint,
   rotatedFootprint,
   floorCellToRoom,
+  surfaceExtent,
+  surfaceKey,
+  wallCellToRoom,
+  windowCellNamesFor,
   type GridPlacement,
 } from "../core/grid";
 import {
@@ -30,9 +36,9 @@ import {
 import { useVariantModelSource } from "./variantModel";
 import { GridOverlay } from "./GridOverlay";
 import { usePlacementStore } from "../core/placement";
-import { screenPointToFloorCell } from "../input/picking";
+import { screenPointToFloorCell, screenPointToWallCell } from "../input/picking";
 import { anchorForCentre } from "../core/grid";
-import { SCENE_SCALE, roomToScene } from "../core/roomShell";
+import { SCENE_SCALE, WALL_THICKNESS, roomToScene, type WallId } from "../core/roomShell";
 
 // Metro exposes bundled GLBs through the React Native numeric asset module.
 // The shell is authored art, put through scripts/compress-room-glb.mjs — textures only, geometry
@@ -54,7 +60,13 @@ type OrbitState = {
 
 function RoomModel({ onReady }: { onReady: () => void }) {
   const model = useModel(ROOM_MODEL);
-  const { transformManager } = useFilamentContext();
+  const { transformManager, scene } = useFilamentContext();
+  const layout = usePlacementStore((s) => s.layout);
+  const activeEdit = usePlacementStore((s) => s.activeEdit);
+  // Entity handles for the wall cells currently knocked out, by GLB node name. A ref, not state:
+  // this is imperative scene bookkeeping — the entities must be RE-ADDED when a window moves away,
+  // and only this map still knows their handles once they are out of the scene.
+  const knockedOut = useRef(new Map<string, Entity>());
 
   // The shell is STATIC: normalized to the unit cube once and never rotated. All view control is
   // the camera's, which is what keeps picking a ray against fixed planes.
@@ -63,6 +75,39 @@ function RoomModel({ onReady }: { onReady: () => void }) {
     transformManager.transformToUnitCube(model.rootEntity, model.boundingBox);
     onReady();
   }, [model, onReady, transformManager]);
+
+  // Window holes: the wall's band ships pre-diced into WCell_* nodes (see roomShell.ts), and a
+  // window "cuts" its opening by removing exactly the cells its footprint covers. Diffed against
+  // the previous frame so a moving ghost heals the wall behind it as it goes — removal and
+  // re-adding are both O(changed cells), and the ghost previews its hole even while blocked
+  // (windowCellNamesFor is total; cells outside the band simply have no node to remove).
+  useEffect(() => {
+    if (model.state !== "loaded") return;
+    const wanted = new Set<string>();
+    const placements = activeEdit ? [...layout, activeEdit.placement] : layout;
+    for (const placement of placements) {
+      const def = getRoomItemDef(placement.itemId);
+      if (!def) continue;
+      for (const name of windowCellNamesFor(placement, def)) wanted.add(name);
+    }
+    const removed = knockedOut.current;
+    for (const [name, entity] of [...removed]) {
+      if (!wanted.has(name)) {
+        scene.addEntity(entity);
+        removed.delete(name);
+      }
+    }
+    for (const name of wanted) {
+      if (removed.has(name)) continue;
+      const entity = model.asset.getFirstEntityByName(name);
+      // A name with no entity means the shell GLB and roomShell.ts disagree — stale export. The
+      // hole simply doesn't open; placement stays valid, and the next export heals it.
+      if (entity) {
+        scene.removeEntity(entity);
+        removed.set(name, entity);
+      }
+    }
+  }, [model, layout, activeEdit, scene]);
 
   return null;
 }
@@ -121,6 +166,36 @@ const LoadedItem = memo(function LoadedItem({
 
     const scale = fitScale(item) * SCENE_SCALE;
     const unitScale = 2 / Math.max(item.size.x, item.size.y, item.size.z);
+
+    if (placement.surface.kind === "wall") {
+      // A wall item mounts by its ANCHOR — hole centre on the wall's inner face — while the
+      // unit-cube base re-centres the model on its AABB centre. Authored origins CANNOT express
+      // depth (the unit-cube erases them), so seating is a renderer POLICY over the measured size:
+      // the INTERIOR is what must look right — the window's front sits flush with the interior
+      // wall face and its body extends backward. A model deeper than the wall pokes out of the
+      // EXTERIOR by the excess, which is accepted by design (the diorama is viewed from inside; the
+      // outside face is scenery). A model shallower than the wall keeps its back on the outer skin
+      // instead (recessed front), which is how the approved shallow windows already sat. Width and
+      // height need no correction — the anchor scripts centre them exactly.
+      const wall = placement.surface.wall;
+      const anchor = roomToScene(wallCellToRoom(wall, placement.cell, occupiedFootprint(placement, item.def)));
+      // Models are authored facing the room with the wall at −z behind them, which is exactly the
+      // z-max pose; the x-min wall looks along +x, a quarter turn the other way.
+      const yaw = wall === "z-max" ? 0 : -Math.PI / 2;
+      const protrusion = Math.min(item.size.z - WALL_THICKNESS, 0);
+      const depthOffset = (item.size.z / 2 - protrusion) * scale;
+      const transform = unit
+        .scaling([scale / unitScale, scale / unitScale, scale / unitScale])
+        .rotate(yaw, [0, 1, 0])
+        .translate([
+          anchor.x + (wall === "x-min" ? -depthOffset : 0),
+          anchor.y,
+          anchor.z + (wall === "z-max" ? depthOffset : 0),
+        ]);
+      transformManager.setTransform(model.rootEntity, transform);
+      return;
+    }
+
     const footprint = rotatedFootprint(item.def.footprint, placement.rotSteps);
     const centre = roomToScene(floorCellToRoom(placement.cell, footprint));
 
@@ -132,7 +207,17 @@ const LoadedItem = memo(function LoadedItem({
       .rotate((placement.rotSteps * Math.PI) / 2, [0, 1, 0])
       .translate([centre.x, centre.y + (scale * item.size.y) / 2, centre.z]);
     transformManager.setTransform(model.rootEntity, transform);
-  }, [item, model, placement.cell, placement.rotSteps, transformManager]);
+  }, [item, model, placement.cell, placement.rotSteps, placement.surface, transformManager]);
+
+  // Wall items must not cast shadows: Filament's shadow maps treat alpha-blended glass as OPAQUE,
+  // so a window would shadow the room exactly like solid wall — the light shaft through the
+  // opening is the whole point of having one. The frame's thin shadow is an acceptable loss.
+  useEffect(() => {
+    if (model.state !== "loaded" || placement.surface.kind !== "wall") return;
+    for (const entity of model.asset.getRenderableEntities()) {
+      renderableManager.setCastShadow(entity, false);
+    }
+  }, [model, placement.surface.kind, renderableManager]);
 
   // ALWAYS written, including the no-tint reset: if the engine ever hands two components the same
   // asset, the committed sibling heals any tint the ghost left behind.
@@ -222,30 +307,58 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange }: R
   }, [orbit, rotationY, zoom]);
 
   // While a ghost is active, the finger owns the ghost, not the camera: the same drag that
-  // orbited a moment ago now slides the piece cell to cell under the fingertip.
+  // orbited a moment ago now slides the piece cell to cell under the fingertip. A wall ghost
+  // slides on ITS wall with HYSTERESIS at the corner: it stays loyal while the finger is anywhere
+  // over its own wall's run, and hops to the other wall only when the finger has clearly left the
+  // run AND points inside the other one — a naive nearest-plane pick teleported the piece every
+  // time the ray grazed the corner.
   const dragGhost = useCallback((px: number, py: number) => {
     const state = usePlacementStore.getState();
     const edit = state.activeEdit;
     if (!edit) return;
     const def = getRoomItemDef(edit.placement.itemId);
     if (!def) return;
-    const pointed = screenPointToFloorCell(px, py, viewportRef.current, orbit.value.smoothed);
-    if (!pointed) return;
-    const footprint = rotatedFootprint(def.footprint, edit.placement.rotSteps);
-    state.moveGhost(anchorForCentre(pointed, footprint));
+    if (edit.placement.surface.kind !== "wall") {
+      const pointed = screenPointToFloorCell(px, py, viewportRef.current, orbit.value.smoothed);
+      if (pointed) state.moveGhost(anchorForCentre(pointed, occupiedFootprint(edit.placement, def)));
+      return;
+    }
+    const here = edit.placement.surface.wall;
+    const other: WallId = here === "z-max" ? "x-min" : "z-max";
+    const own = screenPointToWallCell(px, py, viewportRef.current, orbit.value.smoothed, here);
+    const ownW = surfaceExtent({ kind: "wall", wall: here }).w;
+    if (own && own.x >= 0 && own.x < ownW) {
+      state.moveGhost(anchorForCentre(own, occupiedFootprint(edit.placement, def)));
+      return;
+    }
+    const hop = screenPointToWallCell(px, py, viewportRef.current, orbit.value.smoothed, other);
+    const hopW = surfaceExtent({ kind: "wall", wall: other }).w;
+    if (hop && hop.x >= 0 && hop.x < hopW) {
+      const surface = { kind: "wall", wall: other } as const;
+      state.moveGhost(
+        anchorForCentre(hop, occupiedFootprint({ ...edit.placement, surface }, def)),
+        surface,
+      );
+    }
   }, [orbit]);
 
-  // Long-press a committed piece to pick it back up for editing.
+  // Long-press a committed piece to pick it back up for editing: floor first (pieces stand in
+  // front of walls from this camera), then each wall's plane.
   const pickUpAt = useCallback((px: number, py: number) => {
     const state = usePlacementStore.getState();
     if (state.activeEdit) return;
-    const pointed = screenPointToFloorCell(px, py, viewportRef.current, orbit.value.smoothed);
-    if (!pointed) return;
-    const under = state.layout.find((p) => {
-      const def = getRoomItemDef(p.itemId);
-      if (!def || p.surface.kind !== "floor") return false;
-      return cellsFor(p, def).some((c) => c.x === pointed.x && c.y === pointed.y);
-    });
+    const hits = (surface: GridPlacement["surface"], pointed: { x: number; y: number } | null) =>
+      pointed
+        ? state.layout.find((p) => {
+            const def = getRoomItemDef(p.itemId);
+            if (!def || surfaceKey(p.surface) !== surfaceKey(surface)) return false;
+            return cellsFor(p, def).some((c) => c.x === pointed.x && c.y === pointed.y);
+          })
+        : undefined;
+    const under =
+      hits({ kind: "floor" }, screenPointToFloorCell(px, py, viewportRef.current, orbit.value.smoothed)) ??
+      hits({ kind: "wall", wall: "z-max" }, screenPointToWallCell(px, py, viewportRef.current, orbit.value.smoothed, "z-max")) ??
+      hits({ kind: "wall", wall: "x-min" }, screenPointToWallCell(px, py, viewportRef.current, orbit.value.smoothed, "x-min"));
     if (under) state.editPlacement(under.instanceId);
   }, [orbit]);
 
@@ -353,9 +466,13 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange }: R
             .map((placement) => (
               <PlacedItem key={placement.instanceId} placement={placement} />
             ))}
+          {/* SAME key as a committed piece, on purpose: confirm and pick-up then morph this
+              component instead of unmount/remounting it, so the model is neither reloaded nor
+              released mid-flight — the release/addAssetEntities race in useModel ("Pointer
+              FilamentAssetWrapper has already been manually released") lived in that remount. */}
           {activeEdit ? (
             <PlacedItem
-              key={`ghost-${activeEdit.placement.instanceId}`}
+              key={activeEdit.placement.instanceId}
               placement={activeEdit.placement}
               tint={activeEdit.check.ok ? "valid" : "blocked"}
             />
@@ -363,7 +480,9 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange }: R
           <OrbitCameraRig orbit={orbit} />
         </FilamentView>
       </FilamentScene>
-      {activeEdit ? (
+      {/* The overlay draws the FLOOR grid — a wall ghost gets its feedback from the tinted model
+          and the live hole preview instead, so the floor overlay stays down. */}
+      {activeEdit && activeEdit.placement.surface.kind === "floor" ? (
         <GridOverlay
           viewport={{ width, height }}
           angles={{ ...orbitFromControls(rotationY, zoom), phi: orbit.value.raw.phi }}

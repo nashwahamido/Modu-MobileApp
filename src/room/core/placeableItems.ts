@@ -21,7 +21,7 @@ import { catalogUrl } from "../../data/catalogUrls";
 import type { PlaceableRoomRow } from "../../data/repos";
 import type { AssetSrc } from "../../game/core/type";
 import type { PlaceableItemDef } from "./grid";
-import { ROOM_SHELL } from "./roomShell";
+import { ROOM_SHELL, WALL_CELL_SIZE } from "./roomShell";
 
 export type RoomItemModel = {
   def: PlaceableItemDef;
@@ -45,26 +45,38 @@ export const FURNITURE_WORLD_SCALE = 1;
 // from gaining a phantom cell to float error.
 const cells = (meters: number): number => Math.ceil((meters * FURNITURE_WORLD_SCALE) / CELL - 1e-9);
 
+// Wall footprints round to the NEAREST fine cell, unlike the floor's ceil: a window's footprint IS
+// its hole, and a hole smaller than the glazing shows wall through the glass — while one slightly
+// larger than the frame just reads as a plaster reveal. Same rule as scripts/fix_window_anchors.py.
+const wallCells = (meters: number): number => Math.max(1, Math.round(meters / WALL_CELL_SIZE));
+
+// category routes the SURFACE: 'window' rows hang on walls with a hole-sized footprint; everything
+// else (including rows cached before category existed) stands on the floor.
 function toModel(row: PlaceableRoomRow): RoomItemModel {
-  return {
-    def: {
-      itemId: row.id,
-      footprint: { w: cells(row.size.x), d: cells(row.size.z) },
-      allowedSurfaces: ["floor"],
-    },
-    source: row.source,
-    size: row.size,
-    baseOffsetY: row.baseOffsetY,
-  };
+  const def: PlaceableItemDef =
+    row.category === "win"
+      ? {
+          itemId: row.id,
+          footprint: { w: wallCells(row.size.x), d: 1 },
+          wallHeightCells: wallCells(row.size.y),
+          allowedSurfaces: ["wall"],
+          opensWall: true,
+        }
+      : {
+          itemId: row.id,
+          footprint: { w: cells(row.size.x), d: cells(row.size.z) },
+          allowedSurfaces: ["floor"],
+        };
+  return { def, source: row.source, size: row.size, baseOffsetY: row.baseOffsetY };
 }
 
 // The baked-in BUILT set: sizes mirror the DB seed (003_catalog.sql) the same way seed.ts does, so
 // offline placement matches what the catalog will say once it loads.
 const BUNDLED_ROWS: PlaceableRoomRow[] = [
-  { id: "dalfred-stool", source: "built", size: { x: 0.5, y: 0.79, z: 0.5 }, baseOffsetY: 0.007 },
-  { id: "lack-table", source: "built", size: { x: 0.55, y: 0.45, z: 0.55 }, baseOffsetY: 0 },
-  { id: "eket-cabinet", source: "built", size: { x: 0.37, y: 0.35, z: 0.75 }, baseOffsetY: 0.175 },
-  { id: "bekvam-stool", source: "built", size: { x: 0.39, y: 0.5, z: 0.43 }, baseOffsetY: 0 },
+  { id: "dalfred-stool", source: "built", category: "fur", size: { x: 0.5, y: 0.79, z: 0.5 }, baseOffsetY: 0.007 },
+  { id: "lack-table", source: "built", category: "fur", size: { x: 0.55, y: 0.45, z: 0.55 }, baseOffsetY: 0 },
+  { id: "eket-cabinet", source: "built", category: "fur", size: { x: 0.37, y: 0.35, z: 0.75 }, baseOffsetY: 0.175 },
+  { id: "bekvam-stool", source: "built", category: "fur", size: { x: 0.39, y: 0.5, z: 0.43 }, baseOffsetY: 0 },
 ];
 
 const toItems = (rows: PlaceableRoomRow[]): Record<string, RoomItemModel> =>

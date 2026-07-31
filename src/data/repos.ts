@@ -83,12 +83,11 @@ export interface CatalogRepo {
   listPlaceables(): Promise<PlaceableRoomRow[]>;
 }
 
-// One placeable_items row's room-placement metadata: the item's measured world-AABB size in authored
-// meters (x = width, z = depth at rotSteps 0) and the lift from its origin to its base. The room
-// derives footprint and scale from these — the DB stores only what a tool measures.
+// One placeable_items row's room-placement metadata: the item's measured world-AABB size in authored meters (x = width, z = depth at rotSteps 0) and the lift from its origin to its base. The room derives footprint and scale from these — the DB stores only what a tool measures. category routes the SURFACE: 'window' rows place on walls (hole footprint derived from size on the fine wall grid); everything else stands on the floor. Rows cached before this field existed may lack it — consumers treat a missing category as a floor item.
 export type PlaceableRoomRow = {
   id: CatalogId;
   source: ItemSource;
+  category?: ShopCategory;
   size: { x: number; y: number; z: number };
   baseOffsetY: number;
 };

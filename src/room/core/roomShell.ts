@@ -112,6 +112,12 @@ export const FLOOR_CELLS = {
 // share this one fine grid and plain occupancy keeps them apart — no cross-grid rounding anywhere.
 export const WALL_CELL_SIZE = 0.25;
 
+// The walls' authored thickness — HALF a rendering contract: every wall item's GLB is authored
+// with its origin on the mounting plane and its back face exactly this far behind it (the
+// anchor-empty convention, enforced by scripts/fix_window_anchors.py), so the renderer can
+// reconstruct the model's AABB centre from its measured size alone. Re-measure on re-export.
+export const WALL_THICKNESS = 0.12;
+
 export const WALL_CELLS: Record<WallId, { w: number; h: number }> = {
   "x-min": wallCells("x-min"),
   "z-max": wallCells("z-max"),

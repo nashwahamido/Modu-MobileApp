@@ -93,25 +93,22 @@ export function seedCompleted(): Record<UserId, FurnitureId[]> {
   };
 }
 
-// The purchasable catalog — the in-memory mirror of the item_buy seed in migration 003_catalog.sql.
-// Ids, prices and min_levels are copied from it verbatim: this is the stand-in players see when
-// EXPO_PUBLIC_DATA_BACKEND is not "supabase", so it is only useful insofar as it matches the real thing.
-// (It had drifted to a disjoint set — shelving-units-wooden / bed-slattum-white — which meant the demo
-// inventory silently rendered fewer items than it claimed to own.)
-// NOTE: every item_buy row is currently category "fur", so the wall/floor/deco tabs are legitimately
-// empty here — that is the catalog's state, not a gap in the fixture.
+// The purchasable catalog — the in-memory mirror of the item_buy seed in migration 003_catalog.sql. Ids, prices and min_levels are copied from it verbatim: this is the stand-in players see when EXPO_PUBLIC_DATA_BACKEND is not "supabase", so it is only useful insofar as it matches the real thing. (It had drifted to a disjoint set — shelving-units-wooden / bed-slattum-white — which meant the demo inventory silently rendered fewer items than it claimed to own.)
+// NOTE: the wall/floor/deco tabs are legitimately empty here — that is the catalog's state (windows arrived with 010_windows.sql; surfaces still have no rows), not a gap in the fixture.
 export function seedShopItems(): ShopItem[] {
   return [
     { id: "malm-chest", name: "MALM Chest", category: "fur", price: 150, minLevel: 1 },
     { id: "neiden-bedframe", name: "NEIDEN Bedframe", category: "fur", price: 120, minLevel: 1 },
     { id: "rosentorp-table", name: "ROSENTORP Table", category: "fur", price: 100, minLevel: 1 },
+    { id: "window-wc-narrow", name: "Narrow WC Window", category: "win", price: 60, minLevel: 1 },
+    { id: "window-double-hung", name: "Double-Hung Window", category: "win", price: 80, minLevel: 1 },
+    { id: "window-pvc-single", name: "PVC Single Window", category: "win", price: 90, minLevel: 1 },
+    { id: "window-sash", name: "Victorian Sash Window", category: "win", price: 120, minLevel: 1 },
+    { id: "window-wood-classic", name: "Classic Wood Window", category: "win", price: 140, minLevel: 1 },
   ];
 }
 
-// Shop items each user already owns — the checkmarks in the shop grid, and the contents of their
-// inventory. Ids MUST exist in seedShopItems above: the inventory renders by filtering the catalogue
-// down to owned ids, so an id with no catalogue row is silently dropped rather than shown.
-// "me" owns two to match the mock (the two ticked cards), leaving one still buyable.
+// Shop items each user already owns — the checkmarks in the shop grid, and the contents of their inventory. Ids MUST exist in seedShopItems above: the inventory renders by filtering the catalogue down to owned ids, so an id with no catalogue row is silently dropped rather than shown. "me" owns two to match the mock (the two ticked cards), leaving one still buyable.
 export function seedInventory(): Record<UserId, ShopItemId[]> {
   return {
     [DEMO_ME]: ["malm-chest", "rosentorp-table"],
@@ -120,9 +117,7 @@ export function seedInventory(): Record<UserId, ShopItemId[]> {
   };
 }
 
-// The colour/finish axis per item — the in-memory mirror of the item_variants seed in migration
-// 003_catalog.sql, copied verbatim for the same reason seedShopItems is: this is what the picker offers
-// when the backend is not "supabase", so it is only useful insofar as it matches the real table.
+// The colour/finish axis per item — the in-memory mirror of the item_variants seed in migration 003_catalog.sql, copied verbatim for the same reason seedShopItems is: this is what the picker offers when the backend is not "supabase", so it is only useful insofar as it matches the real table.
 // Exactly one is_default per item id, like the partial unique index enforces.
 export function seedItemVariants(): ItemVariant[] {
   const v = (itemId: string, variation: string | null, isDefault = false): ItemVariant => ({ itemId, variation, isDefault });
@@ -144,21 +139,31 @@ export function seedItemVariants(): ItemVariant[] {
     v("neiden-bedframe", "wooden", true),
     v("rosentorp-table", "black", true),
     v("rosentorp-table", "white"),
+    // Windows: single model each, no colour axis — null variation = the 'default' path segment.
+    v("window-wc-narrow", null, true),
+    v("window-double-hung", null, true),
+    v("window-pvc-single", null, true),
+    v("window-sash", null, true),
+    v("window-wood-classic", null, true),
   ];
 }
 
-// Room-placement metadata per item — the in-memory mirror of the size seeds in migration
-// 003_catalog.sql, copied verbatim like seedShopItems is. Sizes are measured
-// world-AABB extents in authored meters; tutorial has no room model, so it has no row here.
+// Room-placement metadata per item — the in-memory mirror of the size seeds in migration 003_catalog.sql, copied verbatim like seedShopItems is. Sizes are measured world-AABB extents in authored meters; tutorial has no room model, so it has no row here.
 export function seedPlaceableItems(): PlaceableRoomRow[] {
   return [
-    { id: "dalfred-stool", source: "built", size: { x: 0.5, y: 0.79, z: 0.5 }, baseOffsetY: 0.007 },
-    { id: "lack-table", source: "built", size: { x: 0.55, y: 0.45, z: 0.55 }, baseOffsetY: 0 },
-    { id: "eket-cabinet", source: "built", size: { x: 0.37, y: 0.35, z: 0.75 }, baseOffsetY: 0.175 },
-    { id: "bekvam-stool", source: "built", size: { x: 0.39, y: 0.5, z: 0.43 }, baseOffsetY: 0 },
-    { id: "malm-chest", source: "bought", size: { x: 0.804, y: 1.004, z: 0.483 }, baseOffsetY: 0 },
-    { id: "neiden-bedframe", source: "bought", size: { x: 0.96, y: 0.647, z: 1.95 }, baseOffsetY: 0 },
-    { id: "rosentorp-table", source: "bought", size: { x: 1.101, y: 0.751, z: 1.101 }, baseOffsetY: 0 },
+    { id: "dalfred-stool", source: "built", category: "fur", size: { x: 0.5, y: 0.79, z: 0.5 }, baseOffsetY: 0.007 },
+    { id: "lack-table", source: "built", category: "fur", size: { x: 0.55, y: 0.45, z: 0.55 }, baseOffsetY: 0 },
+    { id: "eket-cabinet", source: "built", category: "fur", size: { x: 0.37, y: 0.35, z: 0.75 }, baseOffsetY: 0.175 },
+    { id: "bekvam-stool", source: "built", category: "fur", size: { x: 0.39, y: 0.5, z: 0.43 }, baseOffsetY: 0 },
+    { id: "malm-chest", source: "bought", category: "fur", size: { x: 0.804, y: 1.004, z: 0.483 }, baseOffsetY: 0 },
+    { id: "neiden-bedframe", source: "bought", category: "fur", size: { x: 0.96, y: 0.647, z: 1.95 }, baseOffsetY: 0 },
+    { id: "rosentorp-table", source: "bought", category: "fur", size: { x: 1.101, y: 0.751, z: 1.101 }, baseOffsetY: 0 },
+    // Windows (010_windows.sql): wall items — size x = width, y = height, z = depth out of the wall.
+    { id: "window-wc-narrow", source: "bought", category: "win", size: { x: 0.504, y: 1.251, z: 0.165 }, baseOffsetY: 0 },
+    { id: "window-double-hung", source: "bought", category: "win", size: { x: 0.73, y: 1.04, z: 0.107 }, baseOffsetY: 0 },
+    { id: "window-pvc-single", source: "bought", category: "win", size: { x: 1.005, y: 1.256, z: 0.167 }, baseOffsetY: 0 },
+    { id: "window-sash", source: "bought", category: "win", size: { x: 1.061, y: 1.262, z: 0.218 }, baseOffsetY: 0 },
+    { id: "window-wood-classic", source: "bought", category: "win", size: { x: 1.239, y: 1.231, z: 0.349 }, baseOffsetY: 0 },
   ];
 }
 
