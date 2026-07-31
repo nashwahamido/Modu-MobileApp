@@ -2,7 +2,7 @@
 import type { PostgrestError } from "@supabase/supabase-js";
 import { supabase } from "@/src/config/supabase";
 import type { AssemblyMode, BrandId, FurnitureId } from "@/src/game/core/type";
-import type { BuildProgressRepo, CatalogRepo, FriendsRepo, ItemVariant, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo, VariantsRepo } from "../repos";
+import type { BuildProgressRepo, CatalogRepo, FriendsRepo, ItemVariant, PlaceableRoomRow, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo, VariantsRepo } from "../repos";
 import type { BuildSave, Profile, ProfilePatch, RoomLayout } from "../types";
 import type { ShopCategory, ShopItem } from "../shopItems";
 import type { AvatarRef } from "../avatars";
@@ -18,10 +18,7 @@ function check(error: PostgrestError | null): void {
 // Reference tables (levels, avatars) are small and rarely change — fetch each once per session and resolve client-side.
 type Refs = { levels: LevelRow[]; avatars: AvatarRef[] };
 
-// Caches the PROMISE, so concurrent callers share one round trip — but drops it again if that promise
-// rejects. Without the reset a single transient failure (a blip, or a fetch that raced ahead of the
-// session) would be cached as a permanently-rejected promise: getRefs() feeds every profile read, so
-// the HUD, store, inventory and profile screen would all stay broken until the app was restarted.
+// Caches the PROMISE, so concurrent callers share one round trip — but drops it again if that promise rejects. Without the reset a single transient failure (a blip, or a fetch that raced ahead of the session) would be cached as a permanently-rejected promise: getRefs() feeds every profile read, so the HUD, store, inventory and profile screen would all stay broken until the app was restarted.
 function cachedOnce<T>(load: () => Promise<T>): () => Promise<T> {
   let cache: Promise<T> | null = null;
   return () => {
@@ -159,13 +156,30 @@ const catalogRepo: CatalogRepo = {
       };
     });
   },
+
+  async listPlaceables() {
+    // The union view spans both item tables; a null size means "no room model authored", so those rows are filtered server-side — the room never sees an item it could not place. category_id rides along because it routes the placement surface (window -> wall).
+    const { data, error } = await supabase
+      .from("placeable_items")
+      .select("id, source, category_id, size_x, size_y, size_z, base_offset_y")
+      .not("size_x", "is", null);
+    check(error);
+    type Row = { id: string; source: "built" | "bought"; category_id: string; size_x: number; size_y: number; size_z: number; base_offset_y: number };
+    return ((data ?? []) as Row[]).map(
+      (r): PlaceableRoomRow => ({
+        id: r.id,
+        source: r.source,
+        category: r.category_id as PlaceableRoomRow["category"],
+        size: { x: r.size_x, y: r.size_y, z: r.size_z },
+        baseOffsetY: r.base_offset_y,
+      }),
+    );
+  },
 };
 
 // --- rooms ------------------------------------------------------------------
 
-// The jsonb column carries a versioned envelope: { version, placements }. Legacy rows hold a bare
-// array from the pre-grid model — those coordinates are meaningless on the grid, so any shape
-// other than the current envelope reads as an empty room rather than a mis-placed one.
+// The jsonb column carries a versioned envelope: { version, placements }. Legacy rows hold a bare array from the pre-grid model — those coordinates are meaningless on the grid, so any shape other than the current envelope reads as an empty room rather than a mis-placed one.
 type RoomEnvelope = { version: number; placements: RoomLayout["placements"] };
 type RoomRow = { owner_id: string; placements: RoomEnvelope | unknown[]; updated_at: string };
 
@@ -176,8 +190,7 @@ const roomRepo: RoomLayoutRepo = {
     if (!data) return { ownerId, version: 1, placements: [], updatedAt: new Date().toISOString() };
     const row = data as RoomRow;
     const envelope = row.placements;
-    // Version AND shape: a malformed row ({version:1} with no/null placements) must read as an
-    // empty room, not hand `undefined` to the store to throw on later.
+    // Version AND shape: a malformed row ({version:1} with no/null placements) must read as an empty room, not hand `undefined` to the store to throw on later.
     const placements =
       !Array.isArray(envelope) && envelope?.version === 1 && Array.isArray(envelope.placements)
         ? envelope.placements
@@ -283,8 +296,7 @@ const buildRepo: BuildProgressRepo = {
     check(clearError);
   },
   async reward(_ownerId, furnitureId) {
-    // Atomic + idempotent + server-authoritative: reward_build reads the amount from item_build,
-    // inserts the one-per-build ledger row, and bumps the profile as the authenticated caller.
+    // Atomic + idempotent + server-authoritative: reward_build reads the amount from item_build, inserts the one-per-build ledger row, and bumps the profile as the authenticated caller.
     const { data, error } = await supabase.rpc("reward_build", { p_furniture_id: furnitureId });
     check(error);
     const res = data as { ok: boolean; already_rewarded?: boolean; coins?: number; xp?: number };
@@ -376,8 +388,7 @@ const likesRepo: RoomLikesRepo = {
 
 // --- shop / inventory -------------------------------------------------------
 
-// The purchasable catalog is item_buy — small and
-// unchanging, so fetch it once per session. category_id maps to the app's ShopCategory (fur/deco/wall/floor).
+// The purchasable catalog is item_buy — small and unchanging, so fetch it once per session. category_id maps to the app's ShopCategory (fur/deco/wall/floor).
 const getShopItems = cachedOnce(async (): Promise<ShopItem[]> => {
   const { data, error } = await supabase.from("item_buy").select("id, name, category_id, price, min_level");
   check(error);
@@ -400,8 +411,7 @@ const storeRepo: StoreRepo = {
     return (data as { item_id: string }[]).map((r) => r.item_id);
   },
   async purchase(_userId, itemId) {
-    // Atomic in the DB: purchase_item checks balance + ownership + level, deducts coins and grants the
-    // item as the authenticated caller (auth.uid()), so _userId is implied — never trusted from the client.
+    // Atomic in the DB: purchase_item checks balance + ownership + level, deducts coins and grants the item as the authenticated caller (auth.uid()), so _userId is implied — never trusted from the client.
     const { data, error } = await supabase.rpc("purchase_item", { p_item_id: itemId });
     check(error);
     const res = data as { ok: boolean; reason?: string; coins?: number };

@@ -9,6 +9,9 @@ import {
   FLOOR_CELLS,
   ROOM_SHELL,
   WALL_CELLS,
+  WALL_CELL_SIZE,
+  WINDOW_BANDS,
+  windowCellEntityName,
   type Vec3,
   type WallId,
 } from "./roomShell";
@@ -39,6 +42,9 @@ export type PlaceableItemDef = {
   allowedSurfaces: SurfaceKind[];
   // Wall items: how far up the wall the piece extends, in cells.
   wallHeightCells?: number;
+  // Windows: this item's footprint is a HOLE — the scene knocks the covered shell cells out of the
+  // wall. Frames hang on the wall surface and leave it intact.
+  opensWall?: boolean;
 };
 
 // One placed object. This is the persisted shape — see src/data/types.ts PlacedFurniture.
@@ -172,6 +178,21 @@ export function canPlace(
     return { ok: false, reason: "out-of-bounds" };
   }
 
+  // A hole can only open where the shell has removable cells: the whole footprint must sit inside
+  // the wall's window band. The margins and the solid wall outside the band are in-bounds for a
+  // FRAME, but out-of-bounds for a window — the wall there is structural.
+  if (def.opensWall && placement.surface.kind === "wall") {
+    const band = WINDOW_BANDS[placement.surface.wall];
+    if (
+      placement.cell.x < band.cols.from ||
+      placement.cell.x + w > band.cols.to ||
+      placement.cell.y < band.rows.from ||
+      placement.cell.y + d > band.rows.to
+    ) {
+      return { ok: false, reason: "out-of-bounds" };
+    }
+  }
+
   const taken = occupancy.get(surfaceKey(placement.surface));
   if (taken) {
     for (const cell of cellsFor(placement, def)) {
@@ -219,18 +240,34 @@ export function floorCellToRoom(cell: Cell, footprint: Footprint): Vec3 {
 }
 
 // The centre of a wall placement — on the wall's inner face, so a frame hangs flat against it.
+// Wall grids run at WALL_CELL_SIZE (0.25), finer than the floor's cellSize — see roomShell.
 export function wallCellToRoom(
   wall: WallId,
   cell: Cell,
   footprint: Footprint,
 ): Vec3 {
-  const { cellSize } = ROOM_SHELL;
   const spec = ROOM_SHELL.walls[wall];
-  const along = spec.from + (cell.x + footprint.w / 2) * cellSize;
-  const up = spec.bottom + (cell.y + footprint.d / 2) * cellSize;
+  const along = spec.from + (cell.x + footprint.w / 2) * WALL_CELL_SIZE;
+  const up = spec.bottom + (cell.y + footprint.d / 2) * WALL_CELL_SIZE;
   return wall === "x-min"
     ? { x: spec.innerFace, y: up, z: along }
     : { x: along, y: up, z: spec.innerFace };
+}
+
+// The shell GLB node names a placement's hole covers — what the scene knocks out of the wall.
+// Empty for anything that does not open the wall (floor items, frames). Cells outside the authored
+// window band have no removable node and resolve to null; they are skipped rather than thrown on,
+// so the renderer stays total even mid-drag over an illegal spot — canPlace is what REJECTS such a
+// placement, this only answers what geometry disappears.
+export function windowCellNamesFor(placement: GridPlacement, def: PlaceableItemDef): string[] {
+  if (placement.surface.kind !== "wall" || !def.opensWall) return [];
+  const wall = placement.surface.wall;
+  const names: string[] = [];
+  for (const cell of cellsFor(placement, def)) {
+    const name = windowCellEntityName(wall, cell.x, cell.y);
+    if (name) names.push(name);
+  }
+  return names;
 }
 
 // The floor cell containing a point, for turning a picking ray's hit into a cell. Returns the cell
@@ -240,6 +277,18 @@ export function roomPointToFloorCell(point: Pick<Vec3, "x" | "z">): Cell {
   return {
     x: Math.floor((point.x - floor.minX) / cellSize),
     y: Math.floor((point.z - floor.minZ) / cellSize),
+  };
+}
+
+// The wall cell containing a point on (or near) the wall's plane — the wall twin of
+// roomPointToFloorCell, and like it may return an off-grid cell for callers to clamp or reject.
+// x is the cell along the wall's run, y the row above the floor, both at WALL_CELL_SIZE.
+export function roomPointToWallCell(wall: WallId, point: Vec3): Cell {
+  const spec = ROOM_SHELL.walls[wall];
+  const along = wall === "x-min" ? point.z : point.x;
+  return {
+    x: Math.floor((along - spec.from) / WALL_CELL_SIZE),
+    y: Math.floor((point.y - spec.bottom) / WALL_CELL_SIZE),
   };
 }
 

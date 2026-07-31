@@ -1,5 +1,6 @@
 // The data-access seam. Features depend ONLY on these interfaces; swapping the in-memory adapter for a Supabase one is a single change in ./index.
 import type { BrandId, FurnitureId } from "@/src/game/core/type";
+import type { ItemSource } from "./catalogAssets";
 import type { ShopCategory, ShopItem, ShopItemId } from "./shopItems";
 import type { BuildSave, CatalogId, Friend, Profile, ProfilePatch, RoomLayout, UserId } from "./types";
 
@@ -77,7 +78,19 @@ export interface CatalogRepo {
   // Every buildable furniture, reference data identical for all players. Read once at boot and cached — the
   // in-game screens need a name synchronously mid-build and cannot await a round trip.
   listBuilds(): Promise<BuildCatalogRow[]>;
+  // Every item the room can place, from placeable_items — only rows with an authored size; items
+  // without one (tutorial, surfaces) are simply absent. Reference data, cached like the above.
+  listPlaceables(): Promise<PlaceableRoomRow[]>;
 }
+
+// One placeable_items row's room-placement metadata: the item's measured world-AABB size in authored meters (x = width, z = depth at rotSteps 0) and the lift from its origin to its base. The room derives footprint and scale from these — the DB stores only what a tool measures. category routes the SURFACE: 'window' rows place on walls (hole footprint derived from size on the fine wall grid); everything else stands on the floor. Rows cached before this field existed may lack it — consumers treat a missing category as a floor item.
+export type PlaceableRoomRow = {
+  id: CatalogId;
+  source: ItemSource;
+  category?: ShopCategory;
+  size: { x: number; y: number; z: number };
+  baseOffsetY: number;
+};
 
 // One row of item_variants: an item's colour/finish axis. `variation` is the free-form per-item key
 // that IS the storage path segment (white, oak, black, ...); null = the item has a single model, at

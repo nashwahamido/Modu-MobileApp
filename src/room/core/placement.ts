@@ -13,12 +13,16 @@ import {
   canPlace,
   buildOccupancy,
   clampToSurface,
+  occupiedFootprint,
   rotatedFootprint,
+  surfaceKey,
   type GridPlacement,
   type PlacementCheck,
   type RotSteps,
+  type SurfaceId,
 } from "./grid";
-import { ROOM_ITEM_DEFS } from "./placeableItems";
+import { WINDOW_BANDS } from "./roomShell";
+import { getRoomItemDef, roomItemDefs } from "./placeableItems";
 
 // The persisted shape and the grid's working shape are the same thing under two names; keep the
 // conversion in one visible place so they cannot drift silently.
@@ -65,7 +69,8 @@ interface PlacementState {
   setGhostVariation: (variation: string | null) => void;
   // Re-edit a committed piece (long-press / tap on it).
   editPlacement: (instanceId: string) => void;
-  moveGhost: (cell: { x: number; y: number }) => void;
+  // Optionally with a new surface: dragging a wall item past the corner hands it to the other wall.
+  moveGhost: (cell: { x: number; y: number }, surface?: SurfaceId) => void;
   rotateGhost: (direction: -1 | 1) => void;
   confirm: () => void;
   cancel: () => void;
@@ -84,8 +89,8 @@ const nextInstanceId = (itemId: string, layout: GridPlacement[]): string => {
 const validate = (placement: GridPlacement, layout: GridPlacement[]): PlacementCheck =>
   canPlace(
     placement,
-    ROOM_ITEM_DEFS.get(placement.itemId),
-    buildOccupancy(layout, ROOM_ITEM_DEFS, placement.instanceId),
+    getRoomItemDef(placement.itemId),
+    buildOccupancy(layout, roomItemDefs(), placement.instanceId),
   );
 
 // Saves are queued so two quick commits cannot land out of order (the later snapshot must win
@@ -122,7 +127,21 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
       // An account switch mid-fetch must not land the old owner's rows in the new owner's room.
       if (get().ownerId !== ownerId) return;
       set((s) => {
-        const layout = saved.placements.map(toGrid);
+        // Saved rows are re-validated against TODAY'S rules, not the rules they were placed under:
+        // grids have shrunk and window bands have moved this project, and a stale row otherwise
+        // renders verbatim forever — a window frozen outside the band with no way to grab it.
+        // Sequential accept keeps the earlier of two now-colliding pieces. An item whose def is
+        // missing (catalog not synced yet) is KEPT — the scene already skips rendering unknowns,
+        // and dropping it here would delete bought furniture on every cold start.
+        const layout: GridPlacement[] = [];
+        for (const row of saved.placements.map(toGrid)) {
+          const def = getRoomItemDef(row.itemId);
+          if (def && !canPlace(row, def, buildOccupancy(layout, roomItemDefs())).ok) {
+            console.warn("[room] dropping stale placement", row.instanceId, row.surface, row.cell);
+            continue;
+          }
+          layout.push(row);
+        }
         let activeEdit = s.activeEdit;
         // A pre-hydration ghost was keyed and validated against an empty room; redo both against
         // the real layout so it cannot collide with a saved piece or reuse its instanceId.
@@ -143,22 +162,39 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
   },
 
   startPlacing(itemId, opts) {
-    const def = ROOM_ITEM_DEFS.get(itemId);
+    const def = getRoomItemDef(itemId);
     // No room model for this item: refuse to enter placement rather than drag an invisible ghost.
     if (!def) return false;
     set((s) => {
       // Starting over an in-progress EDIT must not discard the edited piece: put it back first,
       // exactly as cancel() would (a new ghost just evaporates).
       const layout = s.activeEdit?.previous ? [...s.layout, s.activeEdit.previous] : s.layout;
+      // The def routes the surface: wall-only items (windows, later frames) ghost onto the z-max
+      // wall — the one facing the camera — everything else onto the floor.
+      const surface: SurfaceId = def.allowedSurfaces.includes("floor")
+        ? { kind: "floor" }
+        : { kind: "wall", wall: "z-max" };
+      // Ghost starts centred on its surface — for a window, centred in the WINDOW BAND, since the
+      // structural wall outside it can never accept the hole; the first drag snaps it under the finger.
+      let startCell = { x: 5, y: 4 };
+      if (surface.kind === "wall") {
+        const band = WINDOW_BANDS[surface.wall];
+        const h = def.wallHeightCells ?? def.footprint.d;
+        startCell = def.opensWall
+          ? {
+              x: band.cols.from + Math.floor((band.cols.to - band.cols.from - def.footprint.w) / 2),
+              y: band.rows.from + Math.floor((band.rows.to - band.rows.from - h) / 2),
+            }
+          : { x: 7, y: 5 };
+      }
       const placement: GridPlacement = {
         instanceId: nextInstanceId(itemId, layout),
         itemId,
         // Opens on the item's DEFAULT colour, the one its tile showed. Null when the variant table has
         // not loaded (or the item has no colour axis) — the 'default' model, which is what the bundle has.
         variation: opts?.variation ?? defaultVariationOf(itemId),
-        surface: { kind: "floor" },
-        // Ghost starts centred on the floor; the first drag snaps it under the finger.
-        cell: clampToSurface({ x: 5, y: 4 }, { kind: "floor" }, def.footprint),
+        surface,
+        cell: startCell,
         rotSteps: 0,
       };
       return {
@@ -203,19 +239,31 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
     });
   },
 
-  moveGhost(cell) {
+  moveGhost(cell, surface) {
     set((s) => {
       if (!s.activeEdit) return s;
-      const def = ROOM_ITEM_DEFS.get(s.activeEdit.placement.itemId);
+      const def = getRoomItemDef(s.activeEdit.placement.itemId);
       if (!def) return s;
-      const footprint = rotatedFootprint(def.footprint, s.activeEdit.placement.rotSteps);
-      const clamped = clampToSurface(cell, s.activeEdit.placement.surface, footprint);
+      // A surface handoff may only move a piece between surfaces of a KIND it allows — the drag
+      // layer decides WHEN to hop (corner crossing); this only refuses nonsense.
+      const nextSurface =
+        surface && def.allowedSurfaces.includes(surface.kind) ? surface : s.activeEdit.placement.surface;
+      // occupiedFootprint, not rotatedFootprint: on a wall the second axis is wallHeightCells, and
+      // clamping with the raw depth (1 for a window) would let a tall piece slide up past the top.
+      const footprint = occupiedFootprint({ ...s.activeEdit.placement, surface: nextSurface }, def);
+      const clamped = clampToSurface(cell, nextSurface, footprint);
       // Cells are half a metre — most drag events stay inside the current one. Bail with the SAME
       // state object so zustand notifies nobody: this runs per pan event, and re-rendering the
       // whole room per event (instead of per cell crossing) is what blew React's update depth.
-      const current = s.activeEdit.placement.cell;
-      if (clamped.x === current.x && clamped.y === current.y) return s;
-      const placement = { ...s.activeEdit.placement, cell: clamped };
+      const current = s.activeEdit.placement;
+      if (
+        clamped.x === current.cell.x &&
+        clamped.y === current.cell.y &&
+        surfaceKey(nextSurface) === surfaceKey(current.surface)
+      ) {
+        return s;
+      }
+      const placement = { ...current, surface: nextSurface, cell: clamped };
       return { activeEdit: { ...s.activeEdit, placement, check: validate(placement, s.layout) } };
     });
   },
@@ -223,7 +271,10 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
   rotateGhost(direction) {
     set((s) => {
       if (!s.activeEdit) return s;
-      const def = ROOM_ITEM_DEFS.get(s.activeEdit.placement.itemId);
+      // Wall items face out of their wall and ignore rotation; re-clamping with a swapped footprint
+      // would corrupt a tall piece's position for nothing.
+      if (s.activeEdit.placement.surface.kind === "wall") return s;
+      const def = getRoomItemDef(s.activeEdit.placement.itemId);
       if (!def) return s;
       const rotSteps = ((((s.activeEdit.placement.rotSteps + direction) % 4) + 4) % 4) as RotSteps;
       const placement = {

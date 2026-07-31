@@ -11,10 +11,12 @@ import {
   floorCellToRoom,
   occupiedFootprint,
   roomPointToFloorCell,
+  roomPointToWallCell,
   rotatedFootprint,
   surfaceExtent,
   surfaceKey,
   wallCellToRoom,
+  windowCellNamesFor,
   type GridPlacement,
   type PlaceableItemDef,
 } from "./grid";
@@ -63,9 +65,9 @@ const place = (over: Partial<GridPlacement> = {}): GridPlacement => ({
 });
 
 test("floor grid is derived from the measured shell, not hand-authored", () => {
-  // 5.50 x 5.48 authored units at 0.5 per cell.
-  assert.deepEqual({ w: FLOOR_CELLS.w, d: FLOOR_CELLS.d }, { w: 11, d: 11 });
-  assert.deepEqual(surfaceExtent({ kind: "floor" }), { w: 11, h: 11 });
+  // 4.5 x 4.4989 authored metres at 0.5 per cell — the shell was authored to make this land clean.
+  assert.deepEqual({ w: FLOOR_CELLS.w, d: FLOOR_CELLS.d }, { w: 9, d: 9 });
+  assert.deepEqual(surfaceExtent({ kind: "floor" }), { w: 9, h: 9 });
 });
 
 test("the grid covers the whole floor, to within a fraction of a cell", () => {
@@ -77,8 +79,8 @@ test("the grid covers the whole floor, to within a fraction of a cell", () => {
   };
   assert.ok(Math.abs(slack.x) < cellSize / 2, `x slack ${slack.x}`);
   assert.ok(Math.abs(slack.z) < cellSize / 2, `z slack ${slack.z}`);
-  // Overhang is only acceptable while it stays behind the walls' inner faces.
-  assert.ok(floor.minZ + FLOOR_CELLS.d * cellSize <= ROOM_SHELL.walls["z-max"].innerFace);
+  // Overhang is only acceptable while it stays invisible. The current shell's floor abuts the z-max wall's inner face exactly, so the rounding remainder sinks INTO the wall body rather than hiding in a slab-to-wall gap — allow it a hair past the inner face, but never enough to poke out as a visible ledge.
+  assert.ok(floor.minZ + FLOOR_CELLS.d * cellSize <= ROOM_SHELL.walls["z-max"].innerFace + 0.01);
 });
 
 test("scene mapping round-trips and matches Filament's unit cube", () => {
@@ -218,6 +220,71 @@ test("a wall cell sits on the wall's inner face", () => {
   assert.equal(onXMin.x, ROOM_SHELL.walls["x-min"].innerFace);
   const onZMax = wallCellToRoom("z-max", { x: 0, y: 0 }, { w: 2, d: 3 });
   assert.equal(onZMax.z, ROOM_SHELL.walls["z-max"].innerFace);
+});
+
+const sashWindow: PlaceableItemDef = {
+  itemId: "window-sash",
+  footprint: { w: 4, d: 1 },
+  allowedSurfaces: ["wall"],
+  wallHeightCells: 5,
+  opensWall: true,
+};
+
+test("a window must sit wholly inside the band — the structural wall rejects it, a frame is free", () => {
+  const defs = new Map([[sashWindow.itemId, sashWindow], [frame.itemId, frame]]);
+  const occupancy = buildOccupancy([], defs);
+  const at = (cell: { x: number; y: number }): GridPlacement =>
+    place({ itemId: "window-sash", surface: { kind: "wall", wall: "z-max" }, cell });
+  // Band cols 2..16, rows 4..10; the 4x5 sash fits at the min corner and at the far corner.
+  assert.equal(canPlace(at({ x: 2, y: 4 }), sashWindow, occupancy).ok, true);
+  assert.equal(canPlace(at({ x: 12, y: 5 }), sashWindow, occupancy).ok, true);
+  // One cell into the margin column or above the band head: rejected as out-of-bounds.
+  assert.deepEqual(canPlace(at({ x: 1, y: 4 }), sashWindow, occupancy), { ok: false, reason: "out-of-bounds" });
+  assert.deepEqual(canPlace(at({ x: 2, y: 6 }), sashWindow, occupancy), { ok: false, reason: "out-of-bounds" });
+  // The same margin cell is fine for a FRAME — it hangs on the wall without cutting it.
+  const framed = place({ itemId: "painting-small", surface: { kind: "wall", wall: "z-max" }, cell: { x: 0, y: 4 } });
+  assert.equal(canPlace(framed, frame, occupancy).ok, true);
+});
+
+test("a room point on the wall maps to its wall cell", () => {
+  // The centre of wall cell (2, 4) on z-max, fed back through the point-to-cell inverse.
+  const point = wallCellToRoom("z-max", { x: 2, y: 4 }, { w: 1, d: 1 });
+  assert.deepEqual(roomPointToWallCell("z-max", point), { x: 2, y: 4 });
+  const onXMin = wallCellToRoom("x-min", { x: 7, y: 6 }, { w: 1, d: 1 });
+  assert.deepEqual(roomPointToWallCell("x-min", onXMin), { x: 7, y: 6 });
+});
+
+test("a window's covered cells map to the shell's removable node names", () => {
+  // Anchored at the band's min corner (WINDOW_BANDS cols/rows start at 2/4), so the names are the
+  // band-local origin block: c00..c03 × r0..r4.
+  const names = windowCellNamesFor(
+    place({ itemId: "window-sash", surface: { kind: "wall", wall: "z-max" }, cell: { x: 2, y: 4 } }),
+    sashWindow,
+  );
+  assert.equal(names.length, 4 * 5);
+  assert.ok(names.includes("WCell_zmax_c00_r0"));
+  assert.ok(names.includes("WCell_zmax_c03_r4"));
+  assert.ok(!names.includes("WCell_zmax_c04_r0"));
+});
+
+test("cells outside the band resolve to no node — skipped, not thrown", () => {
+  // Anchored two columns into the solid margin: only the columns inside the band map to names.
+  const names = windowCellNamesFor(
+    place({ itemId: "window-sash", surface: { kind: "wall", wall: "x-min" }, cell: { x: 0, y: 4 } }),
+    sashWindow,
+  );
+  assert.equal(names.length, 2 * 5);
+  assert.ok(names.every((n) => n.startsWith("WCell_xmin_")));
+});
+
+test("only hole-opening wall items knock out cells", () => {
+  // A frame occupies wall cells but leaves the wall intact; floor items never map at all.
+  const framed = windowCellNamesFor(
+    place({ itemId: "painting-small", surface: { kind: "wall", wall: "z-max" }, cell: { x: 4, y: 5 } }),
+    frame,
+  );
+  assert.deepEqual(framed, []);
+  assert.deepEqual(windowCellNamesFor(place({ cell: { x: 2, y: 4 } }), table), []);
 });
 
 test("a picked point resolves to the cell it falls in", () => {

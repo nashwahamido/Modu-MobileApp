@@ -7,13 +7,17 @@
 // Units are AUTHORED units, i.e. exactly what the GLB (and Blender) says. That makes every number
 // here checkable against the source file. Scene space is a pure function of them — see roomToScene.
 //
-// Provenance: measured from src/assets/models/room/*.glb by walking node transforms over the
-// POSITION accessor bounds. Both shells that exist (homepageroom-runtime, virtualroom_empty) are the
-// same authored room and agree on every figure below; they differ only in clutter and texturing.
-//   Cube.007  floor slab   min [ 0.04, -0.92, -5.39]  size [5.50, 0.14, 5.48]
-//   Cube.004  wall (z-max) min [-0.40, -1.00,  0.13]  size [5.94, 4.12, 0.38]
-//   Cube      wall (x-min) min [-0.40, -1.00, -5.47]  size [0.38, 4.12, 5.60]
-//   Cube.001 / Cube.005    cornices at y 3.11 — the ceiling line
+// Provenance: measured 2026-07-29 from the "room" object of print_room.blend at export time (the
+// same numbers were re-read from the GLB's POSITION accessor bounds + node translation as a check).
+// Authored units are REAL METRES — the shell was rescaled against real-size furniture (a 1.43 x 1.95
+// double bed, a 0.75-high desk), landing on a 4.5 x 4.5 m floor with 2.92 m walls: a believable room
+// where a bed reads as bed-sized. The grid is a clean 9 x 9 at cellSize 0.5.
+// The shell carries exactly four materials, and their NAMES are load-bearing: the decor system
+// retextures Floor and Wall by material name at runtime and tints FloorEdge and Trim to match.
+//   Floor      the raised walkable slab: top face y -0.3951, sitting on the plinth below
+//   FloorEdge  the plinth (down to y -0.6771) plus the exposed border ledge around the raised slab on the two open sides
+//   Wall       both walls, 0.12 m thick (thinned from the authored 0.22 so window jambs read slim; the plinth and cornice still span the original outer skins, reading as a foundation lip and cornice overhang from outside), inner faces at x -0.8297 and z 1.542, band top y 2.5224 (2.92 above the floor); both walls' window bands are diced into removable WCell_* nodes, see WINDOW_BANDS below
+//   Trim       cornice along both wall tops, y 2.5224..2.72 (overhangs the open edges slightly)
 // Re-run the measurement if the shell is re-exported; a moved wall silently invalidates the grid.
 
 export type Vec3 = { x: number; y: number; z: number };
@@ -47,37 +51,72 @@ export type RoomShellSpec = {
     y: number;
   };
   walls: Record<WallId, WallSpec>;
-  // Authored units per grid cell. 0.5 with a ~5.5 room gives an 11 x 10 floor.
+  // Authored units (metres) per grid cell. 0.5 with the 4.5 floor gives a 9 x 9 floor.
   cellSize: number;
 };
 
 export const ROOM_SHELL: RoomShellSpec = {
   bounds: {
-    min: { x: -0.44, y: -1.27, z: -5.49 },
-    max: { x: 5.65, y: 3.57, z: 0.86 },
+    min: { x: -1.0539, y: -0.6771, z: -3.069 },
+    max: { x: 3.7824, y: 2.7249, z: 1.7664 },
   },
   floor: {
-    minX: 0.04,
-    maxX: 5.54,
-    minZ: -5.39,
-    maxZ: 0.09,
-    // Slab top: base -0.92 plus its 0.14 thickness.
-    y: -0.78,
+    // The PLINTH footprint, not the raised slab's: the raised top is inset on the open sides, and anchoring the grid on the plinth keeps both axes at a clean 9 cells. The cost is that a piece flush against an open-side cell edge can cantilever slightly over the ledge, which sits below the walkable top.
+    minX: -0.8297,
+    maxX: 3.6703,
+    minZ: -2.9569,
+    maxZ: 1.542,
+    // Top face of the RAISED slab — the walkable plane a piece's base rests on.
+    y: -0.3951,
   },
   walls: {
-    "x-min": { innerFace: -0.02, from: -5.47, to: 0.13, bottom: -0.78, top: 3.11 },
-    "z-max": { innerFace: 0.13, from: -0.40, to: 5.54, bottom: -0.78, top: 3.11 },
+    "x-min": { innerFace: -0.8297, from: -2.9569, to: 1.542, bottom: -0.3951, top: 2.5224 },
+    "z-max": { innerFace: 1.542, from: -0.8297, to: 3.6703, bottom: -0.3951, top: 2.5224 },
   },
   cellSize: 0.5,
 };
 
+// Windows are WALL PLACEMENTS, not fixed sockets: the z-max wall's window band ships in the shell GLB pre-diced into one solid box per wall-grid cell, and the scene knocks out exactly the cells a placed window covers (scene.removeEntity on the named node). The neighbouring boxes' faces then read as the jambs, so removal alone produces a finished opening. Everything outside the band is solid wall and can never hold a window.
+// Each wall's band runs from sill 1.0 m above the floor (real furniture height) to head 2.5, with a solid 0.5 margin at both ends of the run — a structural guarantee that no window can sit flush against the corner or a wall's open end (on x-min the corner-side margin is the grid's natural remainder plus authored fill).
+// Coordinates below are WALL-GRID cells (WALL_CELL_SIZE, 0.25): windows are ordinary wall placements on the same grid as photo frames, so plain occupancy keeps them apart. The band bounds what can become a HOLE: a window's footprint must lie inside them, while a frame may hang anywhere on the wall. Window sizes step by 0.25 in both axes — a 1.0 x 1.31 sash covers a 4 x 5-cell hole and its frame overlaps the remainder.
+export const WINDOW_BANDS: Record<WallId, {
+  // Wall-grid columns/rows whose cells are removable in the GLB; end-exclusive.
+  cols: { from: number; to: number };
+  rows: { from: number; to: number };
+}> = {
+  "x-min": { cols: { from: 2, to: 16 }, rows: { from: 4, to: 10 } },
+  "z-max": { cols: { from: 2, to: 16 }, rows: { from: 4, to: 10 } },
+};
+
+// The GLB node name for the removable cell at wall-grid (col, row), or null where the wall is
+// solid. The name's indices are band-local (c00 is the band's first column, not the wall's).
+// Matching is by NAME via asset.getFirstEntityByName, so this string format is part of the shell's
+// authored contract. The wall id is embedded without its dash: WCell_zmax_c03_r1.
+export function windowCellEntityName(wall: WallId, col: number, row: number): string | null {
+  const band = WINDOW_BANDS[wall];
+  if (col < band.cols.from || col >= band.cols.to) return null;
+  if (row < band.rows.from || row >= band.rows.to) return null;
+  return `WCell_${wall.replace("-", "")}_c${String(col - band.cols.from).padStart(2, "0")}_r${row - band.rows.from}`;
+}
+
 // How many square cells cover the floor rect, ROUNDED rather than truncated.
-// Truncating left the z axis one cell short — 5.48 / 0.5 is 10.96, so ten cells covered 5.00 of 5.48 and the leftover 0.48 showed as a bare strip the full width of the room against the back wall.
-// Rounding up costs a 0.02 overhang at maxZ, which lands in the gap between the slab edge (0.095) and the z-max wall's inner face (0.134) and so is never visible. Check that gap again if the shell is re-exported: a remainder near half a cell would push the last row past the wall.
+// Truncating left the old shell's z axis one cell short — ten cells covered 5.00 of a 5.48 floor and the leftover 0.48 showed as a bare strip the full width of the room against the back wall.
+// The current shell was authored so this comes out clean: x is exactly 12 cells, z is 5.9988 so twelve cells overhang maxZ by 0.0012 — which is INSIDE the z-max wall, whose inner face sits exactly at the floor edge. Check again if the shell is re-exported: a remainder near half a cell would push the last row past the wall.
 export const FLOOR_CELLS = {
   w: Math.round((ROOM_SHELL.floor.maxX - ROOM_SHELL.floor.minX) / ROOM_SHELL.cellSize),
   d: Math.round((ROOM_SHELL.floor.maxZ - ROOM_SHELL.floor.minZ) / ROOM_SHELL.cellSize),
 } as const;
+
+// Wall grids are FINER than the floor grid: 0.25 per cell against the floor's 0.5. Wall items are
+// small (frames, shelves, windows) and windows want quarter-metre sizing, so frames and windows
+// share this one fine grid and plain occupancy keeps them apart — no cross-grid rounding anywhere.
+export const WALL_CELL_SIZE = 0.25;
+
+// The walls' authored thickness — HALF a rendering contract: every wall item's GLB is authored
+// with its origin on the mounting plane and its back face exactly this far behind it (the
+// anchor-empty convention, enforced by scripts/fix_window_anchors.py), so the renderer can
+// reconstruct the model's AABB centre from its measured size alone. Re-measure on re-export.
+export const WALL_THICKNESS = 0.12;
 
 export const WALL_CELLS: Record<WallId, { w: number; h: number }> = {
   "x-min": wallCells("x-min"),
@@ -87,8 +126,8 @@ export const WALL_CELLS: Record<WallId, { w: number; h: number }> = {
 function wallCells(wall: WallId): { w: number; h: number } {
   const spec = ROOM_SHELL.walls[wall];
   return {
-    w: Math.floor((spec.to - spec.from) / ROOM_SHELL.cellSize),
-    h: Math.floor((spec.top - spec.bottom) / ROOM_SHELL.cellSize),
+    w: Math.floor((spec.to - spec.from) / WALL_CELL_SIZE),
+    h: Math.floor((spec.top - spec.bottom) / WALL_CELL_SIZE),
   };
 }
 
