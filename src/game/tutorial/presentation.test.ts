@@ -17,4 +17,15 @@ test("Control keeps tutorial presentation minimal", () => {
   assert.equal(presentation.showChecklist, false);
   assert.equal(presentation.showMilestoneConfirmation, false);
   assert.equal(presentation.emphasizeTarget, false);
+  assert.equal(presentation.showVisualDemo, false);
+  assert.equal(presentation.reducedText, false);
+});
+
+test("Visual mode uses demonstrations and reduced text", () => {
+  const presentation = tutorialPresentationForProfile("visual");
+
+  assert.equal(presentation.emphasizeTarget, true);
+  assert.equal(presentation.showVisualDemo, true);
+  assert.equal(presentation.reducedText, true);
+  assert.equal(presentation.showChecklist, false);
 });

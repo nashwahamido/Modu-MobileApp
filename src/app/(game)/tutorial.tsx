@@ -715,7 +715,14 @@ function TutorialScreen() {
         !sceneState.activeTighten &&
         !orientationAction &&
         !driveAction ? (
-          <BeatControl action={sceneState.activeBeat} />
+          <BeatControl
+            action={sceneState.activeBeat}
+            onSwipeStart={
+              sceneState.activeBeat.actionId === "finishing_checks"
+                ? resetCamera
+                : undefined
+            }
+          />
         ) : null}
         <TutorialTarget id="joystick" style={styles.joystickZone}>
           <Joystick

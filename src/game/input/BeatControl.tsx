@@ -26,13 +26,17 @@ const HINTS: Record<"up" | "down", { arrow: string; verb: string }> = {
 export function BeatControl({
   action,
   pushDrivers,
+  onSwipeStart,
 }: {
   action: AssemblyAction;
   pushDrivers?: DriverRegistry;
+  onSwipeStart?: () => void;
 }) {
   const direction = BEAT_DIRECTION[action.actionId] ?? "up";
   const fired = useRef(false);
+  const started = useRef(false);
   const [playing, setPlaying] = useState(false);
+  const [cardOffset, setCardOffset] = useState(0);
   const settings = useGameStore((s) => s.settings);
   const furniture = useGameStore((s) => s.furniture);
   const title = furniture ? instructionText(furniture.instructions, action.actionId, settings.textLevel) : "";
@@ -44,11 +48,23 @@ export function BeatControl({
   const pan = Gesture.Pan()
     .runOnJS(true)
     .onBegin(() => {
-      if (!playing) fired.current = false;
+      if (!playing) {
+        fired.current = false;
+        started.current = false;
+        setCardOffset(0);
+      }
     })
     .onUpdate((e) => {
       if (fired.current || playing) return;
       const travel = direction === "up" ? -e.translationY : e.translationY;
+      const forwardTravel = Math.max(0, travel);
+      setCardOffset(
+        (direction === "up" ? -1 : 1) * Math.min(forwardTravel, SWIPE_PX * 1.35),
+      );
+      if (forwardTravel > 6 && !started.current) {
+        started.current = true;
+        onSwipeStart?.();
+      }
       if (travel >= SWIPE_PX) {
         fired.current = true;
         if (pushOpen && pushDrivers) {
@@ -62,16 +78,30 @@ export function BeatControl({
           });
           return;
         }
-        useGameStore.getState().completeAction(action.actionId);
+        // Let the card finish moving out while the camera returns home. The
+        // short delay keeps the gesture visible before this control unmounts.
+        setCardOffset((direction === "up" ? -1 : 1) * SWIPE_PX * 1.8);
+        setTimeout(() => {
+          useGameStore.getState().completeAction(action.actionId);
+        }, 140);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
+    })
+    .onFinalize(() => {
+      if (!fired.current && !playing) setCardOffset(0);
     });
 
   const hint = HINTS[direction];
   return (
     <View style={styles.wrap} pointerEvents="box-none">
       <GestureDetector gesture={pan}>
-        <View style={[styles.card, playing && styles.cardPlaying]}>
+        <View
+          style={[
+            styles.card,
+            playing && styles.cardPlaying,
+            { transform: [{ translateY: cardOffset }] },
+          ]}
+        >
           <Text style={styles.arrow}>{playing ? "⇆" : hint.arrow}</Text>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.hint}>
