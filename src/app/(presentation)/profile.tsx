@@ -2,7 +2,6 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, ActivityIndicator, Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import type { ImageSourcePropType } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN } from "@/src/hooks/use-safe-insets";
 
@@ -10,22 +9,13 @@ import { Button } from "@/src/game/ui/Button";
 import { SettingsIcon, StarIcon } from "@/src/components/Icons";
 import { RADIUS, TYPE, ELEVATION, SPACE, useStyles, useTheme, SIZE } from "@/src/game/ui/theme";
 import { FURNITURE_METAS } from "@/src/game/content/furnitures/furnitures";
-import type { ProfileId } from "@/src/game/core/profile";
+import { avatarForProfile } from "@/src/game/core/avatar";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import type { Profile } from "@/src/data";
 import type { Theme } from "@/src/game/ui/theme";
 
 // The "/N" denominator for items assembled: the same buildable set the catalogue counts.
 const TOTAL_BUILDS = FURNITURE_METAS.length;
-
-// avatarMode -> avatar image, mirroring avatar-recommendation. Falls back to "control" when unset.
-const AVATARS: Record<ProfileId, ImageSourcePropType> = {
-  visual: require("../../assets/images/avatars/lumi.jpg"),
-  momentum: require("../../assets/images/avatars/sparky.jpg"),
-  clearPath: require("../../assets/images/avatars/ciara.jpg"),
-  control: require("../../assets/images/avatars/felix.jpg"),
-};
-const avatarFor = (mode: ProfileId | null): ImageSourcePropType => AVATARS[mode ?? "control"];
 
 type FriendsTab = "friends" | "requests";
 
@@ -132,7 +122,7 @@ export default function ProfileScreen() {
       <View style={styles.body}>
         <View style={styles.profileCard}>
           <View style={styles.avatarWrap}>
-            <Image source={avatarFor(profile.avatarMode)} style={styles.avatar} />
+            <Image source={avatarForProfile(profile.avatarMode)} style={styles.avatar} />
             <View style={styles.levelBadge}>
               <StarIcon size={40} color={t.accent} />
               <Text style={styles.levelText}>{profile.level}</Text>
@@ -214,7 +204,7 @@ export default function ProfileScreen() {
             <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
               {friends.map((f) => (
                 <View key={f.userId} style={styles.friendRow}>
-                  <Image source={avatarFor(f.avatarMode)} style={styles.friendAvatar} />
+                  <Image source={avatarForProfile(f.avatarMode)} style={styles.friendAvatar} />
                   <Text style={styles.friendName} numberOfLines={1}>
                     {f.username ?? "Builder"}
                   </Text>

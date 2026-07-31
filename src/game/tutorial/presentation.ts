@@ -4,6 +4,7 @@ export interface TutorialPresentation {
   showChecklist: boolean;
   showMilestoneConfirmation: boolean;
   emphasizeTarget: boolean;
+  showMomentumCompanion: boolean;
 }
 
 const PRESENTATION_BY_PROFILE: Record<ProfileId, TutorialPresentation> = {
@@ -11,21 +12,25 @@ const PRESENTATION_BY_PROFILE: Record<ProfileId, TutorialPresentation> = {
     showChecklist: false,
     showMilestoneConfirmation: false,
     emphasizeTarget: false,
+    showMomentumCompanion: false,
   },
   visual: {
     showChecklist: false,
     showMilestoneConfirmation: false,
     emphasizeTarget: true,
+    showMomentumCompanion: false,
   },
   momentum: {
     showChecklist: false,
-    showMilestoneConfirmation: true,
+    showMilestoneConfirmation: false,
     emphasizeTarget: true,
+    showMomentumCompanion: true,
   },
   clearPath: {
     showChecklist: true,
     showMilestoneConfirmation: true,
     emphasizeTarget: true,
+    showMomentumCompanion: false,
   },
 };
 

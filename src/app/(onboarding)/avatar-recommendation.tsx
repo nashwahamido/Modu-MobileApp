@@ -8,6 +8,7 @@ import type { ModeId } from "@/src/onboarding/questionnaire";
 import { VoiceButton } from "@/src/game/ui/VoiceButton";
 import { useGameStore } from "@/src/game/core/store";
 import type { ProfileId } from "@/src/game/core/profile";
+import { AVATAR_IMAGES } from "@/src/game/core/avatar";
 import { useTutorialStore } from "@/src/game/tutorial/store";
 import { saveSelectedAvatarMode } from "@/src/services/onboarding";
 import { Button } from "@/src/game/ui/Button";
@@ -16,23 +17,12 @@ import { useSafeInsets } from "@/src/hooks/use-safe-insets";
 import type { Theme } from "@/src/game/ui/theme";
 
 const mascot = require("../../assets/images/mascot/mascot.png");
-const lumiAvatar = require("../../assets/images/avatars/lumi.jpg");
-const sparkyAvatar = require("../../assets/images/avatars/sparky.jpg");
-const ciaraAvatar = require("../../assets/images/avatars/ciara.jpg");
-const felixAvatar = require("../../assets/images/avatars/felix.jpg");
 // The room is the post-onboarding hub now that the home tab is gone.
 const homeRoute = "/room" as Href;
 
-const avatarImages = {
-  visual: lumiAvatar,
-  momentum: sparkyAvatar,
-  "clearPath": ciaraAvatar,
-  control: felixAvatar,
-};
-
 const modes = avatarModes.map((mode) => ({
   ...mode,
-  image: avatarImages[mode.id],
+  image: AVATAR_IMAGES[mode.id],
 }));
 
 export default function AvatarRecommendationScreen() {
@@ -136,7 +126,11 @@ export default function AvatarRecommendationScreen() {
             </View>
           ) : null}
           <View style={[styles.avatarCircle, { backgroundColor: selectedMode.color }]}>
-            <Image source={selectedMode.image} style={styles.avatarImage} />
+            <Image
+              source={selectedMode.image}
+              style={styles.avatarImage}
+              resizeMode="cover"
+            />
           </View>
           <Text style={styles.modeTitle}>{selectedMode.title}</Text>
         </View>
@@ -291,11 +285,12 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       justifyContent: "center",
       borderRadius: 75,
+      overflow: "hidden",
     },
     avatarImage: {
-      width: 122,
-      height: 122,
-      borderRadius: 28,
+      width: 166,
+      height: 166,
+      borderRadius: 83,
     },
     recommendedBadge: {
       position: "absolute",

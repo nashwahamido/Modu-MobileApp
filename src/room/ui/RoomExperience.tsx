@@ -24,6 +24,7 @@ import { Button } from '../../game/ui/Button';
 import { OverlaySheet } from '../../game/ui/OverlaySheet';
 import { SceneBackdrop } from '../../game/ui/SceneBackdrop';
 import { useGameStore } from '../../game/core/store';
+import { avatarForProfile } from '../../game/core/avatar';
 import { useStyles, useTheme } from "@/src/game/ui/theme";
 import { useCurrentUserId } from '../../data';
 import { RoomScene } from '../scene/RoomScene';
@@ -42,7 +43,6 @@ import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from '../..
 const TEXT_COLOR = '#231F20';
 const ROOM_EDIT_GUIDE_KEY = 'modu.room-edit-guide-seen.v1';
 const ROOM_WELCOME_GUIDE_KEY = 'modu.room-welcome-guide-seen.v1';
-const ROOM_GUIDE_MASCOT = require('../../assets/images/mascot/mascot.png');
 const LEXEND = {
   regular: 'Lexend_400Regular',
   semibold: 'Lexend_600SemiBold',
@@ -110,6 +110,7 @@ export function RoomExperience() {
   // The room's own backdrop axis (Settings → Display → "Room background"), separate from the assembly scene's.
   const roomBackdrop = useGameStore((s) => s.roomBackdrop);
   const darkTheme = useGameStore((s) => s.theme) === 'dark';
+  const roomGuideMascot = avatarForProfile(useGameStore((s) => s.profile));
   // Placement is shared state (src/room/core/placement) so any route can start it and the scene can
   // render the layout. This screen owns only the HUD: the ghost's drag lives in the scene's
   // gesture layer, where the finger is converted to grid cells by ray picking.
@@ -302,7 +303,7 @@ export function RoomExperience() {
       {showRoomEditGuide ? (
         <OverlaySheet size="dialog" onClose={dismissRoomEditGuide}>
           <Image
-            source={ROOM_GUIDE_MASCOT}
+            source={roomGuideMascot}
             style={s.roomGuideMascot}
             resizeMode="contain"
           />
@@ -322,7 +323,7 @@ export function RoomExperience() {
       {showRoomWelcomeGuide ? (
         <OverlaySheet size="dialog" onClose={dismissRoomWelcomeGuide}>
           <Image
-            source={ROOM_GUIDE_MASCOT}
+            source={roomGuideMascot}
             style={s.roomGuideMascot}
             resizeMode="contain"
           />

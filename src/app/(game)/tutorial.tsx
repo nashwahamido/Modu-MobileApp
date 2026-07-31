@@ -61,6 +61,9 @@ import { availableInMode } from "@/src/game/core/evaluation/availability";
 import { TutorialTarget } from "@/src/game/tutorial/TutorialTarget";
 import { MascotGuideOverlay } from "@/src/game/tutorial/MascotGuideOverlay";
 import { TutorialStepRail } from "@/src/game/tutorial/TutorialStepRail";
+import { MomentumCompanion } from "@/src/game/tutorial/MomentumCompanion";
+import { MomentumStepHeader } from "@/src/game/tutorial/MomentumStepHeader";
+import { MomentumAttentionOverlay } from "@/src/game/tutorial/MomentumAttentionOverlay";
 import { useTutorialStore } from "@/src/game/tutorial/store";
 import { furnitureForProfile } from "@/src/game/core/profile";
 import { tutorialPresentationForProfile } from "@/src/game/tutorial/presentation";
@@ -586,10 +589,12 @@ function TutorialScreen() {
         pointerEvents="box-none"
       >
         {/* Instructions hidden → only the progress bar stays (slim pill). Shared with play.tsx, so the tutorial HUD can never drift from the real one. */}
-        <View style={styles.objectiveWrap} pointerEvents="none">
+        <View style={styles.objectiveWrap} pointerEvents="box-none">
+          <MomentumCompanion />
           <ObjectiveBar
             line={
-              tutorialPresentation.showChecklist
+              tutorialPresentation.showChecklist ||
+              tutorialPresentation.showMomentumCompanion
                 ? null
                 : settings.showInstructions
                 ? collapsedLegGuide
@@ -604,7 +609,11 @@ function TutorialScreen() {
             total={displayedTotalCount}
             xp={completedCount * furniture.xpPerStep}
             header={
-              tutorialPresentation.showChecklist ? <TutorialStepRail /> : undefined
+              tutorialPresentation.showChecklist ? (
+                <TutorialStepRail />
+              ) : tutorialPresentation.showMomentumCompanion ? (
+                <MomentumStepHeader />
+              ) : undefined
             }
           />
         </View>
@@ -776,6 +785,7 @@ function TutorialScreen() {
           });
         }}
       />
+      <MomentumAttentionOverlay />
     </SceneBackdrop>
   );
 }

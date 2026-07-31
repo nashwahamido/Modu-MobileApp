@@ -11,9 +11,9 @@ import { useTutorialTargets, type TutorialFrame } from './targetRegistry';
 import { useTutorialAudio } from './useTutorialAudio';
 import { Button } from '@/src/game/ui/Button';
 import { useGameStore } from '@/src/game/core/store';
+import { avatarForProfile } from '@/src/game/core/avatar';
 import { ELEVATION, RADIUS, Theme, TYPE, useStyles } from '@/src/game/ui/theme';
 import { tutorialPresentationForProfile } from './presentation';
-const mascotImage = require("../../assets/images/mascot/mascot.png");
 const PADDING = 0;
 
 interface Props {
@@ -45,6 +45,7 @@ export function MascotGuideOverlay({
   const height = overlaySize?.height ?? windowSize.height;
   const currentIndex = useTutorialStore((s) => s.currentIndex);
   const profile = useGameStore((s) => s.profile);
+  const mascotImage = avatarForProfile(profile);
   const presentation = tutorialPresentationForProfile(profile);
   const steps = useTutorialStore((s) => s.steps);
   const phase = useTutorialStore((s) => s.phase);
@@ -53,6 +54,9 @@ export function MascotGuideOverlay({
   const rewardReady = useTutorialStore((s) => s.rewardReady);
   const settingsReady = useTutorialStore((s) => s.settingsReady);
   const stepRewardReady = useTutorialStore((s) => s.stepRewardReady);
+  const attentionOverlayActive = useTutorialStore(
+    (s) => s.attentionOverlayActive,
+  );
   const lastCompletedStepLabel = useTutorialStore((s) => s.lastCompletedStepLabel);
   const skipSettingsTutorial = useTutorialStore((s) => s.skipSettingsTutorial);
   const dismissStepReward = useTutorialStore((s) => s.dismissStepReward);
@@ -63,7 +67,12 @@ export function MascotGuideOverlay({
   const step = steps[currentIndex];
   useTutorialAudio(
     step?.audio,
-    audioEnabled && !blocked && !skipped && !completed && !rewardReady,
+    audioEnabled &&
+      !blocked &&
+      !attentionOverlayActive &&
+      !skipped &&
+      !completed &&
+      !rewardReady,
   );
 
   const handleLayout = (event: LayoutChangeEvent) => {
@@ -112,7 +121,7 @@ export function MascotGuideOverlay({
     return () => clearTimeout(retry);
   }, [completed, currentIndex, nodes, overlaySize, rewardReady, setFrame, skipped, steps]);
 
-  if (skipped || blocked) return null;
+  if (skipped || blocked || attentionOverlayActive) return null;
 
   if (settingsReady) {
     return (
@@ -237,7 +246,15 @@ export function MascotGuideOverlay({
         </>
       ) : null}
       <View style={[styles.bubble, bubbleStyle]} pointerEvents="box-none">
-        <Image source={mascotImage} style={styles.mascot} resizeMode="contain" />
+        {!presentation.showMomentumCompanion ? (
+          <View style={styles.mascotPortrait}>
+            <Image
+              source={mascotImage}
+              style={styles.mascotPortraitImage}
+              resizeMode="cover"
+            />
+          </View>
+        ) : null}
         <View style={styles.copy} pointerEvents="box-none">
           <Text style={styles.stepText}>
             {phase === 'settings' ? 'SETTINGS · ' : ''}{currentIndex + 1}/{steps.length}
@@ -334,13 +351,21 @@ const makeStyles = (t: Theme) =>
       alignItems: 'center',
       gap: 10,
     },
-    mascot: {
+    mascotPortrait: {
       width: 82,
       height: 66,
       borderRadius: 14,
       borderWidth: 3,
       borderColor: t.surface,
       backgroundColor: t.surface,
+      overflow: 'hidden',
+    },
+    mascotPortraitImage: {
+      position: 'absolute',
+      width: 150,
+      height: 150,
+      left: -37,
+      top: -17,
     },
     copy: {
       flex: 1,
