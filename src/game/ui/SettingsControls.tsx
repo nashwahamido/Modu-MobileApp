@@ -1,9 +1,9 @@
 // The one general settings surface, shared by the homepage /settings screen and the in-game gear panel (both write to the same store). Dev/interaction experiments are grouped at the top; then display, guidance, audio.
 //
 // Visual language adopted from the on-release engine: a compact arrow Stepper (‹ Value ›) for multi-choice settings, Switch rows for booleans.
-import { Alert, Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { StyleSheet, Alert, Pressable, Switch, Text, View } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
-import { Theme, useStyles, useTheme } from "@/src/game/ui/theme";
+import { useStyles, useTheme } from "@/src/game/ui/theme";
 import type {
   DragPlane,
   GhostStyle,
@@ -18,6 +18,7 @@ import type {
   TextLevel,
 } from "@/src/game/core/type";
 import type { ProfileId } from "@/src/game/core/profile";
+import type { Theme } from "@/src/game/ui/theme";
 
 const PROFILES: { value: ProfileId; label: string }[] = [
   { value: "control", label: "Control" },
@@ -202,6 +203,44 @@ function SectionHeader({ children }: { children: string }) {
   return <Text style={styles.section}>{children}</Text>;
 }
 
+export function SceneAppearanceControls({
+  onPreferenceChange,
+}: {
+  onPreferenceChange?: (preference: "background" | "lighting") => void;
+} = {}) {
+  const styles = useStyles(makeStyles);
+  const settings = useGameStore((s) => s.settings);
+  const backdrop = useGameStore((s) => s.backdrop);
+  const setSettings = useGameStore((s) => s.setSettings);
+  const setBackdrop = useGameStore((s) => s.setBackdrop);
+
+  return (
+    <View style={styles.list}>
+      <SectionHeader>Scene appearance</SectionHeader>
+      <Choice
+        label="Background"
+        desc="Preview the scene behind your furniture"
+        value={backdrop}
+        options={BACKDROPS}
+        onChange={(value) => {
+          setBackdrop(value);
+          onPreferenceChange?.("background");
+        }}
+      />
+      <Choice
+        label="Lighting"
+        desc="Preview how the furniture is lit"
+        value={settings.lightingPreset}
+        options={LIGHTING}
+        onChange={(value) => {
+          setSettings({ lightingPreset: value });
+          onPreferenceChange?.("lighting");
+        }}
+      />
+    </View>
+  );
+}
+
 // ── the shared controls ──────────────────────────────────────────────────────
 export function SettingsControls() {
   const styles = useStyles(makeStyles);
@@ -211,11 +250,13 @@ export function SettingsControls() {
   const mode = useGameStore((s) => s.mode);
   const renderStyle = useGameStore((s) => s.renderStyle);
   const backdrop = useGameStore((s) => s.backdrop);
+  const roomBackdrop = useGameStore((s) => s.roomBackdrop);
   const theme = useGameStore((s) => s.theme);
   const setSettings = useGameStore((s) => s.setSettings);
   const setMode = useGameStore((s) => s.setMode);
   const setRenderStyle = useGameStore((s) => s.setRenderStyle);
   const setBackdrop = useGameStore((s) => s.setBackdrop);
+  const setRoomBackdrop = useGameStore((s) => s.setRoomBackdrop);
   const setTheme = useGameStore((s) => s.setTheme);
 
   const changeFont = (delta: number) =>
@@ -286,13 +327,6 @@ export function SettingsControls() {
         options={DRAG_PLANE}
         onChange={(v) => setSettings({ dragPlane: v })}
       />
-      <Row
-        label="Canvas strafe"
-        desc="One-finger drag on the scene pans the camera"
-        value={settings.canvasStrafe}
-        onValueChange={(v) => setSettings({ canvasStrafe: v })}
-      />
-
       <SectionHeader>Display</SectionHeader>
       <Choice
         label="Model look"
@@ -302,11 +336,18 @@ export function SettingsControls() {
         onChange={setRenderStyle}
       />
       <Choice
-        label="Background"
-        desc="Scene backdrop, separate from the model"
+        label="Build background"
+        desc="Assembly scene backdrop, separate from the model"
         value={backdrop}
         options={BACKDROPS}
         onChange={setBackdrop}
+      />
+      <Choice
+        label="Room background"
+        desc="Backdrop behind your room, set separately from the build"
+        value={roomBackdrop}
+        options={BACKDROPS}
+        onChange={setRoomBackdrop}
       />
       <Choice
         label="Lighting"

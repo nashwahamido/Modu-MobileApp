@@ -1,4 +1,5 @@
 import { Theme, useStyles } from "@/src/game/ui/theme";
+import { GrainOverlay } from "@/src/game/ui/Button";
 import { useEffect, useRef, type ReactNode } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 import {
@@ -89,6 +90,7 @@ export function PartsTray({ items, gestureFor, header, thumbs, highlightGroup, h
                 };
               }}
             >
+              <GrainOverlay radius={12} />
               {thumb ? (
                 <Image source={thumb} style={styles.thumb} resizeMode="contain" />
               ) : (

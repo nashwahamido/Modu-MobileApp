@@ -4,34 +4,34 @@ import { StatusBar } from "expo-status-bar";
 import { StyleSheet, Text, View } from "react-native";
 
 import { Button } from "@/src/game/ui/Button";
+import { useAuth } from "@/src/hooks/useAuth";
+import { SESSION_REQUIRED, SIGN_IN_ROUTE } from "@/src/hooks/useSessionGate";
 import { SPACE, Theme, TYPE, useStyles} from "@/src/game/ui/theme";
+import { useSafeInsets } from "@/src/hooks/use-safe-insets";
 
 // The home screen sits outside a build, so it doesn't read the store's theme — it IS the
 
 export default function App() {
   const styles = useStyles(makeStyles);
+  const safe = useSafeInsets();
+  const { user } = useAuth();
+  // useSessionGate would bounce a signed-out Home tap anyway, but only AFTER the room mounts and fires
+  // its first query. Pointing the link straight at sign-in means that wasted round-trip never happens.
+  const homeRoute = SESSION_REQUIRED && !user ? SIGN_IN_ROUTE : "/room";
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingLeft: safe.left, paddingRight: safe.right }]}>
       <Text style={styles.title}>Modu</Text>
-      <Text style={styles.sub}>Build furniture, step by step</Text>
 
       <View style={styles.actions}>
-        <Link href="/catalogue" asChild>
-          {/* The ONE primary action on the screen. */}
-          <Button label="Start building" variant="primary" pill />
+        <Link href="/auth" asChild>
+          {/* The ONE primary action on the screen: first-run onboarding (auth → questionnaire → avatar → home). */}
+          <Button label="New User" variant="primary" pill />
         </Link>
-        <Link href="/settings" asChild>
-          <Button label="Settings" pill />
+        <Link href={homeRoute} asChild>
+          <Button label="Home" pill />
         </Link>
       </View>
 
-      {__DEV__ && (
-        <View style={styles.devRow}>
-          <Link href="/engine-test" asChild>
-            <Button label="engine test (dev)" variant="ghost" small />
-          </Link>
-        </View>
-      )}
       <StatusBar style="light" />
     </View>
   );
@@ -44,6 +44,8 @@ const makeStyles = (t: Theme) =>
     backgroundColor: t.bg,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 28,
+    gap: 22,
   },
   title: { fontSize: 34, fontWeight: "800", color: t.text, letterSpacing: 0.5 },
   sub: { ...TYPE.body, color: t.textDim, marginTop: SPACE.sm },
@@ -53,5 +55,4 @@ const makeStyles = (t: Theme) =>
     gap: SPACE.lg,
     marginTop: 36,
   },
-  devRow: { marginTop: SPACE.xl, flexDirection: "row", gap: SPACE.md },
   });

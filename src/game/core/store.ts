@@ -94,6 +94,8 @@ interface GameState {
   renderStyle: RenderStyleId;
   /** Scene background: clean | studio | dot (independent of the model look). */
   backdrop: BackdropId;
+  /** Backdrop behind the room diorama. Its own axis: the room is a place you live in, the build scene is a task, so they are dressed separately. */
+  roomBackdrop: BackdropId;
   /** Display theme (backdrop + thumbnails): light | dark | high_contrast. */
   theme: ThemeId;
 
@@ -109,6 +111,7 @@ interface GameState {
   setMode: (mode: AssemblyMode) => void;
   setRenderStyle: (style: RenderStyleId) => void;
   setBackdrop: (backdrop: BackdropId) => void;
+  setRoomBackdrop: (backdrop: BackdropId) => void;
   setTheme: (theme: ThemeId) => void;
 
   completeAction: (id: ActionId) => void;
@@ -153,6 +156,11 @@ interface GameState {
    *  would re-show it the instant the step was redone. */
   doneDismissed: boolean;
   setDoneDismissed: (v: boolean) => void;
+  /** The build is finished but the player has NOT yet tapped "Complete": they can still orbit
+   *  and inspect the model. The finished-build screen waits on this so the last look isn't
+   *  snatched away the instant the final part lands. */
+  completeConfirmed: boolean;
+  setCompleteConfirmed: (v: boolean) => void;
 
   setActiveCluster: (cluster: ClusterId | null) => void;
   setCombiningCluster: (cluster: ClusterId | null) => void;
@@ -182,6 +190,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
   mapOpen: false,
   mapSeen: false,
   doneDismissed: false,
+  completeConfirmed: false,
   tightenDeg: {},
   orientationActionId: null,
   orientationDeg: {},
@@ -195,6 +204,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
   mode: "free",
   renderStyle: "realistic",
   backdrop: "studio",
+  // "clear" keeps the room on the themed app background it has always had; the illustrated backdrops are opt-in.
+  roomBackdrop: "clear",
   // Light by default. The palette (ui/theme.ts) was designed against the dark reference,
   // but light is the safer default for a study: it survives a bright room, a projector,
   // and a participant's own phone brightness, none of which we control. Dark and
@@ -211,6 +222,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
       combiningCluster: null,
       mapSeen: false,
       doneDismissed: false,
+      completeConfirmed: false,
       tightenDeg: {},
       orientationActionId: null,
       orientationDeg: {},
@@ -262,6 +274,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
   setMode: (mode) => set({ mode }),
   setRenderStyle: (renderStyle) => set({ renderStyle }),
   setBackdrop: (backdrop) => set({ backdrop }),
+  setRoomBackdrop: (roomBackdrop) => set({ roomBackdrop }),
   setTheme: (theme) => set({ theme }),
 
   completeAction: (id) => {
@@ -460,6 +473,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
   setMapOpen: (open) => set({ mapOpen: open }),
   setMapSeen: (seen) => set({ mapSeen: seen }),
   setDoneDismissed: (v) => set({ doneDismissed: v }),
+  setCompleteConfirmed: (v) => set({ completeConfirmed: v }),
   setActiveCluster: (cluster) => set({ activeCluster: cluster }),
   setCombiningCluster: (cluster) => set({ combiningCluster: cluster }),
 

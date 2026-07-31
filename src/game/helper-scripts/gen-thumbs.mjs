@@ -3,7 +3,7 @@
 // Run from the modi project root:
 //   npm run gen:thumbs
 //
-// This writes src/game/data/furnitures/<ID>/thumbs.gen.ts with static require(...)
+// This writes src/game/content/furnitures/<ID>/thumbs.gen.ts with static require(...)
 // calls. Metro needs those static requires, so keep this as a build-time script
 // rather than trying to look up thumbnails dynamically in the app.
 
@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const SRC = path.resolve(SCRIPT_DIR, "..", "..");
-const FURNITURES = path.join(SCRIPT_DIR, "..", "data", "furnitures");
+const FURNITURES = path.join(SCRIPT_DIR, "..", "content", "furnitures");
 const MODEL_ROOT = path.join(SRC, "assets", "models", "furnitures");
 const THUMB_ROOT = path.join(SRC, "assets", "thumbnails");
 const REQUIRE_ROOT = "../../../../assets/thumbnails";

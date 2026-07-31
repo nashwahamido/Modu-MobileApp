@@ -28,7 +28,7 @@ import type { ParkInfo } from "@/src/game/core/evaluation/engagement";
 import type { ISharedValue } from "react-native-worklets-core";
 import type { OffsetSink } from "../scene/combineDriver";
 import type { CarryOffset } from "../scene/CombineCarry";
-import { computeFit } from "@/src/game/core/geometry/fit";
+import { computeFit, APPROACH_FACTOR } from "@/src/game/core/geometry/fit";
 import { isStaged } from "@/src/game/core/model/staging";
 import { isPickupType } from "@/src/game/core/ids";
 import { quatSlerp, screenPointOnPlane } from "@/src/game/core/geometry/math";
@@ -50,6 +50,10 @@ import {
   OffsetDriver,
 } from "../scene/offsetDriver";
 
+// Physical dimensions shared by the gesture maths and the stylesheet: the maths divides by them, so changing one moves the pixels AND retunes the gesture together.
+const RING = 64;
+const TARGET_RING = 92;
+
 type Float3 = [number, number, number];
 
 const PICKUP_MS = 450;
@@ -67,7 +71,6 @@ const SWITCH_MARGIN_PX = 14;
 /** Snap ACCEPTANCE radius comes from settings.snapDistance (per-profile, default 0.14); clamped here so no profile can exceed the geometry-safe cap. APPROACH/SWITCH_MARGIN above stay constants — they own anti-jumping. */
 const SNAP_DIST_MIN = 0.06;
 const SNAP_DIST_MAX = 0.2;
-const RING = 64;
 
 /** True when dragging `partId` carries other bodies with it on slideDriver (PartModel's "riding" mode / useSceneState's riding set): the LEAD of a multi-body component, or the carrier of a staged sub-assembly bringing its fitted hardware home. One predicate for both, so a part that is somehow both needs no extra case. */
 function hasRidingBodies(furniture: Furniture | null | undefined, partId: PartId | null | undefined): boolean {
@@ -85,7 +88,7 @@ interface Params {
   /** The combine carry offset, applied to the dragged cluster's entities on the RENDER thread (scene/CombineCarry) — carrying ~60 entities per frame from the JS thread froze the app. */
   carryShared: ISharedValue<CarryOffset>;
   getFocusPoint: () => Vec3;
-  /** Camera strafe callbacks — the canvas gesture falls back to these when the one-finger drag isn't re-grabbing a floating part (settings.canvasStrafe). */
+  /** Camera strafe callbacks — the canvas gesture falls back to these when the one-finger drag isn't re-grabbing a floating part. */
   onPanStart?: (x: number, y: number) => void;
   onPanMove?: (x: number, y: number) => void;
   onPanEnd?: () => void;
@@ -368,8 +371,8 @@ export function usePartDrag({
           if (canvas) {
             const st = useGameStore.getState();
             if (!(isFloating() && st.heldActionId === action.actionId)) {
-              // Not a re-grab → camera strafe fallback (its own toggle).
-              if (st.settings.canvasStrafe && onPanStart) {
+              // Not a re-grab → camera strafe fallback (always on).
+              if (onPanStart) {
                 canvasStrafing = true;
                 onPanStart(e.x, e.y);
               }
@@ -812,7 +815,12 @@ export function usePartDrag({
           );
           // the carry glides in the horizontal plane (o[1] is structurally 0), so a VERTICAL park offset (DALFRED's seat parks 0.15 straight up) must not count against the snap — measure the miss in-plane only
           const d = Math.hypot(o[0] - target[0], o[2] - target[2]);
-          const fit = d <= snapDist ? "nearCorrect" : "held";
+          const fit =
+            d <= snapDist
+              ? "nearCorrect"
+              : d <= snapDist * APPROACH_FACTOR
+                ? "approaching"
+                : "held";
           if (fit !== useGameStore.getState().fitState) {
             useGameStore.getState().setDragFit(fit, null);
           }
@@ -946,8 +954,6 @@ function ClusterTargetRing({
     />
   );
 }
-
-const TARGET_RING = 92;
 
 const styles = StyleSheet.create({
   ring: {

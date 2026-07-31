@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
-import { Theme, useStyles } from "@/src/game/ui/theme";
-import { toolList } from "@/src/game/data/tools";
+import { ELEVATION, RADIUS, Theme, useStyles } from "@/src/game/ui/theme";
+import { GrainOverlay } from "@/src/game/ui/Button";
+import { toolList } from "@/src/game/content/tools";
 import { pickThumb } from "@/src/game/core/presentation/labels";
 import type { ToolId } from "@/src/game/core/type";
 
@@ -34,7 +35,9 @@ export function ToolBar({ neededTool }: { neededTool: ToolId | null }) {
 
   return (
     <View style={styles.bar} pointerEvents="box-none">
-      {needsAttention && !open ? <Text style={styles.prompt}>pick a tool</Text> : null}
+      {needsAttention && !open ? (
+        <Text style={styles.prompt}>pick a tool</Text>
+      ) : null}
       {open
         ? tools.map((t) => {
             const active = selectedTool === t.id;
@@ -43,21 +46,36 @@ export function ToolBar({ neededTool }: { neededTool: ToolId | null }) {
               <Pressable
                 key={t.id}
                 onPress={() => pick(t.id)}
-                style={[styles.slot, active && styles.slotActive, wanted && styles.slotWanted]}
+                style={[
+                  styles.slot,
+                  active && styles.slotActive,
+                  wanted && styles.slotWanted,
+                ]}
                 hitSlop={6}
               >
-                <Image source={pickThumb(t.icon)} style={styles.icon} resizeMode="contain" />
+                <GrainOverlay radius={12} />
+                <Image
+                  source={pickThumb(t.icon)}
+                  style={styles.icon}
+                  resizeMode="contain"
+                />
               </Pressable>
             );
           })
         : null}
       <Pressable
         onPress={() => setOpen((o) => !o)}
-        style={[styles.toggle, needsAttention && styles.slotWanted, open && styles.toggleOpen]}
+        style={({ pressed }) => [
+          styles.toggle,
+          needsAttention && styles.slotWanted,
+          open && styles.toggleOpen,
+          pressed && { opacity: 0.6 },
+        ]}
         hitSlop={8}
       >
+        <GrainOverlay radius={RADIUS.control} />
         <Image
-          source={require("../../assets/images/ui/icon-toolBar.png")}
+          source={require("../../assets/ui/icons/icon-tools.png")}
           style={styles.toolboxIcon}
           resizeMode="contain"
         />
@@ -78,16 +96,18 @@ const makeStyles = (t: Theme) =>
     gap: 8,
   },
   toggle: {
-    // 36 to match the auto button (controlHeightSm), down from 46.
+    // Chip container matching the HUD icon buttons: surface fill, border, clay grain, shadow.
     width: 36,
     height: 36,
-    borderRadius: 12,
+    borderRadius: RADIUS.control,
+    borderWidth: 1,
     backgroundColor: t.surface,
-    borderWidth: 2,
     borderColor: t.border,
+    ...ELEVATION.card,
     alignItems: "center",
     justifyContent: "center",
   },
+  // Open swaps the fill to the raised surface, echoing a pressed/active chip.
   toggleOpen: { backgroundColor: t.surfaceRaised },
   slot: {
     width: 36,
@@ -104,9 +124,6 @@ const makeStyles = (t: Theme) =>
   slotActive: { borderColor: t.accent, backgroundColor: t.surfaceRaised },
   slotWanted: { borderColor: t.accent },
   icon: { width: 26, height: 26 },
-  // The toolbox glyph is flat black artwork, so it takes a tint. This is deliberately a
-  // SEPARATE style from `icon`: that one is shared by the tool THUMBNAILS above, which are
-  // illustrated images — tinting those would flatten them into purple silhouettes.
-  toolboxIcon: { width: 26, height: 26, tintColor: t.accent },
+  toolboxIcon: { width: 24, height: 24 },
   prompt: { fontSize: 11, fontWeight: "700", color: t.textDim, marginRight: 2 },
   });

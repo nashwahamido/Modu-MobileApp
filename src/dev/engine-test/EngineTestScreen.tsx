@@ -1,19 +1,7 @@
 import { useEffect } from "react";
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { StyleSheet, Pressable, ScrollView, Text, View } from "react-native";
 
-import {
-  Radius,
-  Spacing,
-  Status,
-  Surface,
-  typeScale,
-} from "./theme";
+import { Radius, Spacing, Status, Surface, typeScale } from "./theme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "@/src/hooks/use-color-scheme";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
@@ -31,7 +19,7 @@ import {
   FURNITURE_METAS,
   isPlayable,
   loadFurnitureById,
-} from "@/src/game/data/furnitures/furnitures";
+} from "@/src/game/content/furnitures/furnitures";
 import { OrientationLock } from "expo-screen-orientation";
 import { availableInMode } from "@/src/game/core/evaluation/availability";
 import {
@@ -43,7 +31,7 @@ import {
 
 const LEVELS: TextLevel[] = ["standard", "simple"];
 const TEST_DENSITY = 0.74;
-const DEFAULT_FURNITURE_ID: FurnitureId = "DALFRED";
+const DEFAULT_FURNITURE_ID: FurnitureId = "dalfred-stool";
 
 function loadHarnessFurniture(id: FurnitureId) {
   loadFurnitureById(id).then((f) => useGameStore.getState().loadFurniture(f));
@@ -127,7 +115,7 @@ export default function EngineTestScreen() {
       ]}
     >
       {}
-      <Text style={{ color: C.text, fontSize: t.title, fontWeight: "800" }}>{furniture.meta.name}</Text>
+      <Text style={{ color: C.text, fontSize: t.title, fontWeight: "800" }}>{furniture.meta.id}</Text>
       <View style={styles.chipRow}>
         {chip(`${completedCount}/${totalCount} steps`, C.primary, C.onPrimary)}
         {chip(`★ ${completedCount * furniture.xpPerStep} XP`, C.cardAlt, C.text)}
@@ -183,7 +171,7 @@ export default function EngineTestScreen() {
                   fontWeight: "700",
                 }}
               >
-                {meta.name}
+                {meta.id}
               </Text>
             </Pressable>
           );

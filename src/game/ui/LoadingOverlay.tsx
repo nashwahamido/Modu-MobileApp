@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import { Animated, StyleSheet, Text, View } from "react-native";
+// The assembly loader: picks the copy and the avatar for a furniture load, then hands off to LoadingScreen — the one file that owns loading look and cadence. Rendered ABOVE the scene so the GLB parses beneath it; opaque, so the blank scene is never visible.
+import { useCatalogRow } from "@/src/data/catalogStore";
 import { useGameStore } from "@/src/game/core/store";
-import { Button, ProgressBar } from "@/src/game/ui/Button";
-import { Theme, useStyles } from "@/src/game/ui/theme";
-import { advance, type Milestone } from "./loadingProgress";
+import { Button } from "@/src/game/ui/Button";
+import { LoadingScreen } from "@/src/game/ui/LoadingScreen";
+import { type Milestone } from "./loadingProgress";
 
 interface Props {
   /** Reached load signal (loadingProgress.ts); the parent derives it from store + onModelReady. */
@@ -16,100 +16,31 @@ interface Props {
   onFadedOut: () => void;
 }
 
-const TICK_MS = 100;
-const HOLD_MS = 150;
-const FADE_MS = 300;
-
-/** Full-screen loading cover for the play screen: avatar slot + furniture name + creep/jump progress bar, with an error state. Rendered ABOVE the scene so the GLB parses beneath it; opaque, so the blank scene is never visible. */
 export function LoadingOverlay({ milestone, error, onRetry, onBack, onFadedOut }: Props) {
-  const styles = useStyles(makeStyles);
   const profile = useGameStore((s) => s.profile);
   const furniture = useGameStore((s) => s.furniture);
-  const fontScale = useGameStore((s) => s.settings.fontScale);
+  // The name shown while loading is DB-authored; before the catalogue lands this falls back to LoadingScreen's default.
+  const catalogRow = useCatalogRow(furniture?.meta.id ?? null);
   const simple = useGameStore((s) => s.settings.textLevel === "simple");
-  const [fraction, setFraction] = useState(0);
-  const opacity = useRef(new Animated.Value(1)).current;
-  const fading = useRef(false);
-
-  // Creep + jump tick. Paused while the error UI is up — a moving bar under an error message reads as a lie.
-  useEffect(() => {
-    if (error) return;
-    const iv = setInterval(() => setFraction((f) => advance(f, TICK_MS, milestone)), TICK_MS);
-    return () => clearInterval(iv);
-  }, [milestone, error]);
-
-  // The final beat: bar at 100% → short hold → fade → parent unmounts us. fading ref guards double-runs when deps churn mid-fade, and re-arms on error so a later successful retry can fade out again; an error arriving mid-fade stops the animation and restores full opacity, and the finished:false that stopAnimation produces is what keeps onFadedOut from firing on an aborted fade.
-  useEffect(() => {
-    if (error) {
-      fading.current = false;
-      opacity.stopAnimation();
-      opacity.setValue(1);
-      return;
-    }
-    if (milestone !== 1 || fraction < 1 || fading.current) return;
-    fading.current = true;
-    const hold = setTimeout(() => {
-      Animated.timing(opacity, { toValue: 0, duration: FADE_MS, useNativeDriver: true }).start(({ finished }) => {
-        if (finished) onFadedOut();
-      });
-    }, HOLD_MS);
-    return () => clearTimeout(hold);
-  }, [error, milestone, fraction, opacity, onFadedOut]);
-
-  // Avatar placeholder: the active profile's initial in a ring — real art replaces the Text without layout changes.
-  const initial = profile.charAt(0).toUpperCase();
 
   return (
-    <Animated.View style={[styles.root, { opacity }]}>
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>{initial}</Text>
-      </View>
-      {error ? (
+    <LoadingScreen
+      overlay
+      fadeOnComplete
+      milestone={milestone}
+      // Avatar placeholder: the active profile's initial in the ring — real art replaces the Text without layout changes.
+      avatar={{ initial: profile.charAt(0).toUpperCase() }}
+      label={catalogRow ? `${catalogRow.name} · ${catalogRow.brand}` : undefined}
+      errorMessage={
+        error ? (simple ? "This didn't load." : "Couldn't load this furniture.") : undefined
+      }
+      actions={
         <>
-          <Text style={[styles.name, { fontSize: 16 * fontScale }]}>
-            {simple ? "This didn't load." : "Couldn't load this furniture."}
-          </Text>
-          <View style={styles.buttons}>
-            <Button label="Try again" variant="primary" onPress={onRetry} />
-            <Button label="Back" onPress={onBack} />
-          </View>
+          <Button label="Try again" variant="primary" onPress={onRetry} />
+          <Button label="Back" onPress={onBack} />
         </>
-      ) : (
-        <>
-          <Text style={[styles.name, { fontSize: 16 * fontScale }]}>
-            {furniture ? `${furniture.meta.name} · ${furniture.meta.brand}` : "Loading…"}
-          </Text>
-          <ProgressBar value={fraction} total={1} style={styles.bar} />
-        </>
-      )}
-    </Animated.View>
+      }
+      onComplete={onFadedOut}
+    />
   );
 }
-
-const makeStyles = (t: Theme) =>
-  StyleSheet.create({
-    root: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: t.bg,
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 18,
-      // Being the LAST child is not enough to cover the HUD: on Android an elevated view draws above later siblings regardless of tree order, so the cluster chooser (elevation 20) and every ELEVATION.card panel punched through. zIndex covers iOS/web ordering, elevation covers Android, and 100 sits far above the highest value any HUD element uses.
-      zIndex: 100,
-      elevation: 100,
-    },
-    avatar: {
-      width: 72,
-      height: 72,
-      borderRadius: 36,
-      backgroundColor: t.surfaceInset,
-      borderWidth: 2,
-      borderColor: t.accent,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    avatarText: { color: t.text, fontSize: 28, fontWeight: "700" },
-    name: { color: t.textDim, fontWeight: "600" },
-    bar: { width: "60%", maxWidth: 420 },
-    buttons: { flexDirection: "row", gap: 12, marginTop: 6 },
-  });

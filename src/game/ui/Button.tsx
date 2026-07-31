@@ -13,6 +13,7 @@
 
 import { ReactNode } from "react";
 import {
+  Image,
   Pressable,
   StyleProp,
   StyleSheet,
@@ -22,6 +23,35 @@ import {
 } from "react-native";
 
 import { ELEVATION, RADIUS, SIZE, SPACE, Theme, TYPE, useTheme } from "./theme";
+
+const CLAY_PATTERN = require("@/src/assets/textures/clay-pattern.png");
+/** How strong the paper grain reads over a surface's colour. The source texture is already
+ *  a low-opacity dark overlay; this scales it further. One knob — dial after seeing it. */
+const GRAIN_OPACITY = 0.3;
+
+/**
+ * The clay grain, laid over a surface WITHOUT changing its colour. An absolutely-filled,
+ * tiling, non-interactive image clipped to the surface's own radius. Self-clipping (its own
+ * borderRadius + overflow) so the parent keeps its drop shadow — putting overflow:hidden on
+ * the shadowed Pressable itself would clip the shadow away.
+ */
+export function GrainOverlay({ radius }: { radius: number }) {
+  return (
+    <View
+      pointerEvents="none"
+      style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: "hidden" }]}
+    >
+      <Image
+        source={CLAY_PATTERN}
+        resizeMode="cover"
+        style={[StyleSheet.absoluteFill, { opacity: GRAIN_OPACITY }]}
+      />
+      {/* Note: "cover" not "repeat" — repeat renders nothing on Android's New
+          Architecture. The texture is organic clay grain, so stretching it to cover reads
+          fine at any surface size; a regular pattern would need real tiling. */}
+    </View>
+  );
+}
 
 /** primary  — the ONE action that moves the build forward. At most one on screen.
  *  secondary — everything else that can be pressed.
@@ -43,6 +73,9 @@ interface ButtonProps {
   badge?: number | string;
   style?: StyleProp<ViewStyle>;
   hitSlop?: number;
+  /** Overrides the label for screen readers — needed for icon-only buttons that have no
+   *  visible text label to announce. */
+  accessibilityLabel?: string;
 }
 
 function fillFor(t: Theme, variant: ButtonVariant, pressed: boolean): string {
@@ -76,6 +109,7 @@ export function Button({
   badge,
   style,
   hitSlop = 8,
+  accessibilityLabel,
 }: ButtonProps) {
   const t = useTheme();
   const filled = variant === "primary" || variant === "success";
@@ -86,7 +120,7 @@ export function Button({
       disabled={disabled}
       hitSlop={hitSlop}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled: !!disabled }}
       style={({ pressed }) => [
         styles.base,
@@ -107,6 +141,7 @@ export function Button({
     >
       {({ pressed }) => (
         <>
+          <GrainOverlay radius={pill ? RADIUS.pill : RADIUS.control} />
           {icon}
           {label ? (
             <Text
@@ -185,6 +220,7 @@ export function IconButton({
         style,
       ]}
     >
+      <GrainOverlay radius={RADIUS.control} />
       {icon}
     </Pressable>
   );
@@ -223,6 +259,7 @@ export function Fab({
         style,
       ]}
     >
+      <GrainOverlay radius={SIZE.fab / 2} />
       {icon}
     </Pressable>
   );
@@ -253,6 +290,7 @@ export function Panel({
         style,
       ]}
     >
+      <GrainOverlay radius={RADIUS.panel} />
       {children}
     </View>
   );

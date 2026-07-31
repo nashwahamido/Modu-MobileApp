@@ -5,7 +5,7 @@
 // Spec features NOT yet in the engine are tracked in MERGE_PLAN (profile gaps).
 
 import { AccessibilitySettings } from "@/src/game/core/accessibility";
-import { AssemblyMode } from "@/src/game/core/type";
+import { AssemblyMode, FurnitureId } from "@/src/game/core/type";
 
 export const DEFAULT_SETTINGS: AccessibilitySettings = {
   textLevel: "standard",
@@ -23,13 +23,18 @@ export const DEFAULT_SETTINGS: AccessibilitySettings = {
   releaseBehavior: "autoReturn",
   lightingPreset: "auto",
   snapDistance: 0.14,
-  // On everywhere. A one-finger drag on empty scene panning the camera is the
-  // behaviour people expect from a 3D view; having it off made the canvas feel dead.
-  canvasStrafe: true,
   dragPlane: "adaptive",
 };
 
 export type ProfileId = "visual" | "momentum" | "clearPath" | "control";
+
+/** Default onboarding task for each support profile. Catalogue choices still override this. */
+// idk if we should keep this - Ge
+export function furnitureForProfile(profile: ProfileId): FurnitureId {
+  return profile === "momentum" || profile === "clearPath"
+    ? "lack-table"
+    : "dalfred-stool";
+}
 
 export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>> = {
   // Autonomy and adjustable guidance: the DEFAULT profile at launch.

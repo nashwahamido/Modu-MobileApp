@@ -12,6 +12,7 @@ import type { ISharedValue } from "react-native-worklets-core";
 import { useGameStore } from "@/src/game/core/store";
 import type { PartId } from "@/src/game/core/type";
 import { CombineCarry, type CarryOffset } from "./CombineCarry";
+import { OrbitDrive, type StickDeflection } from "./OrbitDrive";
 import { stageOffsetMap } from "@/src/game/core/model/staging";
 import { FOCAL_LENGTH_MM } from "./cameraConfig";
 import { CEL_IBL_INTENSITY, getLightRig, IBL_INTENSITY } from "./lighting";
@@ -38,6 +39,10 @@ interface Props {
   slideDriver: ClusterDriver;
   /** Combine carry offset, applied on the render thread (CombineCarry). */
   carryShared: ISharedValue<CarryOffset>;
+  /** Joystick deflection, integrated into the camera on the render thread (OrbitDrive). */
+  stickShared: ISharedValue<StickDeflection>;
+  /** Whether a stick grab session is open — gates OrbitDrive. */
+  stickActive: ISharedValue<boolean>;
   /** Fired when the shared GLB reports parsed ("loaded") — the play screen's loading overlay keys its last milestone off this. Re-fires on remounts (style switch, retry); the listener must be idempotent. */
   onModelReady?: () => void;
 }
@@ -52,6 +57,8 @@ export function AssemblyScene({
   pushDrivers,
   slideDriver,
   carryShared,
+  stickShared,
+  stickActive,
   onModelReady,
 }: Props) {
   const furniture = useGameStore((s) => s.furniture);
@@ -146,6 +153,11 @@ export function AssemblyScene({
         <ShadowPlane source={furniture.shadow} />
       ) : null}
       <CombineCarry model={model} carryShared={carryShared} />
+      <OrbitDrive
+        manipulator={cameraManipulator}
+        stickShared={stickShared}
+        active={stickActive}
+      />
       <ShaderAssetsProvider>
         {(Object.keys(furniture.parts) as PartId[]).map((id) => (
           <PartModel

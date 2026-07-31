@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { useEffect, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
 import {
   clusterComplete,
   clusterLabel,
@@ -18,6 +18,10 @@ export function ClusterCelebration() {
   const completed = useGameStore((s) => s.completed);
   const [shown, setShown] = useState<ClusterId | null>(null);
   const seen = useRef<Set<ClusterId> | null>(null);
+  // Which furniture `seen` was baselined against. Cluster ids are generic ("base", "seat"), and the
+  // play screen swaps furniture WITHOUT remounting — so a set carried across a swap either swallows
+  // the new build's "base" celebration or replays a resumed build's already-finished ones.
+  const seenFor = useRef<string | null>(null);
 
   const done = new Set(completed);
   const clusters = furniture ? focusableClusterIds(furniture) : [];
@@ -28,9 +32,13 @@ export function ClusterCelebration() {
 
   useEffect(() => {
     if (!furniture) return;
-    // first run baselines to the clusters already finished at mount, so a remount mid-build doesn't replay old celebrations
-    if (!seen.current) {
+    // first run — and every furniture swap — baselines to the clusters already finished, so neither a
+    // remount mid-build nor a resumed save replays old celebrations
+    if (!seen.current || seenFor.current !== furniture.meta.id) {
       seen.current = new Set(finished);
+      seenFor.current = furniture.meta.id;
+      // A stale card from the previous furniture must not survive the swap.
+      setShown(null);
       return;
     }
     for (const c of finished) {
@@ -57,7 +65,11 @@ export function ClusterCelebration() {
   return (
     <View style={styles.scrim} pointerEvents="box-none">
       <View style={styles.panel}>
-        <Text style={styles.badge}>✓</Text>
+        <Image
+          source={require("@/src/assets/ui/icons/icon-success.png")}
+          style={styles.badge}
+          resizeMode="contain"
+        />
         <Text style={styles.title}>{clusterLabel(furniture, shown)} finished</Text>
         <Button
           label={allDone ? "Put it together ›" : `Build the ${clusterLabel(furniture, next).toLowerCase()} ›`}
@@ -91,7 +103,7 @@ const makeStyles = (t: Theme) =>
       gap: 8,
       alignItems: "center",
     },
-    badge: { fontSize: 40, color: t.success, fontWeight: "800" },
+    // Sized to the 40pt glyph it replaced, so the card's rhythm is unchanged.
+    badge: { width: 48, height: 48 },
     title: { color: t.text, fontSize: 18, fontWeight: "800" },
-    subtitle: { color: t.textDim, fontSize: 13, lineHeight: 18, textAlign: "center", marginBottom: 6 },
   });

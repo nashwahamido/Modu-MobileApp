@@ -52,11 +52,14 @@ export function RecenterIcon({ size = 20, color }: IconProps) {
  */
 export function StarBadge({ size = 40, color }: IconProps) {
   const outer = 11.5;
-  const inner = 4.7;
+  // Fuller arms than a geometric star: the wireframe's badge is a chunky sticker, and a deep
+  // inner radius reads as spiky next to the round nodes.
+  const inner = 5.4;
   const pts: string[] = [];
   for (let i = 0; i < 10; i++) {
     const r = i % 2 === 0 ? outer : inner;
-    const a = (-90 + i * 36) * (Math.PI / 180);
+    // Tilted a few degrees, as drawn — a perfectly upright star looks pasted on.
+    const a = (-90 + 8 + i * 36) * (Math.PI / 180);
     pts.push(`${12 + r * Math.cos(a)},${12 + r * Math.sin(a)}`);
   }
   return (

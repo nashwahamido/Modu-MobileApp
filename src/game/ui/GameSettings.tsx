@@ -1,6 +1,7 @@
 // In-game settings: a gear button that opens the shared SettingsControls in a cream modal card. Same controls as the homepage /settings screen — one source of truth, one look (adopted from the on-release engine).
 import { router } from "expo-router";
 import { useState } from "react";
+import type { ReactNode } from "react";
 import {
   Image,
   Modal,
@@ -12,27 +13,45 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Theme, useStyles } from "@/src/game/ui/theme";
+import { ELEVATION, RADIUS, Theme, useStyles } from "@/src/game/ui/theme";
 import { SettingsControls } from "@/src/game/ui/SettingsControls";
+import { GrainOverlay } from "@/src/game/ui/Button";
 
-const SETTINGS_ICON = require("@/src/assets/images/ui/setting_icon.png");
+const SETTINGS_ICON = require("@/src/assets/ui/icons/icon-settings.png");
 
-export function GameSettings() {
+interface GameSettingsProps {
+  headerContent?: ReactNode;
+  controls?: ReactNode;
+  confirmLabel?: string;
+  confirmDisabled?: boolean;
+  onConfirm?: () => void;
+}
+
+export function GameSettings({
+  headerContent,
+  controls,
+  confirmLabel = "Done",
+  confirmDisabled = false,
+  onConfirm,
+}: GameSettingsProps = {}) {
   const styles = useStyles(makeStyles);
   const [open, setOpen] = useState(false);
   const { height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const cardMaxHeight = winH - insets.top - insets.bottom - 32;
 
+  const closeSettings = () => setOpen(false);
+
   return (
     <>
       {/* Settings icon — rounded-square chip with a minimalist sliders glyph. subject to change*/}
       <Pressable
-        style={[styles.gear]}
+        style={({ pressed }) => [styles.gear, pressed && { opacity: 0.6 }]}
         onPress={() => setOpen(true)}
         hitSlop={8}
         accessibilityLabel="Settings"
       >
+        <GrainOverlay radius={RADIUS.control} />
         <Image
           source={SETTINGS_ICON}
           style={[styles.icon]}
@@ -51,20 +70,22 @@ export function GameSettings() {
           "landscape-right",
           "portrait",
         ]}
-        onRequestClose={() => setOpen(false)}
+        onRequestClose={closeSettings}
       >
         <View style={styles.backdrop} pointerEvents="box-none">
           <Pressable
             style={StyleSheet.absoluteFill}
-            onPress={() => setOpen(false)}
+            onPress={closeSettings}
           />
           <View style={[styles.card, { maxHeight: cardMaxHeight }]}>
+            <GrainOverlay radius={18} />
             <Text style={styles.title}>Settings</Text>
+            {headerContent}
             <ScrollView
               contentContainerStyle={styles.cardScroll}
               showsVerticalScrollIndicator={false}
             >
-              <SettingsControls />
+              {controls ?? <SettingsControls />}
             </ScrollView>
             <View style={styles.footer}>
               <Pressable
@@ -75,14 +96,26 @@ export function GameSettings() {
                 hitSlop={8}
                 accessibilityLabel="Return to home"
               >
-                <Text style={styles.homeText}>⌂ Home</Text>
+                <View style={styles.homeRow}>
+                  <Image
+                    source={require("@/src/assets/ui/icons/icon-home.png")}
+                    style={styles.homeIcon}
+                    resizeMode="contain"
+                  />
+                  <Text style={styles.homeText}>Home</Text>
+                </View>
               </Pressable>
               <Pressable
-                style={styles.done}
-                onPress={() => setOpen(false)}
+                style={[styles.done, confirmDisabled && styles.doneDisabled]}
+                onPress={() => {
+                  if (confirmDisabled) return;
+                  onConfirm?.();
+                  closeSettings();
+                }}
                 hitSlop={8}
+                disabled={confirmDisabled}
               >
-                <Text style={styles.doneText}>Done</Text>
+                <Text style={styles.doneText}>{confirmLabel}</Text>
               </Pressable>
             </View>
           </View>
@@ -104,14 +137,26 @@ const makeStyles = (t: Theme) =>
     // gear, the hint, and undo/redo below all sit on the same grid.
     width: 36,
     height: 36,
-    borderRadius: 14,
+    borderRadius: RADIUS.control,
+    borderWidth: 1,
     backgroundColor: t.surface,
+    borderColor: t.border,
+    ...ELEVATION.card,
     alignItems: "center",
     justifyContent: "center",
   },
   // 22 in a 36 box leaves the same breathing room as the glyphs in undo/redo; at 30 the
   // gear filled its button edge to edge once the box came down to 36.
-  icon: { width: 22, height: 22 },
+  icon: {
+    // Matches HUD_ICON so the gear sits at the same weight as undo, recenter and pause.
+    width: 24,
+    height: 24,
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+  },
   // The PNG is dark artwork; invert it (tint white) for the dark chip.
   backdrop: {
     ...StyleSheet.absoluteFillObject,
@@ -140,6 +185,8 @@ const makeStyles = (t: Theme) =>
     marginTop: 12,
   },
   homeText: { fontSize: 14, fontWeight: "700", color: t.textDim },
+  homeRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  homeIcon: { width: 20, height: 20 },
   done: {
     // Purple, not green: Done is an ACTION, and every action in this palette is the accent.
     // Green is reserved for a COMPLETED step.
@@ -148,5 +195,6 @@ const makeStyles = (t: Theme) =>
     paddingHorizontal: 18,
     paddingVertical: 9,
   },
+  doneDisabled: { opacity: 0.42 },
   doneText: { color: t.onAccent, fontWeight: "700", fontSize: 14 },
   });

@@ -1,7 +1,7 @@
 // Run every time the model has been updated.
 
 // Extracts each node of a furniture's combined GLB
-// src/game/data/furnitures/<ID>/parts.gen.ts — MODEL FACTS ONLY.
+// src/game/content/furnitures/<ID>/parts.gen.ts — MODEL FACTS ONLY.
 
 //   node src/game/helper-scripts/read-parts.mjs
 
@@ -168,7 +168,7 @@ function buildParts(json, bin, typeOverrides = {}) {
   return parts;
 }
 
-// write src/game/data/furnitures/<ID>/parts.gen.ts
+// write src/game/content/furnitures/<ID>/parts.gen.ts
 function emit(id, parts) {
   const body = Object.values(parts)
     .map((d) => `  ${JSON.stringify(d.partId)}: ${JSON.stringify(d)},`)

@@ -1,43 +1,77 @@
 import { useRouter } from "expo-router";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { StyleSheet, Image, Pressable, ScrollView, Text, View } from "react-native";
 
 import { useGameStore } from "@/src/game/core/store";
-import { Theme, useStyles } from "@/src/game/ui/theme";
-
-/** Coins per completed step. Mirrors ClusterFocusControl — see the note there: there is no
- *  wallet or shop in the data model, so this is a placeholder RATE, not a typed-in number. */
-const COINS_PER_STEP = 3;
+import { useStyles } from "@/src/game/ui/theme";
+import { useRepos } from "@/src/data";
+import { useCatalogRow } from "@/src/data/catalogStore";
+import { usePlacementStore } from "@/src/room/core/placement";
+import type { Theme } from "@/src/game/ui/theme";
 
 /**
  * The finished-build screen.
- *
- * Styled to match the build map (same cream card, same purple rim), and shown the moment
- * the last action lands.
- *
- * ── what is real and what is not ────────────────────────────────────────────────────────
- * The coins and XP are computed from the build. The "succulent plant" reward, "place in the
- * room" and "store in inventory" are from the wireframe and have NOTHING behind them yet —
- * no item model, no inventory, no room view. They are rendered as designed so the screen
- * can be reviewed whole, but both buttons currently just leave the build. Wiring them up is
- * a real feature, not a label change.
+ * The coins and XP shown are the catalog's configured reward (item_build) — the same source the
+ * grant uses — so the display can't drift from what's awarded. The "succulent plant" reward is from
+ * the wireframe and has nothing behind it yet — no item model.
+ * Both action buttons go to the inventory: the built piece appears there now, and placement is not
+ * wired yet, so "place in the room now!" has nothing to place. They stay separate buttons so the
+ * placement route can be restored to the first one without touching the layout.
  */
 export function BuildComplete() {
   const styles = useStyles(makeStyles);
   const router = useRouter();
+  const repos = useRepos();
   const furniture = useGameStore((s) => s.furniture);
   const completed = useGameStore((s) => s.completed);
   const undoLastAction = useGameStore((s) => s.undoLastAction);
   const redoLastAction = useGameStore((s) => s.redoLastAction);
   const dismissed = useGameStore((s) => s.doneDismissed);
+  const confirmed = useGameStore((s) => s.completeConfirmed);
+  const [reward, setReward] = useState({ coins: 0, xp: 0 });
+
+  const furnitureId = furniture?.meta.id ?? null;
+  // Display copy is DB-authored; the bundle knows only the id and the artwork.
+  const catalogRow = useCatalogRow(furnitureId);
+  useEffect(() => {
+    if (!furnitureId) return;
+    let alive = true;
+    repos.builds
+      .buildReward(furnitureId)
+      .then((r) => alive && setReward(r))
+      // Showing zero beats an uncaught rejection — the grant is server-side regardless. Matches BuildMap.
+      .catch((err) => console.warn("[BuildComplete] reward lookup failed", err));
+    return () => {
+      alive = false;
+    };
+  }, [furnitureId, repos]);
 
   if (!furniture) return null;
   const total = furniture.actions.length;
   const isDone = total > 0 && completed.length >= total;
-  if (!isDone || dismissed) return null;
+  // Wait for the player to tap "Complete" — until then the FinishBuildButton is showing
+  // and they can still orbit the finished model.
+  if (!isDone || dismissed || !confirmed) return null;
 
-  const coins = total * COINS_PER_STEP;
-  const xp = total * furniture.xpPerStep;
-  const leave = () => router.replace("/catalogue");
+  const { coins, xp } = reward;
+  // Two steps, not a plain replace("/inventory"). The (presentation) group is a MODAL layer that
+  // floats over whatever scene is beneath it, and every other entry into it is a push from the room —
+  // inventory's own back button is dismissTo("/room") and needs the room to actually be there.
+  // Replacing play (rather than pushing) also drops the finished build off the back stack, and the
+  // room remount is what makes the new piece show up in it.
+  const goToInventory = () => {
+    router.replace("/room");
+    router.push("/inventory");
+  };
+  // Straight into the room with the ghost already in hand; falls back to the inventory for the
+  // rare furniture with no room model (the tutorial).
+  const placeInRoom = () => {
+    if (!furnitureId || !usePlacementStore.getState().startPlacing(furnitureId, { firstPlacementGuide: true })) {
+      goToInventory();
+      return;
+    }
+    router.replace("/room");
+  };
 
   return (
     <View style={styles.scrim}>
@@ -72,7 +106,7 @@ export function BuildComplete() {
           </Pressable>
         </View>
 
-        <Text style={styles.title}>{furniture.meta.name} assembled!</Text>
+        <Text style={styles.title}>{catalogRow ? `${catalogRow.name} assembled!` : "Assembled!"}</Text>
 
         <ScrollView
           contentContainerStyle={styles.body}
@@ -116,15 +150,19 @@ export function BuildComplete() {
           <View style={styles.actionsRow}>
             <Pressable
               style={styles.action}
-              onPress={leave}
+              onPress={placeInRoom}
               accessibilityLabel="Place it in the room"
             >
-              <Text style={styles.actionGlyph}>⌂</Text>
+              <Image
+                source={require("@/src/assets/ui/icons/icon-home.png")}
+                style={styles.actionIcon}
+                resizeMode="contain"
+              />
               <Text style={styles.actionText}>place in the room now!</Text>
             </Pressable>
             <Pressable
               style={styles.action}
-              onPress={leave}
+              onPress={goToInventory}
               accessibilityLabel="Store it in your inventory"
             >
               <Text style={styles.actionGlyph}>▤</Text>
@@ -173,9 +211,10 @@ const makeStyles = (t: Theme) =>
     roundGlyph: { fontSize: 17, fontWeight: "800", color: t.accent },
 
     title: {
+      // Rosy accent for the headline, per the wireframe.
       fontSize: 19,
       fontWeight: "800",
-      color: t.accent,
+      color: "#A97480",
       textAlign: "center",
       marginBottom: 12,
     },
@@ -234,6 +273,7 @@ const makeStyles = (t: Theme) =>
     actionsRow: { flexDirection: "row", justifyContent: "center", gap: 44 },
     action: { alignItems: "center", gap: 4, maxWidth: 150 },
     actionGlyph: { fontSize: 24, color: t.text },
+  actionIcon: { width: 40, height: 40, marginBottom: 4 },
     actionText: {
       fontSize: 11,
       fontWeight: "700",

@@ -1,7 +1,9 @@
+import { memo, useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
+import { GrainOverlay } from '@/src/game/ui/Button';
 
 const RADIUS = 46;      // travel radius of the knob
 const THUMB = 52;       // the knob itself — bigger than the travel, as in the reference
@@ -26,26 +28,39 @@ interface Props {
 
 /** Fixed virtual joystick: a cream dial with four direction arrows and a raised, glossy
  *  knob that springs back on release. */
-export function Joystick({ onStart, onMove, onEnd }: Props) {
+function JoystickImpl({ onStart, onMove, onEnd }: Props) {
   const tx = useSharedValue(0);
   const ty = useSharedValue(0);
 
-  const pan = Gesture.Pan()
-    .onBegin(() => {
-      scheduleOnRN(onStart);
-    })
-    .onUpdate((e) => {
-      const len = Math.hypot(e.translationX, e.translationY);
-      const clamp = len > RADIUS ? RADIUS / len : 1;
-      tx.value = e.translationX * clamp;
-      ty.value = e.translationY * clamp;
-      scheduleOnRN(onMove, tx.value / RADIUS, ty.value / RADIUS);
-    })
-    .onFinalize(() => {
-      tx.value = withSpring(0);
-      ty.value = withSpring(0);
-      scheduleOnRN(onEnd);
-    });
+  // MEMOISED, for the same reason the scene gestures and the part/cluster gesture caches
+  // are: the play screen re-renders throughout a drag (fit-state churn), and handing
+  // GestureDetector a fresh Gesture object makes gesture-handler reconfigure the native
+  // handler underneath an in-flight touch. The three callbacks are useCallback-stable in
+  // useOrbitCamera, so this rebuilds only when the manipulator itself swaps.
+  const pan = useMemo(
+    () =>
+      Gesture.Pan()
+        .onBegin(() => {
+          scheduleOnRN(onStart);
+        })
+        .onUpdate((e) => {
+          const len = Math.hypot(e.translationX, e.translationY);
+          const clamp = len > RADIUS ? RADIUS / len : 1;
+          tx.value = e.translationX * clamp;
+          ty.value = e.translationY * clamp;
+          // onMove (JS hop) keeps API compatibility and updates any JS-side listeners.
+          // OrbitDrive reads stickShared on the render thread; writing it here via the same
+          // hop is a single cheap assignment (not the old per-frame integration), so even
+          // under drag load the camera keeps orbiting at the latest deflection.
+          scheduleOnRN(onMove, tx.value / RADIUS, ty.value / RADIUS);
+        })
+        .onFinalize(() => {
+          tx.value = withSpring(0);
+          ty.value = withSpring(0);
+          scheduleOnRN(onEnd);
+        }),
+    [onStart, onMove, onEnd, tx, ty],
+  );
 
   const thumbStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: tx.value }, { translateY: ty.value }],
@@ -54,11 +69,13 @@ export function Joystick({ onStart, onMove, onEnd }: Props) {
   return (
     <GestureDetector gesture={pan}>
       <View style={styles.base}>
+        <GrainOverlay radius={BASE / 2} />
         <Text style={[styles.arrow, styles.arrowUp]}>▲</Text>
         <Text style={[styles.arrow, styles.arrowDown]}>▼</Text>
         <Text style={[styles.arrow, styles.arrowLeft]}>◀</Text>
         <Text style={[styles.arrow, styles.arrowRight]}>▶</Text>
         <Animated.View style={[styles.thumb, thumbStyle]}>
+          <GrainOverlay radius={THUMB / 2} />
           {/* A lighter cap over the top half reads as a gloss highlight. */}
           <View style={styles.thumbGloss} />
         </Animated.View>
@@ -66,6 +83,10 @@ export function Joystick({ onStart, onMove, onEnd }: Props) {
     </GestureDetector>
   );
 }
+
+/** memo as well as the useMemo above: the parent re-renders on every fit-state change, and
+ *  there is no reason for the dial to re-render at all — its props are stable. */
+export const Joystick = memo(JoystickImpl);
 
 const styles = StyleSheet.create({
   base: {
