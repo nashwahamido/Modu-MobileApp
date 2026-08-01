@@ -12,6 +12,7 @@ import { availableActions, availableInMode } from "@/src/game/core/evaluation/av
 import { blockReason, reasonActionable } from "@/src/game/core/evaluation/blockReason";
 import { combineReady, focusableClusterIds } from "@/src/game/core/evaluation/clusters";
 import { HARDWARE } from "@/src/game/content/hardware";
+import { deriveSceneState } from "@/src/game/scene/useSceneState";
 import {
   ActionId,
   AssemblyMode,
@@ -77,6 +78,32 @@ const FIXTURES: { id: string; f: Furniture }[] = [
   { id: "dalfred-stool", f: fixture("dalfred-stool", DALFRED as AuthoredExports, DALFRED_PARTS) },
   { id: "eket-cabinet", f: fixture("eket-cabinet", EKET as AuthoredExports, EKET_PARTS) },
 ];
+
+test("LACK bolt remains available to the tutorial when Focus mode compresses the tray", () => {
+  const furniture = FIXTURES.find(({ id }) => id === "lack-table")!.f;
+  const tabletop = furniture.actions.find(
+    (action) => action.type === "placePart" && action.partId === "tableTop",
+  );
+  assert.ok(tabletop);
+
+  const scene = deriveSceneState(
+    furniture,
+    [tabletop.actionId],
+    null,
+    null,
+    null,
+    "free",
+    true,
+  );
+  const tutorialBolts = scene.allTrayItems.filter(
+    (item) =>
+      item.action?.type === "placeFastener" ||
+      item.action?.type === "insertFastener",
+  );
+
+  assert.ok(tutorialBolts.length > 0);
+  assert.ok(tutorialBolts.every((item) => item.enabled));
+});
 
 // deterministic PRNG so a fuzz failure reproduces from its seed
 const mulberry32 = (seed: number) => (): number => {

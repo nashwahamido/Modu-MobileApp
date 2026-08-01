@@ -54,6 +54,8 @@ export interface SceneState {
   heldAction: AssemblyAction | null;
   /** Everything this stage uses, grouped — the inventory column. */
   trayItems: TrayItem[];
+  /** Uncompressed inventory before Focus mode chooses a single card. Tutorial gates use this so a required card cannot be filtered out twice. */
+  allTrayItems: TrayItem[];
   /** Tighten action currently awaiting the circular gesture. */
   activeTighten: AssemblyAction | null;
   /** 3-phase insertFastener currently awaiting the PRESS gesture (stage → loose). */
@@ -255,7 +257,16 @@ export function deriveSceneState(
     else if (acts.tighten && !done.has(acts.tighten)) modes[id] = "loose";
     else modes[id] = "flush";
   }
-  return { modes, heldAction, trayItems, activeTighten, activeInsertPress, stagedSeat, activeBeat };
+  return {
+    modes,
+    heldAction,
+    trayItems,
+    allTrayItems: allTray,
+    activeTighten,
+    activeInsertPress,
+    stagedSeat,
+    activeBeat,
+  };
 }
 
 export function useSceneState(): SceneState {
@@ -271,7 +282,7 @@ export function useSceneState(): SceneState {
     () =>
       furniture
         ? deriveSceneState(furniture, completed, heldActionId, activeCluster, matchedActionId, mode, focusMode, staticSockets)
-        : { modes: {}, heldAction: null, trayItems: [], activeTighten: null, activeInsertPress: null, stagedSeat: null, activeBeat: null },
+        : { modes: {}, heldAction: null, trayItems: [], allTrayItems: [], activeTighten: null, activeInsertPress: null, stagedSeat: null, activeBeat: null },
     [furniture, completed, heldActionId, activeCluster, matchedActionId, mode, focusMode, staticSockets],
   );
 }

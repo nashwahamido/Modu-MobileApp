@@ -20,6 +20,8 @@ export type ReleaseBehavior = "float" | "autoReturn";
 export type LightingPreset = "auto" | "studio" | "warm" | "soft" | "golden";
 /** Held-part drag mechanism: "adaptive" = this engine's model — screen-space candidate matching + the drag plane eases to the matched socket's height (handles multi-height groups); "level" = the on-release engine's model, kept for comparison/demo — plane FIXED at the session target's height, candidates matched by true 3D distance, so depth can hide a socket (visible on multi-height groups like the wool stool's two-height legs or DALFRED's screw105251). */
 export type DragPlane = "adaptive" | "level";
+/** Control companion's tutorial presentation preset. Individual support toggles may override parts of it. */
+export type ControlGuidanceLevel = "minimal" | "balanced" | "detailed";
 
 // ===============  The settings =================
 export interface AccessibilitySettings {
@@ -33,6 +35,10 @@ export interface AccessibilitySettings {
   showInstructions: boolean;
   /** Show only the current part + action; hide the rest of the chrome. */
   focusMode: boolean;
+  /** Show non-essential HUD such as progress, XP, undo, and fit feedback. */
+  showUiOverlay: boolean;
+  /** Base presentation preset for the adjustable Control companion. */
+  controlGuidanceLevel: ControlGuidanceLevel;
   /** Auto-orient the camera to frame the next open target socket. */
   autoView: boolean;
   fontScale: number;

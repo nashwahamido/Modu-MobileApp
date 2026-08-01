@@ -30,6 +30,7 @@ interface Props {
   onSimulatePinch?: () => void;
   blocked?: boolean;
   audioEnabled?: boolean;
+  textEnabled?: boolean;
 }
 
 export function MascotGuideOverlay({
@@ -41,6 +42,7 @@ export function MascotGuideOverlay({
   onSimulatePinch,
   blocked = false,
   audioEnabled = false,
+  textEnabled = true,
 }: Props) {
   const styles = useStyles(makeStyles);
   const overlayRef = useRef<View>(null);
@@ -51,6 +53,9 @@ export function MascotGuideOverlay({
   const height = overlaySize?.height ?? windowSize.height;
   const currentIndex = useTutorialStore((s) => s.currentIndex);
   const profile = useGameStore((s) => s.profile);
+  const controlGuidanceLevel = useGameStore(
+    (s) => s.settings.controlGuidanceLevel,
+  );
   const mascotImage = avatarForProfile(profile);
   const presentation = tutorialPresentationForProfile(profile);
   const steps = useTutorialStore((s) => s.steps);
@@ -83,9 +88,14 @@ export function MascotGuideOverlay({
   );
 
   useEffect(() => {
+    const detailedControlSpeech =
+      profile === 'control' &&
+      controlGuidanceLevel === 'detailed' &&
+      audioEnabled &&
+      !step?.audio;
     if (
-      !presentation.showVisualDemo ||
-      !visualSpeechEnabled ||
+      (!presentation.showVisualDemo && !detailedControlSpeech) ||
+      (presentation.showVisualDemo && !visualSpeechEnabled) ||
       blocked ||
       attentionOverlayActive ||
       skipped ||
@@ -96,10 +106,9 @@ export function MascotGuideOverlay({
       Speech.stop();
       return;
     }
-    const spokenMessage = visualMessageForStep(
-      step.id,
-      step.shortLabel ?? step.message,
-    );
+    const spokenMessage = presentation.showVisualDemo
+      ? visualMessageForStep(step.id, step.shortLabel ?? step.message)
+      : step.message;
     Speech.stop();
     Speech.speak(spokenMessage, { rate: 0.82 });
     return () => {
@@ -109,8 +118,11 @@ export function MascotGuideOverlay({
     attentionOverlayActive,
     blocked,
     completed,
+    controlGuidanceLevel,
     currentIndex,
+    audioEnabled,
     presentation.showVisualDemo,
+    profile,
     rewardReady,
     skipped,
     step,
@@ -270,28 +282,45 @@ export function MascotGuideOverlay({
       : presentation.reducedText
         ? visualMessageForStep(step.id, step.shortLabel ?? step.message)
         : step.message;
+  const compactControlGuide =
+    profile === 'control' && textEnabled && controlGuidanceLevel === 'balanced';
+  const detailedControlGuide =
+    profile === 'control' && textEnabled && controlGuidanceLevel === 'detailed';
+  const showScrim = profile !== 'control' || detailedControlGuide;
+  const displayedMessage = compactControlGuide
+    ? controlMessageForStep(step.id, step.shortLabel ?? step.message)
+    : message;
+  // Minimal Control support may hide both prose and the general HUD, but it
+  // must never hide the gesture needed to advance the current step. Reuse the
+  // existing visual cues as a compact, non-verbal fallback.
+  const showEssentialVisualCue =
+    presentation.showVisualDemo || (profile === 'control' && !textEnabled);
   const bubbleStyle = bubblePosition(
     step.targetId,
     frame,
     width,
     height,
-    presentation.showVisualDemo,
+    presentation.showVisualDemo || compactControlGuide,
   );
 
   return (
     <View ref={overlayRef} style={styles.layer} pointerEvents="box-none" onLayout={handleLayout}>
       {frame ? (
         <>
-          <View pointerEvents="none" style={[styles.scrim, { left: 0, top: 0, right: 0, height: frame.y }]} />
-          <View pointerEvents="none" style={[styles.scrim, { left: 0, top: frame.y, width: frame.x, height: frame.height }]} />
-          <View
-            pointerEvents="none"
-            style={[styles.scrim, { left: frame.x + frame.width, top: frame.y, right: 0, height: frame.height }]}
-          />
-          <View
-            pointerEvents="none"
-            style={[styles.scrim, { left: 0, top: frame.y + frame.height, right: 0, bottom: 0 }]}
-          />
+          {showScrim ? (
+            <>
+              <View pointerEvents="none" style={[styles.scrim, { left: 0, top: 0, right: 0, height: frame.y }]} />
+              <View pointerEvents="none" style={[styles.scrim, { left: 0, top: frame.y, width: frame.x, height: frame.height }]} />
+              <View
+                pointerEvents="none"
+                style={[styles.scrim, { left: frame.x + frame.width, top: frame.y, right: 0, height: frame.height }]}
+              />
+              <View
+                pointerEvents="none"
+                style={[styles.scrim, { left: 0, top: frame.y + frame.height, right: 0, bottom: 0 }]}
+              />
+            </>
+          ) : null}
           <View
             pointerEvents="none"
             style={[
@@ -300,19 +329,22 @@ export function MascotGuideOverlay({
               { left: frame.x, top: frame.y, width: frame.width, height: frame.height },
             ]}
           />
-          {presentation.showVisualDemo && step.id === 'long-press-part' ? (
+          {showEssentialVisualCue && step.id === 'long-press-part' ? (
             <VisualLongPressCue frame={frame} />
           ) : null}
-          {presentation.showVisualDemo && step.id === 'select-allen-key' ? (
+          {showEssentialVisualCue && step.id === 'select-allen-key' ? (
             <VisualToolboxCue frame={frame} />
           ) : null}
-          {presentation.showVisualDemo && step.id === 'view-under-table' ? (
+          {showEssentialVisualCue && step.id === 'view-under-table' ? (
             <VisualJoystickCue frame={frame} />
           ) : null}
         </>
       ) : null}
-      <View style={[styles.bubble, bubbleStyle]} pointerEvents="box-none">
-        {!presentation.showMomentumCompanion ? (
+      {textEnabled && !(compactControlGuide && step.id === 'stand-table-upright') ? <View
+        style={[styles.bubble, compactControlGuide && styles.controlCompactBubble, bubbleStyle]}
+        pointerEvents="box-none"
+      >
+        {!presentation.showMomentumCompanion && profile !== 'control' ? (
           <View style={styles.mascotPortrait}>
             <Image
               source={mascotImage}
@@ -321,13 +353,17 @@ export function MascotGuideOverlay({
             />
           </View>
         ) : null}
-        <View style={styles.copy} pointerEvents="box-none">
-          <Text style={styles.stepText}>
+        <View style={[styles.copy, compactControlGuide && styles.controlCompactCopy]} pointerEvents="box-none">
+          {!compactControlGuide ? <Text style={styles.stepText}>
             {phase === 'settings' ? 'SETTINGS · ' : ''}{currentIndex + 1}/{steps.length}
-          </Text>
+          </Text> : null}
           <View style={styles.messageRow}>
-            <Text style={[styles.message, presentation.showVisualDemo && styles.visualMessage]}>
-              {message}
+            <Text style={[
+              styles.message,
+              presentation.showVisualDemo && styles.visualMessage,
+              compactControlGuide && styles.controlCompactMessage,
+            ]}>
+              {displayedMessage}
             </Text>
             {presentation.showVisualDemo ? (
               <VoiceButton
@@ -349,7 +385,7 @@ export function MascotGuideOverlay({
                 : 'Audio guidance is off. Tap the speaker to turn it on again.'}
             </Text>
           ) : null}
-          <View
+          {!compactControlGuide ? <View
             style={styles.actions}
             pointerEvents={step.id === 'pinch-to-zoom' && onSimulatePinch ? 'auto' : 'none'}
           >
@@ -367,9 +403,9 @@ export function MascotGuideOverlay({
             {step.id === 'pinch-to-zoom' && onSimulatePinch ? (
               <Button label="Computer: test zoom" small onPress={onSimulatePinch} />
             ) : null}
-          </View>
+          </View> : null}
         </View>
-      </View>
+      </View> : null}
       {stepRewardReady && presentation.showMilestoneConfirmation ? (
         <View style={styles.stepRewardToast} pointerEvents="none">
           <Text style={styles.stepRewardText}>
@@ -390,6 +426,20 @@ function visualMessageForStep(stepId: string, fallback: string): string {
     'select-allen-key': 'Choose the Allen key',
     'tighten-connector': 'Turn clockwise',
     'install-four-legs': 'Match each leg to a bolt',
+    'stand-table-upright': 'Turn the table upright',
+  };
+  return messages[stepId] ?? fallback;
+}
+
+function controlMessageForStep(stepId: string, fallback: string): string {
+  const messages: Record<string, string> = {
+    'long-press-part': 'Hold the tabletop',
+    'drag-and-snap': 'Move it to the highlighted target',
+    'view-under-table': 'Rotate to see underneath',
+    'place-connector': 'Place a bolt in the highlighted hole',
+    'select-allen-key': 'Choose the Allen key',
+    'tighten-connector': 'Turn clockwise to tighten',
+    'install-four-legs': 'Repeat the bolt, tool, and leg steps',
     'stand-table-upright': 'Turn the table upright',
   };
   return messages[stepId] ?? fallback;
@@ -494,7 +544,7 @@ const makeStyles = (t: Theme) =>
       position: 'absolute',
       borderRadius: 18,
       borderWidth: 3,
-      borderColor: '#8D7BA8',
+      borderColor: t.accent,
       backgroundColor: 'rgba(255,255,255,0.08)',
     },
     highlightEmphasized: {
@@ -507,6 +557,9 @@ const makeStyles = (t: Theme) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
+    },
+    controlCompactBubble: {
+      width: 230,
     },
     mascotPortrait: {
       width: 82,
@@ -534,8 +587,15 @@ const makeStyles = (t: Theme) =>
       borderColor: t.border,
       ...ELEVATION.card,
     },
+    controlCompactCopy: {
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      borderWidth: 2,
+      borderColor: '#8D7BA8',
+    },
     stepText: { color: t.success, fontSize: 11, fontWeight: '800', marginBottom: 4 },
     message: { color: t.text, fontSize: 14, lineHeight: 19, fontWeight: '700' },
+    controlCompactMessage: { fontSize: 12, lineHeight: 16, fontWeight: '800' },
     messageRow: {
       flexDirection: 'row',
       alignItems: 'center',

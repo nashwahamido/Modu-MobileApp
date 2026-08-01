@@ -64,6 +64,7 @@ import { TutorialStepRail } from "@/src/game/tutorial/TutorialStepRail";
 import { MomentumCompanion } from "@/src/game/tutorial/MomentumCompanion";
 import { MomentumStepHeader } from "@/src/game/tutorial/MomentumStepHeader";
 import { MomentumAttentionOverlay } from "@/src/game/tutorial/MomentumAttentionOverlay";
+import { ControlSupportPanel } from "@/src/game/tutorial/ControlSupportPanel";
 import { useTutorialStore } from "@/src/game/tutorial/store";
 import { furnitureForProfile } from "@/src/game/core/profile";
 import { tutorialPresentationForProfile } from "@/src/game/tutorial/presentation";
@@ -105,6 +106,8 @@ function TutorialScreen() {
   const lastScale = useRef(1);
   const joystickTutorialStartedAt = useRef<number | null>(null);
   const [guideCollapsed, setGuideCollapsed] = useState(false);
+  const [supportBlocked, setSupportBlocked] = useState(false);
+  const [controlGuidanceEnabled, setControlGuidanceEnabled] = useState(false);
 
   // Stabilised with useCallback so <Joystick>'s internal gesture memo actually holds.
   // The tutorial needs to wrap the raw camera callbacks to drive step tracking; passing
@@ -313,7 +316,7 @@ function TutorialScreen() {
     }
     if (tutorialStepId === "view-under-table") return [];
     if (tutorialStepId === "place-connector") {
-      return sceneState.trayItems.filter(
+      return sceneState.allTrayItems.filter(
         (item) =>
           item.action?.type === "placeFastener" ||
           item.action?.type === "insertFastener",
@@ -322,7 +325,7 @@ function TutorialScreen() {
     if (tutorialStepId === "select-allen-key") return [];
     if (tutorialStepId === "tighten-connector") return [];
     return sceneState.trayItems;
-  }, [sceneState.trayItems, tutorialAdvancing, tutorialStepId]);
+  }, [sceneState.allTrayItems, sceneState.trayItems, tutorialAdvancing, tutorialStepId]);
 
   useEffect(() => {
     setGuideCollapsed(false);
@@ -588,8 +591,8 @@ function TutorialScreen() {
         ]}
         pointerEvents="box-none"
       >
-        {/* Instructions hidden → only the progress bar stays (slim pill). Shared with play.tsx, so the tutorial HUD can never drift from the real one. */}
-        <View style={styles.objectiveWrap} pointerEvents="box-none">
+        {/* The adjustable UI-overlay setting hides the complete non-essential objective HUD. */}
+        {settings.showUiOverlay ? <View style={styles.objectiveWrap} pointerEvents="box-none">
           <MomentumCompanion />
           <ObjectiveBar
             line={
@@ -616,17 +619,24 @@ function TutorialScreen() {
               ) : undefined
             }
           />
-        </View>
+        </View> : null}
         <CenterDropRing />
-        <FitChip />
-        <HintToast />
-        <UndoButton />
+        {settings.showUiOverlay ? <FitChip /> : null}
+        {settings.softHints ? <HintToast /> : null}
+        {settings.showUiOverlay ? <UndoButton /> : null}
         <TutorialTarget
           id="undo"
           style={styles.undoTarget}
           pointerEvents="none"
         />
-        <GameSettings />
+        {settings.showUiOverlay ? <GameSettings /> : null}
+        {profile === "control" ? (
+          <ControlSupportPanel
+            guidanceEnabled={controlGuidanceEnabled}
+            onGuidanceChange={setControlGuidanceEnabled}
+            onBlockingChange={setSupportBlocked}
+          />
+        ) : null}
         <TutorialTarget
           id="settings"
           style={styles.settingsTarget}
@@ -655,7 +665,7 @@ function TutorialScreen() {
           style={styles.toolbarTarget}
           pointerEvents="none"
         />
-        {mode === "free" && !focus ? (
+        {mode === "free" && settings.softHints && (!focus || profile === "control") ? (
           <TutorialTarget id="hint" style={hudControls.hintButton}>
             <HintButton
               onPress={() => {
@@ -756,12 +766,17 @@ function TutorialScreen() {
         ) : null}
       </View>
       {ringOverlay}
-      <GreenFlash trigger={completedCount} />
+      {settings.showUiOverlay ? <GreenFlash trigger={completedCount} /> : null}
       <MascotGuideOverlay
         activeToolKind={activeToolKind}
         assemblyComplete={totalCount > 0 && completedCount >= totalCount}
         audioEnabled={settings.audio}
-        blocked={collapsedActionGuide}
+        textEnabled={settings.showInstructions}
+        blocked={
+          collapsedActionGuide ||
+          supportBlocked ||
+          (profile === "control" && !controlGuidanceEnabled && !guideCompleted)
+        }
         onClaimReward={() => {}}
         onSimulatePinch={() => {
           if (!manipulator) return;

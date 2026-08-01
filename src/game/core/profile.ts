@@ -6,6 +6,7 @@
 
 import { AccessibilitySettings } from "@/src/game/core/accessibility";
 import { AssemblyMode, FurnitureId } from "@/src/game/core/type";
+import { CONTROL_GUIDANCE_PRESETS } from "@/src/game/core/controlGuidance";
 
 export const DEFAULT_SETTINGS: AccessibilitySettings = {
   textLevel: "standard",
@@ -14,6 +15,8 @@ export const DEFAULT_SETTINGS: AccessibilitySettings = {
   showInstructions: true,
   manualTools: false,
   focusMode: false,
+  showUiOverlay: true,
+  controlGuidanceLevel: "balanced",
   autoView: false,
   fontScale: 1,
 
@@ -37,10 +40,11 @@ export function furnitureForProfile(profile: ProfileId): FurnitureId {
 export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>> = {
   // Autonomy and adjustable guidance: the DEFAULT profile at launch.
   control: {
-    showInstructions: false,
-    focusMode: false,
+    // Balanced is the initial Control-mode support level. Every value remains
+    // independently adjustable from the in-tutorial Support panel.
+    ...CONTROL_GUIDANCE_PRESETS.balanced,
+    controlGuidanceLevel: "balanced",
     autoView: false,
-    softHints: true,
     manualTools: true,
     // dev-setting
     snapStyle: "magnetic",
