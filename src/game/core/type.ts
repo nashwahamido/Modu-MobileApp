@@ -255,6 +255,10 @@ export type StyleSet = Partial<Record<RenderStyleId, RenderStyle>>;
 export interface FurnitureMeta {
   id: FurnitureId;
   thumbnail: ThumbSet;
+  /** Catalogue art per finish, keyed by the item_variants `variation` string. Absent, or a key with
+   *  no art, means the catalogue shows no finish arrow for this furniture — so a variation declared
+   *  in the table before its artwork ships degrades to the plain tile rather than a broken image. */
+  variantThumbnails?: Record<string, ThumbSet>;
   partCount: number;
   stageCount: number;
   stepCount: number;
