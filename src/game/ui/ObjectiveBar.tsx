@@ -1,8 +1,9 @@
 // The centred objective pill: instruction line + [★ star | progress track | XP label] row. SHARED by the play screen and the tutorial fork — edit here and both stay in sync.
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { ProgressBar } from "@/src/game/ui/Button";
-import { ELEVATION, RADIUS, SPACE, Theme, TYPE, useStyles } from "@/src/game/ui/theme";
+import { ELEVATION, RADIUS, SPACE, Theme, TYPE, useStyles, FONT } from "@/src/game/ui/theme";
 
 interface Props {
   /** The objective sentence; null hides the text row and collapses the bar to the slim fixed pill (instructions off). */
@@ -21,6 +22,20 @@ interface Props {
 export function ObjectiveBar({ line, fontSize, value, total, xp, header }: Props) {
   const styles = useStyles(makeStyles);
   const expanded = line !== null || header != null;
+  // Derived, not a constant: fontSize is already scaled by the caller's accessibility setting, so a
+  // fixed box height would clip the text at the larger scales.
+  const lineHeight = Math.round(fontSize * 1.18);
+  // Each new instruction drops in from above. Keyed on the line itself, so it fires on a real change
+  // of copy and not on every re-render the progress row causes.
+  const enter = useSharedValue(1);
+  useEffect(() => {
+    enter.value = 0;
+    enter.value = withTiming(1, { duration: 240, easing: Easing.out(Easing.cubic) });
+  }, [enter, line]);
+  const lineAnim = useAnimatedStyle(() => ({
+    opacity: enter.value,
+    transform: [{ translateY: -lineHeight * (1 - enter.value) }],
+  }));
   return (
     <View
       style={[
@@ -31,9 +46,23 @@ export function ObjectiveBar({ line, fontSize, value, total, xp, header }: Props
       pointerEvents="none"
     >
       {header ?? (line !== null ? (
-        <Text style={[styles.objectiveText, { fontSize }]} numberOfLines={2}>
-          {line}
-        </Text>
+        // ONE line, fixed. The instruction changes on every step and its length changes with it, so
+        // a box that sizes to its content made the bar breathe in and out under the player's eyes.
+        // overflow:hidden is load-bearing — it is what the new line drops in from behind.
+        <View style={{ height: lineHeight, justifyContent: "center", overflow: "hidden" }}>
+          <Animated.View style={lineAnim}>
+            <Text
+              style={[styles.objectiveText, { fontFamily: FONT, fontSize, lineHeight }]}
+              numberOfLines={1}
+              // Shrink rather than wrap: a second line would take the height back, and truncating an
+              // instruction is the one outcome this screen cannot afford.
+              adjustsFontSizeToFit
+              minimumFontScale={0.72}
+            >
+              {line}
+            </Text>
+          </Animated.View>
+        </View>
       ) : null)}
       {/* [★ star] [progress track] [XP label] — the badge sits ON the bar's left,
           the way the reference integrates the level star into the track. */}
@@ -49,8 +78,16 @@ export function ObjectiveBar({ line, fontSize, value, total, xp, header }: Props
           style={styles.xpBadge}
           resizeMode="contain"
         />
+        {/* Badge and total together on the left: they are one fact, and splitting them across the track made the track a divider between a picture and a number that belong to each other. */}
+        <Text style={styles.xpLabel} numberOfLines={1}>{xp}</Text>
         <ProgressBar value={value} total={total} style={styles.xpTrack} />
-        <Text style={styles.xpLabel}>{xp}</Text>
+        {/* Step count as a ratio the eye can skip: the number that MOVES is full size in the text
+            colour, the one that never changes is smaller and muted. Same information as "0/18",
+            without two equal-weight numbers fighting over a slash. */}
+        <View style={styles.stepCount}>
+          <Text style={styles.stepNow}>{value}</Text>
+          <Text style={styles.stepTotal}>/{total}</Text>
+        </View>
       </View>
     </View>
   );
@@ -60,16 +97,15 @@ const makeStyles = (t: Theme) =>
   StyleSheet.create({
     objectiveBar: {
       justifyContent: "center",
-      // CAPPED. The bar is centred and the cluster chips sit at right:14, so an unbounded
-      // bar grows under them on a long instruction. 360 + the pause button keeps the whole
-      // group clear of that corner; anything longer wraps to a second line instead.
-      maxWidth: 360,
+      // FIXED, not capped. A max width still lets the bar shrink to a short instruction and grow
+      // back on the next one, which is the jitter itself. 360 + the pause button keeps the group
+      // clear of the cluster chips at right:14.
+      width: 360,
       backgroundColor: t.surface,
       borderColor: t.border,
       borderWidth: StyleSheet.hairlineWidth * 2,
       paddingHorizontal: SPACE.lg,
-      // With the objective sentence shown the bar needs two rows, so it sizes to content.
-      paddingVertical: 6,
+      paddingVertical: 5,
       borderRadius: RADIUS.panel,
       ...ELEVATION.card,
     },
@@ -81,8 +117,8 @@ const makeStyles = (t: Theme) =>
       width: 360,
       paddingVertical: 4,
     },
-    objectiveText: { ...TYPE.body, color: t.text, fontSize: 13, lineHeight: 15 },
-    progressGap: { marginTop: SPACE.sm },
+    objectiveText: { ...TYPE.body, color: t.text, textAlign: "center" },
+    progressGap: { marginTop: 4 },
     structuredProgressGap: { marginTop: 3 },
 
     // The XP badge sits INSIDE the bar, on the progress track's left — a star that overlaps
@@ -97,5 +133,10 @@ const makeStyles = (t: Theme) =>
       marginRight: -2,
     },
     xpTrack: { flex: 1 },
-    xpLabel: { ...TYPE.numeric, color: t.gold },
+    // minWidth on both flanks: without it the track resizes every time a number gains a digit, which
+    // is the same jitter one level down.
+    xpLabel: { ...TYPE.numeric, color: t.gold, minWidth: 26 },
+    stepCount: { flexDirection: "row", alignItems: "baseline", minWidth: 38, justifyContent: "flex-end" },
+    stepNow: { ...TYPE.numeric, color: t.text },
+    stepTotal: { ...TYPE.numeric, fontSize: 10, color: t.textDim },
   });

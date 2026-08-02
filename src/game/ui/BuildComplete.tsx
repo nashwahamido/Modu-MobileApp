@@ -83,6 +83,10 @@ const STAGE = {
  *  of a build, and the scene behind it has nothing left to say. */
 const SCRIM = "rgba(10,8,9,0.88)";
 
+/** The banner's mauve, reused for the card's rim so the ribbon reads as part of the same object
+ *  rather than pinned onto something else. */
+const MAUVE = "#A97480";
+
 const CONFETTI_COLORS = ["#A97480", "#8D7BA8", "#CCA16C", "#7D8B6E", "#F3EFE8"];
 const CONFETTI_COUNT = 26;
 
@@ -90,7 +94,7 @@ const CONFETTI_COUNT = 26;
  *  reads as a falling brick, and the sway is most of what sells it as paper. */
 function ConfettiPiece({
   left, size, color, delay, duration, drift, fall,
-}: { left: string; size: number; color: string; delay: number; duration: number; drift: number; fall: number }) {
+}: { left: number; size: number; color: string; delay: number; duration: number; drift: number; fall: number }) {
   const t = useSharedValue(0);
   useEffect(() => {
     t.value = withDelay(delay, withRepeat(withTiming(1, { duration, easing: Easing.linear }), 3, false));
@@ -117,18 +121,20 @@ function ConfettiPiece({
 /** The celebration, once the result has finished assembling itself on screen. The spread is derived
  *  from the index rather than Math.random: a re-render must not reshuffle scraps that are mid-fall. */
 function ConfettiRain({ delay }: { delay: number }) {
-  const { height } = useWindowDimensions();
+  const { height, width } = useWindowDimensions();
   const pieces = useMemo(
     () =>
       Array.from({ length: CONFETTI_COUNT }, (_, i) => ({
-        left: `${(i * 37) % 100}%`,
+        // Pixels, not a percent string: RN types `left` as DimensionValue, which takes a number or a
+        // `${number}%` template literal — a plain string is not assignable to it.
+        left: (((i * 37) % 100) / 100) * width,
         size: 6 + (i % 3) * 3,
         color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
         delay: delay + (i % 9) * 120,
         duration: 2000 + (i % 5) * 280,
         drift: ((i % 5) - 2) * 16,
       })),
-    [delay],
+    [delay, width],
   );
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -428,8 +434,8 @@ const makeStyles = (t: Theme) =>
       maxWidth: 520,
       backgroundColor: "#E3DACD",
       borderRadius: 22,
-      borderWidth: 2,
-      borderColor: t.accent,
+      borderWidth: 3,
+      borderColor: MAUVE,
       // Room for the ribbon's body to sit over the top edge without covering the undo/redo row.
       paddingTop: 26,
       paddingBottom: 12,

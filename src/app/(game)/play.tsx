@@ -390,11 +390,9 @@ function GameScreen() {
           />
           {/* Instructions hidden → only the progress bar stays (slim pill). */}
           <ObjectiveBar
-            line={
-              settings.showInstructions
-                ? `${objective} · ${completedCount}/${totalCount}`
-                : null
-            }
+            // The sentence only. The step count rides on the progress row inside the bar — keeping it
+            // out of here is what stops the line's length changing with the count.
+            line={settings.showInstructions ? objective : null}
             fontSize={objectiveFontSize}
             value={completedCount}
             total={totalCount}
