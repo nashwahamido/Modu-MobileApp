@@ -45,10 +45,15 @@ export function ToolsIcon({ size = 31, color = '#807277' }: Props) {
     <Path d="m6.5 18 10.8-10.8M4.2 20.3l3.1-1.1-2-2-1.1 3.1ZM19.8 3.7l-3.1 1.1 2 2 1.1-3.1Z" fill={color}/>
   </Svg>;
 }
-export function ChevronIcon({ size = 28, color = '#807277', up = false }: Props & { up?: boolean }) {
-  // fill + a same-colour stroke with a round linejoin softens the triangle's corners — a plain
-  // fill-only path has no linejoin to round, since there's no stroke outline to apply it to.
-  return <Svg {...base(size)}><Path d={up ? 'M2.6 17.2 12 6.8l9.4 10.4H2.6Z' : 'M2.6 6.8 12 17.2l9.4-10.4H2.6Z'} fill={color} stroke={color} strokeWidth={2} strokeLinejoin="round"/></Svg>;
+export function ChevronIcon({ size = 28, color = '#807277', up = false, outlineColor, outlineWidth = 1.5 }: Props & { up?: boolean; outlineColor?: string; outlineWidth?: number }) {
+  // Fill plus a same-colour stroke, whose round linejoin softens the corners.
+  const d = up ? 'M2.6 17.2 12 6.8l9.4 10.4H2.6Z' : 'M2.6 6.8 12 17.2l9.4-10.4H2.6Z';
+  return <Svg {...base(size)}>
+    {/* Behind the arrow, at its width plus twice the outline, so only the outer half shows.
+        Stroking the arrow itself would eat inward and change its shape. */}
+    {outlineColor ? <Path d={d} fill="none" stroke={outlineColor} strokeWidth={2 + outlineWidth * 2} strokeLinejoin="round"/> : null}
+    <Path d={d} fill={color} stroke={color} strokeWidth={2} strokeLinejoin="round"/>
+  </Svg>;
 }
 export function CheckIcon({ size, color = '#555' }: Props) { return <Svg {...base(size)} fill="none" stroke={color} strokeWidth="2.5"><Polyline points="4,12 9,17 20,6"/></Svg> }
 export function CloseIcon({ size, color = '#555' }: Props) { return <Svg {...base(size)} fill="none" stroke={color} strokeWidth="2.5"><Line x1="5" y1="5" x2="19" y2="19"/><Line x1="19" y1="5" x2="5" y2="19"/></Svg> }

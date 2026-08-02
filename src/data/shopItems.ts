@@ -1,7 +1,7 @@
 // The shop VIEW-MODEL: what a purchasable item is, and how the two catalogue surfaces (Shop and
 // Inventory) filter and sort one. No data lives here — the rows come from item_buy through the repo
 // seam, and the in-memory stand-in is seedShopItems() in adapters/seed.ts with every other fixture.
-export type ShopCategory = "fur" | "wall" | "floor" | "deco";
+export type ShopCategory = "fur" | "wall" | "floor" | "deco" | "window";
 
 export type ShopItemId = string;
 
@@ -17,7 +17,10 @@ export interface ShopItem {
 
 // The tab order shown in the store — "all" first, then the categories from the mock.
 // Not exported: CATEGORY_FILTERS below is the list every caller actually wants.
-const SHOP_CATEGORIES: ShopCategory[] = ["fur", "wall", "floor", "deco"];
+const SHOP_CATEGORIES: ShopCategory[] = ["fur", "wall", "floor", "deco", "window"];
+
+// The tabs without the "all" filter, for the room's shop popup.
+export const SHOP_CATEGORY_TABS: ShopCategory[] = SHOP_CATEGORIES;
 
 // A category tab value, including the "all" tab that shows everything.
 export type CategoryFilter = ShopCategory | "all";
@@ -27,9 +30,10 @@ export const CATEGORY_FILTERS: CategoryFilter[] = ["all", ...SHOP_CATEGORIES];
 export const CATEGORY_LABELS: Record<CategoryFilter, string> = {
   all: "All",
   fur: "Furniture",
-  wall: "Wallpaper",
-  floor: "Floor",
+  wall: "Wallpapers",
+  floor: "Floors",
   deco: "Decorations",
+  window: "Windows",
 };
 
 // Sort modes offered by the catalogue chrome, and their short pill labels.
