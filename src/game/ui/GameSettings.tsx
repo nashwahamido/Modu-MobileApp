@@ -12,8 +12,8 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ELEVATION, RADIUS, Theme, useStyles } from "@/src/game/ui/theme";
+import { useSafeInsets } from "@/src/hooks/use-safe-insets";
+import { ELEVATION, RADIUS, Theme, useStyles, FONT } from "@/src/game/ui/theme";
 import { SettingsControls } from "@/src/game/ui/SettingsControls";
 import { GrainOverlay } from "@/src/game/ui/Button";
 
@@ -37,8 +37,10 @@ export function GameSettings({
   const styles = useStyles(makeStyles);
   const [open, setOpen] = useState(false);
   const { height: winH } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-  const cardMaxHeight = winH - insets.top - insets.bottom - 32;
+  // The FLOORED insets, not the raw ones: immersive mode reports 0 on both test devices, so reading
+  // them directly made this the full window height and the card ran off the top and bottom edges.
+  const insets = useSafeInsets();
+  const cardMaxHeight = winH - insets.top - insets.bottom;
 
   const closeSettings = () => setOpen(false);
 
@@ -72,16 +74,19 @@ export function GameSettings({
         ]}
         onRequestClose={closeSettings}
       >
-        <View style={styles.backdrop} pointerEvents="box-none">
+        <View
+          style={[styles.backdrop, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
+          pointerEvents="box-none"
+        >
           <Pressable
             style={StyleSheet.absoluteFill}
             onPress={closeSettings}
           />
           <View style={[styles.card, { maxHeight: cardMaxHeight }]}>
-            <GrainOverlay radius={18} />
             <Text style={styles.title}>Settings</Text>
             {headerContent}
             <ScrollView
+              style={styles.cardScrollView}
               contentContainerStyle={styles.cardScroll}
               showsVerticalScrollIndicator={false}
             >
@@ -176,7 +181,11 @@ const makeStyles = (t: Theme) =>
     shadowOffset: { width: 0, height: 8 },
     elevation: 8,
   },
-  title: { fontSize: 17, fontWeight: "800", color: t.text, marginBottom: 2 },
+  title: { fontFamily: FONT, fontSize: 17, fontWeight: "800", color: t.text, marginBottom: 2 },
+  // flexShrink is the whole fix for the cut-off card: without it a ScrollView sizes to its CONTENT
+  // and overflows a maxHeight parent instead of scrolling inside it, pushing the title off the top
+  // and the footer off the bottom.
+  cardScrollView: { flexShrink: 1 },
   cardScroll: { paddingBottom: 4 },
   footer: {
     flexDirection: "row",
@@ -184,7 +193,7 @@ const makeStyles = (t: Theme) =>
     justifyContent: "space-between",
     marginTop: 12,
   },
-  homeText: { fontSize: 14, fontWeight: "700", color: t.textDim },
+  homeText: { fontFamily: FONT, fontSize: 14, fontWeight: "700", color: t.textDim },
   homeRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   homeIcon: { width: 20, height: 20 },
   done: {
@@ -196,5 +205,5 @@ const makeStyles = (t: Theme) =>
     paddingVertical: 9,
   },
   doneDisabled: { opacity: 0.42 },
-  doneText: { color: t.onAccent, fontWeight: "700", fontSize: 14 },
+  doneText: { color: t.onAccent, fontFamily: FONT, fontWeight: "700", fontSize: 14 },
   });
