@@ -305,6 +305,11 @@ function FurnitureCard({
       .map((v) => v.variation)
       .filter((v): v is string => v != null && v in art);
   }, [meta.variantThumbnails, variants]);
+  // A first build ARMS before it launches: tapping Start on an unselected card selects it, which
+  // runs the finish carousel, and the second tap goes to the build. Only for "new" — Continue and
+  // Assemble again are returns to something already under way, and a gate on those is just a tax on
+  // a player who has seen the finishes already.
+  const armsFirst = state === "new" && !selected;
   // The build always uses the DEFAULT finish — the carousel is a showcase, not a picker, so a tap on Start mid-slide must not launch whatever frame was on screen.
   const buildFinish = finishes[0] ?? null;
   // Cells: the alternates in reverse, then the default, then the FIRST cell again — so the pass
@@ -427,9 +432,10 @@ function FurnitureCard({
       {/* Now a real target: the card body selects, this starts. Two jobs, two touch areas — a nested Pressable swallows its own touch, so it never falls through to selection. */}
       <Pressable
         style={({ pressed }) => [styles.startBtn, { backgroundColor: PILL_STYLE[state].bg }, pressed && styles.startBtnPressed]}
-        onPress={() => onStart(buildFinish)}
+        onPress={() => (armsFirst ? onSelect() : onStart(buildFinish))}
         accessibilityRole="button"
         accessibilityLabel={`${PILL_LABEL[state].replace(" ›", "")} ${row?.name ?? meta.id}`}
+        accessibilityHint={armsFirst ? "Shows the available finishes. Tap again to start building." : undefined}
       >
         <GrainOverlay radius={RADIUS.pill} />
         <Text style={[styles.startText, { color: PILL_STYLE[state].fg }]}>{PILL_LABEL[state]}</Text>
