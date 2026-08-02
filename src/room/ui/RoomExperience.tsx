@@ -11,21 +11,13 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import {
-  useFonts,
-  Lexend_400Regular,
-  Lexend_600SemiBold,
-  Lexend_700Bold,
-  Lexend_800ExtraBold,
-  Lexend_900Black,
-} from "@expo-google-fonts/lexend";
 import { CheckIcon, RotateLeftIcon, RotateRightIcon, TrashIcon } from '../../components/Icons';
 import { Button } from '../../game/ui/Button';
 import { OverlaySheet } from '../../game/ui/OverlaySheet';
 import { SceneBackdrop } from '../../game/ui/SceneBackdrop';
 import { useGameStore } from '../../game/core/store';
 import { avatarForProfile } from '../../game/core/avatar';
-import { useStyles, useTheme } from "@/src/game/ui/theme";
+import { useStyles, useTheme, FONT, LEXEND } from "@/src/game/ui/theme";
 import { useCurrentUserId } from '../../data';
 import { RoomScene } from '../scene/RoomScene';
 import { ColourPicker } from './ColourPicker';
@@ -37,19 +29,12 @@ import type { Theme } from "@/src/game/ui/theme";
 import { clampRoomYaw } from '../core/roomShell';
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from '../../hooks/use-safe-insets';
 
-// This screen's text is pinned to the mockup's exact ink colour and to Lexend, rather than
-// the theme's t.text/system-font pair — a deliberate override for this redesign, not an
-// oversight, so it does not shift with the light/dark/high-contrast theme.
+// This screen's text is pinned to the mockup's exact ink colour rather than the theme's
+// t.text — a deliberate override for this redesign, not an oversight, so it does not shift
+// with the light/dark/high-contrast theme. The family is the app-wide Lexend.
 const TEXT_COLOR = '#231F20';
 const ROOM_EDIT_GUIDE_KEY = 'modu.room-edit-guide-seen.v1';
 const ROOM_WELCOME_GUIDE_KEY = 'modu.room-welcome-guide-seen.v1';
-const LEXEND = {
-  regular: 'Lexend_400Regular',
-  semibold: 'Lexend_600SemiBold',
-  bold: 'Lexend_700Bold',
-  extrabold: 'Lexend_800ExtraBold',
-  black: 'Lexend_900Black',
-} as const;
 
 // A stand-in for icon art that hasn't been delivered yet (star, coins, settings, and every
 // bottom-bar glyph). Decorative only — the Pressable it sits in carries the accessibility
@@ -95,15 +80,6 @@ export function RoomExperience() {
   const t = useTheme();
   const { welcome } = useLocalSearchParams<{ welcome?: string }>();
   const welcomeFromTutorial = welcome === 'tutorial';
-  // Text renders in the system font until this resolves, then re-renders once — no splash
-  // gate, since this is the persistent hub screen and the flash is a single cold-start frame.
-  useFonts({
-    Lexend_400Regular,
-    Lexend_600SemiBold,
-    Lexend_700Bold,
-    Lexend_800ExtraBold,
-    Lexend_900Black,
-  });
   // Tear the 3D view down only when a heavy scene is on top, not on every blur. The room screen stays mounted throughout (its placement/zoom UI state survives); only the Filament view unmounts under play/visit and rebuilds on return.
   const rootNav = useRootNavigationState();
   const heavySceneActive = !!rootNav && HEAVY_ROUTES.has(rootNav.routes[rootNav.index]?.name ?? '');
@@ -353,10 +329,10 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   // Settings sits on its own, self-positioned at the top-left — RoomTopStats (coins + level)
   // is the equivalent cluster at the top-right, now in its own file.
   settingsButton:{position:'absolute',zIndex:12,width:42,height:42,alignItems:'center',justifyContent:'center',shadowColor:'#50464b',shadowOpacity:.17,shadowRadius:3.5,shadowOffset:{width:0,height:2}},
-  placeBar:{position:'absolute',zIndex:16,bottom:78,alignSelf:'center',flexDirection:'row',alignItems:'center',gap:10,borderRadius:22,backgroundColor:t.surface,paddingLeft:18,paddingRight:6,paddingVertical:6,shadowColor:'#000',shadowOpacity:.18,shadowRadius:8},placeBarBlocked:{borderWidth:2,borderColor:t.danger},placeHint:{flexShrink:1,color:TEXT_COLOR,fontFamily:LEXEND.semibold},placeHintBlocked:{color:t.danger,fontSize:11},ghostRotate:{width:36,height:36,borderRadius:18,backgroundColor:t.surfaceRaised,alignItems:'center',justifyContent:'center'},cancelGlyph:{color:TEXT_COLOR,fontFamily:LEXEND.extrabold,fontSize:16},confirmDisabled:{opacity:.35},deleteButton:{width:36,height:36,borderRadius:18,backgroundColor:t.surfaceRaised,alignItems:'center',justifyContent:'center'},confirm:{width:36,height:36,borderRadius:18,backgroundColor:t.success,alignItems:'center',justifyContent:'center'},
-  comingSoonTitle:{fontFamily:LEXEND.black,fontSize:22,color:TEXT_COLOR,textAlign:'center'},comingSoonBody:{marginTop:8,fontFamily:LEXEND.semibold,fontSize:14,color:TEXT_COLOR,textAlign:'center'},comingSoonButton:{marginTop:18,minWidth:120},
+  placeBar:{position:'absolute',zIndex:16,bottom:78,alignSelf:'center',flexDirection:'row',alignItems:'center',gap:10,borderRadius:22,backgroundColor:t.surface,paddingLeft:18,paddingRight:6,paddingVertical:6,shadowColor:'#000',shadowOpacity:.18,shadowRadius:8},placeBarBlocked:{borderWidth:2,borderColor:t.danger},placeHint:{flexShrink:1,color:TEXT_COLOR,...LEXEND.semibold},placeHintBlocked:{color:t.danger,fontFamily: FONT, fontSize:11},ghostRotate:{width:36,height:36,borderRadius:18,backgroundColor:t.surfaceRaised,alignItems:'center',justifyContent:'center'},cancelGlyph:{color:TEXT_COLOR,...LEXEND.extrabold,fontSize:16},confirmDisabled:{opacity:.35},deleteButton:{width:36,height:36,borderRadius:18,backgroundColor:t.surfaceRaised,alignItems:'center',justifyContent:'center'},confirm:{width:36,height:36,borderRadius:18,backgroundColor:t.success,alignItems:'center',justifyContent:'center'},
+  comingSoonTitle:{...LEXEND.black,fontSize:22,color:TEXT_COLOR,textAlign:'center'},comingSoonBody:{marginTop:8,...LEXEND.semibold,fontSize:14,color:TEXT_COLOR,textAlign:'center'},comingSoonButton:{marginTop:18,minWidth:120},
   roomGuideMascot:{width:104,height:90,alignSelf:'center'},
-  roomGuideTitle:{marginTop:8,fontFamily:LEXEND.black,fontSize:22,color:TEXT_COLOR,textAlign:'center'},
-  roomGuideBody:{marginTop:8,fontFamily:LEXEND.semibold,fontSize:14,lineHeight:20,color:TEXT_COLOR,textAlign:'center'},
+  roomGuideTitle:{marginTop:8,...LEXEND.black,fontSize:22,color:TEXT_COLOR,textAlign:'center'},
+  roomGuideBody:{marginTop:8,...LEXEND.semibold,fontSize:14,lineHeight:20,color:TEXT_COLOR,textAlign:'center'},
   roomGuideButton:{marginTop:18,minWidth:120,alignSelf:'center'},
 });

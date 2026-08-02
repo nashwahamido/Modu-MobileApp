@@ -6,23 +6,16 @@ import { router } from 'expo-router';
 import type { Href } from 'expo-router';
 import { StyleSheet, Pressable, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useStyles, useTheme } from "@/src/game/ui/theme";
+import { useStyles, useTheme, LEXEND } from "@/src/game/ui/theme";
 import type { Theme } from "@/src/game/ui/theme";
 import { levelProgressFraction } from '../../data/levels';
 import { useProfileHud } from '../../hooks/useProfileHud';
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN } from '../../hooks/use-safe-insets';
 
-// This bar's text is pinned to the mockup's exact ink colour and to Lexend, rather than the
-// theme's t.text/system-font pair — a deliberate override for this redesign, not an
-// oversight, so it does not shift with the light/dark/high-contrast theme.
+// This bar's text is pinned to the mockup's exact ink colour rather than the theme's
+// t.text — a deliberate override for this redesign, not an oversight, so it does not shift
+// with the light/dark/high-contrast theme. The family is the app-wide Lexend.
 const TEXT_COLOR = '#231F20';
-const LEXEND = {
-  regular: 'Lexend_400Regular',
-  semibold: 'Lexend_600SemiBold',
-  bold: 'Lexend_700Bold',
-  extrabold: 'Lexend_800ExtraBold',
-  black: 'Lexend_900Black',
-} as const;
 
 // A stand-in for icon art that hasn't been delivered yet (the coin and level-star glyphs).
 // Decorative only — the Pressable/label around it carries the accessibility label, so this
@@ -94,5 +87,5 @@ export function RoomTopStats() {
 
 const makeStyles = (t: Theme) => StyleSheet.create({
   topRightGroup:{position:'absolute',zIndex:12,flexDirection:'row',alignItems:'center',gap:18},
-  levelGroup:{flexDirection:'row',alignItems:'center'},badgeCircle:{width:44,height:44,alignItems:'center',justifyContent:'center'},levelNumber:{position:'absolute',color:TEXT_COLOR,fontFamily:LEXEND.bold,fontSize:13},progress:{width:126,height:21,marginLeft:-6,borderRadius:12,backgroundColor:'#DFD7CA',overflow:'hidden',alignItems:'center',justifyContent:'center'},progressFill:{position:'absolute',left:0,top:0,bottom:0,backgroundColor:t.accent},progressText:{width:'100%',color:TEXT_COLOR,fontFamily:LEXEND.semibold,fontSize:11,textAlign:'center'},currencyGroup:{flexDirection:'row',alignItems:'center'},currency:{width:126,height:21,marginLeft:-5,borderRadius:12,backgroundColor:'#DFD7CA',alignItems:'center',justifyContent:'center'},currencyText:{color:TEXT_COLOR,fontFamily:LEXEND.bold,fontSize:12},
+  levelGroup:{flexDirection:'row',alignItems:'center'},badgeCircle:{width:44,height:44,alignItems:'center',justifyContent:'center'},levelNumber:{position:'absolute',color:TEXT_COLOR,...LEXEND.bold,fontSize:13},progress:{width:126,height:21,marginLeft:-6,borderRadius:12,backgroundColor:'#DFD7CA',overflow:'hidden',alignItems:'center',justifyContent:'center'},progressFill:{position:'absolute',left:0,top:0,bottom:0,backgroundColor:t.accent},progressText:{width:'100%',color:TEXT_COLOR,...LEXEND.semibold,fontSize:11,textAlign:'center'},currencyGroup:{flexDirection:'row',alignItems:'center'},currency:{width:126,height:21,marginLeft:-5,borderRadius:12,backgroundColor:'#DFD7CA',alignItems:'center',justifyContent:'center'},currencyText:{color:TEXT_COLOR,...LEXEND.bold,fontSize:12},
 });

@@ -10,21 +10,14 @@ import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanim
 import Svg, { Circle, Defs, Path, RadialGradient, Stop } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChevronIcon } from '../../components/Icons';
-import { useStyles, useTheme } from "@/src/game/ui/theme";
+import { useStyles, useTheme, LEXEND } from "@/src/game/ui/theme";
 import type { Theme } from "@/src/game/ui/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN } from '../../hooks/use-safe-insets';
 
-// This bar's text is pinned to the mockup's exact ink colour and to Lexend, rather than the
-// theme's t.text/system-font pair — a deliberate override for this redesign, not an
-// oversight, so it does not shift with the light/dark/high-contrast theme.
+// This bar's text is pinned to the mockup's exact ink colour rather than the theme's
+// t.text — a deliberate override for this redesign, not an oversight, so it does not shift
+// with the light/dark/high-contrast theme. The family is the app-wide Lexend.
 const TEXT_COLOR = '#231F20';
-const LEXEND = {
-  regular: 'Lexend_400Regular',
-  semibold: 'Lexend_600SemiBold',
-  bold: 'Lexend_700Bold',
-  extrabold: 'Lexend_800ExtraBold',
-  black: 'Lexend_900Black',
-} as const;
 
 // The bottom bar's expand/collapse: plain RN LayoutAnimation doesn't reliably fire under the
 // New Architecture (app.json → newArchEnabled), which this app runs on — so the transition
@@ -252,7 +245,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   bottomBar:{flexDirection:'row',alignItems:'center',height:70,paddingHorizontal:24,borderRadius:22,borderWidth:0.4,borderColor:'#D7D1CE',backgroundColor:'#FBFAF3',gap:30,shadowColor:'#D7D1CE',shadowOpacity:0.3,shadowRadius:5,shadowOffset:{width:0,height:2},elevation:2},
   bottomBarClosed:{height:62,paddingHorizontal:0,borderWidth:0,backgroundColor:'transparent',shadowOpacity:0,gap:0},
   chevronButton:{width:26,height:26,borderRadius:13,alignItems:'center',justifyContent:'center'},
-  chevronLeft:{transform:[{rotate:'270deg'}]},chevronRight:{transform:[{rotate:'90deg'}]},barItem:{width:64,alignItems:'center',justifyContent:'center'},barLabel:{fontFamily:LEXEND.regular,fontSize:10.5,lineHeight:13,color:TEXT_COLOR,marginTop:4,textAlign:'center'},
+  chevronLeft:{transform:[{rotate:'270deg'}]},chevronRight:{transform:[{rotate:'90deg'}]},barItem:{width:64,alignItems:'center',justifyContent:'center'},barLabel:{...LEXEND.regular,fontSize:10.5,lineHeight:13,color:TEXT_COLOR,marginTop:4,textAlign:'center'},
   // Assemble is the one item that survives collapse, so it carries its own elevated chip
   // rather than borrowing the bar's background, and pops above the row on a negative top margin.
   // The button is the ONE thing with a real (flex) position — its marginTop:-22 puts its
