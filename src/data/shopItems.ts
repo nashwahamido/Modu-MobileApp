@@ -21,6 +21,9 @@ export interface ShopItem {
 // Not exported: CATEGORY_FILTERS below is the list every caller actually wants.
 const SHOP_CATEGORIES: ShopCategory[] = ["fur", "wall", "floor", "deco", "win", "lit"];
 
+// The tabs without the "all" filter, for the room's shop popup.
+export const SHOP_CATEGORY_TABS: ShopCategory[] = SHOP_CATEGORIES;
+
 // A category tab value, including the "all" tab that shows everything.
 export type CategoryFilter = ShopCategory | "all";
 export const CATEGORY_FILTERS: CategoryFilter[] = ["all", ...SHOP_CATEGORIES];
@@ -29,8 +32,8 @@ export const CATEGORY_FILTERS: CategoryFilter[] = ["all", ...SHOP_CATEGORIES];
 export const CATEGORY_LABELS: Record<CategoryFilter, string> = {
   all: "All",
   fur: "Furniture",
-  wall: "Wallpaper",
-  floor: "Floor",
+  wall: "Wallpapers",
+  floor: "Floors",
   deco: "Decorations",
   lit: "Lighting",
   win: "Windows",

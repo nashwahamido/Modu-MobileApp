@@ -1,21 +1,21 @@
-// The room hub's top-right cluster: the coins pill and the level/xp pill. Split out of
-// RoomExperience.tsx for the same reason as RoomBottomBar.tsx — keeps that file down to just
-// the screen's own scaffolding (scene, settings, placement bar, dialogs) rather than every
-// HUD piece.
+// The room hub's top-right cluster: the coins pill and the level/xp pill
 import { router } from 'expo-router';
 import type { Href } from 'expo-router';
-import { StyleSheet, Pressable, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useStyles, useTheme } from "@/src/game/ui/theme";
+import { useStyles } from "@/src/game/ui/theme";
 import type { Theme } from "@/src/game/ui/theme";
+import { COIN_ICON, STAR_ICON } from '../../components/iconAssets';
 import { levelProgressFraction } from '../../data/levels';
 import { useProfileHud } from '../../hooks/useProfileHud';
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN } from '../../hooks/use-safe-insets';
 
-// This bar's text is pinned to the mockup's exact ink colour and to Lexend, rather than the
-// theme's t.text/system-font pair — a deliberate override for this redesign, not an
-// oversight, so it does not shift with the light/dark/high-contrast theme.
+// Pinned to the mockup rather than the theme, so it holds across light/dark
 const TEXT_COLOR = '#231F20';
+// How far each bar is tucked under its icon, so it reads as flowing out from behind it
+const BAR_TUCK = 30;
+// Negative = up, A five-point star reads low even when its box is centred
+const LEVEL_ICON_NUDGE_Y = -3;
 const LEXEND = {
   regular: 'Lexend_400Regular',
   semibold: 'Lexend_600SemiBold',
@@ -24,50 +24,23 @@ const LEXEND = {
   black: 'Lexend_900Black',
 } as const;
 
-// A stand-in for icon art that hasn't been delivered yet (the coin and level-star glyphs).
-// Decorative only — the Pressable/label around it carries the accessibility label, so this
-// is hidden from screen readers rather than announced as an unlabeled square.
-function Placeholder({ size = 28, style }: { size?: number; style?: StyleProp<ViewStyle> }) {
-  const t = useTheme();
-  return (
-    <View
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-      style={[
-        {
-          width: size,
-          height: size,
-          borderRadius: 6,
-          backgroundColor: t.surface,
-          borderWidth: 1.5,
-          borderColor: t.borderStrong,
-        },
-        style,
-      ]}
-    />
-  );
-}
-
 export function RoomTopStats() {
   const s = useStyles(makeStyles);
-  // Edge-to-edge: immersive mode reports 0 insets even on a notched phone, so the true fix is
-  // a floor UNDER the design's own resting offset (12/18), not a replacement for it — see
-  // src/hooks/use-safe-insets.ts for why (tuned against a Galaxy S22 Ultra + a bezelled tablet).
+  // Immersive mode reports 0 insets, so these floors sit UNDER the design's own offsets
   const insets = useSafeAreaInsets();
   const padTop = 12 + Math.max(insets.top, SCREEN_VERTICAL_MARGIN);
   const padR = 18 + Math.max(insets.right, SCREEN_SIDE_MARGIN);
-  // Null until the first fetch lands — render an em dash rather than a placeholder number that would read as real.
+  // Null until the first fetch lands — an em dash beats a fake number
   const profile = useProfileHud();
-  // The bar reads full at the top of the curve, where xpForNextLevel is null and there is nothing left to climb to.
+  // Reads full at the top of the curve, where xpForNextLevel is null
   const levelPercent = profile
     ? Math.round(levelProgressFraction({ xpIntoLevel: profile.xpIntoLevel, xpForNextLevel: profile.xpForNextLevel }) * 100)
     : 0;
-
   return (
     <View style={[s.topRightGroup, { top: padTop, right: padR }]}>
       <View style={s.currencyGroup}>
         <View style={s.badgeCircle}>
-          <Placeholder size={26} />
+          <Image source={COIN_ICON} style={s.coinIcon} resizeMode="contain" />
         </View>
         <View style={s.currency}>
           <Text style={s.currencyText}>{profile?.coins ?? "–"}</Text>
@@ -80,7 +53,7 @@ export function RoomTopStats() {
         onPress={() => router.push("/profile" as Href)}
       >
         <View style={s.badgeCircle}>
-          <Placeholder size={26} />
+          <Image source={STAR_ICON} style={s.levelIcon} resizeMode="contain" />
           <Text style={s.levelNumber}>{profile?.level ?? "–"}</Text>
         </View>
         <View style={s.progress}>
@@ -93,6 +66,84 @@ export function RoomTopStats() {
 }
 
 const makeStyles = (t: Theme) => StyleSheet.create({
-  topRightGroup:{position:'absolute',zIndex:12,flexDirection:'row',alignItems:'center',gap:18},
-  levelGroup:{flexDirection:'row',alignItems:'center'},badgeCircle:{width:44,height:44,alignItems:'center',justifyContent:'center'},levelNumber:{position:'absolute',color:TEXT_COLOR,fontFamily:LEXEND.bold,fontSize:13},progress:{width:126,height:21,marginLeft:-6,borderRadius:12,backgroundColor:'#DFD7CA',overflow:'hidden',alignItems:'center',justifyContent:'center'},progressFill:{position:'absolute',left:0,top:0,bottom:0,backgroundColor:t.accent},progressText:{width:'100%',color:TEXT_COLOR,fontFamily:LEXEND.semibold,fontSize:11,textAlign:'center'},currencyGroup:{flexDirection:'row',alignItems:'center'},currency:{width:126,height:21,marginLeft:-5,borderRadius:12,backgroundColor:'#DFD7CA',alignItems:'center',justifyContent:'center'},currencyText:{color:TEXT_COLOR,fontFamily:LEXEND.bold,fontSize:12},
+  topRightGroup: {
+    position: 'absolute',
+    zIndex: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 18,
+  },
+  coinIcon: {
+    width: 48,
+    height: 48,
+  },
+  levelIcon: {
+    width: 46,
+    height: 46,
+    transform: [{ translateY: LEVEL_ICON_NUDGE_Y }],
+  },
+  levelGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  // zIndex: the bar is a later sibling and must emerge from behind the icon
+  badgeCircle: {
+    zIndex: 2,
+    width: 54,
+    height: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Absolute, so it centres on the star. Carries the star's own nudge, or the number would
+  // sit low against a shape that has been lifted
+  levelNumber: {
+    position: 'absolute',
+    color: '#FBFAF3',
+    fontFamily: LEXEND.bold,
+    fontSize: 13,
+    transform: [{ translateY: LEVEL_ICON_NUDGE_Y }],
+  },
+  progress: {
+    width: 126,
+    height: 21,
+    marginLeft: -BAR_TUCK,
+    borderRadius: 12,
+    backgroundColor: '#DFD7CA',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Paler than the theme accent, which otherwise merges with the star
+  progressFill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: '#BCADCB',
+  },
+  progressText: {
+    width: '100%',
+    color: TEXT_COLOR,
+    fontFamily: LEXEND.semibold,
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  currencyGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  currency: {
+    width: 126,
+    height: 21,
+    marginLeft: -BAR_TUCK,
+    borderRadius: 12,
+    backgroundColor: '#DFD7CA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  currencyText: {
+    color: TEXT_COLOR,
+    fontFamily: LEXEND.bold,
+    fontSize: 12,
+  },
 });

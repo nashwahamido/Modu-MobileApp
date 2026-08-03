@@ -1,14 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { router, useRootNavigationState } from 'expo-router';
 import type { Href } from 'expo-router';
-import {
-  StyleSheet,
-  Pressable,
-  Text,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from "react-native";
+import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 import {
   useFonts,
   Lexend_400Regular,
@@ -18,6 +11,7 @@ import {
   Lexend_900Black,
 } from "@expo-google-fonts/lexend";
 import { CheckIcon, RotateLeftIcon, RotateRightIcon, TrashIcon } from '../../components/Icons';
+import { SETTINGS_ICON } from '../../components/iconAssets';
 import { Button } from '../../game/ui/Button';
 import { OverlaySheet } from '../../game/ui/OverlaySheet';
 import { SceneBackdrop } from '../../game/ui/SceneBackdrop';
@@ -30,14 +24,14 @@ import { RoomScene } from '../scene/RoomScene';
 import { ColourPicker } from './ColourPicker';
 import { RoomBottomBar } from './RoomBottomBar';
 import { RoomTopStats } from './RoomTopStats';
+import { ShopOverlay } from '../../shop/ShopOverlay';
+import { InventoryOverlay } from '../../inventory/InventoryOverlay';
 import { usePlacementStore } from '../core/placement';
 import { ORBIT } from '../input/orbit';
 import type { Theme } from "@/src/game/ui/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from '../../hooks/use-safe-insets';
 
-// This screen's text is pinned to the mockup's exact ink colour and to Lexend, rather than
-// the theme's t.text/system-font pair — a deliberate override for this redesign, not an
-// oversight, so it does not shift with the light/dark/high-contrast theme.
+// Pinned to the mockup rather than the theme, so it holds across light/dark
 const TEXT_COLOR = '#231F20';
 const LEXEND = {
   regular: 'Lexend_400Regular',
@@ -47,32 +41,7 @@ const LEXEND = {
   black: 'Lexend_900Black',
 } as const;
 
-// A stand-in for icon art that hasn't been delivered yet (star, coins, settings, and every
-// bottom-bar glyph). Decorative only — the Pressable it sits in carries the accessibility
-// label, so this is hidden from screen readers rather than announced as an unlabeled square.
-function Placeholder({ size = 28, style }: { size?: number; style?: StyleProp<ViewStyle> }) {
-  const t = useTheme();
-  return (
-    <View
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-      style={[
-        {
-          width: size,
-          height: size,
-          borderRadius: 6,
-          backgroundColor: t.surface,
-          borderWidth: 1.5,
-          borderColor: t.borderStrong,
-        },
-        style,
-      ]}
-    />
-  );
-}
-
-// The user-facing wording for each placement rejection. The grid returns reason codes; copy
-// lives here with the rest of the screen's text.
+// The grid returns reason codes; the player-facing wording for each lives here
 function blockedHint(reason: string | null): string {
   if (reason === null) return 'Drag to position';
   switch (reason) {
@@ -83,14 +52,14 @@ function blockedHint(reason: string | null): string {
   }
 }
 
-// Routes that run their OWN heavy Filament scene. While one of these is on top, the room's engine must be down so only one runs at a time. Lightweight layers (the (presentation) modals: settings, profile, …) are NOT here, so opening them leaves the room mounted — no reload.
+// Routes with their own Filament scene: only one engine may run at a time
+// Modals are deliberately absent, so opening one leaves the room mounted
 const HEAVY_ROUTES = new Set(['play', 'tutorial', 'visit']);
 
 export function RoomExperience() {
   const s = useStyles(makeStyles);
   const t = useTheme();
-  // Text renders in the system font until this resolves, then re-renders once — no splash
-  // gate, since this is the persistent hub screen and the flash is a single cold-start frame.
+  // No splash gate- the system-font flash is a single cold-start frame
   useFonts({
     Lexend_400Regular,
     Lexend_600SemiBold,
@@ -98,7 +67,7 @@ export function RoomExperience() {
     Lexend_800ExtraBold,
     Lexend_900Black,
   });
-  // Tear the 3D view down only when a heavy scene is on top, not on every blur. The room screen stays mounted throughout (its placement/zoom UI state survives); only the Filament view unmounts under play/visit and rebuilds on return.
+  // Only the Filament view unmounts under a heavy route; the screen stays mounted
   const rootNav = useRootNavigationState();
   const heavySceneActive = !!rootNav && HEAVY_ROUTES.has(rootNav.routes[rootNav.index]?.name ?? '');
   // Backdrop follows the HOUR (Settings → "Time of day") rather than being its own axis: the view out
@@ -106,13 +75,10 @@ export function RoomExperience() {
   // a daytime photo behind a night-lit room. Each preset names its backdrop; see core/timeOfDay.
   const roomBackdrop = sunPreset(useGameStore((s) => s.roomTimeOfDay)).backdrop;
   const darkTheme = useGameStore((s) => s.theme) === 'dark';
-  // Placement is shared state (src/room/core/placement) so any route can start it and the scene can
-  // render the layout. This screen owns only the HUD: the ghost's drag lives in the scene's
-  // gesture layer, where the finger is converted to grid cells by ray picking.
+  // Placement is shared state, so any route can start it. This screen owns only the HUD.
   const me = useCurrentUserId();
   const hydrate = usePlacementStore((p) => p.hydrate);
-  // Primitive selectors on purpose: this screen re-renders the whole HUD, so it must NOT be
-  // subscribed to the activeEdit object, which changes on every cell the ghost crosses.
+  // Primitive selectors: activeEdit changes on every cell the ghost crosses.
   const editing = usePlacementStore((p) => p.activeEdit !== null);
   const blockedReason = usePlacementStore((p) =>
     p.activeEdit && !p.activeEdit.check.ok ? p.activeEdit.check.reason : null,
@@ -126,6 +92,9 @@ export function RoomExperience() {
   }, [hydrate, me]);
   const blocked = blockedReason !== null;
   const [unavailableFeature, setUnavailableFeature] = useState<string | null>(null);
+  // A layer not a route, so the room stays alive and shows through the scrim
+  const [shopOpen, setShopOpen] = useState(false);
+  const [inventoryOpen, setInventoryOpen] = useState(false);
   const [roomRotation, setRoomRotation] = useState(0);
   const [roomZoom, setRoomZoom] = useState(1);
   const roomRotationRef = useRef(roomRotation);
@@ -149,8 +118,7 @@ export function RoomExperience() {
     applyRoomControls(roomRotationRef.current, nextZoom);
   };
 
-  // Edge-to-edge: the room HUD is absolutely positioned, so each corner group is nudged in
-  // by the device insets (0 on a bezelled tablet, real on a notched phone in landscape).
+  // The HUD is absolutely positioned, so each corner nudges itself in by the insets
   const safe = useSafeInsets();
   return (
     <View style={s.screen}>
@@ -177,12 +145,15 @@ export function RoomExperience() {
         ]}
         onPress={() => router.push("/settings" as Href)}
       >
-        <Placeholder size={26} />
+        <Image source={SETTINGS_ICON} style={s.settingsIcon} resizeMode="contain" />
       </Pressable>
 
       <RoomTopStats />
 
-      <RoomBottomBar />
+      <RoomBottomBar
+        onOpenShop={() => setShopOpen(true)}
+        onOpenInventory={() => setInventoryOpen(true)}
+      />
 
       {editing ? <ColourPicker /> : null}
 
@@ -230,6 +201,10 @@ export function RoomExperience() {
         </View>
       ) : null}
 
+      {shopOpen ? <ShopOverlay onClose={() => setShopOpen(false)} /> : null}
+
+      {inventoryOpen ? <InventoryOverlay onClose={() => setInventoryOpen(false)} /> : null}
+
       {unavailableFeature ? (
         <OverlaySheet size="dialog" onClose={() => setUnavailableFeature(null)}>
           <Text style={s.comingSoonTitle}>{unavailableFeature}</Text>
@@ -247,14 +222,106 @@ export function RoomExperience() {
 }
 
 const makeStyles = (t: Theme) => StyleSheet.create({
-  // The stage is FULL-BLEED: the Filament view is the screen, with the HUD floating over it. Any
-  // inset here becomes a hard clip line through the 3D scene the moment the room is zoomed or
-  // orbited near an edge — framing belongs to the camera (src/room/input/orbit.ts), not to this view's
-  // margins.
-  screen:{flex:1,backgroundColor:t.bg,overflow:'hidden'},stage:StyleSheet.absoluteFillObject,
-  // Settings sits on its own, self-positioned at the top-left — RoomTopStats (coins + level)
-  // is the equivalent cluster at the top-right, now in its own file.
-  settingsButton:{position:'absolute',zIndex:12,width:42,height:42,alignItems:'center',justifyContent:'center',shadowColor:'#50464b',shadowOpacity:.17,shadowRadius:3.5,shadowOffset:{width:0,height:2}},
-  placeBar:{position:'absolute',zIndex:16,bottom:78,alignSelf:'center',flexDirection:'row',alignItems:'center',gap:10,borderRadius:22,backgroundColor:t.surface,paddingLeft:18,paddingRight:6,paddingVertical:6,shadowColor:'#000',shadowOpacity:.18,shadowRadius:8},placeBarBlocked:{borderWidth:2,borderColor:t.danger},placeHint:{flexShrink:1,color:TEXT_COLOR,fontFamily:LEXEND.semibold},placeHintBlocked:{color:t.danger,fontSize:11},ghostRotate:{width:36,height:36,borderRadius:18,backgroundColor:t.surfaceRaised,alignItems:'center',justifyContent:'center'},cancelGlyph:{color:TEXT_COLOR,fontFamily:LEXEND.extrabold,fontSize:16},confirmDisabled:{opacity:.35},deleteButton:{width:36,height:36,borderRadius:18,backgroundColor:t.surfaceRaised,alignItems:'center',justifyContent:'center'},confirm:{width:36,height:36,borderRadius:18,backgroundColor:t.success,alignItems:'center',justifyContent:'center'},
-  comingSoonTitle:{fontFamily:LEXEND.black,fontSize:22,color:TEXT_COLOR,textAlign:'center'},comingSoonBody:{marginTop:8,fontFamily:LEXEND.semibold,fontSize:14,color:TEXT_COLOR,textAlign:'center'},comingSoonButton:{marginTop:18,minWidth:120},
+  // Full-bleed: framing belongs to the camera (src/room/input/orbit.ts), not to insets here
+  screen: {
+    flex: 1,
+    backgroundColor: t.bg,
+    overflow: 'hidden',
+  },
+  stage: StyleSheet.absoluteFillObject,
+  settingsButton: {
+    position: 'absolute',
+    zIndex: 12,
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#50464b',
+    shadowOpacity: .17,
+    shadowRadius: 3.5,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  settingsIcon: {
+    width: 48,
+    height: 48,
+  },
+  placeBar: {
+    position: 'absolute',
+    zIndex: 16,
+    bottom: 78,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 22,
+    backgroundColor: t.surface,
+    paddingLeft: 18,
+    paddingRight: 6,
+    paddingVertical: 6,
+    shadowColor: '#000',
+    shadowOpacity: .18,
+    shadowRadius: 8,
+  },
+  placeBarBlocked: {
+    borderWidth: 2,
+    borderColor: t.danger,
+  },
+  placeHint: {
+    flexShrink: 1,
+    color: TEXT_COLOR,
+    fontFamily: LEXEND.semibold,
+  },
+  placeHintBlocked: {
+    color: t.danger,
+    fontSize: 11,
+  },
+  ghostRotate: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: t.surfaceRaised,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelGlyph: {
+    color: TEXT_COLOR,
+    fontFamily: LEXEND.extrabold,
+    fontSize: 16,
+  },
+  confirmDisabled: {
+    opacity: .35,
+  },
+  deleteButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: t.surfaceRaised,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirm: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: t.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  comingSoonTitle: {
+    fontFamily: LEXEND.black,
+    fontSize: 22,
+    color: TEXT_COLOR,
+    textAlign: 'center',
+  },
+  comingSoonBody: {
+    marginTop: 8,
+    fontFamily: LEXEND.semibold,
+    fontSize: 14,
+    color: TEXT_COLOR,
+    textAlign: 'center',
+  },
+  comingSoonButton: {
+    marginTop: 18,
+    minWidth: 120,
+  },
 });
