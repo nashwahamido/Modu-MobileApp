@@ -13,8 +13,9 @@ import type { ShopCategory, ShopItem, ShopItemId } from "@/src/data";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN } from "@/src/hooks/use-safe-insets";
 import { ShopCategoryTabs } from "./ShopCategoryTabs";
 import { ShopItemTile } from "./ShopItemTile";
-import { IconPlaceholder } from "./ShopPlaceholders";
-import { PurchaseConfirmDialog, PurchaseNoticeDialog, type PurchaseBlock } from "./PurchaseNoticeDialog";
+import type { PurchaseBlock } from "./PurchaseNoticeDialog";
+import { PurchaseConfirmPopup } from "./PurchaseConfirmPopup";
+import { PurchaseNoticePopup } from "./PurchaseNoticePopup";
 
 const TEXT_COLOR = "#231F20";
 // Fixed four columns; the tile width is solved from the measured row width
@@ -22,8 +23,6 @@ const GRID_COLUMNS = 4;
 const GRID_GAP = 22;
 // Side breathing room, subtracted before the columns are solved so tiles really do shrink
 const GRID_EDGE = 22;
-// A veil, not a curtain: past ~0.9 alpha the room stops showing through at all
-const SCRIM = "rgba(223,215,202,0.78)";
 
 export function ShopOverlay({ onClose }: { onClose: () => void }) {
   const s = useStyles(makeStyles);
@@ -182,20 +181,18 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
       </Pressable>
 
       {notice ? (
-        <PurchaseNoticeDialog
+        <PurchaseNoticePopup
           name={notice.item.name}
           price={notice.item.price}
           minLevel={notice.item.minLevel}
           block={notice.block}
-          preview={<IconPlaceholder size={110} />}
           onClose={() => setNotice(null)}
         />
       ) : null}
       {confirm ? (
-        <PurchaseConfirmDialog
+        <PurchaseConfirmPopup
           name={confirm.name}
           price={confirm.price}
-          preview={<IconPlaceholder size={110} />}
           onConfirm={() => buy(confirm)}
           onClose={() => setConfirm(null)}
         />
@@ -211,9 +208,10 @@ const makeStyles = (t: Theme) =>
       ...StyleSheet.absoluteFillObject,
       zIndex: 40,
     },
+    // t.scrim: the same shading OverlaySheet uses, so every popup dims the same way
     scrim: {
       ...StyleSheet.absoluteFillObject,
-      backgroundColor: SCRIM,
+      backgroundColor: t.scrim,
     },
     panel: {
       position: "absolute",

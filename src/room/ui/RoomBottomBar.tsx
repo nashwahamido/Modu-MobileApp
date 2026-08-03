@@ -62,7 +62,13 @@ const ASSEMBLE_COLLAR_ARC = (() => {
   return `M ${leftX} ${y} A ${r} ${r} 0 0 1 ${rightX} ${y}`;
 })();
 
-export function RoomBottomBar({ onOpenShop }: { onOpenShop: () => void }) {
+export function RoomBottomBar({
+  onOpenShop,
+  onOpenInventory,
+}: {
+  onOpenShop: () => void;
+  onOpenInventory: () => void;
+}) {
   const s = useStyles(makeStyles);
   // t.bg is the room's backdrop colour, used for the chevron's outline
   const t = useTheme();
@@ -122,7 +128,7 @@ export function RoomBottomBar({ onOpenShop }: { onOpenShop: () => void }) {
               accessibilityRole="button"
               accessibilityLabel="Inventory"
               style={s.barItem}
-              onPress={() => router.push("/inventory" as Href)}
+              onPress={onOpenInventory}
             >
               <View style={s.iconSlot}>
                 <Image source={INVENTORY_ICON} style={s.barIcon} resizeMode="contain" />

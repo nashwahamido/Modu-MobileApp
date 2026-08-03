@@ -13,17 +13,6 @@ export const YOU_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/You-
 // Distinct from the older icon-settings.png, which the in-game HUD still uses.
 export const SETTINGS_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/Settings-icon.png");
 
-// Each star has its number baked into the artwork, so there is one file per level.
-const LEVEL_ICONS: Record<number, ImageSourcePropType> = {
-  1: require("@/src/assets/ui/icons/level-1.png"),
-  2: require("@/src/assets/ui/icons/level-2.png"),
-  3: require("@/src/assets/ui/icons/level-3.png"),
-  4: require("@/src/assets/ui/icons/level-4.png"),
-  5: require("@/src/assets/ui/icons/level-5.png"),
-};
-
-/** The star for a level, or null when there is none. Null rather than clamping to the
- *  nearest file, which would display a confidently wrong number. */
-export function levelIcon(level: number): ImageSourcePropType | null {
-  return LEVEL_ICONS[level] ?? null;
-}
+// Blank, so the level is drawn over it as text. Replaces the old level-1..5 files, which each
+// had a number baked in and so could only ever cover the levels that had artwork
+export const STAR_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/star-universal-icon.png");

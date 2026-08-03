@@ -23,6 +23,7 @@ import { ColourPicker } from './ColourPicker';
 import { RoomBottomBar } from './RoomBottomBar';
 import { RoomTopStats } from './RoomTopStats';
 import { ShopOverlay } from '../../shop/ShopOverlay';
+import { InventoryOverlay } from '../../inventory/InventoryOverlay';
 import { usePlacementStore } from '../core/placement';
 import { ORBIT } from '../input/orbit';
 import type { Theme } from "@/src/game/ui/theme";
@@ -90,6 +91,7 @@ export function RoomExperience() {
   const [unavailableFeature, setUnavailableFeature] = useState<string | null>(null);
   // A layer not a route, so the room stays alive and shows through the scrim
   const [shopOpen, setShopOpen] = useState(false);
+  const [inventoryOpen, setInventoryOpen] = useState(false);
   const [roomRotation, setRoomRotation] = useState(0);
   const [roomZoom, setRoomZoom] = useState(1);
   const roomRotationRef = useRef(roomRotation);
@@ -146,7 +148,10 @@ export function RoomExperience() {
 
       <RoomTopStats />
 
-      <RoomBottomBar onOpenShop={() => setShopOpen(true)} />
+      <RoomBottomBar
+        onOpenShop={() => setShopOpen(true)}
+        onOpenInventory={() => setInventoryOpen(true)}
+      />
 
       {editing ? <ColourPicker /> : null}
 
@@ -195,6 +200,8 @@ export function RoomExperience() {
       ) : null}
 
       {shopOpen ? <ShopOverlay onClose={() => setShopOpen(false)} /> : null}
+
+      {inventoryOpen ? <InventoryOverlay onClose={() => setInventoryOpen(false)} /> : null}
 
       {unavailableFeature ? (
         <OverlaySheet size="dialog" onClose={() => setUnavailableFeature(null)}>

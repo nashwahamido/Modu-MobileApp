@@ -1,11 +1,11 @@
 // The room hub's top-right cluster: the coins pill and the level/xp pill
 import { router } from 'expo-router';
 import type { Href } from 'expo-router';
-import { StyleSheet, Image, Pressable, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useStyles, useTheme } from "@/src/game/ui/theme";
+import { useStyles } from "@/src/game/ui/theme";
 import type { Theme } from "@/src/game/ui/theme";
-import { COIN_ICON, levelIcon } from '../../components/iconAssets';
+import { COIN_ICON, STAR_ICON } from '../../components/iconAssets';
 import { levelProgressFraction } from '../../data/levels';
 import { useProfileHud } from '../../hooks/useProfileHud';
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN } from '../../hooks/use-safe-insets';
@@ -24,28 +24,6 @@ const LEXEND = {
   black: 'Lexend_900Black',
 } as const;
 
-// Stand-in for the level star when a level has no artwork yet
-function Placeholder({ size = 28, style }: { size?: number; style?: StyleProp<ViewStyle> }) {
-  const t = useTheme();
-  return (
-    <View
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-      style={[
-        {
-          width: size,
-          height: size,
-          borderRadius: 6,
-          backgroundColor: t.surface,
-          borderWidth: 1.5,
-          borderColor: t.borderStrong,
-        },
-        style,
-      ]}
-    />
-  );
-}
-
 export function RoomTopStats() {
   const s = useStyles(makeStyles);
   // Immersive mode reports 0 insets, so these floors sit UNDER the design's own offsets
@@ -58,8 +36,6 @@ export function RoomTopStats() {
   const levelPercent = profile
     ? Math.round(levelProgressFraction({ xpIntoLevel: profile.xpIntoLevel, xpForNextLevel: profile.xpForNextLevel }) * 100)
     : 0;
-  const star = profile ? levelIcon(profile.level) : null;
-
   return (
     <View style={[s.topRightGroup, { top: padTop, right: padR }]}>
       <View style={s.currencyGroup}>
@@ -77,15 +53,8 @@ export function RoomTopStats() {
         onPress={() => router.push("/profile" as Href)}
       >
         <View style={s.badgeCircle}>
-          {/* The star art has its number baked in; the fallback draws a real one. */}
-          {star ? (
-            <Image source={star} style={s.levelIcon} resizeMode="contain" />
-          ) : (
-            <>
-              <Placeholder size={26} />
-              <Text style={s.levelNumber}>{profile?.level ?? "–"}</Text>
-            </>
-          )}
+          <Image source={STAR_ICON} style={s.levelIcon} resizeMode="contain" />
+          <Text style={s.levelNumber}>{profile?.level ?? "–"}</Text>
         </View>
         <View style={s.progress}>
           <View style={[s.progressFill, { width: `${levelPercent}%` }]} />
@@ -109,8 +78,8 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     height: 48,
   },
   levelIcon: {
-    width: 54,
-    height: 54,
+    width: 46,
+    height: 46,
     transform: [{ translateY: LEVEL_ICON_NUDGE_Y }],
   },
   levelGroup: {
@@ -125,11 +94,14 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Absolute, so it centres on the star. Carries the star's own nudge, or the number would
+  // sit low against a shape that has been lifted
   levelNumber: {
     position: 'absolute',
-    color: TEXT_COLOR,
+    color: '#FBFAF3',
     fontFamily: LEXEND.bold,
     fontSize: 13,
+    transform: [{ translateY: LEVEL_ICON_NUDGE_Y }],
   },
   progress: {
     width: 126,
