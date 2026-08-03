@@ -161,10 +161,11 @@ const catalogRepo: CatalogRepo = {
     // The union view spans both item tables; a null size means "no room model authored", so those rows are filtered server-side — the room never sees an item it could not place. category_id rides along because it routes the placement surface (window -> wall).
     const { data, error } = await supabase
       .from("placeable_items")
-      .select("id, source, category_id, size_x, size_y, size_z, base_offset_y")
+      .select("id, source, category_id, size_x, size_y, size_z, base_offset_y, light_type, light_lumens, light_kelvin, light_reach_m, light_cone_deg")
       .not("size_x", "is", null);
     check(error);
-    type Row = { id: string; source: "built" | "bought"; category_id: string; size_x: number; size_y: number; size_z: number; base_offset_y: number };
+    type Row = { id: string; source: "built" | "bought"; category_id: string; size_x: number; size_y: number; size_z: number; base_offset_y: number;
+      light_type: "point" | "spot" | null; light_lumens: number | null; light_kelvin: number | null; light_reach_m: number | null; light_cone_deg: number | null };
     return ((data ?? []) as Row[]).map(
       (r): PlaceableRoomRow => ({
         id: r.id,
@@ -172,6 +173,18 @@ const catalogRepo: CatalogRepo = {
         category: r.category_id as PlaceableRoomRow["category"],
         size: { x: r.size_x, y: r.size_y, z: r.size_z },
         baseOffsetY: r.base_offset_y,
+        // Null for everything but a lamp — the view LEFT JOINs item_lights. All four required columns
+        // are NOT NULL in that table, so light_type carrying a value means the rest do too.
+        light:
+          r.light_type != null
+            ? {
+                type: r.light_type,
+                lumens: r.light_lumens as number,
+                kelvin: r.light_kelvin as number,
+                reachMetres: r.light_reach_m as number,
+                coneDeg: r.light_cone_deg ?? undefined,
+              }
+            : undefined,
       }),
     );
   },

@@ -11,6 +11,7 @@ import {
   WALL_CELLS,
   WALL_CELL_SIZE,
   WINDOW_BANDS,
+  isXWall,
   windowCellEntityName,
   type Vec3,
   type WallId,
@@ -45,6 +46,10 @@ export type PlaceableItemDef = {
   // Windows: this item's footprint is a HOLE — the scene knocks the covered shell cells out of the
   // wall. Frames hang on the wall surface and leave it intact.
   opensWall?: boolean;
+  // Lighting (category 'lit'): the renderer hangs a light over this piece and moves it as the piece
+  // moves. Purely a rendering concern — placement, collision and persistence treat a lighting item as
+  // ordinary furniture, so nothing below this line knows or cares that it glows.
+  emitsLight?: boolean;
 };
 
 // One placed object. This is the persisted shape — see src/data/types.ts PlacedFurniture.
@@ -239,6 +244,27 @@ export function floorCellToRoom(cell: Cell, footprint: Footprint): Vec3 {
   };
 }
 
+// The VOLUME a floor placement occupies, in authored room units: its claimed cells, from the floor
+// surface up to the piece's rendered height. This is what a finger is actually pointing at — a
+// picking ray tested against the floor PLANE instead answers with the cell behind the piece, one
+// for every 20 cm of model height at the rest camera, which is why only a piece's base sliver used
+// to be pickable. Height is the model's measured size.y times its fitScale; callers pass it in so
+// this module stays free of the catalog.
+export function floorPlacementBox(
+  placement: GridPlacement,
+  def: PlaceableItemDef,
+  height: number,
+): { min: Vec3; max: Vec3 } {
+  const { cellSize, floor } = ROOM_SHELL;
+  const { w, d } = occupiedFootprint(placement, def);
+  const minX = floor.minX + placement.cell.x * cellSize;
+  const minZ = floor.minZ + placement.cell.y * cellSize;
+  return {
+    min: { x: minX, y: floor.y, z: minZ },
+    max: { x: minX + w * cellSize, y: floor.y + height, z: minZ + d * cellSize },
+  };
+}
+
 // The centre of a wall placement — on the wall's inner face, so a frame hangs flat against it.
 // Wall grids run at WALL_CELL_SIZE (0.25), finer than the floor's cellSize — see roomShell.
 export function wallCellToRoom(
@@ -249,7 +275,7 @@ export function wallCellToRoom(
   const spec = ROOM_SHELL.walls[wall];
   const along = spec.from + (cell.x + footprint.w / 2) * WALL_CELL_SIZE;
   const up = spec.bottom + (cell.y + footprint.d / 2) * WALL_CELL_SIZE;
-  return wall === "x-min"
+  return isXWall(wall)
     ? { x: spec.innerFace, y: up, z: along }
     : { x: along, y: up, z: spec.innerFace };
 }
@@ -285,7 +311,7 @@ export function roomPointToFloorCell(point: Pick<Vec3, "x" | "z">): Cell {
 // x is the cell along the wall's run, y the row above the floor, both at WALL_CELL_SIZE.
 export function roomPointToWallCell(wall: WallId, point: Vec3): Cell {
   const spec = ROOM_SHELL.walls[wall];
-  const along = wall === "x-min" ? point.z : point.x;
+  const along = isXWall(wall) ? point.z : point.x;
   return {
     x: Math.floor((along - spec.from) / WALL_CELL_SIZE),
     y: Math.floor((point.y - spec.bottom) / WALL_CELL_SIZE),

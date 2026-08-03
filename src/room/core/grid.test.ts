@@ -22,13 +22,18 @@ import {
 } from "./grid";
 import {
   FLOOR_CELLS,
-  MAX_ROOM_YAW,
   ROOM_TARGET,
   ROOM_SHELL,
   SCENE_SCALE,
-  clampRoomYaw,
+  SHELL_WALL_IDS,
+  WALL_CELLS,
+  WINDOW_BANDS,
+  isXWall,
   roomToScene,
   sceneToRoom,
+  wallMountYaw,
+  wallOutward,
+  windowCellEntityName,
 } from "./roomShell";
 
 const stool: PlaceableItemDef = {
@@ -104,7 +109,10 @@ test("the floor is far wider in scene space than the old 0.9 constant assumed", 
   // 0.9-wide plane, which is what the mirror and sign hacks in RoomExperience were compensating for.
   const left = roomToScene({ x: ROOM_SHELL.floor.minX, y: ROOM_SHELL.floor.y, z: 0 });
   const right = roomToScene({ x: ROOM_SHELL.floor.maxX, y: ROOM_SHELL.floor.y, z: 0 });
-  assert.ok(right.x - left.x > 1.7);
+  // 1.69 at the current shell. The bound tracks SCENE_SCALE, which is set by the LARGEST axis of the
+  // whole model — so widening the plinth (as the four-wall shell did) shrinks the floor's share of
+  // the unit cube without the floor itself moving. Only the distance from the 0.9 bug matters here.
+  assert.ok(right.x - left.x > 1.6);
 });
 
 test("rotation swaps the footprint on odd quarter turns only", () => {
@@ -302,13 +310,30 @@ test("a centred drag anchors so the piece sits under the finger", () => {
   assert.deepEqual(anchorForCentre({ x: 5, y: 5 }, { w: 3, d: 3 }), { x: 4, y: 4 });
 });
 
-test("room yaw is clamped to the diorama's open corner", () => {
-  // The shell has two walls and is open on the other two sides; past 45 degrees a drag would show
-  // straight through the missing back, which reads on device as the scene being cut away.
-  assert.equal(clampRoomYaw(0), 0);
-  assert.equal(clampRoomYaw(Math.PI), MAX_ROOM_YAW);
-  assert.equal(clampRoomYaw(-Math.PI), -MAX_ROOM_YAW);
-  assert.ok(Math.abs(clampRoomYaw(0.5) - 0.5) < 1e-9);
+test("every shell wall is a placement surface, with a band and a grid", () => {
+  // All four walls now carry a diced window band and a wall grid — x-max and z-min used to be
+  // geometry and light blockers only. This is the guard that a wall never gets shell geometry
+  // without the placement data to match, which would let a window be placed into nothing.
+  assert.deepEqual([...SHELL_WALL_IDS].sort(), ["x-max", "x-min", "z-max", "z-min"]);
+  for (const wall of SHELL_WALL_IDS) {
+    assert.ok(ROOM_SHELL.walls[wall], `${wall} must have a placement spec`);
+    assert.ok(WINDOW_BANDS[wall], `${wall} must have a window band`);
+    assert.ok(WALL_CELLS[wall].w > 0 && WALL_CELLS[wall].h > 0, `${wall} must have a wall grid`);
+    // Every band cell must name a real node, or a window there opens no hole.
+    assert.ok(windowCellEntityName(wall, WINDOW_BANDS[wall].cols.from, WINDOW_BANDS[wall].rows.from));
+  }
+});
+
+test("wall mount yaw and outward normal agree on which way each wall faces", () => {
+  // A model is authored facing the room with its wall behind it, so rotating by the mount yaw must
+  // send its back along the wall's OUTWARD normal. Getting these out of step seats windows backwards.
+  for (const wall of SHELL_WALL_IDS) {
+    // Authored BACK is +z (the wall sits behind the model), so a yaw about Y sends it to (sin, cos).
+    const yaw = wallMountYaw(wall);
+    const back = { x: Math.round(Math.sin(yaw)), z: Math.round(Math.cos(yaw)) };
+    const axis = isXWall(wall) ? back.x : back.z;
+    assert.equal(axis, wallOutward(wall), `${wall} faces the wrong way`);
+  }
 });
 
 test("the orbit target is the room's centre", () => {

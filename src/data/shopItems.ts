@@ -1,7 +1,9 @@
 // The shop VIEW-MODEL: what a purchasable item is, and how the two catalogue surfaces (Shop and
 // Inventory) filter and sort one. No data lives here — the rows come from item_buy through the repo
 // seam, and the in-memory stand-in is seedShopItems() in adapters/seed.ts with every other fixture.
-export type ShopCategory = "fur" | "wall" | "floor" | "deco" | "win";
+// Mirrors item_categories in the DB — adding one here without the matching migration row will fail
+// the category_id foreign key on insert.
+export type ShopCategory = "fur" | "wall" | "floor" | "deco" | "win" | "lit";
 
 export type ShopItemId = string;
 
@@ -17,7 +19,7 @@ export interface ShopItem {
 
 // The tab order shown in the store — "all" first, then the categories from the mock.
 // Not exported: CATEGORY_FILTERS below is the list every caller actually wants.
-const SHOP_CATEGORIES: ShopCategory[] = ["fur", "wall", "floor", "deco", "win"];
+const SHOP_CATEGORIES: ShopCategory[] = ["fur", "wall", "floor", "deco", "win", "lit"];
 
 // A category tab value, including the "all" tab that shows everything.
 export type CategoryFilter = ShopCategory | "all";
@@ -30,6 +32,7 @@ export const CATEGORY_LABELS: Record<CategoryFilter, string> = {
   wall: "Wallpaper",
   floor: "Floor",
   deco: "Decorations",
+  lit: "Lighting",
   win: "Windows",
 };
 

@@ -16,7 +16,7 @@ import {
 } from "react-native-filament";
 import { useSharedValue } from "react-native-worklets-core";
 
-import { ORBIT, clampOrbit, controlsFromOrbit, orbitFromControls } from "../input/orbit";
+import { ORBIT, clampOrbit, controlsFromOrbit, orbitFromControls, restOrbit } from "../input/orbit";
 import {
   cellsFor,
   floorPlacementBox,
@@ -44,6 +44,7 @@ import { sunDirection, sunPreset } from "../core/timeOfDay";
 import {
   dragWallTarget,
   pickBoxAt,
+  pointsAtSurface,
   screenPointToFloorCell,
   screenPointToWallCell,
   type PickBox,
@@ -70,14 +71,10 @@ import {
   shellWallOfMaterial,
   wallAlpha,
   wallAlphas,
-  wallItemHidden,
 } from "../core/wallCulling";
 
 // Metro exposes bundled GLBs through the React Native numeric asset module.
-// The shell is authored art, put through scripts/set-shell-blend-modes.mjs (alphaMode BLEND on the
-// cullable Wall_*/Trim_* groups — Blender's exporter cannot express it) and, when it carries
-// textures, scripts/compress-room-glb.mjs. Geometry untouched by both, so the measurements frozen
-// in src/room/core/roomShell.ts stay valid.
+// The shell is authored art, put through scripts/set-shell-blend-modes.mjs (alphaMode BLEND on the cullable Wall_*/Trim_* groups — Blender's exporter cannot express it) and, when it carries textures, scripts/compress-room-glb.mjs. Geometry untouched by both, so the measurements frozen in src/room/core/roomShell.ts stay valid.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const ROOM_MODEL = require("../../assets/models/room/virtualroom_empty.glb");
 
@@ -111,8 +108,7 @@ function RoomModel({ onReady, orbit }: { onReady: () => void; orbit: ReturnType<
   // Which walls are currently in CELL form. null until the first pass: the asset enters the scene carrying BOTH forms, so the opening move must force a swap on every wall — trusting an assumed start state left panel and cells both present, which z-fights and (worse) plugs the very window holes the cells exist to open.
   const banded = useRef<Set<ShellWallId> | null>(null);
 
-  // The shell is STATIC: normalized to the unit cube once and never rotated. All view control is
-  // the camera's, which is what keeps picking a ray against fixed planes.
+  // The shell is STATIC: normalized to the unit cube once and never rotated. All view control is the camera's, which is what keeps picking a ray against fixed planes.
   useEffect(() => {
     if (model.state !== "loaded") return;
     transformManager.transformToUnitCube(model.rootEntity, model.boundingBox);
@@ -128,11 +124,7 @@ function RoomModel({ onReady, orbit }: { onReady: () => void; orbit: ReturnType<
     banded.current = null;
   }, [asset, scene]);
 
-  // Window holes: the wall's band ships pre-diced into WCell_* nodes (see roomShell.ts), and a
-  // window "cuts" its opening by removing exactly the cells its footprint covers. Diffed against
-  // the previous frame so a moving ghost heals the wall behind it as it goes — removal and
-  // re-adding are both O(changed cells), and the ghost previews its hole even while blocked
-  // (windowCellNamesFor is total; cells outside the band simply have no node to remove).
+  // Window holes: the wall's band ships pre-diced into WCell_* nodes (see roomShell.ts), and a window "cuts" its opening by removing exactly the cells its footprint covers. Diffed against the previous frame so a moving ghost heals the wall behind it as it goes — removal and re-adding are both O(changed cells), and the ghost previews its hole even while blocked (windowCellNamesFor is total; cells outside the band simply have no node to remove).
   useEffect(() => {
     if (model.state !== "loaded") return;
     const wanted = new Set<string>();
@@ -326,23 +318,28 @@ const TINTS = {
 // EXPOSURE, and react-native-filament does not bridge setExposure. With that term unknowable, no
 // physically-derived number can be trusted here, so this is calibrated by eye against the night preset
 // and stated plainly as such rather than dressed up in a formula.
-const LAMP = {
-  intensity: 25_000,
-  kelvin: 2_700,
-  reachMetres: 4.6,
+// Renderer-side policy for ANY lighting item (category 'lit'), not just a table lamp. Type, brightness,
+// colour, reach and cone all come from the item's own item_lights row (migration
+// 012), so a designer retunes a lamp in the catalog rather than here. Only the BULB HEIGHT stays a
+// renderer policy: it is a fallback for models that do not yet carry a 'Bulb' node, and once they do
+// the node's transform supersedes it.
+const LIT = {
   // How far above the piece's own top the bulb sits — a shade standing on a side table.
   bulbAboveTopMetres: 0.28,
 };
 
-const RoomLamp = memo(function RoomLamp({ placement, item }: { placement: GridPlacement; item: RoomItemModel }) {
+const RoomLit = memo(function RoomLit({ placement, item }: { placement: GridPlacement; item: RoomItemModel }) {
   const { lightManager, scene } = useFilamentContext();
   const entityRef = useRef<Entity | null>(null);
+  // emitsLight is only true when the row carried a light, so this is present — but the catalog is a
+  // network fetch and a stale cache could disagree, and a lamp that renders nothing beats a crash.
+  const light = item.light;
 
   const footprint = rotatedFootprint(item.def.footprint, placement.rotSteps);
   const centre = floorCellToRoom(placement.cell, footprint);
   const bulb = roomToScene({
     x: centre.x,
-    y: ROOM_SHELL.floor.y + item.size.y + LAMP.bulbAboveTopMetres,
+    y: ROOM_SHELL.floor.y + item.size.y + LIT.bulbAboveTopMetres,
     z: centre.z,
   });
 
@@ -352,18 +349,24 @@ const RoomLamp = memo(function RoomLamp({ placement, item }: { placement: GridPl
   spawnRef.current = bulb;
 
   useEffect(() => {
+    if (!light) return;
     const at = spawnRef.current;
     const entity = lightManager.createLightEntity(
-      "point",
-      LAMP.kelvin,
-      LAMP.intensity,
+      light.type,
+      light.kelvin,
+      light.lumens,
       undefined,
       [at.x, at.y, at.z],
       // No shadows: a point light needs a six-face cube shadow map, the most expensive thing
       // available here, and a lamp reads fine without it against the sun's shadows.
       false,
-      LAMP.reachMetres * SCENE_SCALE,
-      undefined,
+      light.reachMetres * SCENE_SCALE,
+      // Filament wants the cone in RADIANS as [inner, outer]; item_lights stores the full outer angle
+      // in degrees. The inner cone is held at 70% of the outer so the edge falls off instead of
+      // cutting — a hard-edged disc on the floor reads as a projector, not a lamp.
+      light.type === "spot" && light.coneDeg != null
+        ? [((light.coneDeg * Math.PI) / 180 / 2) * 0.7, (light.coneDeg * Math.PI) / 180 / 2]
+        : undefined,
     );
     scene.addEntity(entity);
     entityRef.current = entity;
@@ -372,7 +375,7 @@ const RoomLamp = memo(function RoomLamp({ placement, item }: { placement: GridPl
       lightManager.destroy(entity);
       entityRef.current = null;
     };
-  }, [lightManager, scene]);
+  }, [lightManager, scene, light]);
 
   useEffect(() => {
     const entity = entityRef.current;
@@ -483,74 +486,101 @@ const LoadedItem = memo(function LoadedItem({
     }
   }, [model, placement.surface.kind, renderableManager]);
 
-  // A wall item disappears WITH its wall — without this, orbiting behind a wall left its windows
-  // hanging in mid-air. It pops (scene add/remove at the wall fade's midpoint, hysteresis in
-  // wallItemHidden) rather than fading, because wallCulling's alpha trick needs BLEND materials
-  // and furniture GLBs ship opaque frames. Same rAF-off-smoothed-theta pattern as the wall fade,
-  // and no lighting cost: wall items already never cast shadows (the effect above).
-  // The GHOST is exempt: it is the thing being placed, and hiding it mid-drag because the camera
-  // faces the wall from behind would read as the drag eating the piece.
+  // Every material instance of the piece, with the colour and opacity it was AUTHORED with, captured once when the asset loads. The ghost's tint and the wall fade are both MULTIPLIERS over that pair, which is what lets the two compose: the tint used to write a flat [1, 1, 1, 1] and so erased whatever alpha each material shipped with, turning a window's 0.16 glass into a solid slab from the first time it was placed.
+  // Keyed on the ASSET, not on `model`, and that is load-bearing rather than tidiness: useModel rebuilds a fresh object literal every render (see the note in RoomModel), so `model` in the deps would re-run this on every render — re-reading baseColorFactor from values THIS component had already written and folding the tint and the fade into the baseline they are supposed to be measured from. A ghost dragged across ten cells would arrive ten multiplications darker.
+  const materials = useRef<{ instance: MaterialInstance; rgba: [number, number, number, number] }[]>([]);
+  const asset = model.state === "loaded" ? model.asset : null;
   useEffect(() => {
-    if (model.state !== "loaded" || placement.surface.kind !== "wall" || tint) return;
+    if (!asset) return;
+    const found: { instance: MaterialInstance; rgba: [number, number, number, number] }[] = [];
+    for (const entity of asset.getRenderableEntities()) {
+      const count = renderableManager.getPrimitiveCount(entity);
+      for (let index = 0; index < count; index += 1) {
+        const instance = renderableManager.getMaterialInstanceAt(entity, index);
+        // A wall item's materials are BLEND now (scripts/set-item-blend-modes.mjs), and blended geometry that writes no depth composites as its own internal parts stacked up — the sash through the casing in front of it, the back of the frame through its face. The pre-pass gives the piece back the self-occlusion its opaque version got for free. Safe at every alpha for the same reason the walls are, and for one more: a wall item is small, it sits in its wall's opening, and it protrudes INTO the room, so its bounding-box centre is always on the camera's side of the wall plane. It sorts after the cells around it and draws over them rather than under.
+        if (placement.surface.kind === "wall") instance.setTransparencyMode("twoPassesOneSide");
+        const [r, g, b, a] = instance.getFloat4Parameter("baseColorFactor");
+        found.push({ instance, rgba: [r, g, b, a] });
+      }
+    }
+    materials.current = found;
+    // Cleared on teardown so the fade effect's own paint(1) below cannot reach through to instances whose asset has already been released — useModel's cleanup runs ahead of both of these. When the asset SURVIVES a re-render (the ghost-to-committed morph, which shares a key on purpose) this does not run, the list stays live, and the reset lands.
+    return () => {
+      materials.current = [];
+    };
+  }, [asset, placement.surface.kind, renderableManager]);
+
+  // ALWAYS written, including the no-tint, no-fade reset: if the engine ever hands two components the same asset, the committed sibling heals any tint the ghost left behind.
+  const paint = useCallback(
+    (fade: number) => {
+      const factor = TINTS[tint ?? "none"];
+      for (const { instance, rgba } of materials.current) {
+        instance.setFloat4Parameter("baseColorFactor", [rgba[0] * factor[0], rgba[1] * factor[1], rgba[2] * factor[2], rgba[3] * fade]);
+      }
+    },
+    [tint],
+  );
+
+  // A wall item fades WITH its wall — without this, orbiting behind a wall left its windows hanging in mid-air. It used to POP instead, at the fade's midpoint, and that mismatch is what read as a glitch: the wall dissolving over some seven degrees of orbit while the window inside it left in a single frame. Driven by the wall's OWN alpha, not a curve of its own, so the two cannot drift apart at any angle; same rAF-off-smoothed-theta pattern as the wall fade, and no lighting cost, since wall items already never cast shadows (the effect above).
+  // Below WALL_ALPHA_EPSILON the piece leaves the scene rather than lingering at alpha 0. That earns its branch twice over: a transparent draw call for nothing, and the invisible-depth-occluder trap that any alpha-0 twoPassesOneSide surface is (see what it did to the ceiling, in RoomModel).
+  // The GHOST is exempt: it is the thing being placed, and dimming it mid-drag because the camera drifted behind its wall would read as the drag eating the piece. Its wall is pinned visible for the length of the edit anyway (editedWall, in the culling loop).
+  useEffect(() => {
+    if (!asset) return;
+    if (placement.surface.kind !== "wall" || tint) {
+      paint(1);
+      return;
+    }
     const wall = placement.surface.wall;
-    let hidden = false;
-    const setHidden = (hide: boolean) => {
-      hidden = hide;
-      for (const entity of model.asset.getRenderableEntities()) {
-        if (hide) scene.removeEntity(entity);
-        else scene.addEntity(entity);
+    let drawn = true;
+    let written = 1;
+    const setDrawn = (draw: boolean) => {
+      drawn = draw;
+      for (const entity of asset.getRenderableEntities()) {
+        if (draw) scene.addEntity(entity);
+        else scene.removeEntity(entity);
       }
     };
     let frame = requestAnimationFrame(function tick() {
       frame = requestAnimationFrame(tick);
-      const hide = wallItemHidden(hidden, wallAlpha(wall, orbit.value.smoothed.theta));
-      if (hide !== hidden) setHidden(hide);
+      const alpha = wallAlpha(wall, orbit.value.smoothed.theta);
+      const draw = alpha > WALL_ALPHA_EPSILON;
+      if (draw !== drawn) setDrawn(draw);
+      // Settled pieces cost nothing: at rest the alpha stops moving and this writes nothing at all.
+      if (!draw || Math.abs(alpha - written) < WALL_ALPHA_EPSILON) return;
+      written = alpha;
+      paint(alpha);
     });
     return () => {
       cancelAnimationFrame(frame);
-      // Hand the entities back before the asset is released or the item re-renders: every other
-      // effect (and the engine's own teardown) assumes the asset's renderables are in the scene.
-      if (hidden) setHidden(false);
+      // Hand the entities back, at full opacity, before the asset is released or the item re-renders: every other effect (and the engine's own teardown) assumes the asset's renderables are in the scene, and a re-adopted asset must not inherit the half-faded alpha of whatever camera angle the last one was torn down at.
+      if (!drawn) setDrawn(true);
+      paint(1);
     };
-  }, [model, orbit, placement.surface, scene, tint]);
-
-  // ALWAYS written, including the no-tint reset: if the engine ever hands two components the same
-  // asset, the committed sibling heals any tint the ghost left behind.
-  useEffect(() => {
-    if (model.state !== "loaded") return;
-    const factor = TINTS[tint ?? "none"];
-    for (const entity of model.asset.getRenderableEntities()) {
-      const count = renderableManager.getPrimitiveCount(entity);
-      for (let index = 0; index < count; index += 1) {
-        renderableManager
-          .getMaterialInstanceAt(entity, index)
-          .setFloat4Parameter("baseColorFactor", [...factor]);
-      }
-    }
-  }, [item, model, renderableManager, tint]);
+  }, [asset, orbit, paint, placement.surface, scene, tint]);
 
   return null;
 });
 
-// Post-processing, set once. Both option objects MUST come from the View's own create* factories —
-// they are native HostObjects, and handing setBloomOptions a plain JS literal throws.
+// Post-processing, set once. Both option objects MUST come from the View's own create* factories — they are native HostObjects, and handing setBloomOptions a plain JS literal throws.
 //
-// These two are what carry the diorama from "flat game render" toward the lit-room look: SSAO puts
-// the contact darkening into corners and under furniture that no directional light can produce, and
-// bloom lets a window blow out instead of clipping flat to white. Both are deliberately modest —
-// the reference look is soft, not glowing.
+// SSAO REACHES THE FLOOR AND THE FURNITURE ONLY, NEVER THE WALLS. Measured on device 2026-08-03 — do not spend time retuning it for the walls. Filament builds its AO buffer out of the OPAQUE depth pass, and every Wall_*, Trim_* and the Ceiling is alphaMode BLEND because camera-facing culling needs an alpha to write (scripts/set-shell-blend-modes.mjs); only Floor and FloorEdge stay OPAQUE, so only they have depth to be occluded against. Cranking intensity to 4 darkened the floor heavily and moved the walls by nothing at all.
+// The same root cause explains two things that look like separate bugs: a bed pushed against a wall drops no ambient contact shadow onto it, and the walls cast no occlusion down onto the floor.
+//
+// So the settings below are tuned for the only thing they can touch — contact darkening under furniture. The walls' flatness is a different job and needs a different tool: they are lit almost entirely by the one IBL probe, which is uniform across space, and the fix is a baked AO map on a TEXCOORD_1 unwrap. That is a MATERIAL feature rather than a screen-space one, so it works on BLEND geometry exactly as well as on opaque — the blocker here does not apply to it.
+//
+// Bloom lets a window blow out instead of clipping flat to white. Deliberately modest — the reference look is soft, not glowing.
 function RoomPostProcess() {
   const { view } = useFilamentContext();
   useEffect(() => {
     const ao = view.createAmbientOcclusionOptions();
     ao.enabled = true;
-    // RADIUS IS IN WORLD UNITS, and the shell is normalized to a 2-unit cube — so one unit is about
-    // 2.7 m and a believable ~0.35 m occlusion radius is 0.13, not the metre-scale number the
-    // Filament docs' examples use. Too large here and the whole room greys over.
+    // RADIUS IS IN WORLD UNITS, and the shell is normalized to a 2-unit cube — so one unit is about 2.7 m and a believable ~0.35 m occlusion radius is 0.13, not the metre-scale number the Filament docs' examples use. Too large here and the whole room greys over.
+    // Held at contact scale on purpose. A room-scale radius (0.26, ~0.7 m) was tried in order to gradient the walls into their corners, and could not work for the reason in the note above; on the floor alone, all the extra width did was smear the furniture's contact shadows until they stopped reading as contact.
     ao.radius = 0.13;
     ao.intensity = 1.75;
     ao.power = 2.1;
     ao.quality = "MEDIUM";
+    // bentNormals is deliberately absent. Making the ambient term directional instead of uniform is exactly the right idea for the flat walls, but it only applies to surfaces that receive SSAO in the first place — so it reaches the furniture and nothing else. Real cost, no visible change on device, and it does not touch the problem it looks like it should solve.
     view.setAmbientOcclusionOptions(ao);
 
     const bloom = view.createBloomOptions();
@@ -618,8 +648,6 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange }: R
   // The ghost re-renders through the store on every cell change; committed pieces only when the
   // layout itself changes.
   const editing = activeEdit !== null;
-  const editingRef = useRef(editing);
-  editingRef.current = editing;
 
   const home = orbitFromControls(rotationY, zoom);
   const orbit = useSharedValue<OrbitState>({
@@ -660,6 +688,34 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange }: R
       target.wall === here ? undefined : surface,
     );
   }, [orbit]);
+
+  // Does this touch belong to the piece being placed, or to the camera? A placement no longer takes the whole screen: the finger owns the ghost only while it is over the surface that ghost can actually stand on (the floor grid, or a wall the camera can see), and everywhere else — the other surface, the cornice, the backdrop around the diorama — it orbits exactly as it does with nothing being placed. Before this there was no way to look behind a wall mid-placement without cancelling the edit.
+  // Read from the store rather than from the subscribed activeEdit so this callback survives every cell the ghost crosses; the rule itself is pointsAtSurface, unit-tested in ../input/picking.
+  const ghostOwnsPoint = useCallback((px: number, py: number) => {
+    const edit = usePlacementStore.getState().activeEdit;
+    return (
+      edit !== null &&
+      pointsAtSurface(px, py, viewportRef.current, orbit.value.smoothed, edit.placement.surface)
+    );
+  }, [orbit]);
+
+  // Double-tap anywhere on the scene to put the camera back where the room opened — the way out of
+  // any view a player has orbited themselves into, and the reason the orbit needs no home button.
+  // The raw state is written first and the SAME pose is then reported back through the HUD's
+  // (rotationY, zoom) pair, so the prop-driven effect above re-applies what was just written instead
+  // of fighting it. That round trip is why restOrbit's theta must be the nearest rest azimuth rather
+  // than restTheta itself — see the note there. phi has no prop at all, so it is set here and nowhere else.
+  const resetView = useCallback(() => {
+    const rest = restOrbit(orbit.value.raw.theta);
+    orbit.value.raw.radius = rest.radius;
+    orbit.value.raw.phi = rest.phi;
+    orbit.value.raw.theta = rest.theta;
+    const controls = controlsFromOrbit(rest);
+    onRotationChange(controls.rotationY);
+    onZoomChange(controls.zoom);
+    // The glide takes a moment to read as motion; the tap confirms itself immediately.
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, [onRotationChange, onZoomChange, orbit]);
 
   // Long-press a committed piece to pick it back up for editing: floor first (pieces stand in
   // front of walls from this camera), then each wall's plane.
@@ -710,19 +766,25 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange }: R
   }, [orbit]);
 
   const dragStart = useSharedValue({ theta: 0, phi: 0 });
+  // Who owns the drag in progress. Decided ONCE, at touch-down, and held until the finger lifts:
+  // re-asking per event would hand the camera a piece being dragged to the room's edge (where the
+  // finger legitimately strays off the floor) and lurch the view mid-placement. A plain ref rather
+  // than a shared value — every handler below is runOnJS.
+  const dragOwner = useRef<"ghost" | "camera">("camera");
   const pan = useMemo(
     () =>
       Gesture.Pan()
         .maxPointers(1)
         .onStart((e) => {
-          if (editingRef.current) {
+          dragOwner.current = ghostOwnsPoint(e.x, e.y) ? "ghost" : "camera";
+          if (dragOwner.current === "ghost") {
             dragGhost(e.x, e.y);
             return;
           }
           dragStart.value = { theta: orbit.value.raw.theta, phi: orbit.value.raw.phi };
         })
         .onUpdate((e) => {
-          if (editingRef.current) {
+          if (dragOwner.current === "ghost") {
             dragGhost(e.x, e.y);
             return;
           }
@@ -735,11 +797,11 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange }: R
           orbit.value.raw.phi = clamped.phi;
         })
         .onEnd(() => {
-          if (editingRef.current) return;
+          if (dragOwner.current === "ghost") return;
           onRotationChange(controlsFromOrbit(orbit.value.raw).rotationY);
         })
         .runOnJS(true),
-    [dragGhost, dragStart, onRotationChange, orbit, smallestSide],
+    [dragGhost, dragStart, ghostOwnsPoint, onRotationChange, orbit, smallestSide],
   );
 
   const pinchStart = useSharedValue(ORBIT.homeRadius);
@@ -782,6 +844,18 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange }: R
     [editing, pickUpAt],
   );
 
+  const doubleTap = useMemo(
+    () =>
+      Gesture.Tap()
+        .numberOfTaps(2)
+        // The long press's drift budget, for the same reason: two quick taps from a real finger are
+        // never pixel-perfect, and the 10 dp default is barely more than the platform's touch slop.
+        .maxDistance(14)
+        .onStart(resetView)
+        .runOnJS(true),
+    [resetView],
+  );
+
   // Exclusive, not Race: under Race nothing makes the pan WAIT, and pan activates at the platform's
   // touch slop (~8 dp on Android, ~10 pt on iOS) — far less than a finger drifts while holding
   // still for a third of a second. The pan would win, orbit the camera a couple of degrees, and
@@ -789,9 +863,10 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange }: R
   // makes the pan require the long-press to FAIL first, and the long-press fails the instant the
   // finger passes maxDistance — so a real drag still starts within a couple of millimetres, but a
   // stationary finger can no longer be stolen. A second finger hands the pair to pinch.
+  // The double tap RACES that pair rather than joining the Exclusive chain, and that asymmetry is deliberate: an Exclusive with the tap first would make every hold and every drag wait out the tap's 500 ms maxDelay before it could begin, to serve a gesture that only fires on the second tap. Under Race the three simply compete, and a pair of quick stationary taps is the only thing that satisfies the tap first — a hold reaches the long press at 300 ms, and any real movement activates the pan, either of which cancels the tap outright.
   const gesture = useMemo(
-    () => Gesture.Exclusive(longPress, Gesture.Simultaneous(pan, pinch)),
-    [longPress, pan, pinch],
+    () => Gesture.Race(doubleTap, Gesture.Exclusive(longPress, Gesture.Simultaneous(pan, pinch))),
+    [doubleTap, longPress, pan, pinch],
   );
 
   return (
@@ -864,7 +939,7 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange }: R
             .filter((p) => getRoomItemDef(p.itemId)?.emitsLight && p.surface.kind === "floor")
             .map((p) => {
               const item = roomItems[p.itemId];
-              return item ? <RoomLamp key={`lamp:${p.instanceId}`} placement={p} item={item} /> : null;
+              return item ? <RoomLit key={`lit:${p.instanceId}`} placement={p} item={item} /> : null;
             })}
           {/* SAME key as a committed piece, on purpose: confirm and pick-up then morph this
               component instead of unmount/remounting it, so the model is neither reloaded nor
@@ -899,8 +974,8 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange }: R
         <View
           accessibilityLabel={
             editing
-              ? "Drag to move the furniture, pinch to zoom"
-              : "Drag to orbit the room, pinch to zoom, hold a piece to move it"
+              ? "Drag the furniture to move it, drag outside the room to orbit, pinch to zoom, double tap to reset the view"
+              : "Drag to orbit the room, pinch to zoom, hold a piece to move it, double tap to reset the view"
           }
           style={styles.gestureLayer}
         />

@@ -18,7 +18,7 @@ import { create } from "zustand";
 
 import { modelPath, type ItemSource } from "../../data/catalogAssets";
 import { catalogUrl } from "../../data/catalogUrls";
-import type { PlaceableRoomRow } from "../../data/repos";
+import type { PlaceableRoomRow, RoomItemLight } from "../../data/repos";
 import type { AssetSrc } from "../../game/core/type";
 import type { PlaceableItemDef } from "./grid";
 import { ROOM_SHELL, WALL_CELL_SIZE } from "./roomShell";
@@ -31,6 +31,9 @@ export type RoomItemModel = {
   // Lift from the model's origin to its base: -worldMinY. 0 for base-origin models; EKET is
   // authored centred and needs half its height.
   baseOffsetY: number;
+  // Only for lighting (category 'lit'), from item_lights via the placeable_items view. Undefined
+  // means the piece emits nothing — true of every item but a lamp.
+  light?: RoomItemLight;
 };
 
 const CELL = ROOM_SHELL.cellSize;
@@ -51,7 +54,14 @@ const cells = (meters: number): number => Math.ceil((meters * FURNITURE_WORLD_SC
 const wallCells = (meters: number): number => Math.max(1, Math.round(meters / WALL_CELL_SIZE));
 
 // category routes the SURFACE: 'window' rows hang on walls with a hole-sized footprint; everything
-// else (including rows cached before category existed) stands on the floor.
+// else (including rows cached before category existed) stands on the floor. It also routes whether a
+// piece EMITS light: a lamp is ordinary floor furniture that happens to carry a bulb, so 'lit' keeps
+// the floor surface and only turns emitsLight on — exactly the shape 'win' has for walls.
+//
+// The light's NUMBERS do not come from the category, they come from row.light (item_lights, joined in
+// by the placeable_items view — migration 012). A 'lit' row with no light row is a seeding mistake, and
+// it degrades quietly: emitsLight is true but there is nothing to build a light from, so the piece
+// places as ordinary furniture. That is the failure the audit query in 012 exists to catch.
 function toModel(row: PlaceableRoomRow): RoomItemModel {
   const def: PlaceableItemDef =
     row.category === "win"
@@ -66,8 +76,9 @@ function toModel(row: PlaceableRoomRow): RoomItemModel {
           itemId: row.id,
           footprint: { w: cells(row.size.x), d: cells(row.size.z) },
           allowedSurfaces: ["floor"],
+          emitsLight: row.category === "lit" && row.light != null,
         };
-  return { def, source: row.source, size: row.size, baseOffsetY: row.baseOffsetY };
+  return { def, source: row.source, size: row.size, baseOffsetY: row.baseOffsetY, light: row.light };
 }
 
 // The baked-in BUILT set: sizes mirror the DB seed (003_catalog.sql) the same way seed.ts does, so

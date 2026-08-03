@@ -21,8 +21,20 @@ import {
   type RotSteps,
   type SurfaceId,
 } from "./grid";
+import { ORBIT } from "../input/orbit";
 import { WINDOW_BANDS } from "./roomShell";
+import { visibleWalls } from "./wallCulling";
 import { getRoomItemDef, roomItemDefs } from "./placeableItems";
+
+// Where the camera is looking, mirrored here by the scene so store actions can consult it.
+// Deliberately a plain module value and NOT store state: it changes every frame while a finger is
+// down, and putting it in zustand would re-render every subscriber of the layout at 60 Hz. Nothing
+// reads it reactively — it is only ever sampled at the instant a placement begins.
+let cameraAzimuth = ORBIT.restTheta;
+
+export function setCameraAzimuth(theta: number): void {
+  cameraAzimuth = theta;
+}
 
 // The persisted shape and the grid's working shape are the same thing under two names; keep the
 // conversion in one visible place so they cannot drift silently.
@@ -169,11 +181,14 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
       // Starting over an in-progress EDIT must not discard the edited piece: put it back first,
       // exactly as cancel() would (a new ghost just evaporates).
       const layout = s.activeEdit?.previous ? [...s.layout, s.activeEdit.previous] : s.layout;
-      // The def routes the surface: wall-only items (windows, later frames) ghost onto the z-max
-      // wall — the one facing the camera — everything else onto the floor.
+      // The def routes the surface: wall-only items (windows, later frames) ghost onto a wall the
+      // camera can SEE, everything else onto the floor. This used to be hard-coded to z-max, which
+      // was fine while the camera was clamped to a 90-degree arc facing it — with a free 360 orbit
+      // it drops the ghost onto whichever wall happens to be behind the player, and the placement
+      // reads as having silently failed.
       const surface: SurfaceId = def.allowedSurfaces.includes("floor")
         ? { kind: "floor" }
-        : { kind: "wall", wall: "z-max" };
+        : { kind: "wall", wall: visibleWalls(cameraAzimuth)[0] ?? "z-max" };
       // Ghost starts centred on its surface — for a window, centred in the WINDOW BAND, since the
       // structural wall outside it can never accept the hole; the first drag snaps it under the finger.
       let startCell = { x: 5, y: 4 };

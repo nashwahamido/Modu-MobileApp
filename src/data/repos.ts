@@ -90,6 +90,17 @@ export type PlaceableRoomRow = {
   category?: ShopCategory;
   size: { x: number; y: number; z: number };
   baseOffsetY: number;
+  /** Present only for category 'lit' (Lighting) — one item_lights row, joined in by the placeable_items view. Absent means the item emits nothing, which is every item but a lamp. A 'lit' row without this is a seeding mistake (see the audit query in migration 012), and the room degrades to placing it as ordinary furniture. */
+  light?: RoomItemLight;
+};
+
+// A lamp's light, as authored in item_lights. `lumens` is calibrated by eye, NOT physical — Filament scales by camera exposure and react-native-filament does not bridge setExposure, so no derived value predicts on-screen brightness. `reachMetres` is in authored metres; the renderer scales it into scene units. `coneDeg` is set for 'spot' and absent for 'point'.
+export type RoomItemLight = {
+  type: "point" | "spot";
+  lumens: number;
+  kelvin: number;
+  reachMetres: number;
+  coneDeg?: number;
 };
 
 // One row of item_variants: an item's colour/finish axis. `variation` is the free-form per-item key

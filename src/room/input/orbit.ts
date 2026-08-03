@@ -13,7 +13,7 @@
 //
 // Pure math, no Filament and no React: the scene mirrors this state into shared values and applies
 // it per frame; buttons and gestures mutate it through the conversions below.
-import { MAX_ROOM_YAW, type Vec3 } from "../core/roomShell";
+import { type Vec3 } from "../core/roomShell";
 
 export type OrbitAngles = {
   radius: number;
@@ -25,15 +25,18 @@ export type OrbitAngles = {
 };
 
 // Rest pose and limits. Provenance:
-//   restTheta  — atan2(x, z) of the previous camera direction [1.45, 1.05, -1.45]: 3π/4, the
-//                bisector of the diorama's open corner. theta may swing MAX_ROOM_YAW either side,
-//                the same ±45° arc the model-rotation clamp enforced.
+//   restTheta  — atan2(x, z) of the previous camera direction [1.45, 1.05, -1.45]: 3π/4. It was the
+//                bisector of the two-wall diorama's open corner; with four walls it is simply the
+//                pose that opens on x-max and z-min, i.e. the view the room has always started in.
+//                theta is unbounded now — see clampOrbit.
 //   phi        — rest π·0.35 is the reference project's own start; the range allows near-top-down
 //                (0.35, useful for placement) down to just above level (0.98·π/2 — never below the
 //                floor, and never exactly level where the floor is edge-on).
 //   homeRadius — solved, not dialled: the smallest radius at which the shell's floor slab and
 //                cornice line stay inside 0.92 of the viewport for EVERY (theta, phi) in these
-//                limits, at 68 mm and the tightest stage aspect (~1.15). See scratchpad
+//                limits, at 68 mm and the tightest stage aspect (~1.15). Re-solved against the
+//                four-wall shell over a FULL turn (the solve no longer gets to assume a 90° arc):
+//                the minimum is 9.80 and the 9.87 below holds at |ndc| 0.913. See scratchpad
 //                solve-orbit.mjs; re-solve if the lens, limits, or shell change.
 //   focal 68mm — the reference renders at a 20° vertical FOV; 2·atan(12/68) ≈ 20°. The telephoto
 //                flattening is a large part of why that room reads as a calm diorama.
@@ -59,6 +62,8 @@ export const ORBIT: {
   dragSensitivity: 1,
 };
 
+// theta is deliberately NOT clamped: the shell is enclosed on all four sides and the walls between the camera and the room fade out (see ../core/wallCulling), so every azimuth reads as a room. phi and radius still are — those limits are about the floor reading as a floor and the room staying framed, which four walls do not change.
+// theta is left to run unbounded rather than wrapped into (-pi, pi]. Wrapping would step raw.theta by 2*pi at the seam, and the smoothed value chases raw the short way in VALUE, not in angle — so one drag past the seam would spin the room a full turn backwards. Session state only, so the number never grows far.
 export function clampOrbit(angles: OrbitAngles): OrbitAngles {
   return {
     // Zoom is expressed as homeRadius / zoom, so the radius limits derive from the zoom range.
@@ -67,10 +72,18 @@ export function clampOrbit(angles: OrbitAngles): OrbitAngles {
       Math.max(ORBIT.homeRadius / ORBIT.zoom.max, angles.radius),
     ),
     phi: Math.min(ORBIT.phi.max, Math.max(ORBIT.phi.min, angles.phi)),
-    theta: Math.min(
-      ORBIT.restTheta + MAX_ROOM_YAW,
-      Math.max(ORBIT.restTheta - MAX_ROOM_YAW, angles.theta),
-    ),
+    theta: angles.theta,
+  };
+}
+
+// The pose a double-tap on the scene returns to: the one the room opens in, on all three axes.
+// theta is the delicate one. It is deliberately unbounded (see clampOrbit), so a player who has turned the room three times is sitting at restTheta - 6*pi, and resetting to the literal restTheta would spin the whole diorama three turns backwards — the smoothed value chases raw in VALUE, not in angle, so every one of those turns would be rendered. Snapping to the NEAREST azimuth that is a whole number of turns from rest gives the identical view by the shortest path, which is what a reset is supposed to look like.
+export function restOrbit(fromTheta: number): OrbitAngles {
+  const turns = Math.round((fromTheta - ORBIT.restTheta) / (2 * Math.PI));
+  return {
+    radius: ORBIT.homeRadius,
+    phi: ORBIT.phi.rest,
+    theta: ORBIT.restTheta + turns * 2 * Math.PI,
   };
 }
 

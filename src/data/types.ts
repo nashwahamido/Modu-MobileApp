@@ -42,7 +42,8 @@ export type ProfilePatch = Partial<
 // (a vase on a cabinet) is reserved so adding it later is not a data migration; nothing builds it yet.
 export type PlacementSurface =
   | { kind: "floor" }
-  | { kind: "wall"; wall: "x-min" | "z-max" }
+  // Widening this to all four walls is additive: every layout saved when only x-min and z-max existed still parses unchanged.
+  | { kind: "wall"; wall: "x-min" | "x-max" | "z-min" | "z-max" }
   | { kind: "furniture"; hostInstanceId: string; slot: string };
 
 // One furniture instance placed in a room — GRID coordinates, not screen or world space, so a

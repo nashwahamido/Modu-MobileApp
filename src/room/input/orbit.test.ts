@@ -7,20 +7,25 @@ import {
   controlsFromOrbit,
   eyeFor,
   orbitFromControls,
+  restOrbit,
   smoothingAlpha,
 } from "./orbit";
-import { MAX_ROOM_YAW } from "../core/roomShell";
-
-test("orbit clamps to the diorama's readable arc on every axis", () => {
+test("orbit clamps radius and phi, and leaves rotation free", () => {
   const wild = clampOrbit({ radius: 999, phi: 9, theta: 99 });
   assert.equal(wild.radius, ORBIT.homeRadius / ORBIT.zoom.min);
   assert.equal(wild.phi, ORBIT.phi.max);
-  assert.equal(wild.theta, ORBIT.restTheta + MAX_ROOM_YAW);
 
   const tight = clampOrbit({ radius: 0, phi: 0, theta: -99 });
   assert.equal(tight.radius, ORBIT.homeRadius / ORBIT.zoom.max);
   assert.equal(tight.phi, ORBIT.phi.min);
-  assert.equal(tight.theta, ORBIT.restTheta - MAX_ROOM_YAW);
+});
+
+test("theta passes through untouched — the room turns all the way round", () => {
+  // The yaw clamp existed because the shell had two walls and showed its open back past ±45°. With
+  // four walls and camera-facing culling every azimuth reads as a room, so nothing bounds theta.
+  for (const theta of [-99, -Math.PI, 0, ORBIT.restTheta, 7, 99]) {
+    assert.equal(clampOrbit({ radius: ORBIT.homeRadius, phi: ORBIT.phi.rest, theta }).theta, theta);
+  }
 });
 
 test("close-up zoom is allowed but never enters the near plane", () => {
@@ -52,6 +57,35 @@ test("rotationY keeps its old visual direction on the camera", () => {
   // shows the same view, which is why theta runs against rotationY.
   const turned = orbitFromControls(0.4, 1);
   assert.ok(turned.theta < ORBIT.restTheta);
+});
+
+test("reset returns all three axes to the pose the room opens in", () => {
+  const reset = restOrbit(ORBIT.restTheta);
+  assert.equal(reset.radius, ORBIT.homeRadius);
+  assert.equal(reset.phi, ORBIT.phi.rest);
+  assert.equal(reset.theta, ORBIT.restTheta);
+
+  // And it is exactly the neutral HUD state, since the reset reports itself back through the same
+  // (rotationY, zoom) pair the buttons speak.
+  assert.equal(controlsFromOrbit(reset).zoom, 1);
+  assert.equal(controlsFromOrbit(reset).rotationY, 0);
+});
+
+test("reset takes the SHORT way home after the room has been spun round", () => {
+  // theta is deliberately unbounded (see clampOrbit), so a player who has turned the room three
+  // times sits at restTheta - 6π. Resetting to the literal restTheta would spin the whole diorama
+  // three turns backwards, because the smoothed value chases raw in VALUE, not in angle.
+  for (const turns of [-3, -1, 1, 4]) {
+    const spun = ORBIT.restTheta + turns * 2 * Math.PI + 0.4;
+    const reset = restOrbit(spun);
+    assert.ok(
+      Math.abs(reset.theta - spun) <= Math.PI,
+      `reset unwound ${((reset.theta - spun) / Math.PI).toFixed(2)}π after ${turns} turns`,
+    );
+    // Still a rest azimuth: a whole number of turns from restTheta, so the room faces the way it opened.
+    const fromRest = (reset.theta - ORBIT.restTheta) / (2 * Math.PI);
+    assert.ok(Math.abs(fromRest - Math.round(fromRest)) < 1e-12);
+  }
 });
 
 test("smoothing is frame-rate independent and matches the reference at 60fps", () => {
