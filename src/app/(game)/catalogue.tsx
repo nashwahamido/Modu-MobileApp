@@ -17,7 +17,7 @@ import type { FurnitureMeta } from "@/src/game/core/type";
 import { type Milestone } from "@/src/game/ui/loadingProgress";
 
 // data
-import { FURNITURE_METAS } from "@/src/game/content/furnitures/furnitures";
+import { CATALOGUE_METAS } from "@/src/game/content/furnitures/furnitures";
 import { useRepos } from "@/src/data";
 import { useCatalogRow, useCatalogStore } from "@/src/data/catalogStore";
 import { brandFor } from "@/src/game/content/brands";
@@ -67,8 +67,8 @@ export default function CatalogueScreen() {
   const scheme = useColorScheme();
   const repos = useRepos();
   const status = useCatalogStore((s) => s.status);
-  // Every entry in the catalog
-  const items = FURNITURE_METAS;
+  // Every entry in the catalog EXCEPT the tutorial's own furniture — that one is built in the tutorial, not picked as a task.
+  const items = CATALOGUE_METAS;
 
   // Hold the grid until the catalogue is in memory: the bundle knows the artwork and the counts, but not a single word of copy.
   if (status === "empty")

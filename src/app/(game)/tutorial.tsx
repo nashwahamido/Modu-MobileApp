@@ -40,6 +40,7 @@ import {
   slideParkInfo,
 } from "@/src/game/core/evaluation/engagement";
 import {
+  TUTORIAL_FURNITURE_ID,
   loadFurnitureById,
 } from "@/src/game/content/furnitures/furnitures";
 
@@ -72,8 +73,6 @@ import {
   TUTORIAL_STEP_REWARD_TOKENS,
   type ToolTutorialKind,
 } from "@/src/game/tutorial/steps";
-
-const TUTORIAL_FURNITURE_ID = "lack-table";
 
 function TutorialScreen() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);

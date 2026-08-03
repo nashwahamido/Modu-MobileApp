@@ -4,8 +4,16 @@ import { LACK_META } from "./LACK/meta";
 import { EKET_META } from "./EKET/meta";
 import { BEKVAM_META } from "./BEKVAM/meta";
 
-/** Lightweight list for the furniture picker (no heavy payload loaded). Every entry is shown — the picker no longer hides any. */
+/** Every bundled recipe. The whole buildable set — thumbnails, catalogue sync and the profile's totals all read this. */
 export const FURNITURE_METAS: FurnitureMeta[] = [DALFRED_META, LACK_META, EKET_META, BEKVAM_META];
+
+/** The furniture the tutorial teaches on. There is no separate TUTORIAL recipe: the tutorial route plays this one. */
+export const TUTORIAL_FURNITURE_ID: FurnitureId = "lack-table";
+
+/** Lightweight list for the assembly-task picker (no heavy payload loaded). The tutorial's own furniture is not offered as a task — it has its own route, and the player builds it there. */
+export const CATALOGUE_METAS: FurnitureMeta[] = FURNITURE_METAS.filter(
+  (meta) => meta.id !== TUTORIAL_FURNITURE_ID,
+);
 
 /** Lazy loaders for the full build payload. Adding a furniture = one line. */
 export const FURNITURE_LOADERS: Record<FurnitureId, () => Promise<Furniture>> = {
