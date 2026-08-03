@@ -381,11 +381,17 @@ function TutorialScreen() {
   useEffect(() => {
     if (lackBuilt && !lackRecorded.current) {
       lackRecorded.current = true;
-      repos.builds.complete(me, TUTORIAL_FURNITURE_ID).catch((err) => {
-        console.warn("[tutorial] could not record the completed LACK build", err);
-        lackRecorded.current = false;
-        setRecordAttempt((n) => (n < 3 ? n + 1 : n));
-      });
+      repos.builds
+        .reward(me, TUTORIAL_FURNITURE_ID)
+        .then(() => repos.builds.complete(me, TUTORIAL_FURNITURE_ID))
+        .catch((err) => {
+          console.warn(
+            "[tutorial] could not reward/record the completed LACK build",
+            err,
+          );
+          lackRecorded.current = false;
+          setRecordAttempt((n) => (n < 3 ? n + 1 : n));
+        });
     }
   }, [lackBuilt, me, repos, recordAttempt]);
   const displayedCompletedCount = guideCompleted
