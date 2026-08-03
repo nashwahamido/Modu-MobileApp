@@ -1,19 +1,20 @@
 // Per-backdrop images (from the on-release engine's set), each with a dark variant. The Background setting picks the key; Dark mode picks the variant.
-// Consumed only through ui/SceneBackdrop, which renders the image identically on every screen (play, tutorial, room) — see backdropSource for the "clear" / studio-fallback rules.
+// The assembly screens' set (play, tutorial), from assets/images/backdrops/assemble/. The room has its own table and folder next door — src/room/ui/roomBackdrops, assets/images/backdrops/room/.
+// Rendered through ui/SceneBackdrop, which draws the image identically on every screen — see backdropSource for the "clear" / studio-fallback rules.
 import type { BackdropId } from "@/src/game/core/type";
 
 const BACKDROPS: Record<string, { light: number; dark: number }> = {
   studio: {
-    light: require("../../assets/images/backdrops/studio-light.png"),
-    dark: require("../../assets/images/backdrops/studio-dark.png"),
+    light: require("../../assets/images/backdrops/assemble/studio-light.png"),
+    dark: require("../../assets/images/backdrops/assemble/studio-dark.png"),
   },
   cozy: {
-    light: require("../../assets/images/backdrops/cozy-light.png"),
-    dark: require("../../assets/images/backdrops/cozy-dark.png"),
+    light: require("../../assets/images/backdrops/assemble/cozy-light.png"),
+    dark: require("../../assets/images/backdrops/assemble/cozy-dark.png"),
   },
   cartoon: {
-    light: require("../../assets/images/backdrops/cartoon-light.png"),
-    dark: require("../../assets/images/backdrops/cartoon-dark.png"),
+    light: require("../../assets/images/backdrops/assemble/cartoon-light.png"),
+    dark: require("../../assets/images/backdrops/assemble/cartoon-dark.png"),
   },
 };
 

@@ -21,6 +21,8 @@ import { CheckIcon, RotateLeftIcon, RotateRightIcon, TrashIcon } from '../../com
 import { Button } from '../../game/ui/Button';
 import { OverlaySheet } from '../../game/ui/OverlaySheet';
 import { SceneBackdrop } from '../../game/ui/SceneBackdrop';
+import { roomBackdropView } from './roomBackdrops';
+import { sunPreset } from '../core/timeOfDay';
 import { useGameStore } from '../../game/core/store';
 import { useStyles, useTheme } from "@/src/game/ui/theme";
 import { useCurrentUserId } from '../../data';
@@ -31,7 +33,6 @@ import { RoomTopStats } from './RoomTopStats';
 import { usePlacementStore } from '../core/placement';
 import { ORBIT } from '../input/orbit';
 import type { Theme } from "@/src/game/ui/theme";
-import { clampRoomYaw } from '../core/roomShell';
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from '../../hooks/use-safe-insets';
 
 // This screen's text is pinned to the mockup's exact ink colour and to Lexend, rather than
@@ -100,8 +101,10 @@ export function RoomExperience() {
   // Tear the 3D view down only when a heavy scene is on top, not on every blur. The room screen stays mounted throughout (its placement/zoom UI state survives); only the Filament view unmounts under play/visit and rebuilds on return.
   const rootNav = useRootNavigationState();
   const heavySceneActive = !!rootNav && HEAVY_ROUTES.has(rootNav.routes[rootNav.index]?.name ?? '');
-  // The room's own backdrop axis (Settings → Display → "Room background"), separate from the assembly scene's.
-  const roomBackdrop = useGameStore((s) => s.roomBackdrop);
+  // Backdrop follows the HOUR (Settings → "Time of day") rather than being its own axis: the view out
+  // of the room and the light inside it are the same fact, and letting them disagree only ever produces
+  // a daytime photo behind a night-lit room. Each preset names its backdrop; see core/timeOfDay.
+  const roomBackdrop = sunPreset(useGameStore((s) => s.roomTimeOfDay)).backdrop;
   const darkTheme = useGameStore((s) => s.theme) === 'dark';
   // Placement is shared state (src/room/core/placement) so any route can start it and the scene can
   // render the layout. This screen owns only the HUD: the ghost's drag lives in the scene's
@@ -131,13 +134,12 @@ export function RoomExperience() {
     roomRotationRef.current = roomRotation;
     roomZoomRef.current = roomZoom;
   }, [roomRotation, roomZoom]);
-  // Every path into the view goes through here — orbit drag, pinch — so the diorama's open corner and the zoom range are enforced once and cannot be forgotten by a new input path.
+  // Every path into the view goes through here — orbit drag, pinch — so the zoom range is enforced once and cannot be forgotten by a new input path. Rotation is NOT clamped any more: the shell is enclosed on all four sides and the walls between the camera and the room fade out, so the room reads as a room at every azimuth (see src/room/core/wallCulling).
   const applyRoomControls = (nextRotation: number, nextZoom: number) => {
-    const clampedRotation = clampRoomYaw(nextRotation);
     const clampedZoom = Math.max(ORBIT.zoom.min, Math.min(ORBIT.zoom.max, nextZoom));
-    roomRotationRef.current = clampedRotation;
+    roomRotationRef.current = nextRotation;
     roomZoomRef.current = clampedZoom;
-    setRoomRotation(clampedRotation);
+    setRoomRotation(nextRotation);
     setRoomZoom(clampedZoom);
   };
   const handleRoomRotationChange = (nextRotation: number) => {
@@ -153,7 +155,7 @@ export function RoomExperience() {
   return (
     <View style={s.screen}>
       {/* The backdrop sits UNDER a transparent Filament view, so the artwork frames the diorama without touching the 3D scene. "clear": the themed app background (screen) shows through. */}
-      <SceneBackdrop backdrop={roomBackdrop} dark={darkTheme} style={s.stage}>
+      <SceneBackdrop {...roomBackdropView(roomBackdrop, darkTheme)} style={s.stage}>
         {heavySceneActive ? null : (
           <RoomScene
             rotationY={roomRotation}

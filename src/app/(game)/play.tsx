@@ -82,6 +82,7 @@ import type { FurnitureId } from "@/src/game/core/type";
 import { LoadingOverlay } from "@/src/game/ui/LoadingOverlay";
 import type { Milestone } from "@/src/game/ui/loadingProgress";
 import { SceneBackdrop } from "@/src/game/ui/SceneBackdrop";
+import { backdropSource } from "@/src/game/ui/backdrops";
 
 // Dev
 import { DevAutoStep } from "@/src/dev/DevAutoStep";
@@ -352,8 +353,7 @@ function GameScreen() {
 
   return (
     <SceneBackdrop
-      backdrop={backdrop}
-      dark={theme === "dark"}
+      source={backdropSource(backdrop, theme === "dark")}
       style={rootStyle}
     >
       <GestureDetector gesture={sceneGesture}>

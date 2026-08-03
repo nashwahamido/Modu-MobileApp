@@ -53,6 +53,7 @@ import { UndoButton } from "@/src/game/ui/UndoButton";
 import { TutorialGameSettings } from "@/src/game/tutorial/TutorialGameSettings";
 import { ClusterFocusControl } from "@/src/game/ui/ClusterFocusControl";
 import { SceneBackdrop } from "@/src/game/ui/SceneBackdrop";
+import { backdropSource } from "@/src/game/ui/backdrops";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 import {
   currentStageForClusterFocus,
@@ -435,8 +436,7 @@ function TutorialScreen() {
 
   return (
     <SceneBackdrop
-      backdrop={backdrop}
-      dark={theme === "dark"}
+      source={backdropSource(backdrop, theme === "dark")}
       style={[styles.root, theme === "dark" && styles.rootDark]}
     >
       <GestureDetector gesture={sceneGesture}>

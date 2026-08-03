@@ -235,21 +235,15 @@ function RoomModel({ onReady, orbit }: { onReady: () => void; orbit: ReturnType<
         // window jambs drawing over the skin as a grid of seams; faint at alpha 1, and glaring on
         // a HALF-FADED wall, where the camera can legitimately park. The pre-pass gives each wall
         // proper self-occlusion in every state.
-        // The pre-pass writing depth even at alpha 0 is safe HERE, and only here, because the
-        // shell ships each wall as its own renderable (Shell_* nodes): Filament sorts blended
-        // renderables back to front, so a hidden near wall draws AFTER everything behind it —
-        // nothing is left for its depth to clip. (With the old single-'room'-node shell, primitive
-        // order put hidden walls' pre-pass BEFORE the far walls, which clipped them along the
-        // hidden silhouette — that is what the per-wall split fixed.)
-        instance.setTransparencyMode("twoPassesOneSide");
-        // The ceiling is the exception to every rule here: it is written once, to zero, and never
-        // touched again. It exists ONLY to stop the sun falling into the room from above — which is
-        // what confines daylight to the window openings, instead of the walls printing their
-        // silhouettes across the floor. Invisible in colour, solid in the shadow map.
+        // The pre-pass writing depth even at alpha 0 is safe for the WALLS, and the reason is narrow: the shell ships each wall as its own renderable (Shell_* nodes), Filament sorts blended renderables back to front by bounding-box centre, and a hidden wall is by definition the one between the eye and the room — so it draws AFTER everything behind it and nothing is left for its depth to clip. (With the old single-'room'-node shell, primitive order put hidden walls' pre-pass BEFORE the far walls, which clipped them along the hidden silhouette — that is what the per-wall split fixed.)
+        // Read that as a CONDITION, not a blanket licence: an alpha-0 surface may run this mode only while it is guaranteed to sort nearest. The ceiling never was — it sits at the room's centre and half the shell sorts after it — and it silently ate diced band cells for exactly that reason, which is why it now returns before this line.
+        // The ceiling is the exception to every rule here: it is written once, to zero, and never touched again. It exists ONLY to stop the sun falling into the room from above — which is what confines daylight to the window openings, instead of the walls printing their silhouettes across the floor. Invisible in colour, solid in the shadow map.
+        // It is deliberately returned BEFORE the transparency mode below, and must stay that way. A ceiling on twoPassesOneSide is a room-spanning depth occluder that draws nothing: it spans the whole floor plan, its underside sits exactly on the band top (ROOM_SHELL.walls[*].top), and it overhangs out past the wall inner faces — so a grazing ray to the top of a band crosses it. The wall SLABS survive that (one big renderable each, always sorting farther than the ceiling, so they draw first), but a DICED band is 84 small renderables sorted individually, and the ones at the camera-end of a wall sort NEARER than the ceiling: they draw after it, their own depth pre-pass loses to the depth it already wrote, and their colour pass — testing EQUAL — draws nothing at all. Whole cells vanish from an otherwise intact wall, worst at the four azimuths where the camera looks straight down an axis and two walls go edge-on. Shadows do not depend on this: the shadow pass ignores the colour pass's transparency mode.
         if (name === CEILING_MATERIAL) {
           instance.setFloat4Parameter("baseColorFactor", [r, g, b, 0]);
           continue;
         }
+        instance.setTransparencyMode("twoPassesOneSide");
         const bucket = groups.get(name);
         if (bucket) bucket.push({ instance, rgb: [r, g, b] });
         else groups.set(name, [{ instance, rgb: [r, g, b] }]);
