@@ -1,4 +1,3 @@
-import * as Haptics from "expo-haptics";
 import { useEffect, useRef } from "react";
 import { StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -8,6 +7,7 @@ import { engageAxis } from "@/src/game/core/evaluation/engagement";
 import { quatFromAxisAngle, quatMultiply } from "@/src/game/core/geometry/math";
 import { AssemblyAction } from "@/src/game/core/type";
 import { TIGHTEN_TOTAL_DEG, useGameStore } from "@/src/game/core/store";
+import { selectionHaptic } from "@/src/game/core/haptics";
 import type { OffsetDriver } from "../scene/offsetDriver";
 
 const RING = 96; // outer diameter of the band
@@ -82,7 +82,7 @@ export function TightenControl({ action, sinkDriver }: Props) {
           const q = Math.floor(total / 90);
           if (q > lastQuarter.current) {
             lastQuarter.current = q;
-            Haptics.selectionAsync();
+            selectionHaptic();
           }
         }
       }

@@ -10,6 +10,7 @@ import { AssemblyMode, FurnitureId } from "@/src/game/core/type";
 export const DEFAULT_SETTINGS: AccessibilitySettings = {
   textLevel: "standard",
   audio: false,
+  haptics: true,
   softHints: true,
   showInstructions: true,
   manualTools: false,

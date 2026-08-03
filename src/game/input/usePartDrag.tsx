@@ -41,6 +41,10 @@ import {
   Vec3,
 } from "@/src/game/core/type";
 import { selectFirstDrop, useGameStore } from "@/src/game/core/store";
+import {
+  impactHaptic,
+  selectionHaptic,
+} from "@/src/game/core/haptics";
 import type { OrbitManipulator } from "../scene/AssemblyScene";
 import { FOV_Y_DEG } from "../scene/cameraConfig";
 import {
@@ -406,7 +410,7 @@ export function usePartDrag({
           if (hasRidingBodies(furniture, action.partId)) slideDriver.set(base);
           store.beginPickup(action.actionId);
           if (useGameStore.getState().heldActionId !== action.actionId) return;
-          Haptics.selectionAsync();
+          selectionHaptic();
           if (!canvas) ringProgress.value = withTiming(0, { duration: 120 });
 
           const nextStore = useGameStore.getState();
@@ -656,18 +660,18 @@ export function usePartDrag({
               const store = useGameStore.getState();
               if (needsRotation || isScrew) {
                 store.parkOrientation(matched.action.actionId);
-                Haptics.selectionAsync();
+                selectionHaptic();
               } else if (eng === "slide" || eng === "press") {
                 store.parkDrive(matched.action.actionId, eng);
-                Haptics.selectionAsync();
+                selectionHaptic();
               } else {
                 store.releaseHeld();
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                impactHaptic(Haptics.ImpactFeedbackStyle.Medium);
               }
             });
           } else if (store.settings.releaseBehavior === "float") {
             // FLOAT: leave the part exactly where it was set down. heldActionId stays set (we don't cancelHeld), so the driver keeps its offset and the part renders in place — drag it again on the canvas or use the tray Put-back to return it. Ported from the on-release engine. slideDriver is intentionally left as-is (not zeroed): the lead is still logically held, just parked, so its siblings should keep riding at the same offset until the next drag frame or an explicit cancel.
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            impactHaptic(Haptics.ImpactFeedbackStyle.Light);
           } else {
             // complimentary function for FLOAT: AUTO-RETURN: the part flies to a recover spot in front of the camera and returns to the tray.
             const la = manipulator?.getLookAt();
@@ -692,7 +696,7 @@ export function usePartDrag({
               st.cancelHeld();
               // cancelHeld FIRST (clears heldActionId → riding parts unmount), THEN zero the driver so it's clean for the next lead pickup and nothing ever renders the transient reset.
               if (lead) slideDriver.set([0, 0, 0]);
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              impactHaptic(Haptics.ImpactFeedbackStyle.Light);
               st.noteBlocked(action.actionId);
             });
           }
@@ -845,7 +849,7 @@ export function usePartDrag({
               action.actionId,
               action.cluster ? clusterDriveKind(store.furniture?.clusters, action.cluster) : "slide",
             );
-            Haptics.selectionAsync();
+            selectionHaptic();
             return;
           }
           // the seed cluster eases the last stretch home, then the placement commits
@@ -854,7 +858,7 @@ export function usePartDrag({
             st.completeAction(action.actionId);
             st.setCombiningCluster(null);
             carryShared.value = { x: 0, y: 0, z: 0 };
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            impactHaptic(Haptics.ImpactFeedbackStyle.Medium);
           });
         });
     },

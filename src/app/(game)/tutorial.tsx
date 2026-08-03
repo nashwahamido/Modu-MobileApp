@@ -68,6 +68,10 @@ import { useTutorialStore } from "@/src/game/tutorial/store";
 import { furnitureForProfile } from "@/src/game/core/profile";
 import { tutorialPresentationForProfile } from "@/src/game/tutorial/presentation";
 import {
+  playTutorialCompletionHaptic,
+  playTutorialStepHaptic,
+} from "@/src/game/tutorial/haptics";
+import {
   TUTORIAL_STEP_REWARD_TOKENS,
   type ToolTutorialKind,
 } from "@/src/game/tutorial/steps";
@@ -77,6 +81,25 @@ const TUTORIAL_FURNITURE_ID = "lack-table";
 function TutorialScreen() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
   const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    let previous = useTutorialStore.getState();
+    return useTutorialStore.subscribe((current) => {
+      const game = useGameStore.getState();
+      if (current.stepRewardsClaimed > previous.stepRewardsClaimed) {
+        const completedStep = current.steps[current.currentIndex];
+        playTutorialStepHaptic(
+          completedStep?.event,
+          game.profile,
+          game.settings.haptics,
+        );
+      }
+      if (current.completed && !previous.completed) {
+        playTutorialCompletionHaptic(game.settings.haptics);
+      }
+      previous = current;
+    });
+  }, []);
 
   const sceneState = useSceneState();
   const {

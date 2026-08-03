@@ -378,6 +378,12 @@ export function SettingsControls() {
         value={settings.audio}
         onValueChange={(v) => setSettings({ audio: v })}
       />
+      <Row
+        label="Haptic feedback"
+        desc="Vibrate to confirm successful actions"
+        value={settings.haptics}
+        onValueChange={(v) => setSettings({ haptics: v })}
+      />
     </View>
   );
 }

@@ -25,6 +25,8 @@ export type DragPlane = "adaptive" | "level";
 export interface AccessibilitySettings {
   textLevel: TextLevel;
   audio: boolean;
+  /** Confirm successful tutorial and assembly actions with device vibration. */
+  haptics: boolean;
   /** FREE-mode soft hints when reaching for a not-yet-available part. */
   softHints: boolean;
   /** Player picks the tool from the tool bar before tightening; off = the system equips the right tool automatically. */
