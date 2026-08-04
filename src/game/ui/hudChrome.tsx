@@ -101,7 +101,7 @@ export function HintButton({
       source={require("@/src/assets/ui/icons/icon-hint.png")}
       onPress={onPress}
       style={style}
-      accessibilityLabel="Show a hint"
+      accessibilityLabel="Spot the next part"
     />
   );
 }

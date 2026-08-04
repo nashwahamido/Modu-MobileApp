@@ -71,6 +71,10 @@ interface GameState {
   hintGroup: GroupId | null;
   /** Bumped on every ? press so a repeated hint for the same group re-triggers the flash. */
   hintPulse: number;
+  clearSpot: () => void;
+  /** The part the ? hint points at. Spotlights that part's socket in the scene for as long as the
+   *  hint itself lives — clearHint drops both, so the toast's dismiss timer is also the ghost's. */
+  hintPartId: PartId | null;
   /** Accumulated tighten rotation per tighten-action id, in degrees. */
   tightenDeg: Record<ActionId, number>;
   /** Snap action parked at the socket, waiting for orientation correction. */
@@ -177,6 +181,7 @@ const CLEARED = {
   matchedActionId: null,
   hint: null,
   hintGroup: null,
+  hintPartId: null,
 };
 
 export const useGameStore = create<GameState>()((set, get) => ({
@@ -407,7 +412,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
     if (!s.furniture) return;
     const next = s.availableForMode()[0];
     if (!next) {
-      set({ hint: "This area is done — switch focus.", hintGroup: null });
+      set({ hint: "This area is done — switch focus.", hintGroup: null, hintPartId: null });
       return;
     }
     const text = instructionText(
@@ -421,10 +426,16 @@ export const useGameStore = create<GameState>()((set, get) => ({
     set({
       hint: text ? `Try: ${text}` : null,
       hintGroup: text ? group : null,
+      // The spotlight no longer depends on there being TEXT — a hint with no copy still has a part.
+      hintPartId: next.partId ?? null,
       hintPulse: s.hintPulse + 1,
     });
   },
-  clearHint: () => set({ hint: null, hintGroup: null }),
+  clearHint: () => set({ hint: null, hintGroup: null, hintPartId: null }),
+  /** Drop the spotlight WITHOUT touching the toast. The spotlight is a one-shot: it has to end on
+   *  its own timer, not on the toast's, because a hint with no text never mounts a toast and would
+   *  leave the marker lit for the rest of the build. */
+  clearSpot: () => set({ hintPartId: null }),
 
   setSelectedTool: (tool) => set({ selectedTool: tool }),
 

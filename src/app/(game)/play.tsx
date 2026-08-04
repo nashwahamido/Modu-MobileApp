@@ -86,6 +86,10 @@ import { SceneBackdrop } from "@/src/game/ui/SceneBackdrop";
 import { DevAutoStep } from "@/src/dev/DevAutoStep";
 import { DevMenu } from "@/src/dev/DevMenu";
 
+/** How long the Spot marker pulses before putting itself out. Long enough to find with the eye,
+ *  short enough that it never becomes part of the scene's furniture. */
+const SPOT_MS = 2800;
+
 function GameScreen() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
   const insets = useSafeAreaInsets();
@@ -238,6 +242,15 @@ function GameScreen() {
 
   const hintGroup = useGameStore((s) => s.hintGroup);
   const hintPulse = useGameStore((s) => s.hintPulse);
+  // The Spot marker is a ONE-SHOT: it pulses for a few seconds and puts itself out. Keyed on
+  // hintPulse as well as the part, so pressing Spot twice for the same part restarts the window
+  // rather than being swallowed as "no change".
+  const spotPartId = useGameStore((s) => s.hintPartId);
+  useEffect(() => {
+    if (!spotPartId) return;
+    const t = setTimeout(() => useGameStore.getState().clearSpot(), SPOT_MS);
+    return () => clearTimeout(t);
+  }, [spotPartId, hintPulse]);
 
   // select tool
   const selectedTool = useGameStore((s) => s.selectedTool);
