@@ -1,6 +1,6 @@
 // The shop popup's header: a SHOP badge that flows into a pill holding the category tabs
 // Tabs come from src/data/shopItems.ts, so adding a category is a one-line change there
-import { StyleSheet, Image, Pressable, Text, View } from "react-native";
+import { StyleSheet, Image, Pressable, ScrollView, Text, View } from "react-native";
 import Svg, { Circle, Defs, Path, RadialGradient, Stop } from "react-native-svg";
 
 import { SHOP_ICON } from "@/src/components/iconAssets";
@@ -52,27 +52,35 @@ export function ShopCategoryTabs({
     <View style={s.header}>
       {/* Indented from the left, leaving the space the badge is positioned into. */}
       <View style={[s.bar, { marginRight: rightInset }]}>
-        {SHOP_CATEGORY_TABS.map((id) => {
-          const active = id === category;
-          return (
-            <Pressable
-              key={id}
-              accessibilityRole="tab"
-              accessibilityLabel={CATEGORY_LABELS[id]}
-              // So the fill colour is never the only signal of the active tab.
-              accessibilityState={{ selected: active }}
-              style={s.tab}
-              onPress={() => onCategory(id)}
-            >
-              <View style={[s.iconWrap, active && s.iconWrapActive]}>
-                <IconPlaceholder size={38} />
-              </View>
-              <Text style={s.label} numberOfLines={1}>
-                {CATEGORY_LABELS[id]}
-              </Text>
-            </Pressable>
-          );
-        })}
+        {/* Scrolls, because six fixed-width tabs are already wider than the pill on a phone and the panel's overflow:hidden simply clipped the last ones away — windows and lighting were unreachable rather than merely cramped */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={s.scroll}
+          contentContainerStyle={s.tabs}
+        >
+          {SHOP_CATEGORY_TABS.map((id) => {
+            const active = id === category;
+            return (
+              <Pressable
+                key={id}
+                accessibilityRole="tab"
+                accessibilityLabel={CATEGORY_LABELS[id]}
+                // So the fill colour is never the only signal of the active tab.
+                accessibilityState={{ selected: active }}
+                style={s.tab}
+                onPress={() => onCategory(id)}
+              >
+                <View style={[s.iconWrap, active && s.iconWrapActive]}>
+                  <IconPlaceholder size={38} />
+                </View>
+                <Text style={s.label} numberOfLines={1}>
+                  {CATEGORY_LABELS[id]}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {/* Last, so it paints over the pill's left end. Not a button: it only says where you are. */}
@@ -122,6 +130,7 @@ const makeStyles = (t: Theme) =>
       zIndex: 2,
       justifyContent: "center",
     },
+    // The frame only. Everything about how the tabs sit inside it now belongs to the scroller below, since the row is no longer laid out against this box's width
     bar: {
       height: BAR_HEIGHT,
       // Half the diameter, so the pill's edge runs through the badge's centre
@@ -130,9 +139,17 @@ const makeStyles = (t: Theme) =>
       backgroundColor: CHROME,
       borderWidth: HAIRLINE_WIDTH,
       borderColor: HAIRLINE,
-      flexDirection: "row",
+      // So a scrolled row is cut off by the pill's rounded edge rather than drawn past it
+      overflow: "hidden",
+    },
+    // flex:1 fills the pill's height, so the row centres vertically against the frame and not against its own content
+    scroll: {
+      flex: 1,
+    },
+    tabs: {
       alignItems: "center",
-      // Centred with a fixed gap, so the tabs sit as a group instead of spreading
+      // Centred with a fixed gap, so the tabs sit as a group instead of spreading. flexGrow, so that centring still applies on a screen wide enough to hold every tab — where this scroller never scrolls and the pill looks exactly as it did before
+      flexGrow: 1,
       justifyContent: "center",
       gap: 33,
       // Clears the badge overlapping this end, without moving the pill

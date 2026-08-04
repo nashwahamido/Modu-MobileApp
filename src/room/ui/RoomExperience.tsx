@@ -77,7 +77,7 @@ export function RoomExperience() {
   const hour = useGameStore((s) => s.roomTimeOfDay);
   const setRoomTimeOfDay = useGameStore((s) => s.setRoomTimeOfDay);
   const roomBackdrop = sunPreset(hour).backdrop;
-  // The switch's deviation from this hour's default, stamped with the hour so a change of hour drops it — see ceilingLightOn. Deliberately NOT persisted and deliberately not in the store: the default follows the VIEWER's hour, so a visitor's room lights correctly with no owned state to disagree about.
+  // The switch's deviation from this hour's default, stamped with the hour it was made at so it applies to THAT hour only — see ceilingLightOn. Note it is set aside rather than discarded: move away and the new hour's default rules, move back and the deviation applies again, which is what makes "off at night" stay a night preference instead of a one-shot. Only one slot exists, so touching the switch at a second hour replaces it. Deliberately NOT persisted and deliberately not in the store: the default follows the VIEWER's hour, so a visitor's room lights correctly with no owned state to disagree about.
   const [lightOverride, setLightOverride] = useState<CeilingLightOverride>(null);
   const ceilingLight = ceilingLightOn(hour, lightOverride);
   const darkTheme = useGameStore((s) => s.theme) === 'dark';

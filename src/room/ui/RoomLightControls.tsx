@@ -48,7 +48,10 @@ export function RoomLightControls({
   const s = useStyles(makeStyles);
   // The slider is collapsed by default: a permanent scrubber is a lot of chrome over a diorama the player wants to look at, and the hour is a rare choice. The BULB is never collapsed, because flipping a light is the thing you actually do and one tap is the whole budget for it.
   const [hoursOpen, setHoursOpen] = useState(false);
-  const dark = sunPreset(hour).backdrop === 'night';
+  // Through sunPreset, not TIME_OF_DAY[hour], so an id this component does not recognise falls back to a real preset instead of throwing on `.label` — the guarantee that module advertises and its tests pin.
+  const preset = sunPreset(hour);
+  // The ONE place the backdrop legitimately drives lighting UI, against the rule section 4 of the spec sets out: this glyph depicts THE SKY, so the photo outside the window is genuinely the right source for it — unlike the light's own behaviour, which must never be inferred from the wallpaper.
+  const dark = preset.backdrop === 'night';
   const index = TIME_OF_DAY_IDS.indexOf(hour);
 
   // What the slider last asked for. Re-synced to the prop on every render so an hour changed from anywhere else still lands here, and read inside the gesture so a drag does not re-emit the stop it is already sitting on — the gesture is memoized and would otherwise close over the hour the drag STARTED at.
@@ -89,7 +92,7 @@ export function RoomLightControls({
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Time of day: ${TIME_OF_DAY[hour].label}`}
+        accessibilityLabel={`Time of day: ${preset.label}`}
         accessibilityState={{ expanded: hoursOpen }}
         hitSlop={8}
         style={s.button}
@@ -101,14 +104,14 @@ export function RoomLightControls({
       {hoursOpen ? (
         <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={s.panel}>
           {/* The readout names the stop the knob is on. Labels come from TIME_OF_DAY, the same source the old Settings stepper read, so a sixth preset appears here with no edit to this file. */}
-          <Text style={s.panelLabel}>{TIME_OF_DAY[hour].label}</Text>
+          <Text style={s.panelLabel}>{preset.label}</Text>
           <GestureDetector gesture={scrub}>
             {/* The touch area spans the KNOB's full travel, not the track's line, so the ends are as grabbable as the middle — a track-width hit box leaves the first and last stops half off it. */}
             <View
               style={s.trackHit}
               accessibilityRole="adjustable"
               accessibilityLabel="Time of day"
-              accessibilityValue={{ text: TIME_OF_DAY[hour].label, min: 0, max: LAST, now: index }}
+              accessibilityValue={{ text: preset.label, min: 0, max: LAST, now: index }}
               accessibilityActions={ACCESSIBILITY_ACTIONS}
               onAccessibilityAction={(e) => {
                 const next = TIME_OF_DAY_IDS[
