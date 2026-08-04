@@ -20,13 +20,114 @@ import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src
 import { saveOnboardingResults } from "@/src/services/onboarding";
 import type { Theme } from "@/src/game/ui/theme";
 
-import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
+import Reanimated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
+import type { ReactNode } from "react";
+import type { StyleProp, TextStyle, ViewStyle } from "react-native";
 
-/** This screen's backdrop. Deliberately its own pair rather than a shared token: each screen can
- *  be retuned without touching the others. Keep root.backgroundColor equal to BG_FROM — that is
- *  what shows for the frame before the SVG paints. */
-const BG_FROM = "#8D7BA8";
-const BG_TO = "#A9BFD9";
+/** Flat, not a ramp — the intro is one card on an empty field and a gradient behind it only pulled
+ *  the eye off the thing being read. */
+const BG_SOLID = "#A9BFD9";
+/** The card's rim. Lavender at 3pt, matching the catalogue's selected-card treatment. */
+const BUBBLE_RIM = "#8D7BA8";
+/** One source for the bubble's width: the reveal animates a clip to exactly this, and the card
+ *  inside is pinned to it so nothing squeezes as the clip opens. */
+const BUBBLE_W = 470;
+
+/** The intro entrance, as one block: the mascot arrives, then its speech bubble, then what it says,
+ *  then the thing you press. Every value is the moment that element starts. */
+const INTRO_STAGE = {
+  mascot: 120,
+  bubble: 620,
+  text: 1080,
+  /** Between the greeting, the question and the two choices. */
+  lineStep: 420,
+} as const;
+
+/** Scales up past its resting size and settles. */
+function PopIn({ delay, style, children }: { delay: number; style?: StyleProp<ViewStyle>; children: ReactNode }) {
+  const on = useSharedValue(0);
+  useEffect(() => {
+    on.value = withDelay(delay, withSpring(1, { damping: 10, stiffness: 180, mass: 0.8 }));
+  }, [delay, on]);
+  const anim = useAnimatedStyle(() => ({
+    opacity: Math.min(1, on.value * 3),
+    transform: [{ scale: 0.6 + on.value * 0.4 }],
+  }));
+  return <Reanimated.View style={[style, anim]}>{children}</Reanimated.View>;
+}
+
+/** The bubble UNROLLS left to right: an outer clip whose width animates from zero, with the card
+ *  held at full width inside it so nothing squeezes as the clip opens. A scale-up read as a card
+ *  appearing; a wipe reads as speech arriving from the character's side. */
+function BubbleReveal({
+  delay,
+  width,
+  style,
+  children,
+}: {
+  delay: number;
+  width: number;
+  style?: StyleProp<ViewStyle>;
+  children: ReactNode;
+}) {
+  const on = useSharedValue(0);
+  useEffect(() => {
+    on.value = withDelay(delay, withTiming(1, { duration: 460, easing: Easing.out(Easing.cubic) }));
+  }, [delay, on]);
+  const clip = useAnimatedStyle(() => ({ width: width * on.value }));
+  return (
+    <Reanimated.View style={[{ overflow: "hidden" }, clip]}>
+      <View style={[style, { width }]}>{children}</View>
+    </Reanimated.View>
+  );
+}
+
+
+/** Each line drops in from above, in reading order. */
+function SlideInDown({ delay, style, children }: { delay: number; style?: StyleProp<ViewStyle>; children: ReactNode }) {
+  const on = useSharedValue(0);
+  useEffect(() => {
+    on.value = withDelay(delay, withTiming(1, { duration: 340, easing: Easing.out(Easing.cubic) }));
+  }, [delay, on]);
+  const anim = useAnimatedStyle(() => ({
+    opacity: on.value,
+    transform: [{ translateY: -22 * (1 - on.value) }],
+  }));
+  return <Reanimated.View style={[style, anim]}>{children}</Reanimated.View>;
+}
+
+/** The ring breathing behind Next. Swells and fades rather than pulsing the button, which has to
+ *  stay a stable target. */
+function NextHalo() {
+  const on = useSharedValue(0);
+  useEffect(() => {
+    on.value = withRepeat(withTiming(1, { duration: 1400, easing: Easing.out(Easing.quad) }), -1, false);
+  }, [on]);
+  const anim = useAnimatedStyle(() => ({
+    opacity: 0.5 * (1 - on.value),
+    transform: [{ scale: 1 + on.value * 0.18 }],
+  }));
+  return <Reanimated.View style={[HALO, anim]} pointerEvents="none" />;
+}
+
+const HALO = {
+  position: "absolute" as const,
+  left: -10,
+  right: -10,
+  top: -10,
+  bottom: -10,
+  borderRadius: 999,
+  borderWidth: 3,
+  borderColor: BUBBLE_RIM,
+};
 /** The progress fill. Its own value rather than t.accent: the accent IS the gradient's first stop,
  *  so a lavender bar on a lavender backdrop had almost nothing to read against. */
 const PROGRESS_FILL = "#8FA876";
@@ -238,31 +339,32 @@ export default function QuestionnaireScreen() {
 
   if (!introComplete) {
     return (
-      <View style={styles.root}>
-        {/* Diagonal, so neither end of the ramp sits flat behind a whole column of content. */}
-        <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
-          <Defs>
-            <LinearGradient id="questionnaireBg" x1="0" y1="0" x2="1" y2="1">
-              <Stop offset="0" stopColor={BG_FROM} />
-              <Stop offset="1" stopColor={BG_TO} />
-            </LinearGradient>
-          </Defs>
-          <Rect x="0" y="0" width="100%" height="100%" fill="url(#questionnaireBg)" />
-        </Svg>
+      <View
+        style={[
+          styles.root,
+          {
+            paddingLeft: 44 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+            paddingRight: 44 + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN),
+            paddingTop: 22 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
+            paddingBottom: 22 + Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN),
+          },
+        ]}
+      >
         <View style={styles.introStage}>
-          <View style={styles.mascotCircle}>
+          <PopIn delay={INTRO_STAGE.mascot} style={styles.mascotCircle}>
             <Image source={mascot} style={styles.introMascot} />
-            
-          </View>
-          <View style={styles.speechBubble}>
-            <VoiceButton onPress={speakIntro} />
-            <Text style={styles.introText}>
-              {questionnaireIntroText}
-            </Text>
-            <Text style={styles.introPrompt}>
-              {questionnaireHandednessPrompt}
-            </Text>
-            <View style={styles.handOptions}>
+          </PopIn>
+          {/* The button is a SIBLING of the reveal, not a child of it: the wipe needs overflow
+              hidden, and anything hanging over the bubble's edge gets clipped by that same rule. */}
+          <View style={styles.bubbleWrap}>
+            <BubbleReveal delay={INTRO_STAGE.bubble} width={BUBBLE_W} style={styles.speechBubble}>
+            <SlideInDown delay={INTRO_STAGE.text}>
+              <Text style={styles.introText}>{questionnaireIntroText}</Text>
+            </SlideInDown>
+            <SlideInDown delay={INTRO_STAGE.text + INTRO_STAGE.lineStep}>
+              <Text style={styles.introPrompt}>{questionnaireHandednessPrompt}</Text>
+            </SlideInDown>
+            <SlideInDown delay={INTRO_STAGE.text + INTRO_STAGE.lineStep * 2} style={styles.handOptions}>
               <Pressable
                 onPress={() => setHandedness("left")}
                 style={[
@@ -283,9 +385,26 @@ export default function QuestionnaireScreen() {
                 <Text style={styles.handIcon}>R</Text>
                 <Text style={styles.handText}>right</Text>
               </Pressable>
-            </View>
+            </SlideInDown>
+            </BubbleReveal>
+            <VoiceButton onPress={speakIntro} style={styles.bubbleVoice} />
           </View>
         </View>
+        {/* Not rendered at all until a hand is chosen. A disabled button sitting there through the
+            whole introduction is a dead control the eye keeps returning to; appearing on the choice
+            makes it the consequence of the choice. */}
+        {handedness ? (
+        <PopIn
+          delay={0}
+          style={[
+            styles.introNextWrap,
+            {
+              right: 28 + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN),
+              bottom: 24 + Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN),
+            },
+          ]}
+        >
+          <NextHalo />
         <Button
           label="Next"
           variant="primary"
@@ -298,6 +417,8 @@ export default function QuestionnaireScreen() {
           }}
           style={styles.introNextButton}
         />
+        </PopIn>
+        ) : null}
       </View>
     );
   }
@@ -525,7 +646,7 @@ const makeStyles = (t: Theme) =>
   StyleSheet.create({
     root: {
       flex: 1,
-      backgroundColor: BG_FROM,
+      backgroundColor: BG_SOLID,
       // Padding is applied inline (base + safe inset) so the questionnaire clears the cutout
       // and the immersive-hidden bars the same way every other screen does.
     },
@@ -534,11 +655,14 @@ const makeStyles = (t: Theme) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      gap: 28,
+      gap: 20,
+      // Room at the foot for the Next button and its halo, so the bubble clears it — but modest:
+      // too much and the row is pushed into the top margin instead.
+      paddingBottom: 58,
     },
     mascotCircle: {
-      width: 190,
-      height: 190,
+      width: 150,
+      height: 150,
       alignItems: "center",
       justifyContent: "center",
       overflow: "hidden",
@@ -556,14 +680,20 @@ const makeStyles = (t: Theme) =>
       ...StyleSheet.absoluteFillObject,
     },
     speechBubble: {
-      width: 560,
-      minHeight: 216,
-      borderRadius: 42,
+      width: BUBBLE_W,
+      minHeight: 190,
+      borderRadius: 36,
       backgroundColor: t.surface,
-      paddingHorizontal: 44,
-      paddingVertical: 28,
-      gap: 18,
+      borderWidth: 3,
+      borderColor: BUBBLE_RIM,
+      paddingHorizontal: 32,
+      paddingVertical: 24,
+      gap: 14,
     },
+    // Straddling the top-left corner of the rim. Absolute, so it contributes no height — in the flow
+    // it was pushing every line of the message down by its own 44pt.
+    bubbleWrap: { position: "relative" },
+    bubbleVoice: { position: "absolute", top: -20, left: 22, zIndex: 3 },
     introText: {
       color: t.text,
       fontFamily: FONT, fontSize: 17,
@@ -607,12 +737,11 @@ const makeStyles = (t: Theme) =>
       fontWeight: "800",
     },
     // Layout only — the fill, radius, and padding now come from the shared Button.
-    introNextButton: {
-      position: "absolute",
-      right: 54,
-      bottom: 30,
-      minWidth: 116,
-    },
+    // Outside the bubble entirely: it is what you do NEXT, not part of what Modu is saying.
+    // Offsets are set at the call site from the safe insets: an absolute child is not inset by the
+    // parent's padding, so a literal here could never account for the device.
+    introNextWrap: { position: "absolute" },
+    introNextButton: { minWidth: 116 },
     questionHeader: {
       flexDirection: "row",
       alignItems: "center",

@@ -73,8 +73,14 @@ export function AccountPicker() {
         </View>
       ))}
 
-      {busy ? <ActivityIndicator style={styles.spinner} /> : null}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {/* Out of the layout entirely, hanging below the column. Mounting the spinner inline pushed
+          the whole stack up — the screen centres this block vertically, so any height added at the
+          bottom moves everything. Reserving the space fixed the jump but spent the height
+          permanently; absolute costs nothing at rest and nothing on press. */}
+      <View style={styles.statusSlot}>
+        {busy ? <ActivityIndicator /> : null}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+      </View>
     </View>
   );
 }
@@ -87,6 +93,15 @@ const makeStyles = (t: Theme) =>
     divider: { flex: 1, height: 1, backgroundColor: t.border },
     dividerText: { ...TYPE.labelSm, color: t.textFaint },
     hint: { ...TYPE.labelSm, color: t.textFaint, textAlign: "center" },
+    statusSlot: {
+      position: "absolute",
+      top: "100%",
+      left: 0,
+      right: 0,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingTop: 6,
+    },
     spinner: { marginTop: SPACE.xs },
     error: { ...TYPE.labelSm, color: t.danger, textAlign: "center" },
   });

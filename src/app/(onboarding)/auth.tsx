@@ -5,18 +5,18 @@ import { StyleSheet, Image, Text, View } from "react-native";
 import { Button } from "@/src/game/ui/Button";
 import { AccountPicker } from "@/src/dev/AccountPicker";
 import { SPACE, TYPE, useStyles, FONT } from "@/src/game/ui/theme";
-import { useSafeInsets } from "@/src/hooks/use-safe-insets";
+import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import type { Theme } from "@/src/game/ui/theme";
 
-import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
-/** This screen's backdrop. Deliberately its own pair rather than a shared token: each screen can
- *  be retuned without touching the others. Keep root.backgroundColor equal to BG_FROM — that is
- *  what shows for the frame before the SVG paints. */
-const BG_FROM = "#8D7BA8";
-const BG_TO = "#A9BFD9";
+/** Flat, not a ramp. The brand art decides it: the mascot is white and the wordmark is dark taupe,
+ *  so a cream backdrop would swallow the mascot whole (1.01:1) while the blue keeps both readable
+ *  and lets the cream buttons carry the contrast instead. */
+const BG_SOLID = "#A9BFD9";
+const SLOGAN_INK = "#595551";
 
 const mascot = require("../../assets/images/mascot/mascot.png");
+const wordmark = require("../../assets/ui/brand/logo-modu.png");
 const createAccountRoute = "/create-account" as Href;
 const loginRoute = "/create-account?mode=login" as Href;
 
@@ -24,29 +24,27 @@ export default function AuthScreen() {
   const styles = useStyles(makeStyles);
   const safe = useSafeInsets();
   return (
-    <View style={[styles.root, { paddingLeft: safe.left, paddingRight: safe.right }]}>
-      {/* Diagonal, so neither end of the ramp sits flat behind a whole column of content. */}
-      <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
-        <Defs>
-          <LinearGradient id="authBg" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor={BG_FROM} />
-            <Stop offset="1" stopColor={BG_TO} />
-          </LinearGradient>
-        </Defs>
-        <Rect x="0" y="0" width="100%" height="100%" fill="url(#authBg)" />
-      </Svg>
+    <View
+      style={[
+        styles.root,
+        {
+          // ADD to the layout's own padding, never replace it. `paddingLeft` overrides the sheet's
+          // `paddingHorizontal` outright, so passing the bare inset here silently cut the screen's
+          // 42pt gutter down to the 14pt floor.
+          paddingLeft: 42 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+          paddingRight: 42 + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN),
+          paddingTop: 22 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
+          paddingBottom: 22 + Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN),
+        },
+      ]}
+    >
       <View style={styles.content}>
         <View style={styles.intro}>
           <View style={styles.header}>
             <Image source={mascot} style={styles.mascot} />
-            <Text style={styles.brand}>MODU</Text>
+            <Image source={wordmark} style={styles.wordmark} resizeMode="contain" />
           </View>
-          <View style={styles.copyBlock}>
-            <Text style={styles.title}>Start your assembly journey.</Text>
-            <Text style={styles.subtitle}>
-              Create an account to get your personalized guiding avatar!
-            </Text>
-          </View>
+          <Text style={styles.slogan}>Everyone Can Build!</Text>
         </View>
         <View style={styles.actions}>
           <Link href={createAccountRoute} asChild>
@@ -69,9 +67,7 @@ const makeStyles = (t: Theme) =>
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: BG_FROM,
-      paddingHorizontal: 42,
-      paddingVertical: 22,
+      backgroundColor: BG_SOLID,
     },
     content: {
       width: "100%",
@@ -85,6 +81,7 @@ const makeStyles = (t: Theme) =>
       flex: 1,
       maxWidth: 560,
       gap: 18,
+      alignItems: "center",
     },
     header: {
       flexDirection: "row",
@@ -96,27 +93,18 @@ const makeStyles = (t: Theme) =>
       height: 82,
       borderRadius: 20,
     },
-    brand: {
-      color: t.gold,
-      fontFamily: FONT, fontSize: 44,
-      fontWeight: "800",
-      letterSpacing: 8,
-    },
-    copyBlock: {
-      gap: SPACE.sm,
-    },
-    title: {
-      ...TYPE.title,
-      color: t.text,
-      fontSize: 31,
-      lineHeight: 36,
-    },
-    subtitle: {
-      ...TYPE.body,
-      color: t.textDim,
-      fontSize: 16,
-      fontWeight: "600",
-      lineHeight: 22,
+    // Height derived from the art's 4.51 aspect, so the wordmark can never be stretched.
+    wordmark: { width: 230, height: 230 / 4.51 },
+    // One line under the wordmark, so the brand block reads as logo + promise and nothing else.
+    // Fixed ink, not t.text: the backdrop is a fixed blue, so a theme-driven colour would turn this
+    // bone in dark mode and land at 1.78:1 on it.
+    slogan: {
+      color: SLOGAN_INK,
+      fontFamily: FONT,
+      fontSize: 30,
+      fontWeight: "900",
+      letterSpacing: 0.2,
+      textAlign: "center",
     },
     actions: {
       width: 300,

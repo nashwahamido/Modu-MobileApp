@@ -9,7 +9,7 @@ export type QuestionnaireQuestion = {
 };
 
 export const questionnaireIntroText =
-  "Hey! I'm Momo, your assembly assistant. Let's complete a quick questionnaire to find the avatar that fits you best.";
+  "Hey! I'm Modu, your assembly assistant. Let's complete a quick questionnaire to find the avatar that fits you best.";
 export const questionnaireHandednessPrompt =
   "First, are you left- or right-handed?";
 export const questionnaireIntroVoiceText =
