@@ -70,3 +70,22 @@ export function StagesIcon({ size = 24, color = '#807277' }: Props) { return <Sv
 
 /** Estimated build time — the clock on a catalogue card. */
 export function ClockIcon({ size = 24, color = '#807277' }: Props) { return <Svg {...base(size)} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round"><Circle cx="12" cy="12" r="8.5"/><Polyline points="12,7 12,12 15.5,14"/></Svg> }
+
+// Filled when lit, outline when not: the bulb IS the switch's state readout, so the two states have to differ at a glance and not only by tint.
+export function BulbIcon({ size = 24, color = '#807277', on = false }: Props & { on?: boolean }) {
+  return <Svg {...base(size)} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <Path d="M9 16.8a6 6 0 1 1 6 0V18a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 18v-1.2Z" fill={on ? color : 'none'}/>
+    <Line x1="9.6" y1="21" x2="14.4" y2="21"/>
+  </Svg>;
+}
+export function SunIcon({ size = 24, color = '#807277' }: Props) {
+  return <Svg {...base(size)} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round">
+    <Circle cx="12" cy="12" r="4.4"/>
+    <Path d="M12 2.2v2.4M12 19.4v2.4M2.2 12h2.4M19.4 12h2.4M5.1 5.1l1.7 1.7M17.2 17.2l1.7 1.7M18.9 5.1l-1.7 1.7M6.8 17.2l-1.7 1.7"/>
+  </Svg>;
+}
+export function MoonIcon({ size = 24, color = '#807277' }: Props) {
+  return <Svg {...base(size)} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round">
+    <Path d="M20 14.6A8.6 8.6 0 0 1 9.4 4a8.6 8.6 0 1 0 10.6 10.6Z"/>
+  </Svg>;
+}

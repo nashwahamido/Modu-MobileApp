@@ -16,13 +16,14 @@ import { Button } from '../../game/ui/Button';
 import { OverlaySheet } from '../../game/ui/OverlaySheet';
 import { SceneBackdrop } from '../../game/ui/SceneBackdrop';
 import { roomBackdropView } from './roomBackdrops';
-import { sunPreset } from '../core/timeOfDay';
+import { ceilingLightOn, sunPreset, type CeilingLightOverride } from '../core/timeOfDay';
 import { useGameStore } from '../../game/core/store';
 import { useStyles, useTheme } from "@/src/game/ui/theme";
 import { useCurrentUserId } from '../../data';
 import { RoomScene } from '../scene/RoomScene';
 import { ColourPicker } from './ColourPicker';
 import { RoomBottomBar } from './RoomBottomBar';
+import { RoomLightControls } from './RoomLightControls';
 import { RoomTopStats } from './RoomTopStats';
 import { ShopOverlay } from '../../shop/ShopOverlay';
 import { InventoryOverlay } from '../../inventory/InventoryOverlay';
@@ -73,7 +74,12 @@ export function RoomExperience() {
   // Backdrop follows the HOUR (Settings → "Time of day") rather than being its own axis: the view out
   // of the room and the light inside it are the same fact, and letting them disagree only ever produces
   // a daytime photo behind a night-lit room. Each preset names its backdrop; see core/timeOfDay.
-  const roomBackdrop = sunPreset(useGameStore((s) => s.roomTimeOfDay)).backdrop;
+  const hour = useGameStore((s) => s.roomTimeOfDay);
+  const setRoomTimeOfDay = useGameStore((s) => s.setRoomTimeOfDay);
+  const roomBackdrop = sunPreset(hour).backdrop;
+  // The switch's deviation from this hour's default, stamped with the hour so a change of hour drops it — see ceilingLightOn. Deliberately NOT persisted and deliberately not in the store: the default follows the VIEWER's hour, so a visitor's room lights correctly with no owned state to disagree about.
+  const [lightOverride, setLightOverride] = useState<CeilingLightOverride>(null);
+  const ceilingLight = ceilingLightOn(hour, lightOverride);
   const darkTheme = useGameStore((s) => s.theme) === 'dark';
   // Placement is shared state, so any route can start it. This screen owns only the HUD.
   const me = useCurrentUserId();
@@ -130,6 +136,7 @@ export function RoomExperience() {
             zoom={roomZoom}
             onRotationChange={handleRoomRotationChange}
             onZoomChange={handleRoomZoomChange}
+            ceilingLight={ceilingLight}
           />
         )}
       </SceneBackdrop>
@@ -147,6 +154,24 @@ export function RoomExperience() {
       >
         <Image source={SETTINGS_ICON} style={s.settingsIcon} resizeMode="contain" />
       </Pressable>
+
+      {/* Hidden mid-placement: the place bar and colour picker own the screen then, and nobody changes the hour with a piece under their finger. */}
+      {editing ? null : (
+        <RoomLightControls
+          hour={hour}
+          onHourChange={setRoomTimeOfDay}
+          lightOn={ceilingLight}
+          // Stamped with the CURRENT hour, which is what scopes it — see ceilingLightOn.
+          onToggleLight={() => setLightOverride({ hour, on: !ceilingLight })}
+          style={[
+            s.lightControls,
+            {
+              top: 12 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN) + 50,
+              left: 22 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+            },
+          ]}
+        />
+      )}
 
       <RoomTopStats />
 
@@ -244,6 +269,11 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   settingsIcon: {
     width: 48,
     height: 48,
+  },
+  // Absolute like every other HUD corner; the inset maths lives at the call site with the settings button's, so the two stay in one column.
+  lightControls: {
+    position: 'absolute',
+    zIndex: 12,
   },
   placeBar: {
     position: 'absolute',

@@ -18,7 +18,6 @@ import type {
   TextLevel,
 } from "@/src/game/core/type";
 import type { ProfileId } from "@/src/game/core/profile";
-import { TIME_OF_DAY, TIME_OF_DAY_IDS, type TimeOfDayId } from "@/src/room/core/timeOfDay";
 // Built from the room's own backdrop table, so a photo added there appears here with no edit.
 import type { Theme } from "@/src/game/ui/theme";
 
@@ -65,12 +64,6 @@ const BACKDROPS: { value: BackdropId; label: string }[] = [
   { value: "cozy", label: "Cozy" },
   { value: "cartoon", label: "Cartoon" },
 ];
-// Room sun. Five, so Choice renders it as a Stepper rather than a cramped segmented row.
-const ROOM_TIME: { value: TimeOfDayId; label: string }[] = TIME_OF_DAY_IDS.map((id) => ({
-  value: id,
-  label: TIME_OF_DAY[id].label,
-}));
-
 const LIGHTING: { value: LightingPreset; label: string }[] = [
   { value: "auto", label: "Auto" },
   { value: "studio", label: "Studio" },
@@ -258,13 +251,11 @@ export function SettingsControls() {
   const mode = useGameStore((s) => s.mode);
   const renderStyle = useGameStore((s) => s.renderStyle);
   const backdrop = useGameStore((s) => s.backdrop);
-  const roomTimeOfDay = useGameStore((s) => s.roomTimeOfDay);
   const theme = useGameStore((s) => s.theme);
   const setSettings = useGameStore((s) => s.setSettings);
   const setMode = useGameStore((s) => s.setMode);
   const setRenderStyle = useGameStore((s) => s.setRenderStyle);
   const setBackdrop = useGameStore((s) => s.setBackdrop);
-  const setRoomTimeOfDay = useGameStore((s) => s.setRoomTimeOfDay);
   const setTheme = useGameStore((s) => s.setTheme);
 
   const changeFont = (delta: number) =>
@@ -349,13 +340,6 @@ export function SettingsControls() {
         value={backdrop}
         options={BACKDROPS}
         onChange={setBackdrop}
-      />
-      <Choice
-        label="Time of day"
-        desc="Where the sun sits — changes the angle and warmth of light through your windows"
-        value={roomTimeOfDay}
-        options={ROOM_TIME}
-        onChange={setRoomTimeOfDay}
       />
       <Choice
         label="Lighting"

@@ -40,7 +40,7 @@ import { useVariantModelSource } from "./variantModel";
 import { GridOverlay } from "./GridOverlay";
 import { setCameraAzimuth, usePlacementStore } from "../core/placement";
 import { useGameStore } from "../../game/core/store";
-import { sunDirection, sunPreset } from "../core/timeOfDay";
+import { sunDirection, sunPreset, type CeilingLight } from "../core/timeOfDay";
 import {
   dragWallTarget,
   pickBoxAt,
@@ -74,7 +74,12 @@ import {
 } from "../core/wallCulling";
 
 // Metro exposes bundled GLBs through the React Native numeric asset module.
-// The shell is authored art, put through scripts/set-shell-blend-modes.mjs (alphaMode BLEND on the cullable Wall_*/Trim_* groups — Blender's exporter cannot express it) and, when it carries textures, scripts/compress-room-glb.mjs. Geometry untouched by both, so the measurements frozen in src/room/core/roomShell.ts stay valid.
+// The shell is authored art, exported from print_room.blend and then put through three passes IN THIS ORDER — geometry untouched by all of them, so the measurements frozen in src/room/core/roomShell.ts stay valid:
+//   1. scripts/compress-room-glb.mjs   resize and re-encode by texture role
+//   2. scripts/set-shell-blend-modes.mjs   alphaMode BLEND on the cullable Wall_*/Trim_* groups, which Blender's exporter cannot express
+//   3. scripts/set-ao-strength.mjs   how hard the baked occlusion bites; pure taste, re-runnable without Blender
+// THE ORDER OF 1 AND 2 IS LOAD-BEARING, and it is the reverse of what reads naturally. gltf-transform refuses to re-encode a baseColorTexture to JPEG once its material is BLEND, because that would discard an alpha channel the material declares it needs — so blend-modes-first silently leaves the wall and trim colour maps as multi-MB PNGs. Observed: 5.44 MB of texture that way against 0.83 MB this way, from the same export.
+// The AO map those passes carry comes from scripts/bake_room_ao.py; see the note above RoomPostProcess for why a baked map is the only way to darken a wall in this scene.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const ROOM_MODEL = require("../../assets/models/room/virtualroom_empty.glb");
 
@@ -88,6 +93,8 @@ export type RoomSceneProps = {
   zoom: number;
   onRotationChange: (rotationY: number) => void;
   onZoomChange: (zoom: number) => void;
+  /** Whether the room's built-in ceiling light is lit. Resolved in RoomExperience via ceilingLightOn rather than here, because the switch's override is HUD state and the scene has no business owning it. */
+  ceilingLight: boolean;
 };
 
 type OrbitState = {
@@ -328,6 +335,50 @@ const LIT = {
   bulbAboveTopMetres: 0.28,
 };
 
+// The room's OWN light: a fixture, not a bought lamp, so it takes no placement and reads its look from the HOUR instead of from item_lights.
+// Geometry is global and look is per-hour, and the split is deliberate — where a ceiling fitting hangs and how far it throws are facts about the room, while how bright and how warm it burns is what the player is choosing when they pick an hour.
+// Derived from ROOM_SHELL rather than written out, because nothing in this codebase carries its own copy of a shell measurement: re-export the shell and this follows it.
+const CEILING_LIGHT = {
+  x: (ROOM_SHELL.floor.minX + ROOM_SHELL.floor.maxX) / 2,
+  z: (ROOM_SHELL.floor.minZ + ROOM_SHELL.floor.maxZ) / 2,
+  // Just under the wall band's top, so the source sits inside the room rather than buried in the ceiling slab.
+  y: ROOM_SHELL.walls["x-min"].top - 0.1,
+  // UNLIKE the brightness, this one IS derived: the farthest thing to light is a floor corner, hypot(2.25, 2.2495) = 3.18 m out and 2.82 m down, so 4.25 m of slant distance. 6 leaves the corners inside the falloff instead of sitting on its edge.
+  reachMetres: 6,
+};
+
+// Scene space, resolved once: ROOM_SHELL is a module constant and this light never moves, so there is nothing here for a hook to recompute.
+const CEILING_LIGHT_AT = roomToScene({ x: CEILING_LIGHT.x, y: CEILING_LIGHT.y, z: CEILING_LIGHT.z });
+
+// Simpler than RoomLit in the one way that matters: RoomLit has to chase a piece being dragged across the room, so it creates its entity once and moves it with setPosition. This one never moves, so it is a plain create-on-mount, destroy-on-unmount.
+// The effect's dependency on `light` is what makes an hour change rebuild the entity — lumens and kelvin are CREATION parameters of createLightEntity, and TIME_OF_DAY is a module constant, so each preset's interiorLight is a stable object identity and a different hour is a genuinely different reference. No key prop needed; this is the same mechanism RoomLit relies on for item.light.
+const RoomCeilingLight = memo(function RoomCeilingLight({ light }: { light: CeilingLight }) {
+  const { lightManager, scene } = useFilamentContext();
+
+  useEffect(() => {
+    const entity = lightManager.createLightEntity(
+      // Point, not spot: a spot from the ceiling centre lays a disc on the floor and leaves the corners black, and a ceiling fitting in a 4.5 x 4.5 m room is meant to fill it.
+      "point",
+      light.kelvin,
+      light.lumens,
+      undefined,
+      [CEILING_LIGHT_AT.x, CEILING_LIGHT_AT.y, CEILING_LIGHT_AT.z],
+      // No shadows, for the reason RoomLit already states: a point light needs a six-face cube shadow map, the most expensive thing available here.
+      false,
+      CEILING_LIGHT.reachMetres * SCENE_SCALE,
+      // No cone: that argument is the spot's, and this is a point.
+      undefined,
+    );
+    scene.addEntity(entity);
+    return () => {
+      scene.removeEntity(entity);
+      lightManager.destroy(entity);
+    };
+  }, [lightManager, scene, light]);
+
+  return null;
+});
+
 const RoomLit = memo(function RoomLit({ placement, item }: { placement: GridPlacement; item: RoomItemModel }) {
   const { lightManager, scene } = useFilamentContext();
   const entityRef = useRef<Entity | null>(null);
@@ -497,7 +548,7 @@ const LoadedItem = memo(function LoadedItem({
       const count = renderableManager.getPrimitiveCount(entity);
       for (let index = 0; index < count; index += 1) {
         const instance = renderableManager.getMaterialInstanceAt(entity, index);
-        // A wall item's materials are BLEND now (scripts/set-item-blend-modes.mjs), and blended geometry that writes no depth composites as its own internal parts stacked up — the sash through the casing in front of it, the back of the frame through its face. The pre-pass gives the piece back the self-occlusion its opaque version got for free. Safe at every alpha for the same reason the walls are, and for one more: a wall item is small, it sits in its wall's opening, and it protrudes INTO the room, so its bounding-box centre is always on the camera's side of the wall plane. It sorts after the cells around it and draws over them rather than under.
+        // A wall item's materials are BLEND now (converted and uploaded by Modu-Portal's scripts/fix-catalog-blend-modes.mjs), and blended geometry that writes no depth composites as its own internal parts stacked up — the sash through the casing in front of it, the back of the frame through its face. The pre-pass gives the piece back the self-occlusion its opaque version got for free. Safe at every alpha for the same reason the walls are, and for one more: a wall item is small, it sits in its wall's opening, and it protrudes INTO the room, so its bounding-box centre is always on the camera's side of the wall plane. It sorts after the cells around it and draws over them rather than under.
         if (placement.surface.kind === "wall") instance.setTransparencyMode("twoPassesOneSide");
         const [r, g, b, a] = instance.getFloat4Parameter("baseColorFactor");
         found.push({ instance, rgba: [r, g, b, a] });
@@ -566,7 +617,8 @@ const LoadedItem = memo(function LoadedItem({
 // SSAO REACHES THE FLOOR AND THE FURNITURE ONLY, NEVER THE WALLS. Measured on device 2026-08-03 — do not spend time retuning it for the walls. Filament builds its AO buffer out of the OPAQUE depth pass, and every Wall_*, Trim_* and the Ceiling is alphaMode BLEND because camera-facing culling needs an alpha to write (scripts/set-shell-blend-modes.mjs); only Floor and FloorEdge stay OPAQUE, so only they have depth to be occluded against. Cranking intensity to 4 darkened the floor heavily and moved the walls by nothing at all.
 // The same root cause explains two things that look like separate bugs: a bed pushed against a wall drops no ambient contact shadow onto it, and the walls cast no occlusion down onto the floor.
 //
-// So the settings below are tuned for the only thing they can touch — contact darkening under furniture. The walls' flatness is a different job and needs a different tool: they are lit almost entirely by the one IBL probe, which is uniform across space, and the fix is a baked AO map on a TEXCOORD_1 unwrap. That is a MATERIAL feature rather than a screen-space one, so it works on BLEND geometry exactly as well as on opaque — the blocker here does not apply to it.
+// So the settings below are tuned for the only thing they can touch — contact darkening under furniture. The walls are handled instead by a BAKED occlusion map on a TEXCOORD_1 unwrap, shipped in the shell GLB since 2026-08-03 and produced by scripts/bake_room_ao.py. Occlusion is a MATERIAL feature rather than a screen-space one, so it reaches BLEND geometry exactly as well as opaque — the blocker above simply does not apply to it, and it costs one texture sample instead of a pass.
+// What the baked map does NOT give you is the other half of the reference look: a bed pushed against a wall still drops no ambient contact shadow onto it, because furniture moves and a static bake cannot know where it is. That gap is the window portal lights' job, not this one's.
 //
 // Bloom lets a window blow out instead of clipping flat to white. Deliberately modest — the reference look is soft, not glowing.
 function RoomPostProcess() {
@@ -631,10 +683,11 @@ function OrbitCameraRig({ orbit }: { orbit: ReturnType<typeof useSharedValue<Orb
   return null;
 }
 
-export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange }: RoomSceneProps) {
+export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange, ceilingLight }: RoomSceneProps) {
   const [loaded, setLoaded] = useState(false);
   // The player's chosen hour. Every preset is authored to enter through walls the resting camera can see — see src/room/core/timeOfDay.ts for why that constraint exists and what breaks without it.
-  const sun = sunPreset(useGameStore((s) => s.roomTimeOfDay));
+  const hour = useGameStore((s) => s.roomTimeOfDay);
+  const sun = sunPreset(hour);
   const handleReady = useCallback(() => setLoaded(true), []);
   const { width, height } = useWindowDimensions();
   const smallestSide = Math.min(width, height);
@@ -925,6 +978,8 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange }: R
             intensity={4_000}
             direction={[0.6, -0.45, 0.5]}
           />
+          {/* The room's own ceiling light. Off at the three daylight hours by default and on after dark, with the player's switch overriding either way — see ceilingLightOn. */}
+          {ceilingLight ? <RoomCeilingLight light={sun.interiorLight} /> : null}
           <RoomPostProcess />
           <RoomModel onReady={handleReady} orbit={orbit} />
           {/* An id the catalog doesn't know (yet) has no model or dimensions — skip it. */}

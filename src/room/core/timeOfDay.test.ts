@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { TIME_OF_DAY, TIME_OF_DAY_IDS, poolLength, sunDirection, sunPreset } from "./timeOfDay";
+import { TIME_OF_DAY, TIME_OF_DAY_IDS, ceilingLightOn, poolLength, sunDirection, sunPreset } from "./timeOfDay";
 import { wallAlpha } from "./wallCulling";
 import { ORBIT } from "../input/orbit";
 
@@ -56,4 +56,45 @@ test("the day warms and dims from midday to evening", () => {
 
 test("an unknown id falls back rather than throwing", () => {
   assert.equal(sunPreset("nonsense" as never), TIME_OF_DAY.afternoon);
+});
+
+// The five values, pinned LITERALLY and deliberately not as `defaultOn === (backdrop === "night")`. That rule holds today, and asserting it would cement the exact coupling the separate field exists to avoid: the day an overcast preset wants its light on by default, that test fails and has to be deleted. A test you must delete to do the thing the design anticipated is a bad test.
+test("the ceiling light is on by default exactly once it is dark outside", () => {
+  assert.equal(TIME_OF_DAY.morning.interiorLight.defaultOn, false);
+  assert.equal(TIME_OF_DAY.midday.interiorLight.defaultOn, false);
+  assert.equal(TIME_OF_DAY.afternoon.interiorLight.defaultOn, false);
+  assert.equal(TIME_OF_DAY.evening.interiorLight.defaultOn, true);
+  assert.equal(TIME_OF_DAY.night.interiorLight.defaultOn, true);
+});
+
+// Cheap guards against a fat-fingered zero. The kelvin range is the one item_lights already constrains bought lamps to (migration 012), reused here so the room's own light cannot be authored somewhere a purchasable one could not.
+test("every hour's ceiling light is a usable bulb", () => {
+  for (const id of TIME_OF_DAY_IDS) {
+    const { lumens, kelvin } = TIME_OF_DAY[id].interiorLight;
+    assert.ok(lumens > 0, `${id}: a light with no lumens is an off light, not a tuned one`);
+    assert.ok(kelvin >= 1000 && kelvin <= 12000, `${id}: kelvin ${kelvin} is outside the range item_lights allows`);
+  }
+});
+
+// The SHAPE of the ladder is the designed part, not the values: a light has to be brighter to register against midday's 135k lux sun than against a black room, and warmer after dark, where a cool bulb reads as clinical and a warm one as inviting.
+test("the ceiling light brightens against the sun it competes with, and warms after dark", () => {
+  assert.ok(
+    TIME_OF_DAY.midday.interiorLight.lumens > TIME_OF_DAY.night.interiorLight.lumens,
+    "midday must out-shout its own sun; night has none to out-shout",
+  );
+  assert.ok(
+    TIME_OF_DAY.night.interiorLight.kelvin < TIME_OF_DAY.midday.interiorLight.kelvin,
+    "a 2800 K bulb in daylight reads as a yellow stain rather than as a light",
+  );
+});
+
+test("the switch defaults to the hour, and an override only counts at the hour it was made", () => {
+  assert.equal(ceilingLightOn("night", null), true);
+  assert.equal(ceilingLightOn("midday", null), false);
+  // Same hour: the player wins, in both directions.
+  assert.equal(ceilingLightOn("night", { hour: "night", on: false }), false);
+  assert.equal(ceilingLightOn("midday", { hour: "midday", on: true }), true);
+  // Different hour: the override is stale and the new hour's default takes over. THIS IS THE RESET, and the point of stamping the override with its hour is that the reset is a derivation and never an effect — there is no frame where the light is wrong.
+  assert.equal(ceilingLightOn("night", { hour: "midday", on: false }), true);
+  assert.equal(ceilingLightOn("midday", { hour: "night", on: true }), false);
 });
