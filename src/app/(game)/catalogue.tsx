@@ -31,6 +31,7 @@ import { useCatalogRow, useCatalogStore } from "@/src/data/catalogStore";
 import { useVariantStore } from "@/src/data/variantStore";
 import { brandFor } from "@/src/game/content/brands";
 import { ChevronIcon, ClockIcon, StagesIcon } from "@/src/components/Icons";
+import { ConfettiRain } from "@/src/game/ui/Confetti";
 
 // styling
 import { RADIUS, SPACE, TYPE, ELEVATION, useStyles, FONT } from "@/src/game/ui/theme";
@@ -38,6 +39,7 @@ import { Button, GrainOverlay } from "@/src/game/ui/Button";
 import { LoadingScreen } from "@/src/game/ui/LoadingScreen";
 import type { Theme } from "@/src/game/ui/theme";
 
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 // The catalogue's copy is DB-authored.
 // needs loading screen
 function CatalogueLoading({ onBack }: { onBack: () => void }) {
@@ -146,6 +148,16 @@ export default function CatalogueScreen() {
 
   return (
     <View style={styles.root}>
+      {/* Diagonal, so neither end of the ramp sits flat behind a whole row of cards. */}
+      <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+        <Defs>
+          <LinearGradient id="catalogueBg" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor={BG_FROM} />
+            <Stop offset="1" stopColor={BG_TO} />
+          </LinearGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100%" height="100%" fill="url(#catalogueBg)" />
+      </Svg>
       <ScrollView
         contentContainerStyle={[
           styles.content,
@@ -245,6 +257,16 @@ export default function CatalogueScreen() {
   );
 }
 
+/** How long the celebration runs when an already-built model is tapped. Matched to the confetti's
+ *  own three passes so it clears itself rather than being cut off mid-fall. */
+const CELEBRATE_MS = 4200;
+
+/** This screen's backdrop. Deliberately its own pair rather than a shared token: each screen can be
+ *  retuned without touching the others. Keep root.backgroundColor equal to BG_FROM — that is what
+ *  shows for the frame before the SVG paints. */
+const BG_FROM = "#8D7BA8";
+const BG_TO = "#A9BFD9";
+
 /** The single text colour for this screen (wireframe ink). */
 const INK = "#231F20";
 
@@ -310,6 +332,16 @@ function FurnitureCard({
   // Assemble again are returns to something already under way, and a gate on those is just a tax on
   // a player who has seen the finishes already.
   const armsFirst = state === "new" && !selected;
+  // The celebration lives on the CARD, not the screen: it is that model's achievement, and confetti
+  // across the whole grid claims it for every tile at once. Keyed by a counter so a second tap
+  // restarts the fall rather than being swallowed as "already running".
+  const [burst, setBurst] = useState(0);
+  const [box, setBox] = useState<{ w: number; h: number } | null>(null);
+  useEffect(() => {
+    if (!burst) return;
+    const t = setTimeout(() => setBurst(0), CELEBRATE_MS);
+    return () => clearTimeout(t);
+  }, [burst]);
   // The build always uses the DEFAULT finish — the carousel is a showcase, not a picker, so a tap on Start mid-slide must not launch whatever frame was on screen.
   const buildFinish = finishes[0] ?? null;
   // Cells: the alternates in reverse, then the default, then the FIRST cell again — so the pass
@@ -373,7 +405,13 @@ function FurnitureCard({
         selected && [styles.cardSelected, { borderColor: PILL_STYLE[state].bg }],
         pressed && styles.cardPressed,
       ]}
-      onPress={onSelect}
+      onPress={() => {
+        onSelect();
+        // Only for something already finished — confetti over a model you have not built would be
+        // congratulating you for nothing, and a rebuild in progress has not earned it back yet.
+        if (state === "done") setBurst((b) => b + 1);
+      }}
+      onLayout={(e) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
       accessibilityRole="button"
       accessibilityState={{ selected }}
       accessibilityLabel={`${row?.name ?? meta.id}${selected ? ", selected" : ""}`}
@@ -429,6 +467,13 @@ function FurnitureCard({
           ) : null}
         </View>
       </View>
+      {/* Clipped to the card's own rounded box, on its own View rather than on the card — overflow
+          hidden on the card itself would take the elevation shadow with it. */}
+      {burst && box ? (
+        <View style={styles.burstClip} pointerEvents="none">
+          <ConfettiRain key={burst} delay={0} width={box.w} height={box.h} count={14} size={0.62} />
+        </View>
+      ) : null}
       {/* Now a real target: the card body selects, this starts. Two jobs, two touch areas — a nested Pressable swallows its own touch, so it never falls through to selection. */}
       <Pressable
         style={({ pressed }) => [styles.startBtn, { backgroundColor: PILL_STYLE[state].bg }, pressed && styles.startBtnPressed]}
@@ -450,7 +495,7 @@ const makeStyles = (t: Theme) =>
     // Screen palette, per the wireframe. Held here rather than in theme.ts so the rest of the
     // app keeps its own tokens until these are promoted deliberately. INK is every text on the
     // screen — one colour, no dimmed secondary tier, so the hierarchy comes from size/weight.
-    root: { flex: 1, backgroundColor: "#F3ECE0" },
+    root: { flex: 1, backgroundColor: BG_FROM },
     loadingWrap: { flex: 1 },
     // Matches the grid header's inset so the button doesn't jump when the catalogue lands.
     loadingBack: { position: "absolute", top: 56, left: SPACE.xl },
@@ -463,7 +508,6 @@ const makeStyles = (t: Theme) =>
       // The dropdown hangs out of this row; without this its menu is clipped by the ScrollView.
       zIndex: 10,
     },
-    headerSpacer: { flex: 1 },
     homeBtn: {
       width: 44,
       height: 44,
@@ -508,8 +552,11 @@ const makeStyles = (t: Theme) =>
     pickerItemSelected: { backgroundColor: t.surfaceRaised },
     pickerItemText: { ...TYPE.body, color: INK },
     pickerItemActive: { color: INK, fontFamily: FONT, fontWeight: "700" },
+    headerSpacer: { flex: 1 },
     // Tracked-out slightly: this is a screen label, not a page title competing with the cards.
-    title: { fontFamily: FONT, fontSize: 17, fontWeight: "800", color: INK, letterSpacing: 0.5 },
+    // Ink, not cream: cream measures 1.78:1 against the blue end of the gradient, and ink clears
+    // both ends (4.29 lavender, 8.65 blue).
+    title: { fontFamily: FONT, fontSize: 20, fontWeight: "800", color: INK, letterSpacing: 0.4 },
     subtitle: {
       ...TYPE.body,
       color: INK,
@@ -537,6 +584,7 @@ const makeStyles = (t: Theme) =>
       ...ELEVATION.card,
     },
     cardPressed: { backgroundColor: t.surfaceRaised },
+    burstClip: { ...StyleSheet.absoluteFillObject, borderRadius: RADIUS.panel, overflow: "hidden" },
     // The colour comes from PILL_STYLE at the call site, so the outline and the button always agree
     // about which state the card is in — one signal in two places, never two signals.
     cardSelected: { borderWidth: 3 },

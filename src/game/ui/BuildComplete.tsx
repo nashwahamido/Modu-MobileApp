@@ -1,14 +1,13 @@
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { StyleSheet, Image, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
+import { StyleSheet, Image, Pressable, ScrollView, Text, View } from "react-native";
 import type { StyleProp, ViewStyle } from "react-native";
 import Animated, {
   Easing,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
-  withRepeat,
   withSequence,
   withSpring,
   withTiming,
@@ -18,6 +17,7 @@ import { useGameStore } from "@/src/game/core/store";
 import { useStyles, FONT } from "@/src/game/ui/theme";
 import { useRepos } from "@/src/data";
 import { usePlacementStore } from "@/src/room/core/placement";
+import { ConfettiRain } from "@/src/game/ui/Confetti";
 import { SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import type { Theme } from "@/src/game/ui/theme";
 
@@ -86,64 +86,6 @@ const SCRIM = "rgba(10,8,9,0.88)";
 /** The banner's mauve, reused for the card's rim so the ribbon reads as part of the same object
  *  rather than pinned onto something else. */
 const MAUVE = "#A97480";
-
-const CONFETTI_COLORS = ["#A97480", "#8D7BA8", "#CCA16C", "#7D8B6E", "#F3EFE8"];
-const CONFETTI_COUNT = 26;
-
-/** One falling scrap. Sways as it drops and spins on the way down — a piece that only translates
- *  reads as a falling brick, and the sway is most of what sells it as paper. */
-function ConfettiPiece({
-  left, size, color, delay, duration, drift, fall,
-}: { left: number; size: number; color: string; delay: number; duration: number; drift: number; fall: number }) {
-  const t = useSharedValue(0);
-  useEffect(() => {
-    t.value = withDelay(delay, withRepeat(withTiming(1, { duration, easing: Easing.linear }), 3, false));
-  }, [delay, duration, t]);
-  const anim = useAnimatedStyle(() => ({
-    // Hidden before it starts, and fading over the last fifth so it never pops out of existence mid-screen.
-    opacity: t.value === 0 ? 0 : 1 - Math.max(0, (t.value - 0.8) / 0.2),
-    transform: [
-      { translateY: -40 + t.value * fall },
-      { translateX: Math.sin(t.value * Math.PI * 3) * drift },
-      { rotate: `${t.value * 540}deg` },
-    ],
-  }));
-  return (
-    <Animated.View
-      style={[
-        { position: "absolute", top: 0, left, width: size, height: size * 0.6, borderRadius: 1, backgroundColor: color },
-        anim,
-      ]}
-    />
-  );
-}
-
-/** The celebration, once the result has finished assembling itself on screen. The spread is derived
- *  from the index rather than Math.random: a re-render must not reshuffle scraps that are mid-fall. */
-function ConfettiRain({ delay }: { delay: number }) {
-  const { height, width } = useWindowDimensions();
-  const pieces = useMemo(
-    () =>
-      Array.from({ length: CONFETTI_COUNT }, (_, i) => ({
-        // Pixels, not a percent string: RN types `left` as DimensionValue, which takes a number or a
-        // `${number}%` template literal — a plain string is not assignable to it.
-        left: (((i * 37) % 100) / 100) * width,
-        size: 6 + (i % 3) * 3,
-        color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
-        delay: delay + (i % 9) * 120,
-        duration: 2000 + (i % 5) * 280,
-        drift: ((i % 5) - 2) * 16,
-      })),
-    [delay, width],
-  );
-  return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {pieces.map((p, i) => (
-        <ConfettiPiece key={i} {...p} fall={height + 60} />
-      ))}
-    </View>
-  );
-}
 
 /** Scales up past its resting size and settles. Used for things that should feel like they LANDED —
  *  the finished piece, and the two things you can do with it. */

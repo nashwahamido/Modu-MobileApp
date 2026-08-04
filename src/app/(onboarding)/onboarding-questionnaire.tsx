@@ -15,10 +15,21 @@ import {
 } from "@/src/onboarding/questionnaire";
 import { VoiceButton } from "@/src/game/ui/VoiceButton";
 import { Button } from "@/src/game/ui/Button";
-import { SPACE, TYPE, ELEVATION, useStyles } from "@/src/game/ui/theme";
+import { SPACE, TYPE, ELEVATION, useStyles, FONT } from "@/src/game/ui/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import { saveOnboardingResults } from "@/src/services/onboarding";
 import type { Theme } from "@/src/game/ui/theme";
+
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
+
+/** This screen's backdrop. Deliberately its own pair rather than a shared token: each screen can
+ *  be retuned without touching the others. Keep root.backgroundColor equal to BG_FROM — that is
+ *  what shows for the frame before the SVG paints. */
+const BG_FROM = "#8D7BA8";
+const BG_TO = "#A9BFD9";
+/** The progress fill. Its own value rather than t.accent: the accent IS the gradient's first stop,
+ *  so a lavender bar on a lavender backdrop had almost nothing to read against. */
+const PROGRESS_FILL = "#8FA876";
 
 const mascot = require("../../assets/images/questionnaire/whole.png");
 const q3ManualReference = require("../../assets/images/questionnaire/q3-manual-reference.png");
@@ -228,6 +239,16 @@ export default function QuestionnaireScreen() {
   if (!introComplete) {
     return (
       <View style={styles.root}>
+        {/* Diagonal, so neither end of the ramp sits flat behind a whole column of content. */}
+        <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Defs>
+            <LinearGradient id="questionnaireBg" x1="0" y1="0" x2="1" y2="1">
+              <Stop offset="0" stopColor={BG_FROM} />
+              <Stop offset="1" stopColor={BG_TO} />
+            </LinearGradient>
+          </Defs>
+          <Rect x="0" y="0" width="100%" height="100%" fill="url(#questionnaireBg)" />
+        </Svg>
         <View style={styles.introStage}>
           <View style={styles.mascotCircle}>
             <Image source={mascot} style={styles.introMascot} />
@@ -504,7 +525,7 @@ const makeStyles = (t: Theme) =>
   StyleSheet.create({
     root: {
       flex: 1,
-      backgroundColor: t.bg,
+      backgroundColor: BG_FROM,
       // Padding is applied inline (base + safe inset) so the questionnaire clears the cutout
       // and the immersive-hidden bars the same way every other screen does.
     },
@@ -545,13 +566,13 @@ const makeStyles = (t: Theme) =>
     },
     introText: {
       color: t.text,
-      fontSize: 17,
+      fontFamily: FONT, fontSize: 17,
       fontWeight: "600",
       lineHeight: 24,
     },
     introPrompt: {
       color: t.text,
-      fontSize: 18,
+      fontFamily: FONT, fontSize: 18,
       fontStyle: "italic",
       fontWeight: "800",
       textAlign: "center",
@@ -577,7 +598,7 @@ const makeStyles = (t: Theme) =>
     },
     handIcon: {
       color: t.text,
-      fontSize: 28,
+      fontFamily: FONT, fontSize: 28,
       fontWeight: "900",
     },
     handText: {
@@ -600,7 +621,7 @@ const makeStyles = (t: Theme) =>
     stepText: {
       width: 52,
       color: t.text,
-      fontSize: 18,
+      fontFamily: FONT, fontSize: 18,
       fontWeight: "900",
       textAlign: "right",
     },
@@ -614,7 +635,7 @@ const makeStyles = (t: Theme) =>
     progressFill: {
       height: "100%",
       borderRadius: SPACE.sm,
-      backgroundColor: t.accent,
+      backgroundColor: PROGRESS_FILL,
     },
     navArrow: { width: 26, height: 26 },
     navArrowDisabled: { opacity: 0.3 },
@@ -642,7 +663,7 @@ const makeStyles = (t: Theme) =>
     },
     navText: {
       color: t.text,
-      fontSize: 42,
+      fontFamily: FONT, fontSize: 42,
       fontWeight: "900",
       lineHeight: 42,
     },
@@ -711,13 +732,13 @@ const makeStyles = (t: Theme) =>
     },
     navHintTitle: {
       color: t.accent,
-      fontSize: 15,
+      fontFamily: FONT, fontSize: 15,
       fontWeight: "900",
       marginBottom: SPACE.xs,
     },
     navHintText: {
       color: t.text,
-      fontSize: 14,
+      fontFamily: FONT, fontSize: 14,
       fontWeight: "700",
       lineHeight: 19,
     },
@@ -732,7 +753,7 @@ const makeStyles = (t: Theme) =>
     prompt: {
       flex: 1,
       color: t.text,
-      fontSize: 15,
+      fontFamily: FONT, fontSize: 15,
       fontWeight: "900",
       lineHeight: 19,
     },
@@ -781,13 +802,13 @@ const makeStyles = (t: Theme) =>
     },
     referenceZoomIcon: {
       color: t.accent,
-      fontSize: 14,
+      fontFamily: FONT, fontSize: 14,
       fontWeight: "900",
       lineHeight: 14,
     },
     referencePanelText: {
       color: t.accent,
-      fontSize: 10,
+      fontFamily: FONT, fontSize: 10,
       fontWeight: "900",
       lineHeight: 12,
       textAlign: "center",
@@ -867,7 +888,7 @@ const makeStyles = (t: Theme) =>
     },
     optionText: {
       color: t.textDim,
-      fontSize: 12,
+      fontFamily: FONT, fontSize: 12,
       fontWeight: "700",
       lineHeight: 15,
       marginTop: 4,
@@ -876,7 +897,7 @@ const makeStyles = (t: Theme) =>
     },
     compactOptionText: {
       minHeight: 76,
-      fontSize: 13,
+      fontFamily: FONT, fontSize: 13,
       lineHeight: 17,
       marginTop: 6,
       paddingHorizontal: 2,
