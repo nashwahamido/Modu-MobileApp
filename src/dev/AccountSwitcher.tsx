@@ -69,8 +69,7 @@ export function AccountSwitcher({ onDone }: { onDone?: () => void }) {
     }
   };
 
-  // The panel floats above everything, so it can be open over a modal (/settings, /profile). Clearing
-  // that layer first is what makes replace() land on the root stack instead of swapping the modal.
+  // The panel floats above everything, so it can be open over a modal (/settings, /profile). Clearing that layer first is what makes replace() land on the root stack instead of swapping the modal.
   const leaveTo = (destination: Href) => {
     onDone?.();
     if (router.canDismiss()) router.dismissAll();

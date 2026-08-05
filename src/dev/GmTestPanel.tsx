@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import type { Href } from "expo-router";
 import { useState } from "react";
-import { StyleSheet, Pressable, Text, View } from "react-native";
+import { StyleSheet, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { AccountSwitcher } from "./AccountSwitcher";
 
 type GmTarget = {
@@ -22,11 +22,21 @@ const targets: GmTarget[] = [
   { label: "Task", route: "/catalogue" as Href, note: "Task catalogue" },
   { label: "Room", route: "/room" as Href, note: "Virtual room" },
   { label: "Profile", route: "/profile" as Href, note: "Profile & friends" },
+  // No ownerId on purpose: real owner ids are uuids that only exist in the database, so a hardcoded one would rot. This target proves the route registers and exercises the missing-param branch; a real friend's room is reached through the picker in Task 6.
+  { label: "Visit", route: "/visit" as Href, note: "Visit route (no owner)" },
   { label: "Engine", route: "/engine-test" as Href, note: "Engine test (dev)" },
 ];
 
+// What the panel occupies below its own top edge: the root's bottom offset plus the panel's marginBottom. The height cap is solved from these rather than typed in, so moving the panel cannot silently leave the cap wrong.
+const PANEL_BOTTOM_INSET = 132 + 10;
+// Clearance left above the panel so it never runs to the very top of the screen.
+const PANEL_TOP_GUTTER = 24;
+
 export function GmTestPanel() {
   const [open, setOpen] = useState(false);
+  // The app is landscape-LOCKED, so the tall axis is the short one: a phone gives roughly 250 points above the panel's bottom edge, and the roster alone is taller than that once a build lists more than about three accounts. Uncapped, the lower rows — Sign out and Purge among them — render off the top of the screen where no touch can reach them. Cap against the live window rather than a constant so a tablet still gets the whole panel without scrolling.
+  const { height } = useWindowDimensions();
+  const maxPanelHeight = Math.max(180, height - PANEL_BOTTOM_INSET - PANEL_TOP_GUTTER);
 
   // The catalogue picks the furniture now, so nothing here needs the old "/play + an id chosen from
   // the active profile" special case — that guessed one piece when the point was to choose.
@@ -38,7 +48,8 @@ export function GmTestPanel() {
   return (
     <View pointerEvents="box-none" style={styles.root}>
       {open ? (
-        <View style={styles.panel} pointerEvents="auto">
+        <View style={[styles.panel, { maxHeight: maxPanelHeight }]} pointerEvents="auto">
+          {/* Outside the scroller on purpose: the close button has to stay reachable no matter how far down the roster you have scrolled. */}
           <View style={styles.header}>
             <View>
               <Text style={styles.title}>GM Test</Text>
@@ -48,21 +59,27 @@ export function GmTestPanel() {
               <Text style={styles.closeText}>×</Text>
             </Pressable>
           </View>
-          <View style={styles.grid}>
-            {targets.map((target) => (
-              <Pressable
-                key={target.label}
-                onPress={() => jumpTo(target.route)}
-                style={styles.targetButton}
-                hitSlop={4}
-              >
-                <Text style={styles.targetLabel}>{target.label}</Text>
-                <Text style={styles.targetNote}>{target.note}</Text>
-              </Pressable>
-            ))}
-          </View>
-          {/* Renders nothing unless a roster is live in this build. Closes the panel before it navigates. */}
-          <AccountSwitcher onDone={() => setOpen(false)} />
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator
+          >
+            <View style={styles.grid}>
+              {targets.map((target) => (
+                <Pressable
+                  key={target.label}
+                  onPress={() => jumpTo(target.route)}
+                  style={styles.targetButton}
+                  hitSlop={4}
+                >
+                  <Text style={styles.targetLabel}>{target.label}</Text>
+                  <Text style={styles.targetNote}>{target.note}</Text>
+                </Pressable>
+              ))}
+            </View>
+            {/* Renders nothing unless a roster is live in this build. Closes the panel before it navigates. */}
+            <AccountSwitcher onDone={() => setOpen(false)} />
+          </ScrollView>
         </View>
       ) : null}
       <Pressable
@@ -158,6 +175,14 @@ const styles = StyleSheet.create({
     fontSize: 23,
     lineHeight: 25,
     fontWeight: "800",
+  },
+  // flexShrink, not flex: 1 — the panel must still hug its content on a screen tall enough to hold all of it, and only give way once maxHeight actually binds.
+  scroll: {
+    flexShrink: 1,
+  },
+  // The roster's last row would otherwise sit flush against the panel's bottom edge with nothing to show it is the end.
+  scrollContent: {
+    paddingBottom: 4,
   },
   grid: {
     flexDirection: "row",
