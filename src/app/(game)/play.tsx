@@ -5,8 +5,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { OrientationLock } from "expo-screen-orientation";
 import { View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { HUD_SIDE_MARGIN, HUD_VERTICAL_MARGIN } from "@/src/hooks/use-safe-insets";
+import { HUD_SIDE_MARGIN, useHudInsets } from '@/src/hooks/use-safe-insets';
 import { FilamentScene } from "react-native-filament";
 
 import { AssemblyScene } from "@/src/game/scene/AssemblyScene";
@@ -14,23 +13,24 @@ import { useAssemblyDrivers } from "@/src/game/scene/useAssemblyDrivers";
 import { useSceneState } from "@/src/game/scene/useSceneState";
 
 //Input Controls
-import { Joystick } from "@/src/game/input/Joystick";
-import { useOrbitCamera } from "@/src/game/input/useOrbitCamera";
-import { usePartDrag } from "@/src/game/input/usePartDrag";
-import { BeatControl } from "@/src/game/input/BeatControl";
-import { TapControl } from "@/src/game/input/TapControl";
-import { TightenControl } from "@/src/game/input/TightenControl";
-import { RotateControl } from "@/src/game/input/RotateControl";
-import { SlideControl } from "@/src/game/input/SlideControl";
-import { PressControl } from "@/src/game/input/PressControl";
-import { HookPressControl } from "@/src/game/input/HookPressControl";
-import { ScrewControl } from "@/src/game/input/ScrewControl";
-import { InsertPressControl } from "@/src/game/input/InsertPressControl";
-import { DrawTurnControl } from "@/src/game/input/DrawTurnControl";
-import { SeatSlideControl } from "@/src/game/input/SeatSlideControl";
-import { PushTestControl } from "@/src/game/input/PushTestControl";
+import { Joystick } from "@/src/game/input/camera/Joystick";
+import { useOrbitCamera } from "@/src/game/input/camera/useOrbitCamera";
+import { useAssemblySfx } from "@/src/game/audio/useAssemblySfx";
+import { usePartDrag } from "@/src/game/input/drag/usePartDrag";
+import { BeatControl } from "@/src/game/input/slide/BeatControl";
+import { TapControl } from "@/src/game/input/pad/TapControl";
+import { TightenControl } from "@/src/game/input/dial/TightenControl";
+import { RotateControl } from "@/src/game/input/dial/RotateControl";
+import { SlideControl } from "@/src/game/input/slide/SlideControl";
+import { PressControl } from "@/src/game/input/pad/PressControl";
+import { HookPressControl } from "@/src/game/input/slide/HookPressControl";
+import { ScrewControl } from "@/src/game/input/dial/ScrewControl";
+import { InsertPressControl } from "@/src/game/input/pad/InsertPressControl";
+import { DrawTurnControl } from "@/src/game/input/dial/DrawTurnControl";
+import { SeatSlideControl } from "@/src/game/input/slide/SeatSlideControl";
+import { PushTestControl } from "@/src/game/input/slide/PushTestControl";
 import { clusterSink } from "@/src/game/scene/combineDriver";
-import { ToolBar } from "@/src/game/ui/ToolBar";
+import { ToolBar } from "@/src/game/ui/hud/ToolBar";
 import { useStepObjective } from "@/src/game/core/presentation/useStepObjective";
 import {
   pressParkInfo,
@@ -47,22 +47,22 @@ import {
 } from "@/src/game/content/furnitures/furnitures";
 
 // UI Elemets
-import { BuildComplete } from "@/src/game/ui/BuildComplete";
-import { FinishBuildButton } from "@/src/game/ui/FinishBuildButton";
-import { GreenFlash } from "@/src/game/ui/GreenFlash";
-import { HintToast } from "@/src/game/ui/HintToast";
-import { CenterDropRing } from "@/src/game/ui/CenterDropRing";
-import { FitChip } from "@/src/game/ui/FitChip";
-import { PartsTray } from "@/src/game/ui/PartsTray";
-import { ClusterTray } from "@/src/game/ui/ClusterTray";
-import { ClusterCelebration } from "@/src/game/ui/ClusterCelebration";
-import { UndoButton } from "@/src/game/ui/UndoButton";
-import { GameSettings } from "@/src/game/ui/GameSettings";
-import { ToggleChips } from "@/src/game/ui/ToggleChips";
-import { BuildMap, ClusterFocusControl } from "@/src/game/ui/ClusterFocusControl";
+import { BuildComplete } from "@/src/game/ui/celebration/BuildComplete";
+import { FinishBuildButton } from "@/src/game/ui/hud/FinishBuildButton";
+import { GreenFlash } from "@/src/game/ui/feedback/GreenFlash";
+import { HintToast } from "@/src/game/ui/feedback/HintToast";
+import { CenterDropRing } from "@/src/game/ui/feedback/CenterDropRing";
+import { FitChip } from "@/src/game/ui/feedback/FitChip";
+import { PartsTray } from "@/src/game/ui/hud/PartsTray";
+import { ClusterTray } from "@/src/game/ui/hud/ClusterTray";
+import { ClusterCelebration } from "@/src/game/ui/celebration/ClusterCelebration";
+import { UndoButton } from "@/src/game/ui/hud/UndoButton";
+import { GameSettings } from "@/src/game/ui/settings/GameSettings";
+import { ToggleChips } from "@/src/game/ui/hud/ToggleChips";
+import { BuildMap, ClusterFocusControl } from "@/src/game/ui/hud/ClusterFocusControl";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
-import { Button } from "@/src/game/ui/Button";
-import { ObjectiveBar } from "@/src/game/ui/ObjectiveBar";
+import { Button } from "@/src/game/ui/system/Button";
+import { ObjectiveBar } from "@/src/game/ui/hud/ObjectiveBar";
 import {
   HintButton,
   HUD_ICON,
@@ -70,27 +70,30 @@ import {
   RecenterButton,
   hudControlStyles as hudControls,
   hudChrome as styles,
-} from "@/src/game/ui/hudChrome";
-import { useTheme } from "@/src/game/ui/theme";
+} from "@/src/game/ui/hud/hudChrome";
+import { useTheme } from "@/src/game/ui/system/theme";
 import {
-  buildPhase,
   combineReady,
   requiresClusterFocus,
 } from "@/src/game/core/evaluation/clusters";
 import { availableInMode } from "@/src/game/core/evaluation/availability";
 import type { FurnitureId } from "@/src/game/core/type";
-import { LoadingOverlay } from "@/src/game/ui/LoadingOverlay";
-import type { Milestone } from "@/src/game/ui/loadingProgress";
-import { SceneBackdrop } from "@/src/game/ui/SceneBackdrop";
+import { LoadingOverlay } from "@/src/game/ui/loading/LoadingOverlay";
+import type { Milestone } from "@/src/game/ui/loading/loadingProgress";
+import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
+import { backdropSource } from "@/src/game/ui/backdrop/backdrops";
 
 // Dev
 import { DevAutoStep } from "@/src/dev/DevAutoStep";
 import { DevMenu } from "@/src/dev/DevMenu";
 
+/** How long the Spot marker pulses before putting itself out. Long enough to find with the eye,
+ *  short enough that it never becomes part of the scene's furniture. */
+const SPOT_MS = 2800;
+
 function GameScreen() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
-  const insets = useSafeAreaInsets();
-
+  const hud = useHudInsets();
   const lastScale = useRef(1);
   const sceneState = useSceneState();
   const {
@@ -151,19 +154,12 @@ function GameScreen() {
     const watchdog = setTimeout(() => setLoadError(true), 45000);
     return () => clearTimeout(watchdog);
   }, [loaderVisible, loadError, modelReady, retryKey]);
-  // The objective bar reports the BUILD MAP's phase (base → seat → combine), not the authored stage number — those count beats across the whole build and would read
-  // "Stage 4" on a three-node map.
-  // These two derivations walk the whole action graph. Subscribing to `completed` by
-  // REFERENCE and deriving in a useMemo keeps them off the hot path: as written inside
-  // selectors they re-ran on every store write, including each setDragFit during a drag.
+  // Subscribe to `completed` by REFERENCE and derive from it off the hot path:
+  // setDragFit writes on every drag frame.
   const completed = useGameStore((s) => s.completed);
   const completedSet = useMemo(() => new Set(completed), [completed]);
   const activeCluster = useGameStore((s) => s.activeCluster);
   const mode = useGameStore((s) => s.mode);
-  const stage = useMemo(
-    () => (furniture ? buildPhase(furniture, completedSet, activeCluster).index : 1),
-    [furniture, completedSet, activeCluster],
-  );
   const settings = useGameStore((s) => s.settings);
 
   // Dev-setting: float mode vs auto return
@@ -237,15 +233,22 @@ function GameScreen() {
     totalCount,
   });
 
-  // Recenter re-frames the camera on the build, on an empty canvas it just jumps the view for no visible reason.
-  // `modes` is the honest source — "hidden" is a part still in the tray
-  // socket_hint is only a ghost preview of where a held part will go, not a part on the canvas.
+  // Recenter re-frames the camera on the build, on an empty canvas it just jumps the view for no visible reason. `modes` is the honest source — "hidden" is a part still in the tray socket_hint is only a ghost preview of where a held part will go, not a part on the canvas.
   const sceneHasParts = Object.values(sceneState.modes).some(
     (m) => m !== "hidden" && m !== "socket_hint",
   );
 
+  // Gated on the existing accessibility flag, so a profile that asks for a quiet build gets one.
+  useAssemblySfx(settings.soundEffects);
   const hintGroup = useGameStore((s) => s.hintGroup);
   const hintPulse = useGameStore((s) => s.hintPulse);
+  // The Spot marker is a ONE-SHOT: it pulses for a few seconds and puts itself out. Keyed on hintPulse as well as the part, so pressing Spot twice for the same part restarts the window rather than being swallowed as "no change".
+  const spotPartId = useGameStore((s) => s.hintPartId);
+  useEffect(() => {
+    if (!spotPartId) return;
+    const t = setTimeout(() => useGameStore.getState().clearSpot(), SPOT_MS);
+    return () => clearTimeout(t);
+  }, [spotPartId, hintPulse]);
 
   // select tool
   const selectedTool = useGameStore((s) => s.selectedTool);
@@ -285,8 +288,7 @@ function GameScreen() {
     [onPanStart, onPanMove, onPanEnd],
   );
 
-  // Canvas strafe when NOTHING is held — one-finger drag pans the camera (always on, no toggle). While a part IS held, the canvas gesture from usePartDrag owns the finger and routes: floating part → re-grab, else → these same strafe callbacks.
-  // strafing guards onFinalize: a Pan that FAILS (lost the race) still finalizes, and that must not fire a spurious onPanEnd.
+  // Canvas strafe when NOTHING is held — one-finger drag pans the camera (always on, no toggle). While a part IS held, the canvas gesture from usePartDrag owns the finger and routes: floating part → re-grab, else → these same strafe callbacks. strafing guards onFinalize: a Pan that FAILS (lost the race) still finalizes, and that must not fire a spurious onPanEnd.
   const strafing = useRef(false);
   const strafePan = useMemo(
     () =>
@@ -352,8 +354,7 @@ function GameScreen() {
 
   return (
     <SceneBackdrop
-      backdrop={backdrop}
-      dark={theme === "dark"}
+      source={backdropSource(backdrop, theme === "dark")}
       style={rootStyle}
     >
       <GestureDetector gesture={sceneGesture}>
@@ -378,11 +379,11 @@ function GameScreen() {
         style={[
           styles.chrome,
           {
-            top: Math.max(insets.top, HUD_VERTICAL_MARGIN),
+            top: hud.top,
             // The app runs immersive (status + nav bars hidden in _layout), and Android reports ZERO insets once those bars are gone — even though the display cutout is still physically there. So the side margin cannot come from the inset alone: HUD_SIDE_MARGIN is the floor that actually clears a landscape cutout, and max() still honours a larger inset if a device reports one.
-            left: Math.max(insets.left, HUD_SIDE_MARGIN),
-            right: Math.max(insets.right, HUD_SIDE_MARGIN),
-            bottom: Math.max(insets.bottom, HUD_VERTICAL_MARGIN),
+            left: hud.left,
+            right: hud.right,
+            bottom: hud.bottom,
           },
         ]}
         pointerEvents="box-none"
@@ -398,11 +399,8 @@ function GameScreen() {
           />
           {/* Instructions hidden → only the progress bar stays (slim pill). */}
           <ObjectiveBar
-            line={
-              settings.showInstructions
-                ? `Stage ${stage} · ${objective} · ${completedCount}/${totalCount}`
-                : null
-            }
+            // The sentence only. The step count rides on the progress row inside the bar — keeping it out of here is what stops the line's length changing with the count.
+            line={settings.showInstructions ? objective : null}
             fontSize={objectiveFontSize}
             value={completedCount}
             total={totalCount}

@@ -19,7 +19,7 @@ export type ClusterId = string & Brand<"ClusterId">;
 export type ComponentId = string & Brand<"ComponentId">;
 export type LiaisonId = string & Brand<"LiaisonId">;
 
-export type FurnitureId = "dalfred-stool" | "lack-table" | "eket-cabinet" | "bekvam-stool" | "tutorial";
+export type FurnitureId = "dalfred-stool" | "lack-table" | "eket-cabinet" | "bekvam-stool";
 export type BrandId = "IKEA" | "Others";
 export type ToolId = "allenkey" | "mallet" | "hammer" | "screwdriver" | "hand";
 
@@ -249,12 +249,14 @@ export interface RenderStyle {
 }
 export type StyleSet = Partial<Record<RenderStyleId, RenderStyle>>;
 
-// What the BUNDLE knows about a furniture: its id, its artwork, and the counts derived from the recipe.
-// Everything a human authors — name, brand, type, duration, link — lives in item_build and is read
-// through the catalogue store, so it can be edited without shipping a build.
+// What the BUNDLE knows about a furniture: its id, its artwork, and the counts derived from the recipe. Everything a human authors — name, brand, type, duration, link — lives in item_build and is read through the catalogue store, so it can be edited without shipping a build.
 export interface FurnitureMeta {
   id: FurnitureId;
   thumbnail: ThumbSet;
+  /** Catalogue art per finish, keyed by the item_variants `variation` string. Absent, or a key with
+   *  no art, means the catalogue shows no finish arrow for this furniture — so a variation declared
+   *  in the table before its artwork ships degrades to the plain tile rather than a broken image. */
+  variantThumbnails?: Record<string, ThumbSet>;
   partCount: number;
   stageCount: number;
   stepCount: number;

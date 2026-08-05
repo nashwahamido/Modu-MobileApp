@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import type { TimeOfDayId } from "@/src/room/core/timeOfDay";
+// Type-only: the room's backdrop table carries image require()s, and the store must not pull those in.
 import { isPickupType } from "@/src/game/core/ids";
 import {
   availableActions,
@@ -71,6 +73,10 @@ interface GameState {
   hintGroup: GroupId | null;
   /** Bumped on every ? press so a repeated hint for the same group re-triggers the flash. */
   hintPulse: number;
+  clearSpot: () => void;
+  /** The part the ? hint points at. Spotlights that part's socket in the scene for as long as the
+   *  hint itself lives — clearHint drops both, so the toast's dismiss timer is also the ghost's. */
+  hintPartId: PartId | null;
   /** Accumulated tighten rotation per tighten-action id, in degrees. */
   tightenDeg: Record<ActionId, number>;
   /** Snap action parked at the socket, waiting for orientation correction. */
@@ -94,8 +100,8 @@ interface GameState {
   renderStyle: RenderStyleId;
   /** Scene background: clean | studio | dot (independent of the model look). */
   backdrop: BackdropId;
-  /** Backdrop behind the room diorama. Its own axis: the room is a place you live in, the build scene is a task, so they are dressed separately. */
-  roomBackdrop: BackdropId;
+  /** Which hour of the day the room's sun is set to. The room's backdrop photo comes from this too — sunPreset(roomTimeOfDay).backdrop — so there is no separate backdrop setting: a daytime photo behind a night-lit room reads as a bug. Chosen, not clock-driven: the light's angle is a look the player picks, and every preset is authored to enter through walls the camera can see (see src/room/core/timeOfDay.ts). */
+  roomTimeOfDay: TimeOfDayId;
   /** Display theme (backdrop + thumbnails): light | dark | high_contrast. */
   theme: ThemeId;
 
@@ -111,7 +117,7 @@ interface GameState {
   setMode: (mode: AssemblyMode) => void;
   setRenderStyle: (style: RenderStyleId) => void;
   setBackdrop: (backdrop: BackdropId) => void;
-  setRoomBackdrop: (backdrop: BackdropId) => void;
+  setRoomTimeOfDay: (time: TimeOfDayId) => void;
   setTheme: (theme: ThemeId) => void;
 
   completeAction: (id: ActionId) => void;
@@ -177,6 +183,7 @@ const CLEARED = {
   matchedActionId: null,
   hint: null,
   hintGroup: null,
+  hintPartId: null,
 };
 
 export const useGameStore = create<GameState>()((set, get) => ({
@@ -204,13 +211,9 @@ export const useGameStore = create<GameState>()((set, get) => ({
   mode: "free",
   renderStyle: "realistic",
   backdrop: "studio",
-  // "clear" keeps the room on the themed app background it has always had; the illustrated backdrops are opt-in.
-  roomBackdrop: "clear",
-  // Light by default. The palette (ui/theme.ts) was designed against the dark reference,
-  // but light is the safer default for a study: it survives a bright room, a projector,
-  // and a participant's own phone brightness, none of which we control. Dark and
-  // high-contrast are the SAME product in different light — same three accent hues, same
-  // meanings — so switching costs nothing but the setting.
+  // Afternoon: the longest warm pool of the day, and the look the room was tuned against.
+  roomTimeOfDay: "afternoon",
+  // Light by default. The palette (ui/theme.ts) was designed against the dark reference, but light is the safer default for a study: it survives a bright room, a projector, and a participant's own phone brightness, none of which we control. Dark and high-contrast are the SAME product in different light — same three accent hues, same meanings — so switching costs nothing but the setting.
   theme: "light",
 
   loadFurniture: (f) =>
@@ -274,7 +277,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
   setMode: (mode) => set({ mode }),
   setRenderStyle: (renderStyle) => set({ renderStyle }),
   setBackdrop: (backdrop) => set({ backdrop }),
-  setRoomBackdrop: (roomBackdrop) => set({ roomBackdrop }),
+  setRoomTimeOfDay: (roomTimeOfDay) => set({ roomTimeOfDay }),
   setTheme: (theme) => set({ theme }),
 
   completeAction: (id) => {
@@ -407,7 +410,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
     if (!s.furniture) return;
     const next = s.availableForMode()[0];
     if (!next) {
-      set({ hint: "This area is done — switch focus.", hintGroup: null });
+      set({ hint: "This area is done — switch focus.", hintGroup: null, hintPartId: null });
       return;
     }
     const text = instructionText(
@@ -421,10 +424,16 @@ export const useGameStore = create<GameState>()((set, get) => ({
     set({
       hint: text ? `Try: ${text}` : null,
       hintGroup: text ? group : null,
+      // The spotlight no longer depends on there being TEXT — a hint with no copy still has a part.
+      hintPartId: next.partId ?? null,
       hintPulse: s.hintPulse + 1,
     });
   },
-  clearHint: () => set({ hint: null, hintGroup: null }),
+  clearHint: () => set({ hint: null, hintGroup: null, hintPartId: null }),
+  /** Drop the spotlight WITHOUT touching the toast. The spotlight is a one-shot: it has to end on
+   *  its own timer, not on the toast's, because a hint with no text never mounts a toast and would
+   *  leave the marker lit for the rest of the build. */
+  clearSpot: () => set({ hintPartId: null }),
 
   setSelectedTool: (tool) => set({ selectedTool: tool }),
 

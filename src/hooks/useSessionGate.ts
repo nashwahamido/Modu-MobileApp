@@ -11,9 +11,7 @@ export const SESSION_REQUIRED = process.env.EXPO_PUBLIC_DATA_BACKEND === "supaba
 // Where an unauthenticated user is sent — the screen offering create-account, log-in, and (in showcase builds) the demo accounts.
 export const SIGN_IN_ROUTE = "/auth";
 
-// Reachable without a session: the whole sign-up / onboarding run (which is how you GET a session), and
-// the dev engine harness, which never touches the repos. The landing route "/" is handled separately —
-// it has no group, so useSegments() reports it as empty.
+// Reachable without a session: the whole sign-up / onboarding run (which is how you GET a session), and the dev engine harness, which never touches the repos. The landing route "/" is handled separately — it has no group, so useSegments() reports it as empty.
 const PUBLIC_GROUPS = new Set<string>(["(onboarding)", "(dev)"]);
 
 export function useSessionGate(): void {
@@ -27,9 +25,7 @@ export function useSessionGate(): void {
     if (!navState?.key) return;
     // loading = auth still resolving (including a magic-link exchange). Redirecting here would race it.
     if (loading || user) return;
-    // An account switch signs out before it signs in. That gap is not "the user is logged out", it is
-    // the middle of a deliberate swap — bouncing to /auth here would race the switcher's own
-    // navigation and land you on the login screen instead of where you asked to go.
+    // An account switch signs out before it signs in. That gap is not "the user is logged out", it is the middle of a deliberate swap — bouncing to /auth here would race the switcher's own navigation and land you on the login screen instead of where you asked to go.
     if (isAuthTransitionActive()) return;
 
     const group = segments[0] as string | undefined;

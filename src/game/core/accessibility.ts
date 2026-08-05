@@ -25,6 +25,10 @@ export type DragPlane = "adaptive" | "level";
 export interface AccessibilitySettings {
   textLevel: TextLevel;
   audio: boolean;
+  /** Assembly sound effects: taps, screw detents, a part seating, a stage and a build finishing.
+   *  Separate from `audio`, which is the spoken instruction clips — a player may want the mallet to
+   *  thud without having every step read aloud. */
+  soundEffects: boolean;
   /** FREE-mode soft hints when reaching for a not-yet-available part. */
   softHints: boolean;
   /** Player picks the tool from the tool bar before tightening; off = the system equips the right tool automatically. */

@@ -3,9 +3,7 @@
 // Run from the modi project root:
 //   npm run gen:thumbs
 //
-// This writes src/game/content/furnitures/<ID>/thumbs.gen.ts with static require(...)
-// calls. Metro needs those static requires, so keep this as a build-time script
-// rather than trying to look up thumbnails dynamically in the app.
+// This writes src/game/content/furnitures/<ID>/thumbs.gen.ts with static require(...) calls. Metro needs those static requires, so keep this as a build-time script rather than trying to look up thumbnails dynamically in the app.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -22,11 +20,7 @@ const FASTENER_RE = /^(screw|bolt|cam|nut|dowel|barrel|peg|washer|rivet)/i;
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 const sortNatural = (items) => [...items].sort((a, b) => collator.compare(a, b));
 
-// Read the PARTS map out of a parts.gen.ts. We pull the object literal and
-// evaluate it as JS, which is valid for BOTH emitted formats — the single-line
-// JSON style (quoted keys) and the pretty-printed style (unquoted keys, trailing
-// commas). Values are plain data (numbers/strings/arrays), so there's nothing to
-// execute.
+// Read the PARTS map out of a parts.gen.ts. We pull the object literal and evaluate it as JS, which is valid for BOTH emitted formats — the single-line JSON style (quoted keys) and the pretty-printed style (unquoted keys, trailing commas). Values are plain data (numbers/strings/arrays), so there's nothing to execute.
 function readPartsGen(id) {
   const file = path.join(FURNITURES, id, "parts.gen.ts");
   if (!fs.existsSync(file)) return [];
@@ -112,10 +106,7 @@ function inferUnmatchedStructuralThumb(part, parsedThumbs, usedFiles, knownGroup
   return candidates.length === 1 ? candidates[0].file : undefined;
 }
 
-// Thumbnails live under assets/thumbnails/furnitures/<ID>/<theme>/ — the
-// furniture preview at the theme root (<ID>.png) and part thumbs in parts/.
-// A dark variant is the SAME filename under the dark/ folder; it's optional, so
-// groups without one fall back to light at runtime (see pickThumb).
+// Thumbnails live under assets/thumbnails/furnitures/<ID>/<theme>/ — the furniture preview at the theme root (<ID>.png) and part thumbs in parts/. A dark variant is the SAME filename under the dark/ folder; it's optional, so groups without one fall back to light at runtime (see pickThumb).
 const thumbDir = (id, theme) => path.join(THUMB_ROOT, "furnitures", id, theme);
 const partReq = (id, theme, file) =>
   `${REQUIRE_ROOT}/furnitures/${id}/${theme}/parts/${file}`;
@@ -124,8 +115,7 @@ const furnReq = (id, theme, file) =>
 const clusterReq = (id, theme, file) =>
   `${REQUIRE_ROOT}/furnitures/${id}/${theme}/clusters/${file}`;
 
-// Per-cluster previews: clusters/<cluster>.png, keyed by cluster id (the file's
-// basename). Only multi-cluster furniture has these (the combine step).
+// Per-cluster previews: clusters/<cluster>.png, keyed by cluster id (the file's basename). Only multi-cluster furniture has these (the combine step).
 function readClusterThumbs(id) {
   const lightDir = path.join(thumbDir(id, "light"), "clusters");
   if (!fs.existsSync(lightDir)) return {};

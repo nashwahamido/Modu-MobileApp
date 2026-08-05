@@ -58,4 +58,4 @@ docs/
 tools/processGLB/work/
 
 # database
-*.sql
+# *.sql

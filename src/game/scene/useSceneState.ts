@@ -54,6 +54,8 @@ export interface SceneState {
   heldAction: AssemblyAction | null;
   /** Everything this stage uses, grouped — the inventory column. */
   trayItems: TrayItem[];
+  /** Uncompressed inventory before Focus mode chooses a single card. Tutorial gates use this so a required card cannot be filtered out twice. */
+  allTrayItems: TrayItem[];
   /** Tighten action currently awaiting the circular gesture. */
   activeTighten: AssemblyAction | null;
   /** 3-phase insertFastener currently awaiting the PRESS gesture (stage → loose). */
@@ -74,6 +76,9 @@ export function deriveSceneState(
   focusMode = false,
   /** Static-socket ghosts: hint EVERY available same-group socket, not just the proximity-matched one (the ghost component colors matched vs unmatched). */
   showAllGroupSockets = false,
+  /** The part Spot is pointing at. Shows that ONE socket's ghost with nothing held — a parameter
+   *  rather than a store read so this stays a pure function the tests can drive. */
+  hintPartId: PartId | null = null,
 ): SceneState {
   const done = new Set(completed);
   const actionById = new Map(furniture.actions.map((a) => [a.actionId, a]));
@@ -240,7 +245,21 @@ export function deriveSceneState(
     else if (outsideFocus) modes[id] = "hidden";
     else if (!placed) {
       const hintActionId = heldIsInsert ? acts.insert : acts.snap;
+      // Spot, with nothing held. The path below needs a heldGroup, which is exactly what a player standing still and asking for help does not have.
+      //
+      // Snap OR insert: a screw is the part whose motion the player can least guess, so it is the one that most needs the demo. Inserts were excluded while the ghost rendered at its park pose — a glowing copy off the side of the assembly read as the model jumping — but the demo now drives the pose itself, from demoApproach down to the seat, so that reason is spent.
+      //
+      // Staged parts stay out: their real target is shifted by stageShiftFor, and a demo that ignores that shift would fly the ghost into the socket the sub-assembly has not reached yet.
+      const spotAction = acts.snap ?? acts.insert;
       if (
+        hintPartId === id &&
+        spotAction &&
+        availableIds.has(spotAction) &&
+        !stagedOut.has(id) &&
+        !furniture.parts[id].stageOffset
+      ) {
+        modes[id] = "socket_hint";
+      } else if (
         heldGroup &&
         furniture.parts[id].group === heldGroup &&
         hintActionId &&
@@ -255,7 +274,16 @@ export function deriveSceneState(
     else if (acts.tighten && !done.has(acts.tighten)) modes[id] = "loose";
     else modes[id] = "flush";
   }
-  return { modes, heldAction, trayItems, activeTighten, activeInsertPress, stagedSeat, activeBeat };
+  return {
+    modes,
+    heldAction,
+    trayItems,
+    allTrayItems: allTray,
+    activeTighten,
+    activeInsertPress,
+    stagedSeat,
+    activeBeat,
+  };
 }
 
 export function useSceneState(): SceneState {
@@ -264,14 +292,15 @@ export function useSceneState(): SceneState {
   const heldActionId = useGameStore((s) => s.heldActionId);
   const activeCluster = useGameStore((s) => s.activeCluster);
   const matchedActionId = useGameStore((s) => s.matchedActionId);
+  const hintPartId = useGameStore((s) => s.hintPartId);
   const mode = useGameStore((s) => s.mode);
   const focusMode = useGameStore((s) => s.settings.focusMode);
   const staticSockets = useGameStore((s) => s.settings.ghostStyle === "staticSockets");
   return useMemo(
     () =>
       furniture
-        ? deriveSceneState(furniture, completed, heldActionId, activeCluster, matchedActionId, mode, focusMode, staticSockets)
-        : { modes: {}, heldAction: null, trayItems: [], activeTighten: null, activeInsertPress: null, stagedSeat: null, activeBeat: null },
-    [furniture, completed, heldActionId, activeCluster, matchedActionId, mode, focusMode, staticSockets],
+        ? deriveSceneState(furniture, completed, heldActionId, activeCluster, matchedActionId, mode, focusMode, staticSockets, hintPartId)
+        : { modes: {}, heldAction: null, trayItems: [], allTrayItems: [], activeTighten: null, activeInsertPress: null, stagedSeat: null, activeBeat: null },
+    [furniture, completed, heldActionId, activeCluster, matchedActionId, mode, focusMode, staticSockets, hintPartId],
   );
 }

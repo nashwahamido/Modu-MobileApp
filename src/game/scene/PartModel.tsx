@@ -1,5 +1,5 @@
 // TODO: settle down the part marked as dev
-import { memo, useEffect, useMemo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { useFilamentContext } from "react-native-filament";
 import type {
   Entity,
@@ -20,7 +20,7 @@ import {
   slideParkInfo,
 } from "@/src/game/core/evaluation/engagement";
 import { quatFromAxisAngle, quatMultiply } from "@/src/game/core/geometry/math";
-import { MaterialParams, PartDef, Quat, Vec3 } from "@/src/game/core/type";
+import { ActionId, MaterialParams, PartDef, Quat, Vec3 } from "@/src/game/core/type";
 import {
   ORIENTATION_TOTAL_DEG,
   selectFirstDrop,
@@ -35,12 +35,7 @@ import type { PartMode } from "./useSceneState";
 // dev-setting
 /** Ghost colors follow the PDD color language; emissive glow is used because the DALFRED materials are opaque near-black glTF — runtime alpha is ignored and base-color tints are swallowed by the dark albedo. */
 const FIT_GLOW: Record<FitState, [number, number, number]> = {
-  // ORANGE, not the old blue: this is the "here is the next slot" cue, and it has to win the
-  // player's eye against a warm cream HUD and a teal work plane — a cool blue sat back into
-  // both. Green still means seated, so the approach → land transition stays readable.
-  // Three tiers on the way in: ORANGE while hunting, BLUE once the right socket is close,
-  // GREEN the moment it would land. Warm → cool → go, so the change of hue alone tells the
-  // player they are getting warmer without reading a word.
+  // ORANGE, not the old blue: this is the "here is the next slot" cue, and it has to win the player's eye against a warm cream HUD and a teal work plane — a cool blue sat back into both. Green still means seated, so the approach → land transition stays readable. Three tiers on the way in: ORANGE while hunting, BLUE once the right socket is close, GREEN the moment it would land. Warm → cool → go, so the change of hue alone tells the player they are getting warmer without reading a word.
   idle: [1.0, 0.42, 0.0],
   held: [1.0, 0.42, 0.0],
   approaching: [0.15, 0.5, 0.95],
@@ -53,6 +48,82 @@ const FIT_GLOW: Record<FitState, [number, number, number]> = {
  *  off it. Slightly deeper than FIT_GLOW.idle so the proximity-MATCHED socket still reads as
  *  the brighter of the two. */
 const GLOW_MARK: [number, number, number] = [0.85, 0.33, 0.0];
+
+/** Turns a fastener makes across one pass of the Spot demo. Enough to read as screwing rather than
+ *  jittering; not so many it becomes a drill. */
+const DEMO_TURNS = 1.5;
+/** How far back the demo starts a STRUCTURAL part. Fasteners use their own baked insert distance. */
+const DEMO_BACKOFF_M = 0.14;
+
+function visualCentre(p: PartDef): Vec3 {
+  const o = p.visualCenterOffset ?? [0, 0, 0];
+  return [
+    p.pose.position[0] + o[0],
+    p.pose.position[1] + o[1],
+    p.pose.position[2] + o[2],
+  ];
+}
+
+/**
+ * Where the Spot demo starts the ghost from.
+ *
+ * Fasteners bake their own insertion axis (engageDir), so looseDelta already gives the right
+ * back-off and the screw retreats exactly the way it drives in.
+ *
+ * STRUCTURAL parts have no engageDir at all — which is why the first version of this demo did not
+ * move: looseDelta defaults its axis to [0,0,0] and every leg travelled zero distance. Their
+ * approach has to be derived, and the physical truth is that a part comes in from the side away
+ * from whatever it attaches to. Hence: back off along (part centre − centroid of its joins).
+ * With no joins recorded, fall back to straight down from above, which is how a tabletop or a seat
+ * actually goes on.
+ */
+function demoApproach(
+  def: PartDef,
+  parts: Record<string, PartDef>,
+  done: Set<ActionId>,
+  placedIds: ReadonlySet<string>,
+): Vec3 {
+  // 1. Fasteners bake their own insertion axis (engageDir), so looseDelta already gives the right back-off and the screw retreats exactly the way it drives in.
+  const baked = looseDelta(def, engageAxis(def, done));
+  if (baked[0] || baked[1] || baked[2]) return baked;
+  // 2. An AUTHORED placeDir is the direction the part travels to its seat, so the ghost starts the same distance back along its reverse. Authored beats derived: someone decided this.
+  if (def.placeDir) {
+    const d = def.placeDir;
+    const back = def.parkBackoff ?? DEMO_BACKOFF_M;
+    return [-d[0] * back, -d[1] * back, -d[2] * back];
+  }
+  // 3. Derived. A part comes in from the side away from whatever it would collide with — its joins if it records any, otherwise whatever is already standing. NEAREST, not the centroid: the centroid of a half-built chair sits low, which sent the seat plate down through the seat it mounts under. The nearest placed part is the thing actually in the way.
+  const centre = visualCentre(def);
+  const joinIds = [
+    ...(def.directJoins ?? []),
+    ...(def.slideJoins ?? []),
+    ...(def.screwJoins ?? []),
+    ...(def.attached ?? []),
+  ];
+  const pool = joinIds.length
+    ? joinIds.map((id) => parts[id]).filter(Boolean)
+    : Object.values(parts).filter((p) => p.type !== "fastener" && placedIds.has(p.partId));
+  let best: Vec3 | null = null;
+  let bestDist = Infinity;
+  for (const other of pool) {
+    if (other.partId === def.partId) continue;
+    const c = visualCentre(other);
+    const dx = centre[0] - c[0];
+    const dy = centre[1] - c[1];
+    const dz = centre[2] - c[2];
+    const dist = Math.hypot(dx, dy, dz);
+    if (dist > 1e-4 && dist < bestDist) {
+      bestDist = dist;
+      best = [dx, dy, dz];
+    }
+  }
+  if (best) {
+    const k = DEMO_BACKOFF_M / bestDist;
+    return [best[0] * k, best[1] * k, best[2] * k];
+  }
+  // 4. Nothing to avoid — the first part of all. Straight down from above, how a top or a seat goes on.
+  return [0, DEMO_BACKOFF_M, 0];
+}
 
 const EPSILON = 1e-6;
 
@@ -191,6 +262,7 @@ function Ghost({
   glowOverride,
   pulse = false,
   dim = false,
+  travel = false,
 }: {
   model: FilamentModel;
   def: PartDef;
@@ -202,6 +274,10 @@ function Ghost({
   pulse?: boolean;
   /** Subtle goal ghost: rendered at 50% opacity (MaterialInstance.changeAlpha) so the REAL part stays readable as it converges into the ghost. Glow stays at full strength. */
   dim?: boolean;
+  /** Spot's demo: run the ghost IN along its own approach axis a couple of times instead of parking
+   *  it at the seat. Shows the MOVE, not just the destination — which for a screw is the whole
+   *  instruction, since where it goes is obvious and which way it drives is not. */
+  travel?: boolean;
 }) {
   const { renderableManager, transformManager, scene } = useFilamentContext();
   const storeFitState = useGameStore((s) => s.fitState);
@@ -211,6 +287,32 @@ function Ghost({
   const driveActionId = useGameStore((s) => s.driveActionId);
   const fitState = fixedFitState ?? storeFitState;
   const entity = useInstanceEntity(model, def.meshName, 1);
+  // 1 = backed off along the approach axis, 0 = seated. Stepped from a timer rather than Reanimated because the ghost's pose is written imperatively through the transform manager, which lives on the JS side — there is no style here to animate.
+  const [travelT, setTravelT] = useState(0);
+  useEffect(() => {
+    if (!travel) {
+      setTravelT(0);
+      return;
+    }
+    const CYCLE_MS = 1000;
+    const TRIPS = 2;
+    // The last quarter of each cycle rests at the seat, so the part is SEEN arriving rather than snapping straight back out for the next pass.
+    const MOVING = 0.75;
+    const t0 = Date.now();
+    const id = setInterval(() => {
+      const e = Date.now() - t0;
+      if (e >= CYCLE_MS * TRIPS) {
+        setTravelT(0);
+        clearInterval(id);
+        return;
+      }
+      const p = (e % CYCLE_MS) / CYCLE_MS;
+      const k = p < MOVING ? 1 - p / MOVING : 0;
+      // Squared: fast off the mark, settling into the socket.
+      setTravelT(k * k);
+    }, 33);
+    return () => clearInterval(id);
+  }, [travel]);
   const snapActionId = useMemo(() => {
     const f = useGameStore.getState().furniture;
     return (
@@ -256,6 +358,28 @@ function Ghost({
             offset);
       }
     }
+    // The demo overrides whatever pose the normal ghost would take: back off along the SAME axis the loose pose uses, scaled by travelT, so the path it flies is the path the player must drag.
+    if (travel) {
+      const f = useGameStore.getState().furniture;
+      const parts = f?.parts ?? {};
+      // What is already standing, so the ghost can come in from the side that is clear.
+      const placedIds = new Set<string>();
+      for (const a of f?.actions ?? []) {
+        if (a.type === "placePart" && a.partId && done.has(a.actionId)) placedIds.add(a.partId);
+      }
+      const base = demoApproach(def, parts, done, placedIds);
+      offset = [base[0] * travelT, base[1] * travelT, base[2] * travelT];
+    }
+    // A screw does not glide in — it TURNS as it goes, and that turn is the part of the gesture a player cannot guess from a straight-line preview. Structural parts get no spin, because they genuinely do not rotate on the way in and a spinning leg would be a lie about the move.
+    let rotation = def.pose.rotation;
+    if (travel && def.type === "fastener") {
+      const axis = engageAxis(def, done);
+      // Same composition order the tighten driver uses, so the demo turns the way the real gesture turns rather than mirroring it.
+      rotation = quatMultiply(
+        quatFromAxisAngle(axis, (1 - travelT) * DEMO_TURNS * Math.PI * 2),
+        def.pose.rotation,
+      );
+    }
     placeEntity(
       transformManager,
       entity,
@@ -264,9 +388,9 @@ function Ghost({
         def.pose.position[1] + offset[1],
         def.pose.position[2] + offset[2],
       ],
-      def.pose.rotation,
+      rotation,
     );
-  }, [entity, transformManager, def, atLoosePose, completed, driving]);
+  }, [entity, transformManager, def, atLoosePose, completed, driving, travel, travelT]);
 
   useEffect(() => {
     if (!entity) return;
@@ -291,25 +415,16 @@ function Ghost({
     for (let i = 0; i < primitives; i++) {
       const mi = renderableManager.getMaterialInstanceAt(entity, i);
       try {
-        // Tint the albedo to the SAME colour as the emissive, always — not just for static
-        // markers. Tinting is what makes a ghost read on light-albedo parts (LACK), where
-        // emissive alone washes out; and because the tint persists on the material, writing it
-        // only sometimes left an old orange albedo under a new blue emissive, which is why the
-        // approach cue pulsed two colours. Clearing it to white instead just bleached the
-        // ghost. Matching it to `glow` keeps every state one colour. No-op on near-black
-        // materials (DALFRED), which swallow base-colour tints.
+        // Tint the albedo to the SAME colour as the emissive, always — not just for static markers. Tinting is what makes a ghost read on light-albedo parts (LACK), where emissive alone washes out; and because the tint persists on the material, writing it only sometimes left an old orange albedo under a new blue emissive, which is why the approach cue pulsed two colours. Clearing it to white instead just bleached the ghost. Matching it to `glow` keeps every state one colour. No-op on near-black materials (DALFRED), which swallow base-colour tints.
         mi.setFloat4Parameter("baseColorFactor", [glow[0], glow[1], glow[2], 1]);
       } catch {}
     }
-    // Arrived: hold it STEADY. A socket that stops flashing the instant the part would land
-    // is the clearest "yes, here" the scene can give, and it stops the green competing with
-    // the orange markers still pulsing elsewhere.
+    // Arrived: hold it STEADY. A socket that stops flashing the instant the part would land is the clearest "yes, here" the scene can give, and it stops the green competing with the orange markers still pulsing elsewhere.
     if (!pulse || fitState === "nearCorrect") {
       setEmissive(glow);
       return;
     }
-    // Breathing pulse. Deeper swing the FURTHER out the part is: hunting needs to be found
-    // from across the canvas, whereas the blue approach cue is already where the eye is.
+    // Breathing pulse. Deeper swing the FURTHER out the part is: hunting needs to be found from across the canvas, whereas the blue approach cue is already where the eye is.
     const deep = fitState === "held" || fitState === "idle";
     let timer: ReturnType<typeof setTimeout>;
     const t0 = Date.now();
@@ -342,12 +457,10 @@ function SocketHintGhost({
   atLoosePose?: boolean;
 }) {
   const matchedActionId = useGameStore((s) => s.matchedActionId);
+  const hintPartId = useGameStore((s) => s.hintPartId);
   const ghostStyle = useGameStore((s) => s.settings.ghostStyle);
   const firstDrop = useGameStore(selectFirstDrop);
-  // Parked at its seat: the part is physically AT the socket and only the finishing gesture
-  // (screw / orientation twist / slide / press) is left. A ghost at the target pose now sits
-  // exactly where the real part already is and reads as a doubled, clashing leg — same
-  // reasoning as the tighten phase, which dropped its goal ghost for this exact reason.
+  // Parked at its seat: the part is physically AT the socket and only the finishing gesture (screw / orientation twist / slide / press) is left. A ghost at the target pose now sits exactly where the real part already is and reads as a doubled, clashing leg — same reasoning as the tighten phase, which dropped its goal ghost for this exact reason.
   const driveActionId = useGameStore((s) => s.driveActionId);
   const orientationActionId = useGameStore((s) => s.orientationActionId);
   const actionId =
@@ -355,6 +468,10 @@ function SocketHintGhost({
   const isMatched = !!actionId && matchedActionId === actionId;
   const parked =
     !!actionId && (driveActionId === actionId || orientationActionId === actionId);
+  // The ? spotlight, in GLOW_MARK orange — deliberately the dimmer of the two marker colours, so if the player then picks a part up the proximity-matched socket still reads as the brighter of the two. Ahead of the firstDrop guard: the first step is when a hint is most likely to be asked for, and that guard exists to keep ghosts off an empty plane, not to suppress an explicit ask. Spot's ghost. atLoosePose FALSE unconditionally — the cue marks the SEAT, never a park or rest pose, and passing the caller's flag through is what previously put a glowing copy of the part off to the side of the assembly. GLOW_MARK rather than FIT_GLOW.idle so that if the player then picks a part up, the proximity-matched socket still reads as the brighter of the two. Ahead of the firstDrop guard: the first step is when a hint is most likely to be asked for.
+  if (hintPartId === def.partId && actionId && !parked) {
+    return <Ghost model={model} def={def} atLoosePose={false} glowOverride={GLOW_MARK} travel />;
+  }
   if (firstDrop || !actionId || parked) return null;
   // "staticSockets": every open socket of the held group shows a dim pulsing marker; the proximity-matched one switches to the steady fitState-driven color (blue approaching → green seated). "movingGhost": only the matched socket gets a ghost, as before.
   if (!isMatched) {

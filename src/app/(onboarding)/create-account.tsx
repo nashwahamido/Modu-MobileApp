@@ -9,10 +9,10 @@ import {
   type PrototypeAuthMethod,
 } from "@/src/services/auth";
 
-import { Button } from "@/src/game/ui/Button";
-import { SPACE, TYPE, useStyles, useTheme } from "@/src/game/ui/theme";
+import { Button } from "@/src/game/ui/system/Button";
+import { SPACE, TYPE, useStyles, useTheme } from "@/src/game/ui/system/theme";
 import { useSafeInsets } from "@/src/hooks/use-safe-insets";
-import type { Theme } from "@/src/game/ui/theme";
+import type { Theme } from "@/src/game/ui/system/theme";
 
 const mascot = require("../../assets/images/mascot/mascot.png");
 const loadingRoute = "/loading" as Href;

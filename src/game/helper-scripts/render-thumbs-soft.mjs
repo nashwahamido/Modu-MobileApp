@@ -4,10 +4,7 @@
 //   npm run render:thumbs:soft
 //   npm run gen:thumbs
 //
-// Blender thumbnails look nicer, but Blender can fail before Python starts on
-// some local Metal setups. This script reads GLB meshes directly and renders a
-// simple transparent orthographic PNG for missing furniture, part, and tool
-// thumbnails. Pass --force to overwrite existing PNGs.
+// Blender thumbnails look nicer, but Blender can fail before Python starts on some local Metal setups. This script reads GLB meshes directly and renders a simple transparent orthographic PNG for missing furniture, part, and tool thumbnails. Pass --force to overwrite existing PNGs.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -95,8 +92,7 @@ function materialColor(json, materialIndex) {
 }
 
 // Cluster id = the first segment of a node name (cluster_group_index), e.g.
-// "base_leg_1" → "base", "seat_pole" → "seat". Lets us render one cluster's
-// nodes out of the combined GLB.
+// "base_leg_1" → "base", "seat_pole" → "seat". Lets us render one cluster's nodes out of the combined GLB.
 const clusterOf = (name) => (name ?? "").split("_")[0];
 
 function collectTriangles(glbPath, clusterFilter = null) {
@@ -405,10 +401,7 @@ function crc32(buf) {
 }
 
 // Each render targets a PNG under the organised thumbnail tree (light theme):
-//   furnitures/<ID>/light/<ID>.png        furniture preview
-//   furnitures/<ID>/light/parts/<base>.png part thumbnails
-//   tools/<base>.png                       shared tool thumbnails
-// Dark variants go in the parallel dark/ folder once a dark render exists.
+//   furnitures/<ID>/light/<ID>.png        furniture preview furnitures/<ID>/light/parts/<base>.png part thumbnails tools/<base>.png                       shared tool thumbnails Dark variants go in the parallel dark/ folder once a dark render exists.
 function pngName(glb) {
   return `${path.basename(glb, ".glb")}.png`;
 }

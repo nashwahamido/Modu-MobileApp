@@ -1,16 +1,10 @@
-// The account switcher, mounted inside the DEV panel (GmTestPanel) — the SIGNED-IN half of the pair,
-// with AccountPicker (the auth screen) covering the signed-out half. Both read the same rosters.ts.
+// The account switcher, mounted inside the DEV panel (GmTestPanel) — the SIGNED-IN half of the pair, with AccountPicker (the auth screen) covering the signed-out half. Both read the same rosters.ts.
 //
-// This half is what makes the other reachable: nothing else in the app signs you out, so before it
-// existed a switch meant clearing app storage.
+// This half is what makes the other reachable: nothing else in the app signs you out, so before it existed a switch meant clearing app storage.
 //
-// It lives in the dev panel rather than /settings because that is where the rest of the jump-to-a-state
-// tooling already is, and because /settings is a real product screen — a sign-out button sitting in it
-// is one stray tap away from a player, and one merge away from shipping. The panel is __DEV__-only at
-// its mount point, so nothing here can reach a release build.
+// It lives in the dev panel rather than /settings because that is where the rest of the jump-to-a-state tooling already is, and because /settings is a real product screen — a sign-out button sitting in it is one stray tap away from a player, and one merge away from shipping. The panel is __DEV__-only at its mount point, so nothing here can reach a release build.
 //
-// Styled with the panel's own flat palette, not the app theme: it has to read as part of the panel,
-// and the panel deliberately does not follow the product's surfaces.
+// Styled with the panel's own flat palette, not the app theme: it has to read as part of the panel, and the panel deliberately does not follow the product's surfaces.
 import { useState } from "react";
 import { StyleSheet, ActivityIndicator, Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
@@ -25,8 +19,7 @@ import { ENABLED_ROSTERS } from "./rosters";
 const ESTABLISHED_ROUTE = "/room" as Href;
 const FRESH_ROUTE = "/onboarding-questionnaire" as Href;
 
-// How the signed-in account is named back to you. Anonymous sessions have no email, so they fall back
-// to the username the fresh-account path seeded and then to a short uid — enough to tell two apart.
+// How the signed-in account is named back to you. Anonymous sessions have no email, so they fall back to the username the fresh-account path seeded and then to a short uid — enough to tell two apart.
 function describeUser(user: { id: string; email?: string; user_metadata?: Record<string, unknown> } | null): string {
   if (!user) return "signed out";
   if (user.email) return user.email;
@@ -69,8 +62,7 @@ export function AccountSwitcher({ onDone }: { onDone?: () => void }) {
     }
   };
 
-  // The panel floats above everything, so it can be open over a modal (/settings, /profile). Clearing
-  // that layer first is what makes replace() land on the root stack instead of swapping the modal.
+  // The panel floats above everything, so it can be open over a modal (/settings, /profile). Clearing that layer first is what makes replace() land on the root stack instead of swapping the modal.
   const leaveTo = (destination: Href) => {
     onDone?.();
     if (router.canDismiss()) router.dismissAll();
@@ -198,8 +190,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   chipCurrent: { backgroundColor: "#EFE7DA", opacity: 0.6 },
-  // Armed = the next tap deletes. Red border rather than a dialog: the panel is dev chrome, and a
-  // modal over it would be the heaviest thing on the screen.
+  // Armed = the next tap deletes. Red border rather than a dialog: the panel is dev chrome, and a modal over it would be the heaviest thing on the screen.
   chipArmed: { borderColor: "#9A3B2F", backgroundColor: "#F6E5E1" },
   chipLabel: { color: "#231F20", fontSize: 12, fontWeight: "900" },
   chipNote: { color: "#665f55", fontSize: 9, fontWeight: "700", marginTop: 3 },

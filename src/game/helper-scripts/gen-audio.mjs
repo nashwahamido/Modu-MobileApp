@@ -1,18 +1,12 @@
 // Generates audio.gen.ts for each furniture from recorded/TTS step clips.
 //
 // Layout (matches src/assets/audio/furnitures/):
-//   instructions/<ID>/<actionId>.<ext>   one spoken clip per assembly step  → Furniture.audio
-//   parts/<ID>/<group>.<ext>             one clip per part GROUP name        → (reserved; LabelSet.audio)
-// where <ID> is the furniture id, <actionId> a step id (place_circleUpp,
-// insert_screw105251_1, tighten_pole, …), <group> a part group (leg, pole, …),
-// and <ext> ∈ m4a | mp3 | caf | wav.
+//   instructions/<ID>/<actionId>.<ext>   one spoken clip per assembly step  → Furniture.audio parts/<ID>/<group>.<ext>             one clip per part GROUP name        → (reserved; LabelSet.audio) where <ID> is the furniture id, <actionId> a step id (place_circleUpp, insert_screw105251_1, tighten_pole, …), <group> a part group (leg, pole, …), and <ext> ∈ m4a | mp3 | caf | wav.
 //
 // This script maps the `instructions/<ID>/` clips to a require() keyed by
-// ActionId and writes src/game/content/furnitures/<ID>/audio.gen.ts. To wire it in,
-// add to that furniture's index.ts:
+// ActionId and writes src/game/content/furnitures/<ID>/audio.gen.ts. To wire it in, add to that furniture's index.ts:
 //   import { audio } from "./audio.gen";   // …and `audio,` in the Furniture object.
-// Furnitures with no clips get no file (audio stays undefined — the UI falls back
-// to reading instructionText). The `parts/` clips aren't wired yet (per-step mode).
+// Furnitures with no clips get no file (audio stays undefined — the UI falls back to reading instructionText). The `parts/` clips aren't wired yet (per-step mode).
 //
 //   node src/game/helper-scripts/gen-audio.mjs
 import fs from "node:fs";

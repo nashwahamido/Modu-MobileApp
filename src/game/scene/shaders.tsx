@@ -1,16 +1,11 @@
-// The shader-override layer: swaps a part's GLB material for a compiled Filament
-// material, driven by the ACTIVE MODEL LOOK (`renderStyle`).
+// The shader-override layer: swaps a part's GLB material for a compiled Filament material, driven by the ACTIVE MODEL LOOK (`renderStyle`).
 //
 // The two ways a look can be built:
-//   - swap the MODEL     (cozy, cartoon → LACK_cozy.glb / LACK_cartoon.glb, via
-//                         furniture.styleModels — handled by AssemblyScene)
+//   - swap the MODEL     (cozy, cartoon → LACK_cozy.glb / LACK_cartoon.glb, via furniture.styleModels — handled by AssemblyScene)
 //   - swap the MATERIAL  (illustrated → ink.filamat — handled here)
-// A look uses one or the other. `RenderStyle.toon` / `.outline` in core/type.ts were
-// always the hook for this; `shader` replaces them with something the scene reads.
+// A look uses one or the other. `RenderStyle.toon` / `.outline` in core/type.ts were always the hook for this; `shader` replaces them with something the scene reads.
 //
-// Applied PER-ENTITY, not scene-wide: PartModel owns each entity and adds it to the
-// scene, so a scene-level material apply is superseded by the components' own
-// material effects.
+// Applied PER-ENTITY, not scene-wide: PartModel owns each entity and adds it to the scene, so a scene-level material apply is superseded by the components' own material effects.
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
@@ -69,17 +64,13 @@ const METAL_GROUPS: readonly string[] = [
   "screw105298",
   "screw108443",
   "cap107675",
-  // DALFRED — the structural metal. Not fasteners, but not timber either: the foot ring,
-  // the pin that locates the seat, and the plate the seat bolts down onto.
+  // DALFRED — the structural metal. Not fasteners, but not timber either: the foot ring, the pin that locates the seat, and the plate the seat bolts down onto.
   "ringRail",
   "supportPin",
   "seatPlate",
 ];
 
-// NOTE: ringRail, supportPin and seatPlate still have entries in ROUND and CAP_AXIS below.
-// Those are now dead for these parts — the metal branch in the shader returns before either
-// is read. Left in place because they are correct descriptions of the geometry, and they
-// come straight back into use the moment a part is moved back to wood.
+// NOTE: ringRail, supportPin and seatPlate still have entries in ROUND and CAP_AXIS below. Those are now dead for these parts — the metal branch in the shader returns before either is read. Left in place because they are correct descriptions of the geometry, and they come straight back into use the moment a part is moved back to wood.
 
 // ── ink palette (LINEAR, not sRGB — Filament parameters are linear) ──────────
 /** The painted grain map. Multiplied by baseColor, so keep baseColor near white or the
@@ -211,8 +202,7 @@ const INK_HIGHLIGHT: Vec3 = [1.45, 1.4, 1.3];
 const KEY_TO_LIGHT: Vec3 = [-DIR_KEY[0], -DIR_KEY[1], -DIR_KEY[2]];
 // ── the POSTERISED toon palette ─────────────────────────────────────────────
 //
-// FOUR AUTHORED TONES. Not one colour plus lighten/darken — that is exactly what makes a
-// cel shader look cheap, and the reference proves why:
+// FOUR AUTHORED TONES. Not one colour plus lighten/darken — that is exactly what makes a cel shader look cheap, and the reference proves why:
 //
 //   deep #15345d   hue 214°  sat 77%  val 37%
 //   mid  #295e92   hue 210°  sat 72%  val 57%
@@ -220,24 +210,13 @@ const KEY_TO_LIGHT: Vec3 = [-DIR_KEY[0], -DIR_KEY[1], -DIR_KEY[2]];
 //   lift #8ad2e7   hue 194°  sat 40%  val 91%
 //
 // The shadow does not merely darken: the hue ROTATES 202° → 214° toward navy and the
-// SATURATION CLIMBS 67% → 77%. It gets more colourful as it gets darker. The highlight
-// goes the other way — brighter AND far less saturated — and it cannot be reached by
-// mixing the base toward white at all (that would need 22% white in red but 56% in blue).
+// SATURATION CLIMBS 67% → 77%. It gets more colourful as it gets darker. The highlight goes the other way — brighter AND far less saturated — and it cannot be reached by mixing the base toward white at all (that would need 22% white in red but 56% in blue).
 //
-// The wood palette below is that exact structure carried onto the pine hue: the same hue
-// rotation, the same saturation climb, the same value spread. Copying the RELATIONSHIPS
-// rather than the numbers is what keeps it looking painted instead of computed.
-// HONEYCOMB. Base #E8D48C — hue 47°, sat 40%, val 91%.
+// The wood palette below is that exact structure carried onto the pine hue: the same hue rotation, the same saturation climb, the same value spread. Copying the RELATIONSHIPS rather than the numbers is what keeps it looking painted instead of computed. HONEYCOMB. Base #E8D48C — hue 47°, sat 40%, val 91%.
 //
-// The reference's structure, mirrored for a warm hue. A BLUE deepens by rotating UP into
-// navy; a YELLOW deepens by rotating DOWN into amber and brown — yellow's dark neighbour
-// is not olive. So the hue rotation flips sign while its magnitude, the saturation climb
-// and the value spread all stay:
+// The reference's structure, mirrored for a warm hue. A BLUE deepens by rotating UP into navy; a YELLOW deepens by rotating DOWN into amber and brown — yellow's dark neighbour is not olive. So the hue rotation flips sign while its magnitude, the saturation climb and the value spread all stay:
 //
-//   deep #826540   hue 34°  sat 51%  val 51%   ← more saturated as it darkens
-//   mid  #B89B66   hue 39°  sat 45%  val 72%
-//   base #E8D48C   hue 47°  sat 40%  val 91%
-//   lift #FFFADC   hue 51°  sat 14%  val 100%  ← brighter AND far less saturated
+//   deep #826540   hue 34°  sat 51%  val 51%   ← more saturated as it darkens mid  #B89B66   hue 39°  sat 45%  val 72% base #E8D48C   hue 47°  sat 40%  val 91% lift #FFFADC   hue 51°  sat 14%  val 100%  ← brighter AND far less saturated
 const TOON_DEEP: Vec3 = [0.2271, 0.1315, 0.048]; //  #826540
 const TOON_MID: Vec3 = [0.4851, 0.3335, 0.132]; //   #B89B66
 const TOON_BASE: Vec3 = [0.8122, 0.6661, 0.2674]; // #E8D48C
@@ -282,16 +261,12 @@ const PLANKS: Record<string, number> = { tableTop: 7, leg: 2 };
 const PLANKS_DEFAULT = 3;
 const GRAIN_STROKES = 55;
 
-// `.filamat` is registered in metro.config.js assetExts and a require() resolves it to an
-// asset id — exactly how the GLBs are pulled in by each furniture's index.ts. An ESM
+// `.filamat` is registered in metro.config.js assetExts and a require() resolves it to an asset id — exactly how the GLBs are pulled in by each furniture's index.ts. An ESM
 // import would need a `declare module "*.filamat"` shim and would break that convention.
 const SOURCES: Record<Exclude<ShaderStyleId, "off">, number> = {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   toon: require("@/src/assets/materials/toon_v2.filamat"),
-  // ink_v2, not ink: a NEW asset path can't be served from a stale Metro/dev-client
-  // cache, and if it is missing Metro errors loudly. Filament SILENTLY IGNORES a
-  // setParameter for a name a material doesn't have, so a new shaders.ts against an old
-  // .filamat renders with no edges and no error — which is a miserable thing to debug.
+  // ink_v2, not ink: a NEW asset path can't be served from a stale Metro/dev-client cache, and if it is missing Metro errors loudly. Filament SILENTLY IGNORES a setParameter for a name a material doesn't have, so a new shaders.ts against an old .filamat renders with no edges and no error — which is a miserable thing to debug.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   ink: require("@/src/assets/materials/ink_v5.filamat"),
 };
@@ -316,22 +291,16 @@ function paramsFor(
         baseColor: override?.baseColor ?? TOON_BASE,
         liftColor: TOON_LIFT,
         specColor: TOON_SPEC,
-        // Three edges on N·L → FOUR flat tones (deep, mid, base, lift). Pushed low
-        // because a single key light leaves a lot of the model below 0.5, and the
-        // reference's darkest band is a large region, not a sliver.
+        // Three edges on N·L → FOUR flat tones (deep, mid, base, lift). Pushed low because a single key light leaves a lot of the model below 0.5, and the reference's darkest band is a large region, not a sliver.
         bandEdges: [0.18, 0.45, 0.78],
       },
       float: {
-        // The glint: a TIGHT blob with a hard edge. specPower sets its size,
-        // specThreshold cuts it off — that cut is what makes it a flat shape rather
-        // than a soft highlight, and it is the whole reason the surface reads as
-        // glossy vinyl instead of matte plastic.
+        // The glint: a TIGHT blob with a hard edge. specPower sets its size, specThreshold cuts it off — that cut is what makes it a flat shape rather than a soft highlight, and it is the whole reason the surface reads as glossy vinyl instead of matte plastic.
         specPower: 48,
         specThreshold: 0.35,
         specStrength: 0.9,
         lightScale: 1,
-        // A hard ramp turns shadow-map noise into a hard-edged dark PATCH rather than a
-        // soft smudge, so shadows stay off by default here — same reason as the ink look.
+        // A hard ramp turns shadow-map noise into a hard-edged dark PATCH rather than a soft smudge, so shadows stay off by default here — same reason as the ink look.
         shadowStrength: 0,
       },
     };
@@ -343,16 +312,13 @@ function paramsFor(
       baseColor: metal
         ? METAL_BASE
         : (override?.baseColor ?? (USE_TEXTURE ? INK_BASE : INK_BASE_PROCEDURAL)),
-      // Steel's shadow is COLD; wood's is warm. Swapping this one colour is most of what
-      // separates the two materials — more than the texture does.
+      // Steel's shadow is COLD; wood's is warm. Swapping this one colour is most of what separates the two materials — more than the texture does.
       shadeColor: metal ? METAL_SHADE : INK_SHADE,
       inkColor: INK_LINE,
       highlightColor: INK_HIGHLIGHT,
       keyDir: KEY_TO_LIGHT,
       grainAxis: GRAIN_AXIS[def.group] ?? GRAIN_AXIS_DEFAULT,
-      // Which faces are PANEL and which are TIMBER. Table top → its thickness axis, so the
-      // top and underside are panel and the four edges are timber. Leg → zero: solid stock
-      // on every face.
+      // Which faces are PANEL and which are TIMBER. Table top → its thickness axis, so the top and underside are panel and the four edges are timber. Leg → zero: solid stock on every face.
       capAxis: CAP_AXIS[def.group] ?? CAP_AXIS_DEFAULT,
       // A zero axis means "not round" — keep the box (triplanar) path.
       roundAxis: ROUND[def.group]?.axis ?? NOT_ROUND,
@@ -367,14 +333,12 @@ function paramsFor(
       // metal
       isMetal: metal ? 1 : 0,
       metalTiles: METAL_TILES,
-      // The glint. Cel shading throws Filament's specular away, so steel has to grow its
-      // own — without a highlight it is just grey plastic.
+      // The glint. Cel shading throws Filament's specular away, so steel has to grow its own — without a highlight it is just grey plastic.
       metalSpec: metal ? 0.55 : 0,
       metalSpecPower: 28,
       roundRadius: ROUND[def.group]?.radius ?? 0,
       rimAround: ROUND[def.group]?.around ? 1 : 0,
-      // A crisp changeover, so panel gives way to timber ON the rounded corner — which is
-      // exactly where a real edge-banded top changes material.
+      // A crisp changeover, so panel gives way to timber ON the rounded corner — which is exactly where a real edge-banded top changes material.
       capSharp: 8,
       plankScale: PLANKS[def.group] ?? PLANKS_DEFAULT,
       grainScale: GRAIN_STROKES,
@@ -383,31 +347,17 @@ function paramsFor(
       bands: 3,
       softness: 0.14,
       ambientLift: 0.42,
-      // 1.0 is now NEUTRAL: the shader divides by PI like Filament's own Lambert, so
-      // this look is exposed the same as every other against the same rig.
+      // 1.0 is now NEUTRAL: the shader divides by PI like Filament's own Lambert, so this look is exposed the same as every other against the same rig.
       lightScale: 1,
-      // Shadows OFF for this look. A cel ramp is brutally sensitive to shadow-map noise:
-      // any partial visibility lands the pixel in a different BAND, so acne that a smooth
-      // material hides as a faint smudge becomes a hard dark patch across half the table
-      // top. The ShadowPlane still grounds the model. Raise toward 1 if you want the legs
-      // to cast onto the top and can live with the speckle.
+      // Shadows OFF for this look. A cel ramp is brutally sensitive to shadow-map noise: any partial visibility lands the pixel in a different BAND, so acne that a smooth material hides as a faint smudge becomes a hard dark patch across half the table top. The ShadowPlane still grounds the model. Raise toward 1 if you want the legs to cast onto the top and can live with the speckle.
       shadowStrength: 0,
       // ── ink: OFF ──────────────────────────────────────────────────────────────────
       //
-      // lineDarkness 0 kills every ink term at once — contour, crease and edge — because
-      // they are all multiplied by it. The parameters below stay wired up for a model
-      // whose edges are big enough to carry a line; on LACK they are not.
+      // lineDarkness 0 kills every ink term at once — contour, crease and edge — because they are all multiplied by it. The parameters below stay wired up for a model whose edges are big enough to carry a line; on LACK they are not.
       //
-      // Why they had to go: the fillet on these parts is a 1 mm radius on a 49 mm leg,
-      // which is about 0.6 PIXELS on a phone. Every geometry-derived outline draws a line
-      // exactly as wide as the model's own edge, so the line is SUB-PIXEL — and a
-      // sub-pixel line cannot hold still. It flickers between pixels as the camera moves,
-      // which is precisely the shakiness you saw. No threshold fixes that; the only stable
-      // outline is one whose width comes from somewhere other than the geometry (an
-      // inverted hull), and that read as a sticker border on a model this soft-edged.
+      // Why they had to go: the fillet on these parts is a 1 mm radius on a 49 mm leg, which is about 0.6 PIXELS on a phone. Every geometry-derived outline draws a line exactly as wide as the model's own edge, so the line is SUB-PIXEL — and a sub-pixel line cannot hold still. It flickers between pixels as the camera moves, which is precisely the shakiness you saw. No threshold fixes that; the only stable outline is one whose width comes from somewhere other than the geometry (an inverted hull), and that read as a sticker border on a model this soft-edged.
       //
-      // The faceted shading below is what separates the faces now: each one is a single
-      // flat tone, so the corner reads as a clean tonal step instead of a drawn line.
+      // The faceted shading below is what separates the faces now: each one is a single flat tone, so the corner reads as a clean tonal step instead of a drawn line.
       lineDarkness: 0,
       contourPixels: 1.4,
       contourMaxFacing: 0.3,
@@ -418,12 +368,7 @@ function paramsFor(
       edgeInk: 0,
       highlightStrength: 0,
 
-      // Snap the shading normal to the part's nearest axis, so a rounded corner takes its
-      // FACE's tone instead of sweeping a gradient between two faces. Without this, the
-      // cel ramp smears a soft band across every fillet — which is what reads as a pair of
-      // vague vertical stripes down each leg and a horizontal split along the table top's
-      // edge band. Flat faces + crisp corners is what makes an illustration read as drawn.
-      // Drop to 0 to see the difference; there is no in-between worth shipping.
+      // Snap the shading normal to the part's nearest axis, so a rounded corner takes its FACE's tone instead of sweeping a gradient between two faces. Without this, the cel ramp smears a soft band across every fillet — which is what reads as a pair of vague vertical stripes down each leg and a horizontal split along the table top's edge band. Flat faces + crisp corners is what makes an illustration read as drawn. Drop to 0 to see the difference; there is no in-between worth shipping.
       facetStrength: 1,
     },
   };
@@ -521,17 +466,13 @@ function ensureMaterial(
   const needsTexture = style === "ink" && USE_TEXTURE;
 
   // runAsync returns a worklets-core THENABLE, not a real Promise: it has .then but no
-  // .catch, and it is not safe to await repeatedly. Promise.resolve adopts it once and
-  // hands back a genuine Promise, which is what makes it safe to cache here and await
-  // from all nine parts.
+  // .catch, and it is not safe to await repeatedly. Promise.resolve adopts it once and hands back a genuine Promise, which is what makes it safe to cache here and await from all nine parts.
   const promise = Promise.resolve(
     workletContext.runAsync(() => {
       "worklet";
       const material = engine.createMaterial(buffer);
       if (needsTexture) {
-        // Sampler params live on the Material's DEFAULT instance, so every instance made
-        // from it inherits the texture — one upload, nine parts. RNF binds with
-        // WrapMode::REPEAT, which is what makes the triplanar tiling work.
+        // Sampler params live on the Material's DEFAULT instance, so every instance made from it inherits the texture — one upload, nine parts. RNF binds with WrapMode::REPEAT, which is what makes the triplanar tiling work.
         material.setDefaultTextureParameter(renderableManager, "grainMap", grain, "sRGB");
         material.setDefaultTextureParameter(renderableManager, "sideMap", side, "sRGB");
         material.setDefaultTextureParameter(renderableManager, "metalMap", metalTex, "sRGB");
@@ -583,15 +524,11 @@ export function useShaderOverride(
   // Shared scene-level buffers (ShaderAssetsProvider) — an entity mount must never load assets itself; per-entity useBuffer re-fetched everything on every mode-transition remount and froze the JS thread (the pickup/snap stall). Empty context under the "off" look, which never reads them.
   const { buffer, grain, side, metal: metalTex } = useContext(ShaderAssetsCtx);
 
-  // The material resolves ASYNCHRONOUSLY (it is built on the render thread), so this
-  // state is what re-runs the apply-effect once it lands. Until then the part keeps its
-  // GLB material — a visible frame or two of plain wood, never a black or white part.
+  // The material resolves ASYNCHRONOUSLY (it is built on the render thread), so this state is what re-runs the apply-effect once it lands. Until then the part keeps its GLB material — a visible frame or two of plain wood, never a black or white part.
   const [material, setMaterial] = useState<any>(null);
   useEffect(() => {
     if (style === "off" || !buffer) return;
-    // BOTH maps must be uploaded before any instance is built: an instance copies the
-    // material's defaults AT CREATION, so one made before a sampler is bound reads black
-    // forever.
+    // BOTH maps must be uploaded before any instance is built: an instance copies the material's defaults AT CREATION, so one made before a sampler is bound reads black forever.
     if (style === "ink" && USE_TEXTURE && (!grain || !side || !metalTex)) return;
     let live = true;
     ensureMaterial(
@@ -629,8 +566,7 @@ export function useShaderOverride(
       );
     }
 
-    // Metal groups are no longer skipped: they render through the same material with the
-    // metal map and a cold shadow. Only a shader-free LOOK falls back to the GLB.
+    // Metal groups are no longer skipped: they render through the same material with the metal map and a cold shadow. Only a shader-free LOOK falls back to the GLB.
     if (style === "off") {
       slots.original.forEach((mi, i) =>
         renderableManager.setMaterialInstanceAt(entity, i, mi),
@@ -671,8 +607,7 @@ export function useShaderOverride(
       // The part keeps its GLB material rather than disappearing.
       if (__DEV__) console.log(`[shader:${style}] failed ${def.meshName}`, e);
     }
-    // `engine` is deliberately absent: this effect only creates MaterialInstances from
-    // an already-built `material`. The engine belongs to the effect above.
+    // `engine` is deliberately absent: this effect only creates MaterialInstances from an already-built `material`. The engine belongs to the effect above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [style, entity, material, renderableManager, def, override]);
 }

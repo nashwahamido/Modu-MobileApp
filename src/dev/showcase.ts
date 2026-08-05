@@ -1,14 +1,8 @@
-// Showcase mode: one-tap sign-in for a live demo, so nobody spends the first two minutes of their
-// turn typing an email. Two paths — prepared accounts (an established player with levels, coins and
-// a furnished room) and a FRESH account for showing onboarding through to the tutorial from scratch.
+// Showcase mode: one-tap sign-in for a live demo, so nobody spends the first two minutes of their turn typing an email. Two paths — prepared accounts (an established player with levels, coins and a furnished room) and a FRESH account for showing onboarding through to the tutorial from scratch.
 //
 // Kept apart from the dev roster in devAccounts.ts — see the note at the top of accounts.ts for why.
 //
-// EXPO_PUBLIC_SHOWCASE is the one switch: 1 = showcase, 0 = the dev roster instead (devAccounts.ts).
-// Not gated on __DEV__, on purpose — the showcase runs from a release build (no Metro), where __DEV__
-// is false. That also means anything in EXPO_PUBLIC_* is COMPILED INTO THE BUNDLE and readable by
-// anyone holding the app: throwaway accounts on a project with nothing real in it, and ship real
-// builds with EXPO_PUBLIC_SHOWCASE=0.
+// EXPO_PUBLIC_SHOWCASE is the one switch: 1 = showcase, 0 = the dev roster instead (devAccounts.ts). Not gated on __DEV__, on purpose — the showcase runs from a release build (no Metro), where __DEV__ is false. That also means anything in EXPO_PUBLIC_* is COMPILED INTO THE BUNDLE and readable by anyone holding the app: throwaway accounts on a project with nothing real in it, and ship real builds with EXPO_PUBLIC_SHOWCASE=0.
 //
 // Signing out is roster-agnostic — callers use signOutAccount from ./accounts directly.
 import { parseAccounts, signInToAccount, startFreshAccount } from "./accounts";

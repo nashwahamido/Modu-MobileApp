@@ -1,18 +1,14 @@
 // The account list embedded in the auth screen — the SIGNED-OUT half of the pair, with
-// AccountSwitcher (/settings) covering the signed-in half. Both read the same rosters.ts, so an
-// account added to env shows up on each without further wiring.
+// AccountSwitcher (/settings) covering the signed-in half. Both read the same rosters.ts, so an account added to env shows up on each without further wiring.
 //
-// Embedded in the screen rather than floated over the app: during a demo this is what an attendee
-// actually touches, so it has to look like part of the product. Themed with the app's own primitives
-// for that reason — unlike ordinary dev tooling, which stays deliberately plain. Self-gating: renders
-// null when no roster is live, so auth.tsx can mount it freely.
+// Embedded in the screen rather than floated over the app: during a demo this is what an attendee actually touches, so it has to look like part of the product. Themed with the app's own primitives for that reason — unlike ordinary dev tooling, which stays deliberately plain. Self-gating: renders null when no roster is live, so auth.tsx can mount it freely.
 import { useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import type { Href } from "expo-router";
 
-import { Button } from "@/src/game/ui/Button";
-import { SPACE, Theme, TYPE, useStyles } from "@/src/game/ui/theme";
+import { Button } from "@/src/game/ui/system/Button";
+import { SPACE, Theme, TYPE, useStyles } from "@/src/game/ui/system/theme";
 import { ENABLED_ROSTERS } from "./rosters";
 
 // A prepared account drops straight into its furnished room; a fresh one starts the questionnaire so the whole onboarding → tutorial run is on show.
@@ -73,8 +69,14 @@ export function AccountPicker() {
         </View>
       ))}
 
-      {busy ? <ActivityIndicator style={styles.spinner} /> : null}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {/* Out of the layout entirely, hanging below the column. Mounting the spinner inline pushed
+          the whole stack up — the screen centres this block vertically, so any height added at the
+          bottom moves everything. Reserving the space fixed the jump but spent the height
+          permanently; absolute costs nothing at rest and nothing on press. */}
+      <View style={styles.statusSlot}>
+        {busy ? <ActivityIndicator /> : null}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+      </View>
     </View>
   );
 }
@@ -87,6 +89,15 @@ const makeStyles = (t: Theme) =>
     divider: { flex: 1, height: 1, backgroundColor: t.border },
     dividerText: { ...TYPE.labelSm, color: t.textFaint },
     hint: { ...TYPE.labelSm, color: t.textFaint, textAlign: "center" },
+    statusSlot: {
+      position: "absolute",
+      top: "100%",
+      left: 0,
+      right: 0,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingTop: 6,
+    },
     spinner: { marginTop: SPACE.xs },
     error: { ...TYPE.labelSm, color: t.danger, textAlign: "center" },
   });

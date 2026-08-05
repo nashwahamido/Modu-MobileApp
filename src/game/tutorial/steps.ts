@@ -15,11 +15,15 @@ export type TutorialEvent =
   | "camera_recentered"
   | "pinch_zoomed"
   | "one_finger_panned"
+  | "underside_view_reached"
   | "part_picked_up"
   | "part_snapped"
+  | "all_legs_installed"
+  | "connector_placed"
+  | "connector_tightened"
+  | "assembly_reoriented"
   | "step_undone"
   | "step_redone"
-  | "display_preferences_confirmed"
   | "release_behavior_changed"
   | "instruction_preferences_changed"
   | "auto_view_toggled"
@@ -42,6 +46,7 @@ export interface TutorialStep {
   id: string;
   targetId: TutorialTargetId;
   message: string;
+  shortLabel?: string;
   event: TutorialEvent;
   audio?: TutorialAudioSource;
   when?: (context: TutorialContext) => boolean;
@@ -55,48 +60,68 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: "long-press-part",
     targetId: "partsTray",
-    message: "Long-press a panel card to pick it up.",
+    message: "Long-press a part card to pick it up.",
+    shortLabel: "Pick up the tabletop",
     event: "part_picked_up",
   },
   {
     id: "drag-and-snap",
     targetId: "assemblyArea",
-    message:
-      "Keep holding and drag the panel into the cabinet frame. Release when it lines up to snap.",
+    message: "Drag the part into place. Release when it lines up.",
+    shortLabel: "Place the tabletop",
     event: "part_snapped",
   },
   {
-    id: "choose-display-settings",
-    targetId: "settings",
-    message:
-      "Open Settings, preview Background and Lighting, then confirm your choices.",
-    event: "display_preferences_confirmed",
-  },
-  {
-    id: "rotate-with-joystick",
+    id: "view-under-table",
     targetId: "joystick",
-    message: "Use the left joystick to rotate around the cabinet.",
-    event: "joystick_moved",
+    message:
+      "Use the joystick to lower the view until you can clearly see underneath the tabletop.",
+    shortLabel: "View the underside",
+    event: "underside_view_reached",
   },
   {
-    id: "recenter-camera",
-    targetId: "recenter",
-    message: "Lost your view? Tap Recenter to return to the default angle.",
-    event: "camera_recentered",
+    id: "place-connector",
+    targetId: "partsTray",
+    message: "Long-press a bolt, then place it into the highlighted hole.",
+    shortLabel: "Insert the first bolt",
+    event: "connector_placed",
   },
   {
-    id: "pinch-to-zoom",
-    targetId: "scene",
-    message: "Pinch with two fingers to zoom in and check the details.",
-    event: "pinch_zoomed",
+    id: "select-allen-key",
+    targetId: "toolbar",
+    message: "Open the toolbox and select the Allen key.",
+    shortLabel: "Select the Allen key",
+    event: "toolbar_used",
   },
   {
-    id: "secure-with-tool",
+    id: "tighten-connector",
     targetId: "tool",
-    message: "Use the highlighted control to secure the part.",
-    event: "tool_used",
+    message: "Turn clockwise to tighten the bolt with the Allen key.",
+    shortLabel: "Tighten the bolt",
+    event: "connector_tightened",
+  },
+  {
+    id: "install-four-legs",
+    targetId: "partsTray",
+    message:
+      "Install the leg onto the bolt. Repeat the bolt, tool, and leg steps for all four legs.",
+    shortLabel: "Install all four legs",
+    event: "all_legs_installed",
+  },
+  {
+    id: "stand-table-upright",
+    targetId: "scene",
+    message:
+      "All four legs are installed. Swipe down on the orange card to stand the table upright and finish.",
+    shortLabel: "Stand the table upright",
+    event: "assembly_reoriented",
   },
 ];
+
+/** Canonical short copy for recording voice-over; audio assets can be attached later. */
+export const TUTORIAL_VOICE_OVER_SCRIPT = TUTORIAL_STEPS.map(
+  ({ id, message }) => ({ id, text: message }),
+);
 
 /**
  * Content ready for later, contextual moments. These are deliberately not part
@@ -173,7 +198,7 @@ export const FUTURE_TUTORIAL_REQUIREMENTS = {
 
 export const TUTORIAL_CONTENT_DECISIONS = {
   display:
-    "Teach Background and Lighting through the real Settings panel after the first placed part.",
+    "Teach Background through the real Settings panel after the first placed part.",
   guidedInstructions:
     "Teach Standard/Simple as the primary choice and mention Show instructions.",
   sequencing:
@@ -191,7 +216,7 @@ export const settingsTutorialStepsFor = (
 
 export function messageForToolStep(kind: ToolTutorialKind | null) {
   if (kind === "press")
-    return "Tap the hand four times to press the panel into place.";
+    return "Tap the hand four times to press the part into place.";
   if (kind === "tap") return "Tap repeatedly to drive it in.";
   if (kind === "beat") return "Swipe up or down to continue.";
   return "Trace the circle clockwise to tighten the connector.";

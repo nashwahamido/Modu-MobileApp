@@ -1,0 +1,80 @@
+// Sound effects, driven from the STORE rather than from the controls.
+//
+// Every gesture in this app ends in the same few store transitions — a part is held, an action completes, a tighten accumulates degrees. Subscribing once here means a new control gets its sounds for free, and no control has to remember to make a noise. It also keeps the audio out of the gesture path, which is the part that has to stay at 60fps.
+import { useEffect, useRef } from "react";
+import { actionCluster } from "@/src/game/core/evaluation/clusters";
+import { useGameStore } from "@/src/game/core/store";
+import { playSfx, preloadSfx } from "@/src/game/audio/sfx";
+import type { ActionId } from "@/src/game/core/type";
+
+/** Degrees of rotation between clicks. A tighten reports degrees continuously, so without a detent
+ *  this is not a click track but a buzz. 30 is roughly a sixth of a turn — frequent enough to feel
+ *  like progress, sparse enough to stay a sound rather than a texture. */
+const TICK_DEGREES = 30;
+
+export function useAssemblySfx(enabled: boolean): void {
+  const lastTickRef = useRef<Record<string, number>>({});
+  const prevCompletedRef = useRef(0);
+  const prevHeldRef = useRef<ActionId | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    preloadSfx();
+
+    // Seed from the CURRENT state, not from zero: resuming a saved build would otherwise replay a seat sound for every step already finished.
+    const start = useGameStore.getState();
+    prevCompletedRef.current = start.completed.length;
+    prevHeldRef.current = start.heldActionId;
+    lastTickRef.current = Object.fromEntries(
+      Object.entries(start.tightenDeg).map(([id, deg]) => [id, Math.floor(deg / TICK_DEGREES)]),
+    );
+
+    return useGameStore.subscribe((s) => {
+      // ── picking up and putting down ──────────────────────────────────────
+      if (s.heldActionId !== prevHeldRef.current) {
+        if (s.heldActionId) playSfx("pickup");
+        // Only a genuine put-back: a release that COMPLETED the action is a seat, and the seat sound fires below. Playing both would double up on every successful placement.
+        else if (s.completed.length === prevCompletedRef.current) playSfx("drop");
+        prevHeldRef.current = s.heldActionId;
+      }
+
+      // ── an action finishing ──────────────────────────────────────────────
+      if (s.completed.length > prevCompletedRef.current) {
+        const justDone = s.completed[s.completed.length - 1];
+        // The finished build is deliberately SILENT here: the completion screen has its own celebration, and a fanfare firing the instant the last action lands would collide with it.
+        if (s.furniture) {
+          const action = s.furniture.actions.find((a) => a.actionId === justDone);
+          const cluster = action ? actionCluster(s.furniture, action) : null;
+          const clusterDone =
+            cluster != null &&
+            s.furniture.actions
+              .filter((a) => actionCluster(s.furniture!, a) === cluster)
+              .every((a) => s.completed.includes(a.actionId));
+          playSfx(clusterDone ? "stage" : "seat");
+        } else {
+          playSfx("seat");
+        }
+        prevCompletedRef.current = s.completed.length;
+      } else if (s.completed.length < prevCompletedRef.current) {
+        // Undo. Silent on purpose — a sound here would reward going backwards.
+        prevCompletedRef.current = s.completed.length;
+      }
+
+      // ── turning a fastener ───────────────────────────────────────────────
+      for (const [id, deg] of Object.entries(s.tightenDeg)) {
+        const detent = Math.floor(Math.abs(deg) / TICK_DEGREES);
+        if (detent !== (lastTickRef.current[id] ?? 0)) {
+          // Only on the way IN. Backing a screw out should not sound like progress.
+          if (detent > (lastTickRef.current[id] ?? 0)) playSfx("tick");
+          lastTickRef.current[id] = detent;
+        }
+      }
+    });
+  }, [enabled]);
+}
+
+/** The mallet. Fired by the tap controls directly rather than from the subscription: a strike is an
+ *  INPUT event, and its sound has to land with the finger, not one store update later. */
+export function playTapSfx(): void {
+  playSfx("tap");
+}
