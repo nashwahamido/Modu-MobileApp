@@ -16,6 +16,7 @@ import { useSceneState } from "@/src/game/scene/useSceneState";
 //Input Controls
 import { Joystick } from "@/src/game/input/Joystick";
 import { useOrbitCamera } from "@/src/game/input/useOrbitCamera";
+import { useAssemblySfx } from "@/src/game/audio/useAssemblySfx";
 import { usePartDrag } from "@/src/game/input/usePartDrag";
 import { BeatControl } from "@/src/game/input/BeatControl";
 import { TapControl } from "@/src/game/input/TapControl";
@@ -240,6 +241,8 @@ function GameScreen() {
     (m) => m !== "hidden" && m !== "socket_hint",
   );
 
+  // Gated on the existing accessibility flag, so a profile that asks for a quiet build gets one.
+  useAssemblySfx(settings.soundEffects);
   const hintGroup = useGameStore((s) => s.hintGroup);
   const hintPulse = useGameStore((s) => s.hintPulse);
   // The Spot marker is a ONE-SHOT: it pulses for a few seconds and puts itself out. Keyed on

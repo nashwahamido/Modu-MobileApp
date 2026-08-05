@@ -30,7 +30,7 @@ import Reanimated, {
   withTiming,
 } from "react-native-reanimated";
 import type { ReactNode } from "react";
-import type { PressableProps, StyleProp, TextStyle, ViewProps, ViewStyle } from "react-native";
+import type { PressableProps, StyleProp, ViewProps, ViewStyle } from "react-native";
 
 /** Flat, not a ramp — the intro is one card on an empty field and a gradient behind it only pulled
  *  the eye off the thing being read. */

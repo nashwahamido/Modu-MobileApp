@@ -19,9 +19,10 @@ interface Props {
   header?: ReactNode;
 }
 
-/** A light wash of the interactive lavender — the accent at low strength, so it reads as the same
- *  colour family without competing with the buttons that use it at full strength. */
-const OBJECTIVE_WASH = "#E7E1F1";
+/** A light wash of the Continue blue (#A9BFD9), lifted toward white. Light enough that ink on it
+ *  reads at 10.7:1, dark enough to still separate from the bar's cream — at the paler end of the
+ *  ramp the pill stops looking like an inset and starts looking like a gap. */
+const OBJECTIVE_WASH = "#C3D3E6";
 
 export function ObjectiveBar({ line, fontSize, value, total, xp, header }: Props) {
   const styles = useStyles(makeStyles);
@@ -140,6 +141,7 @@ const makeStyles = (t: Theme) =>
       width: 7,
       height: 7,
       borderRadius: 4,
+      // Stays lavender: it marks the live task, and the accent is what "act on this" means here.
       backgroundColor: t.accent,
     },
     objectiveText: {

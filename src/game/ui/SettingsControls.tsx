@@ -3,7 +3,7 @@
 // Visual language adopted from the on-release engine: a compact arrow Stepper (‹ Value ›) for multi-choice settings, Switch rows for booleans.
 import { StyleSheet, Alert, Pressable, Switch, Text, View } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
-import { useStyles, useTheme } from "@/src/game/ui/theme";
+import { useStyles, useTheme, FONT } from "@/src/game/ui/theme";
 import type {
   DragPlane,
   GhostStyle,
@@ -378,6 +378,12 @@ export function SettingsControls() {
         value={settings.audio}
         onValueChange={(v) => setSettings({ audio: v })}
       />
+      <Row
+        label="Sound effects"
+        desc="Taps, screws and completion sounds"
+        value={settings.soundEffects}
+        onValueChange={(v) => setSettings({ soundEffects: v })}
+      />
     </View>
   );
 }
@@ -386,7 +392,7 @@ const makeStyles = (t: Theme) =>
   StyleSheet.create({
   list: { gap: 2 },
   section: {
-    fontSize: 12,
+    fontFamily: FONT, fontSize: 12,
     fontWeight: "800",
     letterSpacing: 0.5,
     textTransform: "uppercase",
@@ -411,8 +417,8 @@ const makeStyles = (t: Theme) =>
     borderTopColor: t.border,
   },
   rowText: { flex: 1, paddingRight: 12 },
-  rowLabel: { fontSize: 15, fontWeight: "700", color: t.text },
-  rowDesc: { fontSize: 12, color: t.textDim, marginTop: 2 },
+  rowLabel: { fontFamily: FONT, fontSize: 15, fontWeight: "700", color: t.text },
+  rowDesc: { fontFamily: FONT, fontSize: 12, color: t.textDim, marginTop: 2 },
   stepper: {
     flexDirection: "row",
     alignItems: "center",
@@ -441,14 +447,14 @@ const makeStyles = (t: Theme) =>
   // Active segment = ACCENT, not success green. Green means a step is DONE; a chosen
   // setting is a live selection, which is what the accent means.
   segBtnActive: { backgroundColor: t.accent, borderColor: t.accent },
-  segText: { fontSize: 12.5, fontWeight: "700", color: t.textDim, textAlign: "center" },
+  segText: { fontFamily: FONT, fontSize: 12.5, fontWeight: "700", color: t.textDim, textAlign: "center" },
   segTextActive: { color: t.onAccent },
   arrow: { paddingHorizontal: 12, paddingVertical: 6 },
-  arrowText: { fontSize: 20, fontWeight: "700", color: t.accent, lineHeight: 22 },
+  arrowText: { fontFamily: FONT, fontSize: 20, fontWeight: "700", color: t.accent, lineHeight: 22 },
   stepperValue: {
     minWidth: 92,
     textAlign: "center",
-    fontSize: 13,
+    fontFamily: FONT, fontSize: 13,
     fontWeight: "700",
     color: t.text,
   },
@@ -471,6 +477,6 @@ const makeStyles = (t: Theme) =>
     marginTop: 4,
   },
   resetRowIdle: { opacity: 0.45 },
-  resetText: { fontSize: 15, fontWeight: "700", color: t.danger },
-  resetDesc: { fontSize: 12, color: t.textDim, marginTop: 2 },
+  resetText: { fontFamily: FONT, fontSize: 15, fontWeight: "700", color: t.danger },
+  resetDesc: { fontFamily: FONT, fontSize: 12, color: t.textDim, marginTop: 2 },
   });

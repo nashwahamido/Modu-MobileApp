@@ -4,7 +4,7 @@ import { StyleSheet, Image, Text, View } from "react-native";
 
 import { Button } from "@/src/game/ui/Button";
 import { AccountPicker } from "@/src/dev/AccountPicker";
-import { SPACE, TYPE, useStyles, FONT } from "@/src/game/ui/theme";
+import { SPACE, useStyles, FONT } from "@/src/game/ui/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import type { Theme } from "@/src/game/ui/theme";
 
