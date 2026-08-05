@@ -8,19 +8,12 @@ import Svg, { Circle, Path } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChevronIcon } from '../../components/Icons';
 import { ASSEMBLE_ICON, INVENTORY_ICON, SHOP_ICON, VISIT_FRIENDS_ICON, YOU_ICON } from '../../components/iconAssets';
-import { ELEVATION, useStyles, useTheme } from "@/src/game/ui/theme";
+import { ELEVATION, useStyles, useTheme, LEXEND } from "@/src/game/ui/theme";
 import type { Theme } from "@/src/game/ui/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN } from '../../hooks/use-safe-insets';
 
-// Pinned to the mockup rather than the theme, so it holds across light/dark.
+// This bar's text is pinned to the mockup's exact ink colour rather than the theme's t.text — a deliberate override for this redesign, not an oversight, so it does not shift with the light/dark/high-contrast theme. The family is the app-wide Lexend.
 const TEXT_COLOR = '#231F20';
-const LEXEND = {
-  regular: 'Lexend_400Regular',
-  semibold: 'Lexend_600SemiBold',
-  bold: 'Lexend_700Bold',
-  extrabold: 'Lexend_800ExtraBold',
-  black: 'Lexend_900Black',
-} as const;
 
 // Reanimated, not RN's LayoutAnimation, which doesn't fire reliably on the New Architecture
 const BAR_LAYOUT = LinearTransition.duration(220);
@@ -285,7 +278,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   },
   // Matched to the shop's category labels so both bars share a type scale
   barLabel: {
-    fontFamily: LEXEND.regular,
+    ...LEXEND.regular,
     fontSize: 12,
     lineHeight: 16,
     color: TEXT_COLOR,

@@ -2,11 +2,10 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Animated, Image, StyleSheet, Text, View } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
+import { avatarForProfile } from "@/src/game/core/avatar";
 import { ProgressBar } from "@/src/game/ui/Button";
 import { Theme, useStyles } from "@/src/game/ui/theme";
 import { advance, type Milestone } from "./loadingProgress";
-
-const mascotImage = require("../../assets/images/mascot/mascot.png");
 
 /** Ring content: the onboarding mascot, or a profile initial (the assembly loader's avatar slot). */
 export type LoadingAvatar = "mascot" | { initial: string };
@@ -45,6 +44,8 @@ export function LoadingScreen({
 }: Props) {
   const styles = useStyles(makeStyles);
   const fontScale = useGameStore((s) => s.settings.fontScale);
+  const profile = useGameStore((s) => s.profile);
+  const mascotImage = avatarForProfile(profile);
   const [fraction, setFraction] = useState(0);
   const opacity = useRef(new Animated.Value(1)).current;
   const finishing = useRef(false);

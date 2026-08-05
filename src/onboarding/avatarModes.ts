@@ -6,7 +6,6 @@ export type AvatarMode = {
   title: string;
   avatarName: string;
   personality: string;
-  slogan: string;
   explanation: string;
   bullets: string[];
 };
@@ -17,8 +16,7 @@ export const avatarModes: AvatarMode[] = [
     color: "#f5eee5",
     title: "Visual Mode",
     avatarName: "Lumi",
-    personality: "Clear, Gentle, and Visual-first",
-    slogan: "I will show you everything!",
+    personality: "Curious, Observant, Imaginative",
     explanation:
       "For users who may find text-heavy instructions tiring and prefer visual demonstrations.",
     bullets: [
@@ -32,12 +30,10 @@ export const avatarModes: AvatarMode[] = [
     color: "#ffe08a",
     title: "Momentum Mode",
     avatarName: "Sparky",
-    personality: "Energetic but Easily Scattered",
-    slogan: "Keep me moving with small wins and clear progress!",
+    personality: "Enthusiastic, encouraging, optimistic",
     explanation:
       "For users who lose motivation when progress is unclear or after interruptions.",
     bullets: [
-      "One visible action at a time",
       "Clear progress and gentle reminders",
       "Small achievements with strong feedback",
     ],
@@ -46,9 +42,8 @@ export const avatarModes: AvatarMode[] = [
     id: "clearPath",
     color: "#dff2e4",
     title: "Clear Path Mode",
-    avatarName: "Ciara",
-    personality: "Calm, Precise, and Reassuring",
-    slogan: "Show the next step clearly, then we can make it.",
+    avatarName: "Pebble",
+    personality: "Calm, organised, reliable",
     explanation:
       "For users who feel stressed when instructions are vague or part orientation is ambiguous.",
     bullets: [
@@ -62,13 +57,12 @@ export const avatarModes: AvatarMode[] = [
     color: "#d7c8ff",
     title: "Control Mode",
     avatarName: "Felix",
-    personality: "Independent but Adaptable",
-    slogan: "I am in control of how much help I need.",
+    personality: "Independent, adaptable, quick-witted",
     explanation: "For users whose support needs may change during the task.",
     bullets: [
       "Adjustable support level",
       "Hint, sound, text, and overlay controls",
-      "Pause and resume with flexible guidance",
+      "flexible guidance control",
     ],
   },
 ];

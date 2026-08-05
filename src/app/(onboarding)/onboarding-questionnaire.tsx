@@ -1,11 +1,13 @@
 import { router } from "expo-router";
 import type { Href } from "expo-router";
 import * as Speech from "@/src/onboarding/speech";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Animated, Image, Pressable, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import {
   getRecommendedModes,
+  questionnaireHandednessPrompt,
+  questionnaireIntroText,
   questionnaireIntroVoiceText,
   questions,
   type Handedness,
@@ -13,18 +15,208 @@ import {
 } from "@/src/onboarding/questionnaire";
 import { VoiceButton } from "@/src/game/ui/VoiceButton";
 import { Button } from "@/src/game/ui/Button";
-import { SPACE, TYPE, ELEVATION, useStyles } from "@/src/game/ui/theme";
+import { SPACE, TYPE, ELEVATION, useStyles, FONT } from "@/src/game/ui/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import { saveOnboardingResults } from "@/src/services/onboarding";
 import type { Theme } from "@/src/game/ui/theme";
 
-const mascot = require("../../assets/images/mascot/mascot.png");
+import Reanimated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
+import type { ReactNode } from "react";
+import type { PressableProps, StyleProp, ViewProps, ViewStyle } from "react-native";
+
+/** Flat, not a ramp — the intro is one card on an empty field and a gradient behind it only pulled
+ *  the eye off the thing being read. */
+const BG_SOLID = "#A9BFD9";
+/** The card's rim. Lavender at 3pt, matching the catalogue's selected-card treatment. */
+const BUBBLE_RIM = "#8D7BA8";
+/** One source for the bubble's width: the reveal animates a clip to exactly this, and the card
+ *  inside is pinned to it so nothing squeezes as the clip opens. */
+const BUBBLE_W = 470;
+
+/** The intro entrance, as one block: the mascot arrives, then its speech bubble, then what it says,
+ *  then the thing you press. Every value is the moment that element starts. */
+const INTRO_STAGE = {
+  mascot: 120,
+  bubble: 620,
+  text: 1080,
+  /** Between the greeting, the question and the two choices. */
+  lineStep: 420,
+} as const;
+
+/** Scales up past its resting size and settles. */
+function PopIn({ delay, style, children }: { delay: number; style?: StyleProp<ViewStyle>; children: ReactNode }) {
+  const on = useSharedValue(0);
+  useEffect(() => {
+    on.value = withDelay(delay, withSpring(1, { damping: 10, stiffness: 180, mass: 0.8 }));
+  }, [delay, on]);
+  const anim = useAnimatedStyle(() => ({
+    opacity: Math.min(1, on.value * 3),
+    transform: [{ scale: 0.6 + on.value * 0.4 }],
+  }));
+  return <Reanimated.View style={[style, anim]}>{children}</Reanimated.View>;
+}
+
+/** The bubble UNROLLS left to right: an outer clip whose width animates from zero, with the card
+ *  held at full width inside it so nothing squeezes as the clip opens. A scale-up read as a card
+ *  appearing; a wipe reads as speech arriving from the character's side. */
+function BubbleReveal({
+  delay,
+  width,
+  style,
+  children,
+}: {
+  delay: number;
+  width: number;
+  style?: StyleProp<ViewStyle>;
+  children: ReactNode;
+}) {
+  const on = useSharedValue(0);
+  useEffect(() => {
+    on.value = withDelay(delay, withTiming(1, { duration: 460, easing: Easing.out(Easing.cubic) }));
+  }, [delay, on]);
+  const clip = useAnimatedStyle(() => ({ width: width * on.value }));
+  return (
+    <Reanimated.View style={[{ overflow: "hidden" }, clip]}>
+      <View style={[style, { width }]}>{children}</View>
+    </Reanimated.View>
+  );
+}
+
+
+/** Opens from small. The pinch gesture wraps this, so it has to be a plain animated View that
+ *  forwards its props — hence collapsable, which GestureDetector needs on Android. */
+function ZoomIn({
+  style,
+  collapsable,
+  onLayout,
+  children,
+}: {
+  style?: StyleProp<ViewStyle>;
+  collapsable?: boolean;
+  onLayout?: ViewProps["onLayout"];
+  children: ReactNode;
+}) {
+  const on = useSharedValue(0);
+  useEffect(() => {
+    on.value = withSpring(1, { damping: 14, stiffness: 190, mass: 0.8 });
+  }, [on]);
+  const anim = useAnimatedStyle(() => ({
+    opacity: Math.min(1, on.value * 2.5),
+    transform: [{ scale: 0.82 + on.value * 0.18 }],
+  }));
+  return (
+    <Reanimated.View style={[style, anim]} collapsable={collapsable} onLayout={onLayout}>
+      {children}
+    </Reanimated.View>
+  );
+}
+
+/** A card that swells when it becomes the chosen one. Spring, not timing: the overshoot is what
+ *  makes the press feel like it landed rather than like a style change. */
+function ScaleOnSelect({
+  selected,
+  style,
+  children,
+  ...rest
+}: {
+  selected: boolean;
+  style?: StyleProp<ViewStyle>;
+  children: ReactNode;
+} & Omit<PressableProps, "style" | "children">) {
+  const on = useSharedValue(0);
+  useEffect(() => {
+    on.value = withSpring(selected ? 1 : 0, { damping: 12, stiffness: 220, mass: 0.6 });
+  }, [on, selected]);
+  const anim = useAnimatedStyle(() => ({ transform: [{ scale: 1 + on.value * 0.055 }] }));
+  return (
+    <Reanimated.View style={[styles_cardFlex, anim]}>
+      <Pressable style={style} {...rest}>
+        {children}
+      </Pressable>
+    </Reanimated.View>
+  );
+}
+
+/** The animated wrapper has to carry the row's flex, or the cards stop sharing the width evenly. */
+const styles_cardFlex = { flex: 1 };
+
+/** Each line drops in from above, in reading order. */
+function SlideInDown({ delay, style, children }: { delay: number; style?: StyleProp<ViewStyle>; children: ReactNode }) {
+  const on = useSharedValue(0);
+  useEffect(() => {
+    on.value = withDelay(delay, withTiming(1, { duration: 340, easing: Easing.out(Easing.cubic) }));
+  }, [delay, on]);
+  const anim = useAnimatedStyle(() => ({
+    opacity: on.value,
+    transform: [{ translateY: -22 * (1 - on.value) }],
+  }));
+  return <Reanimated.View style={[style, anim]}>{children}</Reanimated.View>;
+}
+
+/** The ring breathing behind Next. Swells and fades rather than pulsing the button, which has to
+ *  stay a stable target. */
+function NextHalo() {
+  const on = useSharedValue(0);
+  useEffect(() => {
+    on.value = withRepeat(withTiming(1, { duration: 1400, easing: Easing.out(Easing.quad) }), -1, false);
+  }, [on]);
+  const anim = useAnimatedStyle(() => ({
+    opacity: 0.5 * (1 - on.value),
+    transform: [{ scale: 1 + on.value * 0.18 }],
+  }));
+  return <Reanimated.View style={[HALO, anim]} pointerEvents="none" />;
+}
+
+const HALO = {
+  position: "absolute" as const,
+  left: -10,
+  right: -10,
+  top: -10,
+  bottom: -10,
+  borderRadius: 999,
+  borderWidth: 3,
+  borderColor: BUBBLE_RIM,
+};
+/** The progress fill. Its own value rather than t.accent: the accent IS the gradient's first stop,
+ *  so a lavender bar on a lavender backdrop had almost nothing to read against. */
+const PROGRESS_FILL = "#8FA876";
+
+const mascot = require("../../assets/images/questionnaire/whole.png");
 const q3ManualReference = require("../../assets/images/questionnaire/q3-manual-reference.png");
-const optionExpressionImages = [
-  require("../../assets/images/mascot/expressions/luna-expression-1.png"),
-  require("../../assets/images/mascot/expressions/luna-expression-2.png"),
-  require("../../assets/images/mascot/expressions/luna-expression-3.png"),
-  require("../../assets/images/mascot/expressions/luna-expression-4.png"),
+const questionOptionImages = [
+  [
+    require("../../assets/images/questionnaire/cry.png"),
+    require("../../assets/images/questionnaire/starteye.png"),
+    require("../../assets/images/questionnaire/calm.png"),
+  ],
+  [
+    require("../../assets/images/questionnaire/cry.png"),
+    require("../../assets/images/questionnaire/curious.png"),
+    require("../../assets/images/questionnaire/happy.png"),
+  ],
+  [
+    require("../../assets/images/questionnaire/cry.png"),
+    require("../../assets/images/questionnaire/curious.png"),
+    require("../../assets/images/questionnaire/happy.png"),
+  ],
+  [
+    require("../../assets/images/questionnaire/starteye.png"),
+    require("../../assets/images/questionnaire/calm.png"),
+    require("../../assets/images/questionnaire/happy.png"),
+  ],
+  [
+    require("../../assets/images/questionnaire/cry.png"),
+    require("../../assets/images/questionnaire/curious.png"),
+    require("../../assets/images/questionnaire/starteye.png"),
+  ],
 ];
 
 export default function QuestionnaireScreen() {
@@ -42,6 +234,13 @@ export default function QuestionnaireScreen() {
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const referenceScaleRef = useRef(1);
   const referencePinchStartScaleRef = useRef(1);
+  // Where the zoomed page has been dragged to, in view units. Kept in a ref as well as state for the
+  // same reason the scale is: the gesture reads the CURRENT value on every frame, and state lags.
+  const [referenceOffset, setReferenceOffset] = useState({ x: 0, y: 0 });
+  const referenceOffsetRef = useRef({ x: 0, y: 0 });
+  const referencePanStartRef = useRef({ x: 0, y: 0 });
+  // Measured, not assumed: the clamp needs the real box to know how far there is left to travel.
+  const referenceBoxRef = useRef({ w: 0, h: 0 });
   const navHintAnim = useRef(new Animated.Value(0)).current;
   const question = questions[index];
   const selectedAnswer = answers[index];
@@ -93,6 +292,8 @@ export default function QuestionnaireScreen() {
     referenceScaleRef.current = 1;
     referencePinchStartScaleRef.current = 1;
     setReferenceScale(1);
+    referenceOffsetRef.current = { x: 0, y: 0 };
+    setReferenceOffset({ x: 0, y: 0 });
   }, [referenceExpanded]);
 
   useEffect(() => {
@@ -187,6 +388,18 @@ export default function QuestionnaireScreen() {
     setIndex((current) => current + 1);
   };
 
+  /** How far the page may be dragged at the current scale: the overhang on each side, and nothing
+   *  more. At scale 1 there is no overhang, so panning is a no-op rather than a way to lose the
+   *  image off the edge of the screen. */
+  const clampOffset = useCallback((x: number, y: number, scale: number) => {
+    const maxX = Math.max(0, (referenceBoxRef.current.w * (scale - 1)) / 2);
+    const maxY = Math.max(0, (referenceBoxRef.current.h * (scale - 1)) / 2);
+    return {
+      x: Math.min(maxX, Math.max(-maxX, x)),
+      y: Math.min(maxY, Math.max(-maxY, y)),
+    };
+  }, []);
+
   const referencePinch = useMemo(
     () =>
       Gesture.Pinch()
@@ -198,29 +411,85 @@ export default function QuestionnaireScreen() {
           const nextScale = Math.min(3.2, Math.max(1, referencePinchStartScaleRef.current * event.scale));
           referenceScaleRef.current = nextScale;
           setReferenceScale(nextScale);
+          // Zooming OUT has to pull the page back into bounds, or it stays stranded off-centre.
+          const pulled = clampOffset(
+            referenceOffsetRef.current.x,
+            referenceOffsetRef.current.y,
+            nextScale,
+          );
+          referenceOffsetRef.current = pulled;
+          setReferenceOffset(pulled);
         }),
+    [clampOffset],
+  );
+
+  const referencePan = useMemo(
+    () =>
+      Gesture.Pan()
+        .runOnJS(true)
+        .onBegin(() => {
+          referencePanStartRef.current = referenceOffsetRef.current;
+        })
+        .onUpdate((event) => {
+          const next = clampOffset(
+            referencePanStartRef.current.x + event.translationX,
+            referencePanStartRef.current.y + event.translationY,
+            referenceScaleRef.current,
+          );
+          referenceOffsetRef.current = next;
+          setReferenceOffset(next);
+        }),
+    [clampOffset],
+  );
+
+  /** A single tap closes. The card is 84%x88% of the screen and now has no background, so the empty
+   *  area around the letterboxed page LOOKS like outside but is still the card — taps there were
+   *  landing on it rather than on the backdrop behind. Handling the tap here covers both. */
+  const referenceTap = useMemo(
+    () =>
+      Gesture.Tap()
+        .runOnJS(true)
+        .maxDuration(250)
+        .onEnd(() => setReferenceExpanded(false)),
     [],
+  );
+
+  /** Simultaneous, not exclusive: a two-finger zoom also drifts, and having to lift and re-place to
+   *  reposition is the thing that makes a zoom view feel stuck. The tap is exclusive against the
+   *  other two, so a drag or a pinch never registers as a tap on release. */
+  const referenceGesture = useMemo(
+    () => Gesture.Exclusive(Gesture.Simultaneous(referencePinch, referencePan), referenceTap),
+    [referencePan, referencePinch, referenceTap],
   );
 
   if (!introComplete) {
     return (
-      <View style={styles.root}>
+      <View
+        style={[
+          styles.root,
+          {
+            paddingLeft: 44 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+            paddingRight: 44 + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN),
+            paddingTop: 22 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
+            paddingBottom: 22 + Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN),
+          },
+        ]}
+      >
         <View style={styles.introStage}>
-          <View style={styles.mascotCircle}>
+          <PopIn delay={INTRO_STAGE.mascot} style={styles.mascotCircle}>
             <Image source={mascot} style={styles.introMascot} />
-            
-          </View>
-          <View style={styles.speechBubble}>
-            <VoiceButton onPress={speakIntro} />
-            <Text style={styles.introText}>
-              Hey! I am momo, your assembly assistant! Before you get started,
-              let us complete a short questionnaire to help you find the best
-              help mode!
-            </Text>
-            <Text style={styles.introPrompt}>
-              Before starting, tell me - are you left or right-handed?
-            </Text>
-            <View style={styles.handOptions}>
+          </PopIn>
+          {/* The button is a SIBLING of the reveal, not a child of it: the wipe needs overflow
+              hidden, and anything hanging over the bubble's edge gets clipped by that same rule. */}
+          <View style={styles.bubbleWrap}>
+            <BubbleReveal delay={INTRO_STAGE.bubble} width={BUBBLE_W} style={styles.speechBubble}>
+            <SlideInDown delay={INTRO_STAGE.text}>
+              <Text style={styles.introText}>{questionnaireIntroText}</Text>
+            </SlideInDown>
+            <SlideInDown delay={INTRO_STAGE.text + INTRO_STAGE.lineStep}>
+              <Text style={styles.introPrompt}>{questionnaireHandednessPrompt}</Text>
+            </SlideInDown>
+            <SlideInDown delay={INTRO_STAGE.text + INTRO_STAGE.lineStep * 2} style={styles.handOptions}>
               <Pressable
                 onPress={() => setHandedness("left")}
                 style={[
@@ -241,9 +510,26 @@ export default function QuestionnaireScreen() {
                 <Text style={styles.handIcon}>R</Text>
                 <Text style={styles.handText}>right</Text>
               </Pressable>
-            </View>
+            </SlideInDown>
+            </BubbleReveal>
+            <VoiceButton onPress={speakIntro} style={styles.bubbleVoice} />
           </View>
         </View>
+        {/* Not rendered at all until a hand is chosen. A disabled button sitting there through the
+            whole introduction is a dead control the eye keeps returning to; appearing on the choice
+            makes it the consequence of the choice. */}
+        {handedness ? (
+        <PopIn
+          delay={0}
+          style={[
+            styles.introNextWrap,
+            {
+              right: 28 + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN),
+              bottom: 24 + Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN),
+            },
+          ]}
+        >
+          <NextHalo />
         <Button
           label="Next"
           variant="primary"
@@ -256,6 +542,8 @@ export default function QuestionnaireScreen() {
           }}
           style={styles.introNextButton}
         />
+        </PopIn>
+        ) : null}
       </View>
     );
   }
@@ -277,7 +565,14 @@ export default function QuestionnaireScreen() {
           {index + 1}/{questions.length}
         </Text>
         <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: progressWidth }]} />
+          <View
+            style={[
+              styles.progressFill,
+              // Green is DONE, and the last question is not done until it is answered.
+              index === questions.length - 1 && !!selectedAnswer && styles.progressFillComplete,
+              { width: progressWidth },
+            ]}
+          />
         </View>
         <View
           style={[
@@ -381,11 +676,13 @@ export default function QuestionnaireScreen() {
             }}
             style={styles.referencePanel}
           >
-            <Image
-              source={q3ManualReference}
-              style={styles.referencePanelImage}
-              resizeMode="contain"
-            />
+            <View style={styles.referenceImageClip}>
+              <Image
+                source={q3ManualReference}
+                style={styles.referencePanelImage}
+                resizeMode="contain"
+              />
+            </View>
             <View style={styles.referenceZoomPill}>
               <Text style={styles.referenceZoomIcon}>+</Text>
               <Text style={styles.referencePanelText}>Tap to zoom</Text>
@@ -394,11 +691,11 @@ export default function QuestionnaireScreen() {
         )}
         {question.options.map((option, optionIndex) => {
           const selected = option === selectedAnswer;
-          const expressionImage =
-            optionExpressionImages[optionIndex % optionExpressionImages.length];
+          const expressionImage = questionOptionImages[index][optionIndex];
           return (
-            <Pressable
+            <ScaleOnSelect
               key={option}
+              selected={selected}
               disabled={saving}
               onPress={() => chooseAnswer(option)}
               style={[
@@ -446,7 +743,7 @@ export default function QuestionnaireScreen() {
               >
                 {option}
               </Text>
-            </Pressable>
+            </ScaleOnSelect>
           );
         })}
       </View>
@@ -457,13 +754,30 @@ export default function QuestionnaireScreen() {
             onPress={() => setReferenceExpanded(false)}
             style={styles.referenceOverlayBackdrop}
           />
-          <GestureDetector gesture={referencePinch}>
-            <View style={styles.referenceExpandedCard} collapsable={false}>
+          <GestureDetector gesture={referenceGesture}>
+            <ZoomIn
+              style={styles.referenceExpandedCard}
+              collapsable={false}
+              onLayout={(e) => {
+                referenceBoxRef.current = {
+                  w: e.nativeEvent.layout.width,
+                  h: e.nativeEvent.layout.height,
+                };
+              }}
+            >
               <Image
                 source={q3ManualReference}
                 style={[
                   styles.referenceExpandedImage,
-                  { transform: [{ scale: referenceScale }] },
+                  {
+                    // Translate BEFORE scale: the offsets are clamped in view units, and scaling
+                    // first would multiply them and let the page slide past its own bounds.
+                    transform: [
+                      { translateX: referenceOffset.x },
+                      { translateY: referenceOffset.y },
+                      { scale: referenceScale },
+                    ],
+                  },
                 ]}
                 resizeMode="contain"
               />
@@ -472,7 +786,7 @@ export default function QuestionnaireScreen() {
                   Pinch to zoom · Tap outside to close
                 </Text>
               </View>
-            </View>
+            </ZoomIn>
           </GestureDetector>
         </View>
       )}
@@ -484,7 +798,7 @@ const makeStyles = (t: Theme) =>
   StyleSheet.create({
     root: {
       flex: 1,
-      backgroundColor: t.bg,
+      backgroundColor: BG_SOLID,
       // Padding is applied inline (base + safe inset) so the questionnaire clears the cutout
       // and the immersive-hidden bars the same way every other screen does.
     },
@@ -493,11 +807,14 @@ const makeStyles = (t: Theme) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      gap: 28,
+      gap: 20,
+      // Room at the foot for the Next button and its halo, so the bubble clears it — but modest:
+      // too much and the row is pushed into the top margin instead.
+      paddingBottom: 58,
     },
     mascotCircle: {
-      width: 190,
-      height: 190,
+      width: 150,
+      height: 150,
       alignItems: "center",
       justifyContent: "center",
       overflow: "hidden",
@@ -507,31 +824,37 @@ const makeStyles = (t: Theme) =>
       backgroundColor: t.surface,
     },
     introMascot: {
-      width: 128,
-      height: 128,
-      borderRadius: 30,
+      width: "100%",
+      height: "100%",
+      transform: [{ scale: 1.55 }],
     },
     introMascotModel: {
       ...StyleSheet.absoluteFillObject,
     },
     speechBubble: {
-      width: 560,
-      minHeight: 216,
-      borderRadius: 42,
+      width: BUBBLE_W,
+      minHeight: 190,
+      borderRadius: 36,
       backgroundColor: t.surface,
-      paddingHorizontal: 44,
-      paddingVertical: 28,
-      gap: 18,
+      borderWidth: 3,
+      borderColor: BUBBLE_RIM,
+      paddingHorizontal: 32,
+      paddingVertical: 24,
+      gap: 14,
     },
+    // Straddling the top-left corner of the rim. Absolute, so it contributes no height — in the flow
+    // it was pushing every line of the message down by its own 44pt.
+    bubbleWrap: { position: "relative" },
+    bubbleVoice: { position: "absolute", top: -20, left: 22, zIndex: 3 },
     introText: {
       color: t.text,
-      fontSize: 17,
+      fontFamily: FONT, fontSize: 17,
       fontWeight: "600",
       lineHeight: 24,
     },
     introPrompt: {
       color: t.text,
-      fontSize: 18,
+      fontFamily: FONT, fontSize: 18,
       fontStyle: "italic",
       fontWeight: "800",
       textAlign: "center",
@@ -557,7 +880,7 @@ const makeStyles = (t: Theme) =>
     },
     handIcon: {
       color: t.text,
-      fontSize: 28,
+      fontFamily: FONT, fontSize: 28,
       fontWeight: "900",
     },
     handText: {
@@ -566,12 +889,11 @@ const makeStyles = (t: Theme) =>
       fontWeight: "800",
     },
     // Layout only — the fill, radius, and padding now come from the shared Button.
-    introNextButton: {
-      position: "absolute",
-      right: 54,
-      bottom: 30,
-      minWidth: 116,
-    },
+    // Outside the bubble entirely: it is what you do NEXT, not part of what Modu is saying.
+    // Offsets are set at the call site from the safe insets: an absolute child is not inset by the
+    // parent's padding, so a literal here could never account for the device.
+    introNextWrap: { position: "absolute" },
+    introNextButton: { minWidth: 116 },
     questionHeader: {
       flexDirection: "row",
       alignItems: "center",
@@ -580,7 +902,7 @@ const makeStyles = (t: Theme) =>
     stepText: {
       width: 52,
       color: t.text,
-      fontSize: 18,
+      fontFamily: FONT, fontSize: 18,
       fontWeight: "900",
       textAlign: "right",
     },
@@ -596,6 +918,8 @@ const makeStyles = (t: Theme) =>
       borderRadius: SPACE.sm,
       backgroundColor: t.accent,
     },
+    // Green is reserved for DONE in this palette, so the bar only earns it on the last question.
+    progressFillComplete: { backgroundColor: PROGRESS_FILL },
     navArrow: { width: 26, height: 26 },
     navArrowDisabled: { opacity: 0.3 },
     navButtons: {
@@ -622,7 +946,7 @@ const makeStyles = (t: Theme) =>
     },
     navText: {
       color: t.text,
-      fontSize: 42,
+      fontFamily: FONT, fontSize: 42,
       fontWeight: "900",
       lineHeight: 42,
     },
@@ -634,47 +958,39 @@ const makeStyles = (t: Theme) =>
       paddingRight: 52,
       paddingTop: 68,
     },
+    // Both bubbles hold two short lines and one glyph. The old padding was sized for a card and
+    // left more empty space than message.
     navHintCard: {
-      width: 320,
+      width: 300,
       borderColor: t.accent,
-      borderRadius: 22,
+      borderRadius: 20,
       borderWidth: 3,
       backgroundColor: t.surface,
-      paddingHorizontal: 18,
-      paddingVertical: 14,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      gap: 4,
       ...ELEVATION.card,
     },
     voiceHintCard: {
-      width: 330,
+      width: 300,
       borderColor: t.accent,
-      borderRadius: 22,
+      borderRadius: 20,
       borderWidth: 3,
       backgroundColor: t.surface,
-      paddingHorizontal: 18,
-      paddingVertical: SPACE.lg,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      gap: 4,
       ...ELEVATION.card,
     },
-    voiceHintIconWrap: {
-      width: 54,
-      height: 54,
-      alignItems: "center",
-      justifyContent: "center",
-      borderColor: t.border,
-      borderRadius: 27,
-      borderWidth: 1,
-      backgroundColor: t.surface,
-      marginBottom: 10,
-    },
+    // No second ring: VoiceButton draws its own, and the wrapper's was a circle around a circle.
+    voiceHintIconWrap: { alignSelf: "flex-start", marginBottom: 4 },
+    // Bare arrows. The frame around them read as a control you could press — it is a picture of
+    // the buttons up in the header, not a copy of them.
     navHintArrowDemo: {
       alignSelf: "flex-end",
       flexDirection: "row",
-      gap: 14,
-      borderColor: t.accent,
-      borderRadius: 20,
-      borderWidth: 2,
-      backgroundColor: t.surfaceRaised,
-      paddingHorizontal: 10,
-      marginBottom: SPACE.sm,
+      gap: 12,
+      marginBottom: 2,
     },
     navHint: {
       position: "absolute",
@@ -691,13 +1007,13 @@ const makeStyles = (t: Theme) =>
     },
     navHintTitle: {
       color: t.accent,
-      fontSize: 15,
+      fontFamily: FONT, fontSize: 15,
       fontWeight: "900",
       marginBottom: SPACE.xs,
     },
     navHintText: {
       color: t.text,
-      fontSize: 14,
+      fontFamily: FONT, fontSize: 14,
       fontWeight: "700",
       lineHeight: 19,
     },
@@ -707,12 +1023,14 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       gap: 14,
       paddingTop: 0,
-      marginBottom: 4,
+      // The audio buttons now hang over the cards' top rim, so the gap has to clear the BUTTON, not
+      // the card — at 4 they were colliding with the question line.
+      marginBottom: 26,
     },
     prompt: {
       flex: 1,
       color: t.text,
-      fontSize: 15,
+      fontFamily: FONT, fontSize: 15,
       fontWeight: "900",
       lineHeight: 19,
     },
@@ -728,22 +1046,17 @@ const makeStyles = (t: Theme) =>
       color: t.success,
       fontWeight: "800",
     },
-    referencePanel: {
-      width: 230,
-      height: 252,
-      alignItems: "center",
-      justifyContent: "center",
-      overflow: "hidden",
-      borderColor: t.border,
-      borderRadius: SPACE.md,
-      borderWidth: 2,
-      backgroundColor: t.surface,
-      paddingHorizontal: SPACE.sm,
-      paddingVertical: SPACE.sm,
-    },
+    // No container: the instruction art IS the panel. A card around a picture that already has its
+    // own white field was two boxes deep for one thing to look at.
+    // Narrower than before so the three answer cards get the width back — on this question the
+    // captions are the longest in the set and were wrapping to four lines in a tall thin box.
+    referencePanel: { width: 178, alignItems: "center", gap: 8 },
+    // The rounding lives on a CLIPPING wrapper, not on the Image: borderRadius on an Image with
+    // resizeMode contain leaves the letterboxed field square on Android.
+    referenceImageClip: { width: "100%", borderRadius: 18, overflow: "hidden" },
     referencePanelImage: {
       width: "100%",
-      height: 210,
+      height: 172,
     },
     referenceZoomPill: {
       minWidth: 116,
@@ -761,13 +1074,13 @@ const makeStyles = (t: Theme) =>
     },
     referenceZoomIcon: {
       color: t.accent,
-      fontSize: 14,
+      fontFamily: FONT, fontSize: 14,
       fontWeight: "900",
       lineHeight: 14,
     },
     referencePanelText: {
       color: t.accent,
-      fontSize: 10,
+      fontFamily: FONT, fontSize: 10,
       fontWeight: "900",
       lineHeight: 12,
       textAlign: "center",
@@ -785,25 +1098,35 @@ const makeStyles = (t: Theme) =>
       gap: 22,
     },
     optionCard: {
-      flex: 1,
-      height: 176,
+      // width, NOT flex. The card now sits inside ScaleOnSelect's wrapper, which is a column — so
+      // `flex: 1` there meant "fill the available HEIGHT" and quietly beat the height below. The
+      // wrapper carries the row's flex; the card just fills it.
+      width: "100%",
+      // 152 is what the contents actually need at full size: 14 padding + 66 circle + 10 gap +
+      // three 16pt lines + 14 padding. The old 176 was that plus a 44pt gutter for an audio button
+      // that now hangs on the rim, so the card loses the gutter and keeps everything else.
+      height: 152,
       alignItems: "center",
-      justifyContent: "flex-start",
+      // The card is art then words, with the space shared between them rather than pooled at the
+      // bottom — "flex-start" left the picture stranded at the top and the caption on the floor.
+      justifyContent: "center",
       borderColor: t.border,
       borderRadius: 24,
       borderWidth: 2,
       backgroundColor: t.surface,
-      paddingHorizontal: 14,
-      // room at the top for the audio button now pinned there
-      paddingTop: 44,
+      paddingHorizontal: 16,
+      // No top gutter for the audio button any more: it hangs on the rim, so the card is sized by
+      // its contents and the caption gets the room the gutter used to take.
+      paddingTop: 14,
       paddingBottom: 14,
+      gap: 10,
     },
     compactOptionCard: {
-      height: 238,
-      justifyContent: "flex-start",
+      height: 196,
+      justifyContent: "center",
       paddingHorizontal: 14,
       paddingTop: 14,
-      paddingBottom: 44,
+      paddingBottom: 14,
     },
     selectedOptionCard: {
       borderColor: t.accent,
@@ -814,58 +1137,59 @@ const makeStyles = (t: Theme) =>
       height: 66,
       alignItems: "center",
       justifyContent: "center",
+      overflow: "hidden",
       borderColor: t.gold,
       borderRadius: 33,
       borderWidth: 1,
       backgroundColor: t.surface,
     },
     expressionSlot: {
-      height: 72,
+      height: 66,
       alignItems: "center",
       justifyContent: "center",
     },
     compactExpressionSlot: {
-      height: 92,
+      height: 76,
     },
     compactExpressionCircle: {
-      width: 86,
-      height: 86,
-      borderRadius: 43,
+      width: 74,
+      height: 74,
+      borderRadius: 37,
     },
     selectedExpressionCircle: {
       borderColor: t.accent,
     },
     optionMascot: {
-      width: 54,
-      height: 54,
-      borderRadius: 16,
+      width: "100%",
+      height: "100%",
+      transform: [{ scale: 1.55 }],
     },
     compactOptionMascot: {
-      width: 68,
-      height: 68,
-      borderRadius: 18,
+      width: "100%",
+      height: "100%",
     },
+    // Left-aligned inside a full-width block: centred captions of different lengths gave three
+    // cards three different silhouettes, and the eye reads a common left edge faster.
     optionText: {
+      width: "100%",
       color: t.textDim,
-      fontSize: 12,
+      fontFamily: FONT, fontSize: 12,
       fontWeight: "700",
-      lineHeight: 15,
-      marginTop: 4,
-      minHeight: 45,
-      textAlign: "center",
+      lineHeight: 16,
+      textAlign: "left",
     },
     compactOptionText: {
-      minHeight: 76,
-      fontSize: 13,
+      fontFamily: FONT, fontSize: 13,
       lineHeight: 17,
       marginTop: 6,
       paddingHorizontal: 2,
     },
+    // Straddling the card's top-left corner, matching the speech bubble's button.
     optionAudioButton: {
       position: "absolute",
-      top: 10,
-      left: 10,
-      zIndex: 2,
+      top: -14,
+      left: 12,
+      zIndex: 3,
     },
     selectedOptionText: {
       color: t.accent,
@@ -882,14 +1206,14 @@ const makeStyles = (t: Theme) =>
       ...StyleSheet.absoluteFillObject,
       backgroundColor: t.scrim,
     },
+    // No card. The manual page is white artwork on its own — a cream panel with a gold rim around
+    // it was a frame around a frame, and it is what made the zoom read as a document viewer rather
+    // than as the page itself.
     referenceExpandedCard: {
       width: "84%",
       height: "88%",
       overflow: "hidden",
-      borderColor: t.gold,
       borderRadius: 24,
-      borderWidth: 3,
-      backgroundColor: t.surface,
     },
     referenceExpandedImage: {
       width: "100%",

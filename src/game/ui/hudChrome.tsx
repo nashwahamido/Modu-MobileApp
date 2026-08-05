@@ -101,7 +101,7 @@ export function HintButton({
       source={require("@/src/assets/ui/icons/icon-hint.png")}
       onPress={onPress}
       style={style}
-      accessibilityLabel="Show a hint"
+      accessibilityLabel="Spot the next part"
     />
   );
 }
@@ -202,10 +202,13 @@ export const tutorialChrome = {
   },
   toolTarget: {
     position: "absolute",
-    right: 150,
-    bottom: 28,
-    width: 140,
-    height: 160,
+    // Match TightenControl exactly (right:220, bottom:120, 144×144).
+    // Keeping this in the same HUD coordinate space makes the tutorial
+    // spotlight surround the purple clockwise dial instead of its old area.
+    right: 220,
+    bottom: 120,
+    width: 144,
+    height: 144,
   },
   undoTarget: {
     position: "absolute",

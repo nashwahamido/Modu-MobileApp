@@ -26,7 +26,7 @@ import { useGameStore } from "@/src/game/core/store";
 import Svg, { Circle as SvgCircle, Defs, RadialGradient, Stop } from "react-native-svg";
 import { StarBadge } from "@/src/game/ui/Icons";
 import { CoinMedalIcon } from "@/src/components/Icons";
-import { Theme, useStyles, useTheme } from "@/src/game/ui/theme";
+import { Theme, useStyles, useTheme, FONT } from "@/src/game/ui/theme";
 import { useRepos } from "@/src/data";
 import { useCatalogRow } from "@/src/data/catalogStore";
 import { HUD_SIDE_MARGIN, HUD_VERTICAL_MARGIN } from "@/src/hooks/use-safe-insets";
@@ -216,7 +216,9 @@ export function BuildMap() {
             style={styles.close}
             // Paused mid-build → resume. Nothing chosen yet → there is nothing to resume
             // to, so the only way out is back to the catalogue.
-            onPress={() => (mustChoose ? router.back() : closeMap())}
+            onPress={() =>
+              mustChoose ? router.dismissTo("/catalogue") : closeMap()
+            }
             hitSlop={10}
             accessibilityLabel={mustChoose ? "Leave this build" : "Start building"}
           >
@@ -586,7 +588,7 @@ const makeStyles = (t: Theme) =>
       zIndex: 2,
       elevation: 2,
     },
-    closeGlyph: { color: "#FBF8F3", fontSize: 16, fontWeight: "800" },
+    closeGlyph: { color: "#FBF8F3", fontFamily: FONT, fontSize: 16, fontWeight: "800" },
 
     // Top-left of the card, opposite the close button. Absolute so it cannot push the
     // centred title off centre.
@@ -600,7 +602,7 @@ const makeStyles = (t: Theme) =>
       gap: 6,
     },
     homeIcon: { width: 26, height: 26 },
-    homeText: { fontSize: 13, fontWeight: "700", color: INK },
+    homeText: { fontFamily: FONT, fontSize: 13, fontWeight: "700", color: INK },
     titleRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -608,7 +610,7 @@ const makeStyles = (t: Theme) =>
       gap: 8,
       marginBottom: 10,
     },
-    title: { fontSize: 18, fontWeight: "800", color: t.text },
+    title: { fontFamily: FONT, fontSize: 18, fontWeight: "800", color: t.text },
 
     // ── the nodes ─────────────────────────────────────────────────────────
     nodeRow: {
@@ -705,7 +707,7 @@ const makeStyles = (t: Theme) =>
     stepCount: {
       position: "absolute",
       bottom: 10,
-      fontSize: 9,
+      fontFamily: FONT, fontSize: 9,
       fontWeight: "700",
       color: INK,
     },
@@ -739,7 +741,7 @@ const makeStyles = (t: Theme) =>
     },
     starText: {
       position: "absolute",
-      fontSize: 9,
+      fontFamily: FONT, fontSize: 9,
       fontWeight: "800",
       color: t.onAccent,
       textAlign: "center",
@@ -747,7 +749,7 @@ const makeStyles = (t: Theme) =>
 
     nodeLabel: {
       marginTop: 8,
-      fontSize: 13,
+      fontFamily: FONT, fontSize: 13,
       fontWeight: "700",
       color: INK,
       textAlign: "center",
@@ -780,7 +782,7 @@ const makeStyles = (t: Theme) =>
     },
     progressLabel: {
       textAlign: "center",
-      fontSize: 10,
+      fontFamily: FONT, fontSize: 10,
       fontWeight: "700",
       color: INK,
     },
@@ -837,16 +839,16 @@ const makeStyles = (t: Theme) =>
       borderWidth: 1,
       borderColor: "rgba(35,31,32,0.12)",
     },
-    itemGlyph: { fontSize: 14, fontWeight: "800", color: INK },
+    itemGlyph: { fontFamily: FONT, fontSize: 14, fontWeight: "800", color: INK },
     xpIcon: { width: 26, height: 26 },
     rewardKicker: {
-      fontSize: 9,
+      fontFamily: FONT, fontSize: 9,
       fontWeight: "800",
       letterSpacing: 1,
       color: "#FBF8F3",
     },
     rewardRow: { flexDirection: "row", gap: 6, alignSelf: "stretch" },
-    rewardText: { fontSize: 10, fontWeight: "700", color: INK },
+    rewardText: { fontFamily: FONT, fontSize: 10, fontWeight: "700", color: INK },
 
   switcher: {
     position: "absolute",
@@ -891,11 +893,11 @@ const makeStyles = (t: Theme) =>
   discDisabled: { opacity: 0.5 },
 
   discText: {
-    fontSize: 9.5,
+    fontFamily: FONT, fontSize: 9.5,
     fontWeight: "800",
     color: t.text,
     textAlign: "center",
   },
-  discTextSelected: { fontSize: 11, color: t.onAccent },
+  discTextSelected: { fontFamily: FONT, fontSize: 11, color: t.onAccent },
   discTextFinished: { color: t.text },
   });

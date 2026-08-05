@@ -3,26 +3,19 @@ import { router } from 'expo-router';
 import type { Href } from 'expo-router';
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useStyles } from "@/src/game/ui/theme";
+import { useStyles, LEXEND } from "@/src/game/ui/theme";
 import type { Theme } from "@/src/game/ui/theme";
 import { COIN_ICON, STAR_ICON } from '../../components/iconAssets';
 import { levelProgressFraction } from '../../data/levels';
 import { useProfileHud } from '../../hooks/useProfileHud';
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN } from '../../hooks/use-safe-insets';
 
-// Pinned to the mockup rather than the theme, so it holds across light/dark
+// This bar's text is pinned to the mockup's exact ink colour rather than the theme's t.text — a deliberate override for this redesign, not an oversight, so it does not shift with the light/dark/high-contrast theme. The family is the app-wide Lexend.
 const TEXT_COLOR = '#231F20';
 // How far each bar is tucked under its icon, so it reads as flowing out from behind it
 const BAR_TUCK = 30;
 // Negative = up, A five-point star reads low even when its box is centred
 const LEVEL_ICON_NUDGE_Y = -3;
-const LEXEND = {
-  regular: 'Lexend_400Regular',
-  semibold: 'Lexend_600SemiBold',
-  bold: 'Lexend_700Bold',
-  extrabold: 'Lexend_800ExtraBold',
-  black: 'Lexend_900Black',
-} as const;
 
 export function RoomTopStats() {
   const s = useStyles(makeStyles);
@@ -99,7 +92,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   levelNumber: {
     position: 'absolute',
     color: '#FBFAF3',
-    fontFamily: LEXEND.bold,
+    ...LEXEND.bold,
     fontSize: 13,
     transform: [{ translateY: LEVEL_ICON_NUDGE_Y }],
   },
@@ -124,7 +117,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   progressText: {
     width: '100%',
     color: TEXT_COLOR,
-    fontFamily: LEXEND.semibold,
+    ...LEXEND.semibold,
     fontSize: 12,
     textAlign: 'center',
   },
@@ -143,7 +136,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   },
   currencyText: {
     color: TEXT_COLOR,
-    fontFamily: LEXEND.bold,
+    ...LEXEND.bold,
     fontSize: 12,
   },
 });

@@ -31,6 +31,7 @@ interface TutorialState {
   rewardReady: boolean;
   settingsReady: boolean;
   stepRewardReady: boolean;
+  attentionOverlayActive: boolean;
   lastCompletedStepLabel: string | null;
   stepRewardsClaimed: number;
   acceptsEventsAfter: number;
@@ -45,6 +46,7 @@ interface TutorialState {
   skip: () => void;
   dismissStepReward: () => void;
   dismissReward: () => void;
+  setAttentionOverlayActive: (active: boolean) => void;
   resetTutorial: () => void;
 }
 
@@ -58,6 +60,7 @@ const resetState = (context: TutorialContext) => ({
   rewardReady: false,
   settingsReady: false,
   stepRewardReady: false,
+  attentionOverlayActive: false,
   lastCompletedStepLabel: null,
   stepRewardsClaimed: 0,
   acceptsEventsAfter: 0,
@@ -158,8 +161,8 @@ export const useTutorialStore = create<TutorialState>()((set, get) => ({
         if (state.phase === "core") {
           set({
             completed: true,
-            settingsReady: false,
-            rewardReady: true,
+            settingsReady: true,
+            rewardReady: false,
             pendingAdvanceStepId: null,
           });
         } else {
@@ -197,5 +200,7 @@ export const useTutorialStore = create<TutorialState>()((set, get) => ({
     }),
   dismissStepReward: () => set({ stepRewardReady: false }),
   dismissReward: () => set({ rewardReady: false }),
+  setAttentionOverlayActive: (attentionOverlayActive) =>
+    set({ attentionOverlayActive }),
   resetTutorial: () => set(resetState(get().context)),
 }));

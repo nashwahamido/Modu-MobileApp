@@ -70,7 +70,6 @@ export function seedBuildCatalog(): BuildCatalogRow[] {
     { id: "lack-table", name: "LACK Table", brand: "IKEA", type: "Table & Chair", durationMin: 8 },
     { id: "eket-cabinet", name: "EKET Cabinet", brand: "IKEA", type: "Shelf & Cabinet", durationMin: 35 },
     { id: "bekvam-stool", name: "BEKVÄM Stool", brand: "IKEA", type: "Other", durationMin: 15 },
-    { id: "tutorial", name: "Tutorial", brand: "Others", type: "Shelf & Cabinet", durationMin: 5 },
   ];
 }
 
@@ -81,7 +80,6 @@ export function seedBuiltItems(): Record<FurnitureId, { name: string; category: 
     "bekvam-stool": { name: "BEKVÄM Stool", category: "fur" },
     "dalfred-stool": { name: "DALFRED Stool", category: "fur" },
     "lack-table": { name: "LACK Table", category: "fur" },
-    tutorial: { name: "Tutorial", category: "fur" },
   };
 }
 
@@ -123,7 +121,6 @@ export function seedInventory(): Record<UserId, ShopItemId[]> {
 export function seedItemVariants(): ItemVariant[] {
   const v = (itemId: string, variation: string | null, isDefault = false): ItemVariant => ({ itemId, variation, isDefault });
   return [
-    v("tutorial", null, true),
     v("eket-cabinet", "black", true),
     v("eket-cabinet", "white"),
     v("eket-cabinet", "wooden"),

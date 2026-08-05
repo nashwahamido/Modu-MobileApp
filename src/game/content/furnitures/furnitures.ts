@@ -3,10 +3,9 @@ import { DALFRED_META } from "./DALFRED/meta";
 import { LACK_META } from "./LACK/meta";
 import { EKET_META } from "./EKET/meta";
 import { BEKVAM_META } from "./BEKVAM/meta";
-import { TUTORIAL_META } from "./TUTORIAL/meta";
 
 /** Lightweight list for the furniture picker (no heavy payload loaded). Every entry is shown — the picker no longer hides any. */
-export const FURNITURE_METAS: FurnitureMeta[] = [DALFRED_META, LACK_META, EKET_META, BEKVAM_META, TUTORIAL_META];
+export const FURNITURE_METAS: FurnitureMeta[] = [DALFRED_META, LACK_META, EKET_META, BEKVAM_META];
 
 /** Lazy loaders for the full build payload. Adding a furniture = one line. */
 export const FURNITURE_LOADERS: Record<FurnitureId, () => Promise<Furniture>> = {
@@ -14,7 +13,6 @@ export const FURNITURE_LOADERS: Record<FurnitureId, () => Promise<Furniture>> = 
   "lack-table": () => import("./LACK").then((m) => m.LACK),
   "eket-cabinet": () => import("./EKET").then((m) => m.EKET),
   "bekvam-stool": () => import("./BEKVAM").then((m) => m.BEKVAM),
-  "tutorial": () => import("./TUTORIAL").then((m) => m.TUTORIAL),
 };
 
 /** True when a catalogue entry has a composable, playable payload. */

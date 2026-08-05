@@ -16,6 +16,7 @@ import { useSceneState } from "@/src/game/scene/useSceneState";
 //Input Controls
 import { Joystick } from "@/src/game/input/Joystick";
 import { useOrbitCamera } from "@/src/game/input/useOrbitCamera";
+import { useAssemblySfx } from "@/src/game/audio/useAssemblySfx";
 import { usePartDrag } from "@/src/game/input/usePartDrag";
 import { BeatControl } from "@/src/game/input/BeatControl";
 import { TapControl } from "@/src/game/input/TapControl";
@@ -73,7 +74,6 @@ import {
 } from "@/src/game/ui/hudChrome";
 import { useTheme } from "@/src/game/ui/theme";
 import {
-  buildPhase,
   combineReady,
   requiresClusterFocus,
 } from "@/src/game/core/evaluation/clusters";
@@ -87,6 +87,10 @@ import { backdropSource } from "@/src/game/ui/backdrops";
 // Dev
 import { DevAutoStep } from "@/src/dev/DevAutoStep";
 import { DevMenu } from "@/src/dev/DevMenu";
+
+/** How long the Spot marker pulses before putting itself out. Long enough to find with the eye,
+ *  short enough that it never becomes part of the scene's furniture. */
+const SPOT_MS = 2800;
 
 function GameScreen() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
@@ -152,19 +156,12 @@ function GameScreen() {
     const watchdog = setTimeout(() => setLoadError(true), 45000);
     return () => clearTimeout(watchdog);
   }, [loaderVisible, loadError, modelReady, retryKey]);
-  // The objective bar reports the BUILD MAP's phase (base → seat → combine), not the authored stage number — those count beats across the whole build and would read
-  // "Stage 4" on a three-node map.
-  // These two derivations walk the whole action graph. Subscribing to `completed` by
-  // REFERENCE and deriving in a useMemo keeps them off the hot path: as written inside
-  // selectors they re-ran on every store write, including each setDragFit during a drag.
+  // Subscribe to `completed` by REFERENCE and derive from it off the hot path:
+  // setDragFit writes on every drag frame.
   const completed = useGameStore((s) => s.completed);
   const completedSet = useMemo(() => new Set(completed), [completed]);
   const activeCluster = useGameStore((s) => s.activeCluster);
   const mode = useGameStore((s) => s.mode);
-  const stage = useMemo(
-    () => (furniture ? buildPhase(furniture, completedSet, activeCluster).index : 1),
-    [furniture, completedSet, activeCluster],
-  );
   const settings = useGameStore((s) => s.settings);
 
   // Dev-setting: float mode vs auto return
@@ -245,8 +242,19 @@ function GameScreen() {
     (m) => m !== "hidden" && m !== "socket_hint",
   );
 
+  // Gated on the existing accessibility flag, so a profile that asks for a quiet build gets one.
+  useAssemblySfx(settings.soundEffects);
   const hintGroup = useGameStore((s) => s.hintGroup);
   const hintPulse = useGameStore((s) => s.hintPulse);
+  // The Spot marker is a ONE-SHOT: it pulses for a few seconds and puts itself out. Keyed on
+  // hintPulse as well as the part, so pressing Spot twice for the same part restarts the window
+  // rather than being swallowed as "no change".
+  const spotPartId = useGameStore((s) => s.hintPartId);
+  useEffect(() => {
+    if (!spotPartId) return;
+    const t = setTimeout(() => useGameStore.getState().clearSpot(), SPOT_MS);
+    return () => clearTimeout(t);
+  }, [spotPartId, hintPulse]);
 
   // select tool
   const selectedTool = useGameStore((s) => s.selectedTool);
@@ -398,11 +406,9 @@ function GameScreen() {
           />
           {/* Instructions hidden → only the progress bar stays (slim pill). */}
           <ObjectiveBar
-            line={
-              settings.showInstructions
-                ? `Stage ${stage} · ${objective} · ${completedCount}/${totalCount}`
-                : null
-            }
+            // The sentence only. The step count rides on the progress row inside the bar — keeping it
+            // out of here is what stops the line's length changing with the count.
+            line={settings.showInstructions ? objective : null}
             fontSize={objectiveFontSize}
             value={completedCount}
             total={totalCount}

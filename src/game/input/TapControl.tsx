@@ -8,6 +8,8 @@ import { AssemblyAction } from "@/src/game/core/type";
 import { MALLET_TAPS, TIGHTEN_TOTAL_DEG, useGameStore } from "@/src/game/core/store";
 import type { OffsetDriver } from "../scene/offsetDriver";
 
+import { FONT } from "@/src/game/ui/theme";
+import { playTapSfx } from "@/src/game/audio/useAssemblySfx";
 const SIZE = 120;
 
 interface Props {
@@ -46,6 +48,7 @@ export function TapControl({ action, sinkDriver }: Props) {
     .runOnJS(true)
     .onEnd(() => {
       const store = useGameStore.getState();
+      playTapSfx();
       store.addTightenDeg(action.actionId, degPerTap);
       const total = store.tightenDeg[action.actionId] ?? 0;
       const p = Math.min(1, total / TIGHTEN_TOTAL_DEG);
@@ -121,6 +124,6 @@ const styles = StyleSheet.create({
     borderWidth: 4,
     borderColor: "#8D7BA8",
   },
-  icon: { fontSize: 44 },
-  hint: { fontSize: 12, color: "#6b6257", fontWeight: "600" },
+  icon: { fontFamily: FONT, fontSize: 44 },
+  hint: { fontFamily: FONT, fontSize: 12, color: "#6b6257", fontWeight: "600" },
 });

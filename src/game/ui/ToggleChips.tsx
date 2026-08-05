@@ -28,12 +28,17 @@ export function ToggleChips() {
         accessibilityLabel="Focus mode"
       />
       {settings.focusMode ? null : (
+        // Spot is a ONE-SHOT, not a toggle: it fires an arrow at the next socket and puts itself
+        // out. Hence always "secondary" — a chip that stayed lit would claim a mode is on.
+        // The autoView SETTING still exists and still has its switch in Settings; this chip is no
+        // longer its control.
         <Button
-          label="Auto-View"
+          label="Spot"
           small
           pill
-          variant={settings.autoView ? "primary" : "secondary"}
-          onPress={() => setSettings({ autoView: !settings.autoView })}
+          variant="secondary"
+          onPress={() => useGameStore.getState().suggestNext()}
+          accessibilityLabel="Spot the next part"
         />
       )}
     </View>
