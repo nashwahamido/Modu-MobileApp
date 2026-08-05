@@ -2,7 +2,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Animated, Image, StyleSheet, Text, View } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
-import { avatarForProfile } from "@/src/game/core/avatar";
+import { avatarForProfile } from "@/src/components/avatarAssets";
 import { ProgressBar } from "@/src/game/ui/Button";
 import { Theme, useStyles } from "@/src/game/ui/theme";
 import { advance, type Milestone } from "./loadingProgress";
