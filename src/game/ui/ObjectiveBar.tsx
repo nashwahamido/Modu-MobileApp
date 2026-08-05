@@ -19,6 +19,10 @@ interface Props {
   header?: ReactNode;
 }
 
+/** A light wash of the interactive lavender — the accent at low strength, so it reads as the same
+ *  colour family without competing with the buttons that use it at full strength. */
+const OBJECTIVE_WASH = "#E7E1F1";
+
 export function ObjectiveBar({ line, fontSize, value, total, xp, header }: Props) {
   const styles = useStyles(makeStyles);
   const expanded = line !== null || header != null;
@@ -49,8 +53,13 @@ export function ObjectiveBar({ line, fontSize, value, total, xp, header }: Props
         // ONE line, fixed. The instruction changes on every step and its length changes with it, so
         // a box that sizes to its content made the bar breathe in and out under the player's eyes.
         // overflow:hidden is load-bearing — it is what the new line drops in from behind.
-        <View style={{ height: lineHeight, justifyContent: "center", overflow: "hidden" }}>
-          <Animated.View style={lineAnim}>
+        <View
+          style={[styles.objectivePill, { height: lineHeight + 6 }]}
+        >
+          <Animated.View style={[styles.objectiveLineRow, lineAnim]}>
+            {/* A bullet, not a bare line: it marks the instruction as the ONE thing being asked for
+                right now, and gives the eye a fixed point to return to as the words change. */}
+            <View style={styles.objectiveBullet} />
             <Text
               style={[styles.objectiveText, { fontFamily: FONT, fontSize, lineHeight }]}
               numberOfLines={1}
@@ -104,8 +113,8 @@ const makeStyles = (t: Theme) =>
       backgroundColor: t.surface,
       borderColor: t.border,
       borderWidth: StyleSheet.hairlineWidth * 2,
-      paddingHorizontal: SPACE.lg,
-      paddingVertical: 5,
+      paddingHorizontal: SPACE.md,
+      paddingVertical: 4,
       borderRadius: RADIUS.panel,
       ...ELEVATION.card,
     },
@@ -117,8 +126,30 @@ const makeStyles = (t: Theme) =>
       width: 360,
       paddingVertical: 4,
     },
-    objectiveText: { ...TYPE.body, color: t.text, textAlign: "center" },
-    progressGap: { marginTop: 4 },
+    // The instruction gets its own inset pill inside the bar: a light wash of the interactive
+    // lavender, so the line reads as the live task rather than as a caption on a panel.
+    objectivePill: {
+      justifyContent: "center",
+      overflow: "hidden",
+      borderRadius: RADIUS.pill,
+      backgroundColor: OBJECTIVE_WASH,
+      paddingHorizontal: SPACE.md,
+    },
+    objectiveLineRow: { flexDirection: "row", alignItems: "center", gap: SPACE.sm },
+    objectiveBullet: {
+      width: 7,
+      height: 7,
+      borderRadius: 4,
+      backgroundColor: t.accent,
+    },
+    objectiveText: {
+      ...TYPE.body,
+      flex: 1,
+      color: t.text,
+      fontWeight: "800",
+      textAlign: "left",
+    },
+    progressGap: { marginTop: 2 },
     structuredProgressGap: { marginTop: 3 },
 
     // The XP badge sits INSIDE the bar, on the progress track's left — a star that overlaps

@@ -696,9 +696,9 @@ const makeStyles = (t: Theme) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "flex-end",
-      borderColor: t.gold,
+      // No rim. The shadow already lifts this off the dimmed screen behind it, and an outline on
+      // top of that was drawing a box around something already clearly separated.
       borderRadius: 28,
-      borderWidth: 3,
       shadowColor: "#000",
       shadowOffset: { width: 0, height: 8 },
       shadowOpacity: 0.26,
@@ -733,7 +733,7 @@ const makeStyles = (t: Theme) =>
       height: 88,
       alignItems: "center",
       justifyContent: "center",
-      borderColor: t.gold,
+      borderColor: t.accent,
       borderRadius: 44,
       borderWidth: 1,
       backgroundColor: t.surface,
