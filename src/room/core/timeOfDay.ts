@@ -47,7 +47,7 @@ export const TIME_OF_DAY: Record<TimeOfDayId, SunPreset> = {
   // Low and raking from the x-min side, cool and clean. The long pool is the point.
   morning: {
     label: "Morning",
-    backdrop: "day",
+    backdrop: "morning",
     direction: { x: 0.95, y: -0.62, z: -0.28 },
     intensity: 105_000,
     kelvin: 4_500,
@@ -57,7 +57,7 @@ export const TIME_OF_DAY: Record<TimeOfDayId, SunPreset> = {
   // High and near-vertical: a short bright patch under each window and the flattest shadows of the day.
   midday: {
     label: "Midday",
-    backdrop: "day",
+    backdrop: "midday",
     direction: { x: 0.34, y: -1.55, z: -0.36 },
     intensity: 135_000,
     kelvin: 6_500,
@@ -67,17 +67,17 @@ export const TIME_OF_DAY: Record<TimeOfDayId, SunPreset> = {
   // The reference look: dropping, golden, pools stretched across the floor.
   afternoon: {
     label: "Afternoon",
-    backdrop: "day",
+    backdrop: "afternoon",
     direction: { x: 0.55, y: -0.78, z: -0.72 },
     intensity: 120_000,
     kelvin: 4_500,
-    ambient: 5_500,
+    ambient: 4_500,
     interiorLight: { defaultOn: false, lumens: 165_000, kelvin: 3_200 },
   },
   // Nearly horizontal and deep orange. Dim enough that a lamp would start to matter.
   sunset: {
     label: "Sunset",
-    backdrop: "night",
+    backdrop: "sunset",
     direction: { x: 0.3, y: -0.42, z: -0.92 },
     intensity: 40_000,
     kelvin: 2_500,

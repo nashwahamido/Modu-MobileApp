@@ -100,6 +100,17 @@ test("built items need a colour for a storage path — no colour means the bundl
   assert.equal(getRoomItemStoragePath("eket-cabinet", "black"), "room/built/eket-cabinet/black.glb");
 });
 
+test("a top_surface row exposes its top; unflagged and window rows do not", () => {
+  registerPlaceables([
+    { id: "side-table", source: "bought", category: "fur", size: { x: 0.5, y: 0.5, z: 0.5 }, baseOffsetY: 0, topSurface: true },
+    { id: "plain-chest", source: "bought", category: "fur", size: { x: 0.5, y: 0.5, z: 0.5 }, baseOffsetY: 0 },
+    { id: "flagged-window", source: "bought", category: "win", size: { x: 1.0, y: 1.25, z: 0.2 }, baseOffsetY: 0, topSurface: true },
+  ]);
+  assert.equal(roomItemDefs().get("side-table")?.hostsTop, true);
+  assert.equal(roomItemDefs().get("plain-chest")?.hostsTop, undefined);
+  assert.equal(roomItemDefs().get("flagged-window")?.hostsTop, undefined);
+});
+
 test("bought items always resolve to storage — the 'default' segment when no colour is picked", () => {
   // A bought item has no bundled fallback, so even without a colour axis it must load from storage.
   assert.equal(getRoomItemStoragePath("malm-chest", null), "room/bought/malm-chest/default.glb");

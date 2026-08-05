@@ -15,6 +15,7 @@ import {
   buildOccupancy,
   clampToSurface,
   occupiedFootprint,
+  resolveHost,
   rotatedFootprint,
   surfaceKey,
   type GridPlacement,
@@ -22,7 +23,7 @@ import {
   type RotSteps,
   type SurfaceId,
 } from "./grid";
-import { sanitizeLayout } from "./layoutSanitise";
+import { removeWithChildren, sanitizeLayout } from "./layoutSanitise";
 import { ORBIT } from "../input/orbit";
 import { FLOOR_CELLS, WINDOW_BANDS } from "./roomShell";
 import { visibleWalls } from "./wallCulling";
@@ -115,6 +116,8 @@ const validate = (placement: GridPlacement, layout: GridPlacement[]): PlacementC
     placement,
     getRoomItemDef(placement.itemId),
     buildOccupancy(layout, roomItemDefs(), placement.instanceId),
+    // A stacked ghost's host is a COMMITTED piece, so the layout is the right place to resolve it.
+    placement.surface.kind === "furniture" ? resolveHost(placement.surface.hostInstanceId, layout, roomItemDefs()) : null,
   );
 
 // Saves are queued so two quick commits cannot land out of order (the later snapshot must win
@@ -277,13 +280,18 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
       const def = getRoomItemDef(s.activeEdit.placement.itemId);
       if (!def) return s;
       // A surface handoff may only move a piece between surfaces of a KIND it allows — the drag
-      // layer decides WHEN to hop (corner crossing); this only refuses nonsense.
+      // layer decides WHEN to hop (corner crossing, tabletop entry); this only refuses nonsense. A furniture top takes anything that lives on the FLOOR, mirroring canPlace's rule.
+      const hopKind = surface ? (surface.kind === "furniture" ? "floor" : surface.kind) : null;
       const nextSurface =
-        surface && def.allowedSurfaces.includes(surface.kind) ? surface : s.activeEdit.placement.surface;
+        surface && hopKind && def.allowedSurfaces.includes(hopKind) ? surface : s.activeEdit.placement.surface;
       // occupiedFootprint, not rotatedFootprint: on a wall the second axis is wallHeightCells, and
       // clamping with the raw depth (1 for a window) would let a tall piece slide up past the top.
       const footprint = occupiedFootprint({ ...s.activeEdit.placement, surface: nextSurface }, def);
-      const clamped = clampToSurface(cell, nextSurface, footprint);
+      const hostFootprint =
+        nextSurface.kind === "furniture"
+          ? resolveHost(nextSurface.hostInstanceId, s.layout, roomItemDefs())?.def.footprint
+          : undefined;
+      const clamped = clampToSurface(cell, nextSurface, footprint, hostFootprint);
       // Cells are a quarter metre — most drag events stay inside the current one. Bail with the SAME
       // state object so zustand notifies nobody: this runs per pan event, and re-rendering the
       // whole room per event (instead of per cell crossing) is what blew React's update depth.
@@ -312,11 +320,14 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
       const placement = {
         ...s.activeEdit.placement,
         rotSteps,
-        // Re-clamp: the swapped footprint may spill past an edge the old one touched.
+        // Re-clamp: the swapped footprint may spill past an edge the old one touched — against the HOST's grid when the ghost stands on furniture.
         cell: clampToSurface(
           s.activeEdit.placement.cell,
           s.activeEdit.placement.surface,
           rotatedFootprint(def.footprint, rotSteps),
+          s.activeEdit.placement.surface.kind === "furniture"
+            ? resolveHost(s.activeEdit.placement.surface.hostInstanceId, s.layout, roomItemDefs())?.def.footprint
+            : undefined,
         ),
       };
       return { activeEdit: { ...s.activeEdit, placement, check: validate(placement, s.layout) } };
@@ -362,10 +373,12 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
     if (!s.hydrated) return;
     if (!s.activeEdit) return;
     const wasCommitted = s.activeEdit.previous !== null;
-    // The ghost is already out of `layout`; dropping the edit deletes the piece.
-    set({ activeEdit: null });
-    // A never-committed ghost changed nothing — only a real deletion is worth a save.
-    if (wasCommitted) persist(s.ownerId, s.layout);
+    // The ghost is already out of `layout`; dropping the edit deletes the piece — and a HOST leaves with everything standing on it (eject-on-remove, spec 2026-08-05), which is one filter and one persist. Children return to inventory implicitly, like every removed piece.
+    const layout = removeWithChildren(s.layout, s.activeEdit.placement.instanceId);
+    const ejectedChildren = layout.length !== s.layout.length;
+    set({ activeEdit: null, layout });
+    // A never-committed ghost with nothing on it changed nothing — only a real deletion is worth a save.
+    if (wasCommitted || ejectedChildren) persist(s.ownerId, layout);
   },
 
   reset: () => set({ ownerId: null, layout: [], activeEdit: null, hydrated: false, viewing: null }),

@@ -20,6 +20,7 @@ import { ColourPicker } from './ColourPicker';
 import { FriendPickerOverlay } from './FriendPickerOverlay';
 import { RoomBottomBar } from './RoomBottomBar';
 import { RoomLightControls } from './RoomLightControls';
+import { RoomLoadingOverlay } from './RoomLoadingOverlay';
 import { RoomTopStats } from './RoomTopStats';
 import { ShopOverlay } from '../../shop/ShopOverlay';
 import { InventoryOverlay } from '../../inventory/InventoryOverlay';
@@ -58,6 +59,15 @@ export function RoomExperience() {
   const heavySceneActive = !!rootNav && HEAVY_ROUTES.has(rootNav.routes[rootNav.index]?.name ?? '');
   // The hub's scene must stay down until the visit's teardown has actually landed: stopViewing() runs from a cleanup, which React fires in the passive-effect phase AFTER the commit that re-mounts RoomScene here, so heavySceneActive alone flips back to false one commit too early and the hub's first frame would read s.viewing?.layout ?? s.layout as the friend's room, mounting and then immediately unmounting every visited item's Filament asset (see the visit.tsx cleanup and RoomScene's asset-release churn).
   const stillViewingFriend = usePlacementStore((p) => p.viewing !== null);
+  const sceneMounted = !(heavySceneActive || stillViewingFriend);
+  // The loading gate, re-armed on every mount of the scene rather than once per app run. Coming back from a friend's room (or from the assembly) is a genuine cold load — the scene was torn down, so the shell and every piece re-parse from scratch — and the room would otherwise be watched rebuilding itself piece by piece. Both flags reset while the scene is DOWN, so the overlay is already in place on the commit that brings it back.
+  const [sceneReady, setSceneReady] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    if (sceneMounted) return;
+    setSceneReady(false);
+    setRevealed(false);
+  }, [sceneMounted]);
   // Backdrop follows the HOUR (Settings → "Time of day") rather than being its own axis: the view out
   // of the room and the light inside it are the same fact, and letting them disagree only ever produces
   // a daytime photo behind a night-lit room. Each preset names its backdrop; see core/timeOfDay.
@@ -72,9 +82,10 @@ export function RoomExperience() {
   // Placement is shared state (src/room/core/placement) so any route can start it and the scene can render the layout. This screen owns only the HUD: the ghost's drag lives in the scene's gesture layer, where the finger is converted to grid cells by ray picking.
   const me = useCurrentUserId();
   const hydrate = usePlacementStore((p) => p.hydrate);
+  // The saved room has answered — the loading screen's first milestone. False again for the length of an account switch's re-hydrate, which is exactly when the room is worth covering.
+  const hydrated = usePlacementStore((p) => p.hydrated);
   // Primitive selectors: activeEdit changes on every cell the ghost crosses.
   const editing = usePlacementStore((p) => p.activeEdit !== null);
-  const roomHydrated = usePlacementStore((p) => p.hydrated);
   const placedFurnitureCount = usePlacementStore((p) => p.layout.length);
   const blockedReason = usePlacementStore((p) =>
     p.activeEdit && !p.activeEdit.check.ok ? p.activeEdit.check.reason : null,
@@ -109,10 +120,12 @@ export function RoomExperience() {
     roomRotationRef.current = roomRotation;
     roomZoomRef.current = roomZoom;
   }, [roomRotation, roomZoom]);
+  // Both guides wait on `revealed`, not merely on the data: a guide is advice ABOUT the room, so it has to arrive after the loading screen has handed the room over. Gated here rather than at the render so the AsyncStorage read waits too — raising one behind an opaque overlay would burn its once-only "seen" flag on a dialog nobody ever saw.
   useEffect(() => {
     if (
       welcomeFromTutorial ||
-      !roomHydrated ||
+      !hydrated ||
+      !revealed ||
       editing ||
       placedFurnitureCount === 0
     )
@@ -129,11 +142,12 @@ export function RoomExperience() {
   }, [
     editing,
     placedFurnitureCount,
-    roomHydrated,
+    hydrated,
+    revealed,
     welcomeFromTutorial,
   ]);
   useEffect(() => {
-    if (!welcomeFromTutorial || !roomHydrated || editing) return;
+    if (!welcomeFromTutorial || !hydrated || !revealed || editing) return;
     let active = true;
     AsyncStorage.getItem(ROOM_WELCOME_GUIDE_KEY)
       .then((seen) => {
@@ -143,7 +157,7 @@ export function RoomExperience() {
     return () => {
       active = false;
     };
-  }, [editing, roomHydrated, welcomeFromTutorial]);
+  }, [editing, hydrated, revealed, welcomeFromTutorial]);
   const dismissRoomEditGuide = () => {
     setShowRoomEditGuide(false);
     AsyncStorage.setItem(ROOM_EDIT_GUIDE_KEY, '1').catch((err) =>
@@ -177,15 +191,16 @@ export function RoomExperience() {
     <View style={s.screen}>
       {/* The backdrop sits UNDER a transparent Filament view, so the artwork frames the diorama without touching the 3D scene. "clear": the themed app background (screen) shows through. */}
       <SceneBackdrop {...roomBackdropView(roomBackdrop, darkTheme)} style={s.stage}>
-        {heavySceneActive || stillViewingFriend ? null : (
+        {sceneMounted ? (
           <RoomScene
             rotationY={roomRotation}
             zoom={roomZoom}
             onRotationChange={handleRoomRotationChange}
             onZoomChange={handleRoomZoomChange}
             ceilingLight={ceilingLight}
+            onReady={() => setSceneReady(true)}
           />
-        )}
+        ) : null}
       </SceneBackdrop>
       <Pressable
         accessibilityRole="button"
@@ -344,6 +359,16 @@ export function RoomExperience() {
             onPress={dismissRoomWelcomeGuide}
           />
         </OverlaySheet>
+      ) : null}
+
+      {/* Last child, and opaque: the room loads UNDERNEATH this — HUD included, so no bar or button flashes over a half-built room either. */}
+      {sceneMounted && !revealed ? (
+        <RoomLoadingOverlay
+          dataReady={hydrated}
+          sceneReady={sceneReady}
+          label="Getting your room ready…"
+          onRevealed={() => setRevealed(true)}
+        />
       ) : null}
     </View>
   );

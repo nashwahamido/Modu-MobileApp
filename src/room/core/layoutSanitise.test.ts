@@ -1,25 +1,28 @@
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 
-import type { GridPlacement } from "./grid";
-import { sanitizeLayout } from "./layoutSanitise";
+import type { GridPlacement, SurfaceId } from "./grid";
+import { removeWithChildren, sanitizeLayout } from "./layoutSanitise";
 import { registerPlaceables } from "./placeableItems";
 
-// The registry is module state. Every test starts from the bundled built set plus one bought floor row, matching the shape placeableItems.test.ts uses.
+// The registry is module state. Every test starts from the bundled built set plus one bought floor row, matching the shape placeableItems.test.ts uses — and one flagged HOST so furniture-surface rows have somewhere to stand.
 beforeEach(() => {
   registerPlaceables([
     { id: "malm-chest", source: "bought", category: "fur", size: { x: 0.804, y: 1.004, z: 0.483 }, baseOffsetY: 0 },
+    { id: "side-table", source: "bought", category: "fur", size: { x: 0.5, y: 0.5, z: 0.5 }, baseOffsetY: 0, topSurface: true },
   ]);
 });
 
-const row = (instanceId: string, itemId: string, cell: { x: number; y: number }): GridPlacement => ({
+const row = (instanceId: string, itemId: string, cell: { x: number; y: number }, surface: SurfaceId = { kind: "floor" }): GridPlacement => ({
   instanceId,
   itemId,
   variation: null,
-  surface: { kind: "floor" },
+  surface,
   cell,
   rotSteps: 0,
 });
+const onTop = (instanceId: string, hostInstanceId: string): GridPlacement =>
+  row(instanceId, "dalfred-stool", { x: 0, y: 0 }, { kind: "furniture", hostInstanceId, slot: "top" });
 
 test("a layout that is still legal passes through untouched", () => {
   const layout = [row("a", "lack-table", { x: 2, y: 2 }), row("b", "lack-table", { x: 6, y: 6 })];
@@ -44,4 +47,30 @@ test("a row whose item is not in the catalog is KEPT, not dropped", () => {
   // The catalog syncs after first paint. Dropping unknowns here would delete bought furniture on every cold start; the scene already skips rendering them.
   const unknown = row("a", "not-in-the-catalog-yet", { x: 2, y: 2 });
   assert.deepEqual(sanitizeLayout([unknown]), [unknown]);
+});
+
+test("furniture rows sanitise AFTER their hosts, whatever the saved order", () => {
+  const host = row("t1", "side-table", { x: 2, y: 2 });
+  const child = onTop("c1", "t1");
+  // Child FIRST in the saved rows: a naive sequential pass would reject it before the host exists.
+  assert.deepEqual(sanitizeLayout([child, host]).map((p) => p.instanceId).sort(), ["c1", "t1"]);
+});
+
+test("a child whose host is dropped drops with it; a child of a surviving host survives", () => {
+  const hostA = row("a", "side-table", { x: 0, y: 0 });
+  // hostB collides with hostA (same cells) and is dropped by sequential accept — its child must cascade.
+  const hostB = row("b", "side-table", { x: 0, y: 0 });
+  assert.deepEqual(
+    sanitizeLayout([hostA, hostB, onTop("ca", "a"), onTop("cb", "b")]).map((p) => p.instanceId).sort(),
+    ["a", "ca"],
+  );
+});
+
+test("removeWithChildren takes the host and everything standing on it, and nothing else", () => {
+  const host = row("t1", "side-table", { x: 2, y: 2 });
+  const child = onTop("c1", "t1");
+  const bystander = row("s1", "dalfred-stool", { x: 10, y: 10 });
+  assert.deepEqual(removeWithChildren([host, child, bystander], "t1").map((p) => p.instanceId), ["s1"]);
+  // Removing a CHILD takes only the child.
+  assert.deepEqual(removeWithChildren([host, child, bystander], "c1").map((p) => p.instanceId), ["t1", "s1"]);
 });

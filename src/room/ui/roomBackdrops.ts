@@ -15,14 +15,32 @@ export type RoomBackdrop = {
 
 export const ROOM_BACKDROPS = [
   {
-    id: "day",
-    label: "Daytime",
+    id: "morning",
+    label: "Morning",
+    light: require("../../assets/images/backdrops/room/daytime.png"),
+    dark: require("../../assets/images/backdrops/room/daytime.png"),
+  },
+  {
+    id: "midday",
+    label: "Midday",
+    light: require("../../assets/images/backdrops/room/daytime.png"),
+    dark: require("../../assets/images/backdrops/room/daytime.png"),
+  },
+  {
+    id: "afternoon",
+    label: "Afternoon",
+    light: require("../../assets/images/backdrops/room/daytime.png"),
+    dark: require("../../assets/images/backdrops/room/daytime.png"),
+  },
+  {
+    id: "sunset",
+    label: "Sunset",
     light: require("../../assets/images/backdrops/room/daytime.png"),
     dark: require("../../assets/images/backdrops/room/daytime.png"),
   },
   {
     id: "night",
-    label: "Nighttime",
+    label: "Night",
     light: require("../../assets/images/backdrops/room/nighttime.png"),
     dark: require("../../assets/images/backdrops/room/nighttime.png"),
   },

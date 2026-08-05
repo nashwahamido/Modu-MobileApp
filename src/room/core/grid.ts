@@ -52,6 +52,8 @@ export type PlaceableItemDef = {
   emitsLight?: boolean;
   // Which cells of the w×d footprint are solid, at rotSteps 0: d rows of w chars, 'X' solid, '.' empty; row 0 is the -y edge. Absent = solid rectangle. Floor surfaces only — wall footprints are already exact holes.
   mask?: readonly string[];
+  // This item exposes its top as a placement surface (placeable_items.top_surface, migration 016): tables and cabinets host, sofas and beds do not. The top grid is this def's own footprint at rotSteps 0, mask included.
+  hostsTop?: boolean;
 };
 
 // One placed object. This is the persisted shape — see src/data/types.ts PlacedFurniture.
@@ -71,7 +73,9 @@ export type PlacementRejection =
   | "out-of-bounds"
   | "occupied"
   | "surface-not-allowed"
-  | "unknown-item";
+  | "unknown-item"
+  // The furniture surface's host is missing, not on the floor, or not flagged to host.
+  | "no-host";
 
 export type PlacementCheck = { ok: true } | { ok: false; reason: PlacementRejection };
 
@@ -94,8 +98,7 @@ export function cellKey(cell: Cell): string {
   return `${cell.x},${cell.y}`;
 }
 
-// The grid's extent, in cells. Furniture surfaces have no fixed size yet — they report zero so any
-// placement onto one is rejected as out-of-bounds rather than silently accepted.
+// The grid's extent, in cells. A furniture surface's extent is HOST-DEPENDENT (the host's own footprint), so it is checked in canPlace with a HostContext; this context-free answer stays 0×0 so callers without a layout keep rejecting rather than silently accepting.
 export function surfaceExtent(surface: SurfaceId): { w: number; h: number } {
   switch (surface.kind) {
     case "floor":
@@ -184,16 +187,58 @@ export function buildOccupancy(
   return occupancy;
 }
 
+// The resolved host a furniture-surface check needs. Callers with a layout in hand resolve it via resolveHost; canPlace stays layout-free.
+export type HostContext = { placement: GridPlacement; def: PlaceableItemDef };
+
+export function resolveHost(
+  hostInstanceId: string,
+  placements: readonly GridPlacement[],
+  defs: ReadonlyMap<string, PlaceableItemDef>,
+): HostContext | null {
+  const placement = placements.find((p) => p.instanceId === hostInstanceId);
+  const def = placement ? defs.get(placement.itemId) : undefined;
+  return placement && def ? { placement, def } : null;
+}
+
 // Can this placement stand here? Runs on every drag frame, so it stays allocation-light and returns
 // a reason code rather than display copy — the UI owns the wording.
 export function canPlace(
   placement: GridPlacement,
   def: PlaceableItemDef | undefined,
   occupancy: Occupancy,
+  host?: HostContext | null,
 ): PlacementCheck {
   if (!def) return { ok: false, reason: "unknown-item" };
-  if (!def.allowedSurfaces.includes(placement.surface.kind)) {
+  // On a furniture top, "anything that fits" means anything that lives on the FLOOR — wall items never stack, and no def lists "furniture" explicitly.
+  const allowedKind = placement.surface.kind === "furniture" ? "floor" : placement.surface.kind;
+  if (!def.allowedSurfaces.includes(allowedKind)) {
     return { ok: false, reason: "surface-not-allowed" };
+  }
+
+  if (placement.surface.kind === "furniture") {
+    // Host must exist, stand on the FLOOR (a stacked host is not on the floor, so depth > 1 dies here), and be flagged to host.
+    if (!host || host.placement.surface.kind !== "floor" || !host.def.hostsTop) {
+      return { ok: false, reason: "no-host" };
+    }
+    // The top grid is the host's UNROTATED footprint: child cells are host-frame, so host rotation is invisible here.
+    const top = host.def.footprint;
+    const { w, d } = occupiedFootprint(placement, def);
+    if (placement.cell.x < 0 || placement.cell.y < 0 || placement.cell.x + w > top.w || placement.cell.y + d > top.d) {
+      return { ok: false, reason: "out-of-bounds" };
+    }
+    // Every child cell must land on host mask solid — a round table's empty corners reject like off-grid.
+    if (host.def.mask) {
+      for (const cell of cellsFor(placement, def)) {
+        if (host.def.mask[cell.y]?.[cell.x] !== "X") return { ok: false, reason: "out-of-bounds" };
+      }
+    }
+    const taken = occupancy.get(surfaceKey(placement.surface));
+    if (taken) {
+      for (const cell of cellsFor(placement, def)) {
+        if (taken.has(cellKey(cell))) return { ok: false, reason: "occupied" };
+      }
+    }
+    return OK;
   }
 
   const extent = surfaceExtent(placement.surface);
@@ -239,7 +284,9 @@ export function canPlaceInLayout(
   defs: ReadonlyMap<string, PlaceableItemDef>,
 ): PlacementCheck {
   const occupancy = buildOccupancy(placements, defs, placement.instanceId);
-  return canPlace(placement, defs.get(placement.itemId), occupancy);
+  const host =
+    placement.surface.kind === "furniture" ? resolveHost(placement.surface.hostInstanceId, placements, defs) : null;
+  return canPlace(placement, defs.get(placement.itemId), occupancy, host);
 }
 
 // Clamp an anchor so the piece stays fully on its surface. The drag snaps to the nearest legal cell
@@ -248,8 +295,13 @@ export function clampToSurface(
   cell: Cell,
   surface: SurfaceId,
   footprint: Footprint,
+  // The host's UNROTATED footprint for a furniture surface, resolved by callers with layout access; absent, a furniture clamp collapses to (0,0) — the same conservative answer surfaceExtent gives.
+  hostFootprint?: Footprint,
 ): Cell {
-  const extent = surfaceExtent(surface);
+  const extent =
+    surface.kind === "furniture"
+      ? { w: hostFootprint?.w ?? 0, h: hostFootprint?.d ?? 0 }
+      : surfaceExtent(surface);
   return {
     x: Math.max(0, Math.min(cell.x, extent.w - footprint.w)),
     y: Math.max(0, Math.min(cell.y, extent.h - footprint.d)),
@@ -286,6 +338,87 @@ export function floorPlacementBox(
   return {
     min: { x: minX, y: floor.y, z: minZ },
     max: { x: minX + w * cellSize, y: floor.y + height, z: minZ + d * cellSize },
+  };
+}
+
+// The CENTRE of a stacked placement in authored room units, base on the host's top. Child cells are HOST-LOCAL (host rotSteps-0 frame); the host's yaw turns the offset with the same (x, z) -> (x cos + z sin, -x sin + z cos) the renderer applies, so grid and model can never disagree about where a child sits.
+export function topCellToRoom(
+  host: HostContext,
+  cell: Cell,
+  childFootprint: Footprint,
+  topHeight: number,
+): Vec3 {
+  const { cellSize } = ROOM_SHELL;
+  const hostCentre = floorCellToRoom(
+    host.placement.cell,
+    rotatedFootprint(host.def.footprint, host.placement.rotSteps),
+  );
+  const lx = (cell.x + childFootprint.w / 2 - host.def.footprint.w / 2) * cellSize;
+  const lz = (cell.y + childFootprint.d / 2 - host.def.footprint.d / 2) * cellSize;
+  const spin = (host.placement.rotSteps * Math.PI) / 2;
+  const cos = Math.cos(spin);
+  const sin = Math.sin(spin);
+  return {
+    x: hostCentre.x + lx * cos + lz * sin,
+    y: ROOM_SHELL.floor.y + topHeight,
+    z: hostCentre.z - lx * sin + lz * cos,
+  };
+}
+
+// The inverse: a room point (a picking ray's hit on the top plane) back into the host-frame cell it falls in. May be off-grid — callers run it through anchor/clamp/canPlace like every other pick.
+export function roomPointToTopCell(host: HostContext, point: Pick<Vec3, "x" | "z">): Cell {
+  const { cellSize } = ROOM_SHELL;
+  const hostCentre = floorCellToRoom(
+    host.placement.cell,
+    rotatedFootprint(host.def.footprint, host.placement.rotSteps),
+  );
+  const dx = point.x - hostCentre.x;
+  const dz = point.z - hostCentre.z;
+  const spin = (host.placement.rotSteps * Math.PI) / 2;
+  const cos = Math.cos(spin);
+  const sin = Math.sin(spin);
+  const lx = dx * cos - dz * sin;
+  const lz = dx * sin + dz * cos;
+  return {
+    x: Math.floor(lx / cellSize + host.def.footprint.w / 2),
+    y: Math.floor(lz / cellSize + host.def.footprint.d / 2),
+  };
+}
+
+// The pickable VOLUME of a stacked child: its host-local cell rect turned into world space (four corners, then min/max — an axis-aligned cover of the rotated rect is plenty for a finger), from the host's top up the child's rendered height.
+export function topPlacementBox(
+  host: HostContext,
+  placement: GridPlacement,
+  def: PlaceableItemDef,
+  topHeight: number,
+  childHeight: number,
+): { min: Vec3; max: Vec3 } {
+  const { cellSize } = ROOM_SHELL;
+  const { w, d } = occupiedFootprint(placement, def);
+  const hostCentre = floorCellToRoom(
+    host.placement.cell,
+    rotatedFootprint(host.def.footprint, host.placement.rotSteps),
+  );
+  const spin = (host.placement.rotSteps * Math.PI) / 2;
+  const cos = Math.cos(spin);
+  const sin = Math.sin(spin);
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (const [cx, cy] of [
+    [placement.cell.x, placement.cell.y],
+    [placement.cell.x + w, placement.cell.y],
+    [placement.cell.x, placement.cell.y + d],
+    [placement.cell.x + w, placement.cell.y + d],
+  ]) {
+    const lx = (cx - host.def.footprint.w / 2) * cellSize;
+    const lz = (cy - host.def.footprint.d / 2) * cellSize;
+    const x = hostCentre.x + lx * cos + lz * sin;
+    const z = hostCentre.z - lx * sin + lz * cos;
+    minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+    minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
+  }
+  return {
+    min: { x: minX, y: ROOM_SHELL.floor.y + topHeight, z: minZ },
+    max: { x: maxX, y: ROOM_SHELL.floor.y + topHeight + childHeight, z: maxZ },
   };
 }
 

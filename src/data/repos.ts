@@ -110,6 +110,8 @@ export type PlaceableRoomRow = {
   baseOffsetY: number;
   /** Which cells of the derived w×d footprint are solid — d rows of w 'X'/'.' chars joined with '/', at rotSteps 0, row 0 the -y edge (placeable_items.footprint_mask, migration 015). Absent = solid rectangle, true of every convex item. */
   footprintMask?: string;
+  /** This item's top is a placement surface (placeable_items.top_surface, migration 016) — tables and cabinets. Absent/false = nothing stands on it. */
+  topSurface?: boolean;
   /** Present only for category 'lit' (Lighting) — one item_lights row, joined in by the placeable_items view. Absent means the item emits nothing, which is every item but a lamp. A 'lit' row without this is a seeding mistake (see the audit query in migration 012), and the room degrades to placing it as ordinary furniture. */
   light?: RoomItemLight;
 };

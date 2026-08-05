@@ -3,7 +3,7 @@
 // to a grid cell with plain algebra. Pure math: testable by projecting a known cell centre to the
 // screen and picking it back.
 import { eyeFor, ORBIT, type OrbitAngles } from "./orbit";
-import { roomPointToFloorCell, roomPointToWallCell, surfaceExtent, type Cell, type SurfaceId } from "../core/grid";
+import { roomPointToFloorCell, roomPointToTopCell, roomPointToWallCell, surfaceExtent, type Cell, type HostContext, type SurfaceId } from "../core/grid";
 import { ROOM_SHELL, ROOM_TARGET, roomToScene, sceneToRoom, type Vec3, type WallId,
   isXWall,
 } from "../core/roomShell";
@@ -123,14 +123,19 @@ export function pointsAtSurface(
   viewport: { width: number; height: number },
   angles: OrbitAngles,
   surface: SurfaceId,
+  // For a furniture-surface ghost: ITS host's top, resolved by the caller (the store knows the layout, this module does not). Absent, a furniture surface owns nothing — the conservative pre-stacking answer.
+  topTarget?: TopTarget,
 ): boolean {
   if (surface.kind === "floor") {
     const cell = screenPointToFloorCell(px, py, viewport, angles);
     return cell !== null && onSurfaceGrid(cell, surface);
   }
-  // A furniture surface has no extent yet (surfaceExtent returns 0x0), so it owns nothing and every
-  // drag orbits — the same conservative answer the rest of the grid gives such a placement.
-  if (surface.kind !== "wall") return false;
+  if (surface.kind === "furniture") {
+    if (!topTarget) return false;
+    const cell = screenPointToTopCell(px, py, viewport, angles, topTarget);
+    const { w, d } = topTarget.host.def.footprint;
+    return cell !== null && cell.x >= 0 && cell.x < w && cell.y >= 0 && cell.y < d;
+  }
   for (const wall of [surface.wall, ...visibleWalls(angles.theta)]) {
     const cell = screenPointToWallCell(px, py, viewport, angles, wall);
     if (cell && onSurfaceGrid(cell, { kind: "wall", wall })) return true;
@@ -159,6 +164,48 @@ export function screenPointToFloorCell(
   const hit = screenPointToFloorScene(px, py, viewport, angles);
   if (!hit) return null;
   return roomPointToFloorCell(sceneToRoom(hit));
+}
+
+// A host whose top a finger might target: the resolved host plus its rendered top height in authored room units (size.y × fitScale, computed by the caller who has the catalog).
+export type TopTarget = { host: HostContext; topHeight: number };
+
+// The host-frame cell under a finger on a host's TOP PLANE — the floor pick lifted to y = floor + topHeight, then turned into the host's frame. Null when the finger points above the plane's horizon; may be off the host's grid, callers bound-check.
+export function screenPointToTopCell(
+  px: number,
+  py: number,
+  viewport: { width: number; height: number },
+  angles: OrbitAngles,
+  target: TopTarget,
+): Cell | null {
+  const { eye, dir } = screenRay(px, py, viewport, angles);
+  const planeY = roomToScene({ x: 0, y: ROOM_SHELL.floor.y + target.topHeight, z: 0 }).y;
+  const t = (planeY - eye.y) / dir.y;
+  if (!Number.isFinite(t) || t <= 0) return null;
+  const hit = sceneToRoom({ x: eye.x + dir.x * t, y: planeY, z: eye.z + dir.z * t });
+  return roomPointToTopCell(target.host, hit);
+}
+
+// Which host's top the finger is over, current-host-first so a drag near a table edge does not flap between the table and its neighbour — the same own-surface-first hysteresis dragWallTarget uses.
+export function dragTopTarget(
+  current: string | null,
+  px: number,
+  py: number,
+  viewport: { width: number; height: number },
+  angles: OrbitAngles,
+  targets: readonly TopTarget[],
+): { hostInstanceId: string; cell: Cell } | null {
+  const ordered = [...targets].sort((a, b) =>
+    (a.host.placement.instanceId === current ? -1 : 0) - (b.host.placement.instanceId === current ? -1 : 0),
+  );
+  for (const target of ordered) {
+    const cell = screenPointToTopCell(px, py, viewport, angles, target);
+    if (!cell) continue;
+    const { w, d } = target.host.def.footprint;
+    if (cell.x >= 0 && cell.x < w && cell.y >= 0 && cell.y < d) {
+      return { hostInstanceId: target.host.placement.instanceId, cell };
+    }
+  }
+  return null;
 }
 
 // A pickable volume in authored room units — see floorPlacementBox in ../core/grid.

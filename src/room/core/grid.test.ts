@@ -16,6 +16,9 @@ import {
   rotatedMask,
   surfaceExtent,
   surfaceKey,
+  topCellToRoom,
+  topPlacementBox,
+  roomPointToTopCell,
   wallCellToRoom,
   windowCellNamesFor,
   type GridPlacement,
@@ -396,4 +399,123 @@ test("a small piece fits inside the L's notch but not its arm", () => {
 
 test("a maskless def still claims its full rectangle", () => {
   assert.equal(cellsFor(place({ cell: { x: 0, y: 0 } }), table).length, 2);
+});
+
+const desk: PlaceableItemDef = {
+  itemId: "desk",
+  footprint: { w: 4, d: 2 },
+  allowedSurfaces: ["floor"],
+  hostsTop: true,
+};
+const roundTable: PlaceableItemDef = {
+  itemId: "round-table",
+  footprint: { w: 3, d: 3 },
+  allowedSurfaces: ["floor"],
+  hostsTop: true,
+  mask: [".X.", "XXX", ".X."],
+};
+const stackDefs = new Map([
+  [desk.itemId, desk],
+  [roundTable.itemId, roundTable],
+  [stool.itemId, stool],
+  [table.itemId, table],
+  [frame.itemId, frame],
+]);
+const onTop = (hostInstanceId: string, over: Partial<GridPlacement> = {}): GridPlacement =>
+  place({ instanceId: "child", itemId: "dalfred-stool", surface: { kind: "furniture", hostInstanceId, slot: "top" }, ...over });
+const hostAt = (over: Partial<GridPlacement> = {}): GridPlacement =>
+  place({ instanceId: "desk#1", itemId: "desk", cell: { x: 2, y: 2 }, ...over });
+
+test("a floor item stands on a flagged host; wall items and unknown hosts are refused", () => {
+  assert.deepEqual(canPlaceInLayout(onTop("desk#1"), [hostAt()], stackDefs), { ok: true });
+  assert.deepEqual(canPlaceInLayout(onTop("nobody"), [hostAt()], stackDefs), { ok: false, reason: "no-host" });
+  // A frame is a wall item — it may not stand on furniture whatever the host.
+  assert.deepEqual(
+    canPlaceInLayout(onTop("desk#1", { itemId: "painting-small" }), [hostAt()], stackDefs),
+    { ok: false, reason: "surface-not-allowed" },
+  );
+  // An unflagged host (the plain table) refuses stacking.
+  assert.deepEqual(
+    canPlaceInLayout(onTop("table#1"), [place({ instanceId: "table#1", cell: { x: 2, y: 2 } })], stackDefs),
+    { ok: false, reason: "no-host" },
+  );
+});
+
+test("the top grid is the host's UNROTATED footprint — bounds ignore host rotation, cells are host-local", () => {
+  // desk is 4x2 at rotSteps 0; a stool at host-local (3,1) is the far corner — in bounds even when the HOST is rotated.
+  assert.deepEqual(canPlaceInLayout(onTop("desk#1", { cell: { x: 3, y: 1 } }), [hostAt({ rotSteps: 1 })], stackDefs), { ok: true });
+  assert.deepEqual(
+    canPlaceInLayout(onTop("desk#1", { cell: { x: 4, y: 0 } }), [hostAt()], stackDefs),
+    { ok: false, reason: "out-of-bounds" },
+  );
+});
+
+test("a masked host only accepts children on its solid cells", () => {
+  const host = place({ instanceId: "round#1", itemId: "round-table", cell: { x: 0, y: 0 } });
+  // Centre cell (1,1) is 'X'; corner (0,0) is '.' on the plus-shaped mask.
+  assert.deepEqual(canPlaceInLayout(onTop("round#1", { cell: { x: 1, y: 1 } }), [host], stackDefs), { ok: true });
+  assert.deepEqual(
+    canPlaceInLayout(onTop("round#1", { cell: { x: 0, y: 0 } }), [host], stackDefs),
+    { ok: false, reason: "out-of-bounds" },
+  );
+});
+
+test("depth 1: a host standing on furniture cannot itself host", () => {
+  const deskOnDesk = place({ instanceId: "desk#2", itemId: "desk", surface: { kind: "furniture", hostInstanceId: "desk#1", slot: "top" }, cell: { x: 0, y: 0 } });
+  assert.deepEqual(
+    canPlaceInLayout(onTop("desk#2"), [hostAt(), deskOnDesk], stackDefs),
+    { ok: false, reason: "no-host" },
+  );
+});
+
+test("two hosts are two independent grids; the same host's top collides", () => {
+  const a = hostAt();
+  const b = place({ instanceId: "desk#2", itemId: "desk", cell: { x: 10, y: 10 } });
+  const first = onTop("desk#1", { instanceId: "c1" });
+  assert.deepEqual(canPlaceInLayout(onTop("desk#2", { instanceId: "c2" }), [a, b, first], stackDefs), { ok: true });
+  assert.deepEqual(
+    canPlaceInLayout(onTop("desk#1", { instanceId: "c2" }), [a, b, first], stackDefs),
+    { ok: false, reason: "occupied" },
+  );
+});
+
+test("a stacked child's centre composes host centre + host-local offset + top height", () => {
+  // desk 4x2 at cell (2,2) rotSteps 0. Child cell (0,0) 1x1: host-local offset (-1.5, -0.5) cells = (-0.375, -0.125) m.
+  const host = { placement: hostAt(), def: desk };
+  const at = topCellToRoom(host, { x: 0, y: 0 }, { w: 1, d: 1 }, 0.7);
+  const hostCentre = floorCellToRoom({ x: 2, y: 2 }, { w: 4, d: 2 });
+  assert.ok(Math.abs(at.x - (hostCentre.x - 0.375)) < 1e-9);
+  assert.ok(Math.abs(at.z - (hostCentre.z - 0.125)) < 1e-9);
+  assert.ok(Math.abs(at.y - (ROOM_SHELL.floor.y + 0.7)) < 1e-9);
+});
+
+test("host rotation turns the child's offset with the renderer's yaw convention", () => {
+  // Same child cell, host at rotSteps 1: +90° maps local (x, z) to (z, -x), and the ROTATED host footprint (2x4) centres the host box.
+  const host = { placement: hostAt({ rotSteps: 1 }), def: desk };
+  const hostCentre = floorCellToRoom({ x: 2, y: 2 }, { w: 2, d: 4 });
+  const at = topCellToRoom(host, { x: 0, y: 0 }, { w: 1, d: 1 }, 0.7);
+  // local (-0.375, -0.125) --(+90°)--> (-0.125, +0.375).
+  assert.ok(Math.abs(at.x - (hostCentre.x - 0.125)) < 1e-9);
+  assert.ok(Math.abs(at.z - (hostCentre.z + 0.375)) < 1e-9);
+});
+
+test("roomPointToTopCell inverts topCellToRoom at every host rotation", () => {
+  for (const rotSteps of [0, 1, 2, 3] as const) {
+    const host = { placement: hostAt({ rotSteps }), def: desk };
+    for (const cell of [{ x: 0, y: 0 }, { x: 3, y: 1 }, { x: 2, y: 0 }]) {
+      const centre = topCellToRoom(host, cell, { w: 1, d: 1 }, 0.7);
+      assert.deepEqual(roomPointToTopCell(host, centre), cell, `rot ${rotSteps} cell ${cell.x},${cell.y}`);
+    }
+  }
+});
+
+test("a stacked pick box stands on the host top and contains the child's centre", () => {
+  const host = { placement: hostAt({ rotSteps: 1 }), def: desk };
+  const child = onTop("desk#1", { cell: { x: 3, y: 1 } });
+  const box = topPlacementBox(host, child, stool, 0.7, 0.45);
+  assert.ok(Math.abs(box.min.y - (ROOM_SHELL.floor.y + 0.7)) < 1e-9);
+  assert.ok(Math.abs(box.max.y - (ROOM_SHELL.floor.y + 0.7 + 0.45)) < 1e-9);
+  const centre = topCellToRoom(host, { x: 3, y: 1 }, { w: 1, d: 1 }, 0.7);
+  assert.ok(box.min.x <= centre.x && centre.x <= box.max.x);
+  assert.ok(box.min.z <= centre.z && centre.z <= box.max.z);
 });

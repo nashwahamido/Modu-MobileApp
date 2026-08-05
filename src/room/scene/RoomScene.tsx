@@ -21,9 +21,12 @@ import {
   cellsFor,
   floorPlacementBox,
   occupiedFootprint,
+  resolveHost,
   rotatedFootprint,
   floorCellToRoom,
   surfaceKey,
+  topCellToRoom,
+  topPlacementBox,
   wallCellToRoom,
   windowCellNamesFor,
   type GridPlacement,
@@ -32,6 +35,7 @@ import {
   fitScale,
   getRoomItem,
   getRoomItemDef,
+  roomItemDefs,
   useRoomCatalogStore,
   useRoomItem,
   type RoomItemModel,
@@ -43,12 +47,14 @@ import { aimToDirection } from "../core/lightAim";
 import { useGameStore } from "../../game/core/store";
 import { sunDirection, sunPreset, type CeilingLight } from "../core/timeOfDay";
 import {
+  dragTopTarget,
   dragWallTarget,
   pickBoxAt,
   pointsAtSurface,
   screenPointToFloorCell,
   screenPointToWallCell,
   type PickBox,
+  type TopTarget,
 } from "../input/picking";
 import { anchorForCentre } from "../core/grid";
 import {
@@ -64,6 +70,7 @@ import {
   roomToScene,
   windowCellEntityName,
   type ShellWallId,
+  type Vec3,
 } from "../core/roomShell";
 import {
   WALL_ALPHA_EPSILON,
@@ -387,17 +394,36 @@ const RoomCeilingLight = memo(function RoomCeilingLight({ light }: { light: Ceil
 const RoomLit = memo(function RoomLit({ placement, item }: { placement: GridPlacement; item: RoomItemModel }) {
   const { lightManager, scene } = useFilamentContext();
   const entityRef = useRef<Entity | null>(null);
+
+  const hostId = placement.surface.kind === "furniture" ? placement.surface.hostInstanceId : null;
+  // Same live-host subscription LoadedItem uses: a lamp standing on a dragged table carries its light along, ghost included.
+  const hostPlacement = usePlacementStore((s) =>
+    hostId === null
+      ? null
+      : s.activeEdit && s.activeEdit.placement.instanceId === hostId
+        ? s.activeEdit.placement
+        : (s.layout.find((p) => p.instanceId === hostId) ?? null),
+  );
+  const hostDef = hostPlacement ? getRoomItemDef(hostPlacement.itemId) : undefined;
+  const hostItem = hostPlacement ? getRoomItem(hostPlacement.itemId) : null;
+  const topHeight = hostItem ? hostItem.size.y * fitScale(hostItem) : 0;
+
   // emitsLight is only true when the row carried a light, so this is present — but the catalog is a
-  // network fetch and a stale cache could disagree, and a lamp that renders nothing beats a crash.
-  const light = item.light;
+  // network fetch and a stale cache could disagree, and a lamp that renders nothing beats a crash. A stacked lamp whose host has vanished goes dark the same graceful way.
+  const light = hostId !== null && (!hostPlacement || !hostDef || !hostItem) ? undefined : item.light;
 
   const footprint = rotatedFootprint(item.def.footprint, placement.rotSteps);
-  const centre = floorCellToRoom(placement.cell, footprint);
+  const centre =
+    hostId !== null && hostPlacement && hostDef
+      ? topCellToRoom({ placement: hostPlacement, def: hostDef }, placement.cell, footprint, topHeight)
+      : floorCellToRoom(placement.cell, footprint);
+  // A stacked lamp's base sits on the host's top, not the floor — everything below measures bulb height from here.
+  const baseY = ROOM_SHELL.floor.y + (hostId !== null ? topHeight : 0);
 
   // The bulb's offset is authored in the piece's OWN space at rotSteps 0, so it has to be turned with
   // the piece — otherwise rotating a desk lamp leaves its light behind, pointing at where the lamp used
-  // to be. Only x/z turn; height is unaffected by a yaw.
-  const spin = (placement.rotSteps * Math.PI) / 2;
+  // to be. Only x/z turn; height is unaffected by a yaw. On a host, the piece's world yaw is host + child.
+  const spin = (((hostPlacement?.rotSteps ?? 0) + placement.rotSteps) * Math.PI) / 2;
   const cos = Math.cos(spin);
   const sin = Math.sin(spin);
   const turn = (x: number, z: number) => ({ x: x * cos + z * sin, z: -x * sin + z * cos });
@@ -411,7 +437,7 @@ const RoomLit = memo(function RoomLit({ placement, item }: { placement: GridPlac
   const local = turn(offset.x, offset.z);
   const bulb = roomToScene({
     x: centre.x + local.x,
-    y: ROOM_SHELL.floor.y + offset.y,
+    y: baseY + offset.y,
     z: centre.z + local.z,
   });
 
@@ -525,6 +551,16 @@ const LoadedItem = memo(function LoadedItem({
     if (model.state === "loaded") onLoaded?.();
   }, [model.state, onLoaded]);
 
+  const hostId = placement.surface.kind === "furniture" ? placement.surface.hostInstanceId : null;
+  // The host's LIVE placement — the ghost while the host is being dragged, so children ride the drag; null for floor/wall items and for orphans whose host is gone. Subscribing here is what re-runs the transform effect on every host cell crossing.
+  const hostPlacement = usePlacementStore((s) =>
+    hostId === null
+      ? null
+      : s.activeEdit && s.activeEdit.placement.instanceId === hostId
+        ? s.activeEdit.placement
+        : (s.layout.find((p) => p.instanceId === hostId) ?? null),
+  );
+
   useEffect(() => {
     if (model.state !== "loaded") return;
 
@@ -566,6 +602,23 @@ const LoadedItem = memo(function LoadedItem({
       return;
     }
 
+    if (placement.surface.kind === "furniture") {
+      // A stacked piece composes: host cell-box centre + host yaw over its host-local offset + top height, then its OWN yaw on top of the host's — topCellToRoom owns the maths so the grid and this transform can never disagree. An orphan (host gone mid-sync) renders nowhere rather than at a stale spot.
+      const hostDef = hostPlacement ? getRoomItemDef(hostPlacement.itemId) : undefined;
+      const hostItem = hostPlacement ? getRoomItem(hostPlacement.itemId) : null;
+      if (!hostPlacement || !hostDef || !hostItem) return;
+      const host = { placement: hostPlacement, def: hostDef };
+      const topHeight = hostItem.size.y * fitScale(hostItem);
+      const childFootprint = rotatedFootprint(item.def.footprint, placement.rotSteps);
+      const centre = roomToScene(topCellToRoom(host, placement.cell, childFootprint, topHeight));
+      const transform = unit
+        .scaling([scale / unitScale, scale / unitScale, scale / unitScale])
+        .rotate(((hostPlacement.rotSteps + placement.rotSteps) * Math.PI) / 2, [0, 1, 0])
+        .translate([centre.x, centre.y + (scale * item.size.y) / 2, centre.z]);
+      transformManager.setTransform(model.rootEntity, transform);
+      return;
+    }
+
     const footprint = rotatedFootprint(item.def.footprint, placement.rotSteps);
     const centre = roomToScene(floorCellToRoom(placement.cell, footprint));
 
@@ -577,7 +630,7 @@ const LoadedItem = memo(function LoadedItem({
       .rotate((placement.rotSteps * Math.PI) / 2, [0, 1, 0])
       .translate([centre.x, centre.y + (scale * item.size.y) / 2, centre.z]);
     transformManager.setTransform(model.rootEntity, transform);
-  }, [item, model, placement.cell, placement.rotSteps, placement.surface, transformManager]);
+  }, [hostPlacement, item, model, placement.cell, placement.rotSteps, placement.surface, transformManager]);
 
   // Wall items must not cast shadows: Filament's shadow maps treat alpha-blended glass as OPAQUE,
   // so a window would shadow the room exactly like solid wall — the light shaft through the
@@ -802,8 +855,34 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange, cei
     const def = getRoomItemDef(edit.placement.itemId);
     if (!def) return;
     if (edit.placement.surface.kind !== "wall") {
+      // Tops first: a floor-capable ghost climbs onto any flagged host under the finger, the current host winning ties (dragTopTarget's hysteresis); pointing at open floor hops it back off. Wall items never enter this branch, so only "anything that fits" ever reaches a top.
+      const defs = roomItemDefs();
+      const targets: TopTarget[] = state.layout
+        .filter((p) => p.surface.kind === "floor" && p.instanceId !== edit.placement.instanceId)
+        .flatMap((p) => {
+          const hostDef = defs.get(p.itemId);
+          const hostItem = getRoomItem(p.itemId);
+          return hostDef?.hostsTop && hostItem
+            ? [{ host: { placement: p, def: hostDef }, topHeight: hostItem.size.y * fitScale(hostItem) }]
+            : [];
+        });
+      const currentHost = edit.placement.surface.kind === "furniture" ? edit.placement.surface.hostInstanceId : null;
+      const top = dragTopTarget(currentHost, px, py, viewportRef.current, orbit.value.smoothed, targets);
+      if (top) {
+        const surface = { kind: "furniture", hostInstanceId: top.hostInstanceId, slot: "top" } as const;
+        state.moveGhost(
+          anchorForCentre(top.cell, occupiedFootprint({ ...edit.placement, surface }, def)),
+          top.hostInstanceId === currentHost ? undefined : surface,
+        );
+        return;
+      }
+      const floorSurface = { kind: "floor" } as const;
       const pointed = screenPointToFloorCell(px, py, viewportRef.current, orbit.value.smoothed);
-      if (pointed) state.moveGhost(anchorForCentre(pointed, occupiedFootprint(edit.placement, def)));
+      if (pointed)
+        state.moveGhost(
+          anchorForCentre(pointed, occupiedFootprint({ ...edit.placement, surface: floorSurface }, def)),
+          edit.placement.surface.kind === "floor" ? undefined : floorSurface,
+        );
       return;
     }
     const here = edit.placement.surface.wall;
@@ -820,11 +899,17 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange, cei
   // Does this touch belong to the piece being placed, or to the camera? A placement no longer takes the whole screen: the finger owns the ghost only while it is over the surface that ghost can actually stand on (the floor grid, or a wall the camera can see), and everywhere else — the other surface, the cornice, the backdrop around the diorama — it orbits exactly as it does with nothing being placed. Before this there was no way to look behind a wall mid-placement without cancelling the edit.
   // Read from the store rather than from the subscribed activeEdit so this callback survives every cell the ghost crosses; the rule itself is pointsAtSurface, unit-tested in ../input/picking.
   const ghostOwnsPoint = useCallback((px: number, py: number) => {
-    const edit = usePlacementStore.getState().activeEdit;
-    return (
-      edit !== null &&
-      pointsAtSurface(px, py, viewportRef.current, orbit.value.smoothed, edit.placement.surface)
-    );
+    const state = usePlacementStore.getState();
+    const edit = state.activeEdit;
+    if (edit === null) return false;
+    // A stacked ghost owns the finger while it points at ITS host's top — pointsAtSurface needs the resolved host, which only this layer (store + catalog in hand) can supply.
+    let topTarget: TopTarget | undefined;
+    if (edit.placement.surface.kind === "furniture") {
+      const host = resolveHost(edit.placement.surface.hostInstanceId, state.layout, roomItemDefs());
+      const hostItem = host ? getRoomItem(host.placement.itemId) : null;
+      if (host && hostItem) topTarget = { host, topHeight: hostItem.size.y * fitScale(hostItem) };
+    }
+    return pointsAtSurface(px, py, viewportRef.current, orbit.value.smoothed, edit.placement.surface, topTarget);
   }, [orbit]);
 
   // Double-tap anywhere on the scene to put the camera back where the room opened — the way out of
@@ -866,13 +951,23 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange, cei
     // broken — and, when the cell behind was occupied, picked up the wrong piece.
     const boxes: { placement: GridPlacement; box: PickBox }[] = [];
     for (const p of state.layout) {
-      if (p.surface.kind !== "floor") continue;
       const item = getRoomItem(p.itemId);
       if (!item) continue;
-      boxes.push({
-        placement: p,
-        box: floorPlacementBox(p, item.def, item.size.y * fitScale(item)),
-      });
+      if (p.surface.kind === "floor") {
+        boxes.push({
+          placement: p,
+          box: floorPlacementBox(p, item.def, item.size.y * fitScale(item)),
+        });
+      } else if (p.surface.kind === "furniture") {
+        // A stacked piece's box stands on its host's top, which is what lets the ray hit IT before the larger host box beneath — no priority code, just geometry.
+        const host = resolveHost(p.surface.hostInstanceId, state.layout, roomItemDefs());
+        const hostItem = host ? getRoomItem(host.placement.itemId) : null;
+        if (!host || !hostItem) continue;
+        boxes.push({
+          placement: p,
+          box: topPlacementBox(host, p, item.def, hostItem.size.y * fitScale(hostItem), item.size.y * fitScale(item)),
+        });
+      }
     }
     const onFloor = pickBoxAt(px, py, viewportRef.current, orbit.value.smoothed, boxes.map((b) => b.box));
     // Then every wall the camera can actually see — picking a HIDDEN wall would hand the player a
@@ -1079,7 +1174,7 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange, cei
               light previews while the piece is still under the finger. */}
           {placements
             // lightOn !== false rather than === true: undefined means ON, which is what lets every lamp saved before the switch existed keep burning.
-            .filter((p) => getRoomItemDef(p.itemId)?.emitsLight && p.surface.kind === "floor" && p.lightOn !== false)
+            .filter((p) => getRoomItemDef(p.itemId)?.emitsLight && (p.surface.kind === "floor" || p.surface.kind === "furniture") && p.lightOn !== false)
             .map((p) => {
               const item = roomItems[p.itemId];
               return item ? <RoomLit key={`lit:${p.instanceId}`} placement={p} item={item} /> : null;
@@ -1087,16 +1182,40 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange, cei
           <OrbitCameraRig orbit={orbit} />
         </FilamentView>
       </FilamentScene>
-      {/* The overlay draws the FLOOR grid — a wall ghost gets its feedback from the tinted model
-          and the live hole preview instead, so the floor overlay stays down. */}
-      {activeEdit && activeEdit.placement.surface.kind === "floor" ? (
+      {/* The overlay draws the FLOOR grid, and the ghost's highlight quads on whatever plane the ghost stands on — the floor, or a host's tabletop. A wall ghost gets its feedback from the tinted model and the live hole preview instead, so the overlay stays down for walls only. */}
+      {activeEdit && activeEdit.placement.surface.kind !== "wall" ? (
         <GridOverlay
           viewport={{ width, height }}
           angles={{ ...orbitFromControls(rotationY, zoom), phi: orbit.value.raw.phi }}
-          ghostCells={cellsFor(
-            activeEdit.placement,
-            getRoomItemDef(activeEdit.placement.itemId) ?? { itemId: activeEdit.placement.itemId, footprint: { w: 1, d: 1 }, allowedSurfaces: ["floor"] },
-          )}
+          ghostQuads={(() => {
+            const p = activeEdit.placement;
+            const def =
+              getRoomItemDef(p.itemId) ?? { itemId: p.itemId, footprint: { w: 1, d: 1 }, allowedSurfaces: ["floor" as const] };
+            const cells = cellsFor(p, def);
+            const CORNERS = [[0, 0], [1, 0], [1, 1], [0, 1]] as const;
+            if (p.surface.kind === "furniture") {
+              const host = resolveHost(p.surface.hostInstanceId, layout, roomItemDefs());
+              const hostItem = host ? getRoomItem(host.placement.itemId) : null;
+              if (!host || !hostItem) return [];
+              const topHeight = hostItem.size.y * fitScale(hostItem);
+              // topCellToRoom returns a CELL CENTRE for a 1x1 footprint, so corner (cell + d − 0.5) yields the corner point exactly, host yaw included.
+              return cells.map((cell) => ({
+                key: `${cell.x},${cell.y}`,
+                corners: CORNERS.map(([dx, dy]) =>
+                  topCellToRoom(host, { x: cell.x + dx - 0.5, y: cell.y + dy - 0.5 }, { w: 1, d: 1 }, topHeight),
+                ) as [Vec3, Vec3, Vec3, Vec3],
+              }));
+            }
+            const { cellSize, floor } = ROOM_SHELL;
+            return cells.map((cell) => ({
+              key: `${cell.x},${cell.y}`,
+              corners: CORNERS.map(([dx, dy]) => ({
+                x: floor.minX + (cell.x + dx) * cellSize,
+                y: floor.y,
+                z: floor.minZ + (cell.y + dy) * cellSize,
+              })) as [Vec3, Vec3, Vec3, Vec3],
+            }));
+          })()}
           ghostValid={activeEdit.check.ok}
         />
       ) : null}

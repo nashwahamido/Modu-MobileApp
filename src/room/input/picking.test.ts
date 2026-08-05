@@ -1,16 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { clampToSurface, floorCellToRoom, floorPlacementBox, wallCellToRoom } from "../core/grid";
+import { clampToSurface, floorCellToRoom, floorPlacementBox, topCellToRoom, wallCellToRoom } from "../core/grid";
 import type { GridPlacement, PlaceableItemDef } from "../core/grid";
 import { ORBIT } from "./orbit";
 import {
+  dragTopTarget,
   dragWallTarget,
   pickBoxAt,
   pointsAtSurface,
   roomPointToScreen,
   screenPointToFloorCell,
   screenPointToFloorScene,
+  screenPointToTopCell,
   screenPointToWallCell,
 } from "./picking";
 import { FLOOR_CELLS, ROOM_SHELL, WALL_CELLS, sceneToRoom, type WallId } from "../core/roomShell";
@@ -287,4 +289,34 @@ test("a wall ghost owns neither the floor nor the sky above the cornice", () => 
     );
     assert.equal(pointsAtSurface(VIEWPORT.width / 2, -VIEWPORT.height, VIEWPORT, angles, surface), false);
   }
+});
+
+const stackDesk: PlaceableItemDef = { itemId: "desk", footprint: { w: 4, d: 2 }, allowedSurfaces: ["floor"], hostsTop: true };
+
+test("a top-plane pick round-trips through the screen at each host rotation", () => {
+  for (const rotSteps of [0, 1, 2, 3] as const) {
+    const host = {
+      placement: { instanceId: "d1", itemId: "desk", variation: null, surface: { kind: "floor" as const }, cell: { x: 6, y: 6 }, rotSteps },
+      def: stackDesk,
+    };
+    const target = { host, topHeight: 0.7 };
+    const centre = topCellToRoom(host, { x: 1, y: 1 }, { w: 1, d: 1 }, 0.7);
+    const screen = roomPointToScreen(centre, VIEWPORT, REST)!;
+    assert.deepEqual(screenPointToTopCell(screen.x, screen.y, VIEWPORT, REST, target), { x: 1, y: 1 }, `rot ${rotSteps}`);
+  }
+});
+
+test("dragTopTarget prefers the current host, else the first hit, else null", () => {
+  const mk = (id: string, cell: { x: number; y: number }) => ({
+    host: { placement: { instanceId: id, itemId: "desk", variation: null, surface: { kind: "floor" as const }, cell, rotSteps: 0 as const }, def: stackDesk },
+    topHeight: 0.7,
+  });
+  const a = mk("a", { x: 2, y: 2 });
+  const b = mk("b", { x: 12, y: 12 });
+  const overA = roomPointToScreen(topCellToRoom(a.host, { x: 1, y: 0 }, { w: 1, d: 1 }, 0.7), VIEWPORT, REST)!;
+  const hit = dragTopTarget(null, overA.x, overA.y, VIEWPORT, REST, [a, b]);
+  assert.equal(hit?.hostInstanceId, "a");
+  // Pointing at open floor clear of both desks: no target.
+  const openFloor = roomPointToScreen({ x: ROOM_SHELL.floor.minX + 0.125, y: ROOM_SHELL.floor.y, z: ROOM_SHELL.floor.maxZ - 0.125 }, VIEWPORT, REST)!;
+  assert.equal(dragTopTarget("a", openFloor.x, openFloor.y, VIEWPORT, REST, [a, b]), null);
 });

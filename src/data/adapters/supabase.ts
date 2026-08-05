@@ -170,13 +170,13 @@ const catalogRepo: CatalogRepo = {
     // The union view spans both item tables; a null size means "no room model authored", so those rows are filtered server-side — the room never sees an item it could not place. category_id rides along because it routes the placement surface (window -> wall).
     const { data, error } = await supabase
       .from("placeable_items")
-      .select("id, source, category_id, size_x, size_y, size_z, base_offset_y, light_type, light_lumens, light_kelvin, light_reach_m, light_cone_deg, light_bulb_x, light_bulb_y, light_bulb_z, light_aim_pitch_deg, light_aim_yaw_deg, footprint_mask")
+      .select("id, source, category_id, size_x, size_y, size_z, base_offset_y, light_type, light_lumens, light_kelvin, light_reach_m, light_cone_deg, light_bulb_x, light_bulb_y, light_bulb_z, light_aim_pitch_deg, light_aim_yaw_deg, footprint_mask, top_surface")
       .not("size_x", "is", null);
     check(error);
     type Row = { id: string; source: "built" | "bought"; category_id: string; size_x: number; size_y: number; size_z: number; base_offset_y: number;
       light_type: "point" | "spot" | null; light_lumens: number | null; light_kelvin: number | null; light_reach_m: number | null; light_cone_deg: number | null;
       light_bulb_x: number | null; light_bulb_y: number | null; light_bulb_z: number | null;
-      light_aim_pitch_deg: number | null; light_aim_yaw_deg: number | null; footprint_mask: string | null };
+      light_aim_pitch_deg: number | null; light_aim_yaw_deg: number | null; footprint_mask: string | null; top_surface: boolean | null };
     return ((data ?? []) as Row[]).map(
       (r): PlaceableRoomRow => ({
         id: r.id,
@@ -206,6 +206,7 @@ const catalogRepo: CatalogRepo = {
               }
             : undefined,
         ...(r.footprint_mask ? { footprintMask: r.footprint_mask } : {}),
+        ...(r.top_surface ? { topSurface: true } : {}),
       }),
     );
   },

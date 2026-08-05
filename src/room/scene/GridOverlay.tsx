@@ -10,10 +10,9 @@
 import { memo } from "react";
 import Svg, { Line, Polygon } from "react-native-svg";
 
-import type { Cell } from "../core/grid";
 import type { OrbitAngles } from "../input/orbit";
 import { roomPointToScreen } from "../input/picking";
-import { FLOOR_CELLS, ROOM_SHELL } from "../core/roomShell";
+import { FLOOR_CELLS, ROOM_SHELL, type Vec3 } from "../core/roomShell";
 import { StyleSheet } from "react-native";
 
 type Viewport = { width: number; height: number };
@@ -28,13 +27,13 @@ function project(x: number, z: number, viewport: Viewport, angles: OrbitAngles) 
 export const GridOverlay = memo(function GridOverlay({
   viewport,
   angles,
-  ghostCells,
+  ghostQuads,
   ghostValid,
 }: {
   viewport: Viewport;
   angles: OrbitAngles;
-  // The ghost's mask-aware footprint cells (from cellsFor), highlighted on the floor in its check colour.
-  ghostCells: Cell[];
+  // Each ghost cell as its four room-space corners, precomputed by the caller — the overlay just projects and draws, so floor cells and elevated tabletop cells are the same code here.
+  ghostQuads: { key: string; corners: [Vec3, Vec3, Vec3, Vec3] }[];
   ghostValid: boolean;
 }) {
   const lines: { key: string; a: { x: number; y: number }; b: { x: number; y: number } }[] = [];
@@ -52,17 +51,10 @@ export const GridOverlay = memo(function GridOverlay({
     if (a && b) lines.push({ key: `h${j}`, a, b });
   }
 
-  const cellQuads = ghostCells
-    .map((cell) => {
-      const x0 = floor.minX + cell.x * CELL;
-      const z0 = floor.minZ + cell.y * CELL;
-      const corners = [
-        project(x0, z0, viewport, angles),
-        project(x0 + CELL, z0, viewport, angles),
-        project(x0 + CELL, z0 + CELL, viewport, angles),
-        project(x0, z0 + CELL, viewport, angles),
-      ];
-      return corners.every(Boolean) ? { key: `${cell.x},${cell.y}`, points: corners.map((c) => `${c!.x},${c!.y}`).join(" ") } : null;
+  const cellQuads = ghostQuads
+    .map(({ key, corners }) => {
+      const pts = corners.map((c) => roomPointToScreen(c, viewport, angles));
+      return pts.every(Boolean) ? { key, points: pts.map((p) => `${p!.x},${p!.y}`).join(" ") } : null;
     })
     .filter((q): q is NonNullable<typeof q> => q !== null);
 

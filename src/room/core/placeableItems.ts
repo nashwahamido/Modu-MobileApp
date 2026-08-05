@@ -97,6 +97,7 @@ function toModel(row: PlaceableRoomRow): RoomItemModel {
             itemId: row.id,
             footprint,
             ...(mask ? { mask } : {}),
+            ...(row.topSurface ? { hostsTop: true } : {}),
             allowedSurfaces: ["floor" as const],
             emitsLight: row.category === "lit" && row.light != null,
           };
