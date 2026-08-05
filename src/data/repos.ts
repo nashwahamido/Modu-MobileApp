@@ -2,13 +2,15 @@
 import type { BrandId, FurnitureId } from "@/src/game/core/type";
 import type { ItemSource } from "./catalogAssets";
 import type { ShopCategory, ShopItem, ShopItemId } from "./shopItems";
-import type { BuildSave, CatalogId, Friend, Profile, ProfilePatch, RoomLayout, UserId } from "./types";
+import type { BuildSave, CatalogId, Friend, FriendRequest, Profile, ProfilePatch, RoomLayout, UserId } from "./types";
 
 export interface ProfileRepo {
   get(userId: UserId): Promise<Profile | null>;
   // Batch fetch so a friends list renders without N round-trips.
   getMany(userIds: UserId[]): Promise<Profile[]>;
   update(userId: UserId, patch: ProfilePatch): Promise<Profile>;
+  // The one way to find a player you are not already connected to. EXACT match: username is unique, so this rides that index and there is no result list to page or cap. Null when nobody has that name.
+  findByUsername(username: string): Promise<Profile | null>;
 }
 
 export interface RoomLayoutRepo {
@@ -19,8 +21,24 @@ export interface RoomLayoutRepo {
 
 export interface FriendsRepo {
   list(userId: UserId): Promise<Friend[]>;
+  // ONE directed edge, and therefore HALF a friendship. Fixtures and dev tooling only: the app creates friendships through FriendRequestsRepo.accept, because RLS forbids a client from writing the other party's edge. Calling this to "add a friend" puts them in your list and leaves you absent from theirs.
   add(userId: UserId, friendId: UserId): Promise<void>;
   remove(userId: UserId, friendId: UserId): Promise<void>;
+}
+
+// The consent step in front of FriendsRepo. It exists because a client CANNOT create a mutual friendship: friends holds directed edges and its RLS only permits writing your own outgoing row, so the second edge is written server-side by accept_friend_request (migration 013).
+export interface FriendRequestsRepo {
+  // Requests addressed to this user — the inbox behind the "Friend requests" tab.
+  listIncoming(userId: UserId): Promise<FriendRequest[]>;
+  // Requests this user has sent, so a search result reads "Requested" instead of offering to send again.
+  listOutgoing(userId: UserId): Promise<FriendRequest[]>;
+  // Repeat sends are the same intent as the first and resolve to a single request.
+  send(fromId: UserId, toId: UserId): Promise<void>;
+  // Writes BOTH friend edges. Throws when no request is pending, because the request IS the consent.
+  // recipientId is here for the in-memory adapter, which has no session to read. The Supabase adapter IGNORES it and sends only requesterId: the recipient MUST come from auth.uid() inside the RPC, and a caller-supplied recipient would let anyone befriend two accounts that never agreed.
+  accept(recipientId: UserId, requesterId: UserId): Promise<void>;
+  // Reject (as recipient) or cancel (as sender) — one row delete under two names.
+  withdraw(fromId: UserId, toId: UserId): Promise<void>;
 }
 
 export interface BuildProgressRepo {
@@ -90,6 +108,8 @@ export type PlaceableRoomRow = {
   category?: ShopCategory;
   size: { x: number; y: number; z: number };
   baseOffsetY: number;
+  /** Which cells of the derived w×d footprint are solid — d rows of w 'X'/'.' chars joined with '/', at rotSteps 0, row 0 the -y edge (placeable_items.footprint_mask, migration 015). Absent = solid rectangle, true of every convex item. */
+  footprintMask?: string;
   /** Present only for category 'lit' (Lighting) — one item_lights row, joined in by the placeable_items view. Absent means the item emits nothing, which is every item but a lamp. A 'lit' row without this is a seeding mistake (see the audit query in migration 012), and the room degrades to placing it as ordinary furniture. */
   light?: RoomItemLight;
 };
@@ -101,6 +121,10 @@ export type RoomItemLight = {
   kelvin: number;
   reachMetres: number;
   coneDeg?: number;
+  /** Where the bulb sits inside the piece, in authored metres from its BASE — not from the model's own origin, since the room places furniture by its base. So `bulb.y` reads as plain height up the lamp whatever the GLB was authored around. */
+  bulb: { x: number; y: number; z: number };
+  /** Aim, for a spot. Absent for a point, which has no direction at all. Degrees, in the piece's own space at rotSteps 0 — see src/room/core/lightAim.ts and the convention block in migration 014, which is the contract with the workshop portal. */
+  aim?: { pitchDeg: number; yawDeg: number };
 };
 
 // One row of item_variants: an item's colour/finish axis. `variation` is the free-form per-item key
@@ -148,6 +172,7 @@ export interface Repos {
   profiles: ProfileRepo;
   rooms: RoomLayoutRepo;
   friends: FriendsRepo;
+  friendRequests: FriendRequestsRepo;
   builds: BuildProgressRepo;
   likes: RoomLikesRepo;
   store: StoreRepo;

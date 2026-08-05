@@ -4,6 +4,7 @@ import type { LevelRow } from "../levels";
 import type { ShopCategory, ShopItem, ShopItemId } from "../shopItems";
 import type { BuildCatalogRow, ItemVariant, PlaceableRoomRow } from "../repos";
 import type { BuildSave, Friend, Profile, RoomLayout, UserId } from "../types";
+import { ROOM_LAYOUT_VERSION } from "../types";
 
 // The fake current user for local/dev runs. Real code derives the id from Supabase auth (useAuth().user.id).
 export const DEMO_ME: UserId = "me";
@@ -43,9 +44,9 @@ export function seedLevelRows(): LevelRow[] {
 
 export function seedRooms(): RoomLayout[] {
   return [
-    { ownerId: DEMO_ME, version: 1, placements: [], updatedAt: SEED_TS },
-    { ownerId: DEMO_FRIEND_A, version: 1, placements: [{ instanceId: "a1", furnitureId: "lack-table", surface: { kind: "floor" }, cell: { x: 3, y: 4 }, rotSteps: 0 }], updatedAt: SEED_TS },
-    { ownerId: DEMO_FRIEND_B, version: 1, placements: [{ instanceId: "b1", furnitureId: "dalfred-stool", surface: { kind: "floor" }, cell: { x: 7, y: 5 }, rotSteps: 1 }], updatedAt: SEED_TS },
+    { ownerId: DEMO_ME, version: ROOM_LAYOUT_VERSION, placements: [], updatedAt: SEED_TS },
+    { ownerId: DEMO_FRIEND_A, version: ROOM_LAYOUT_VERSION, placements: [{ instanceId: "a1", furnitureId: "lack-table", surface: { kind: "floor" }, cell: { x: 6, y: 8 }, rotSteps: 0 }], updatedAt: SEED_TS },
+    { ownerId: DEMO_FRIEND_B, version: ROOM_LAYOUT_VERSION, placements: [{ instanceId: "b1", furnitureId: "dalfred-stool", surface: { kind: "floor" }, cell: { x: 14, y: 10 }, rotSteps: 1 }], updatedAt: SEED_TS },
   ];
 }
 

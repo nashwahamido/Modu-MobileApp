@@ -1,7 +1,8 @@
 // In-memory adapter for the repo seam. Values are cloned on the way in and out so callers can't mutate the backing store by reference — the same isolation a network round-trip gives you.
 import type { FurnitureId } from "@/src/game/core/type";
-import type { BuildProgressRepo, CatalogRepo, FriendsRepo, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo, VariantsRepo } from "../repos";
-import type { BuildSave, Friend, Profile, ProfilePatch, RoomLayout, UserId } from "../types";
+import type { BuildProgressRepo, CatalogRepo, FriendRequestsRepo, FriendsRepo, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo, VariantsRepo } from "../repos";
+import type { BuildSave, Friend, FriendRequest, Profile, ProfilePatch, RoomLayout, UserId } from "../types";
+import { ROOM_LAYOUT_VERSION } from "../types";
 import type { ShopItemId } from "../shopItems";
 import { levelForXp, levelSpan, titleForLevel } from "../levels";
 import { seedBuildCatalog, seedBuilds, seedBuiltItems, seedCompleted, seedFriends, seedInventory, seedLevelRows, seedPlaceableItems, seedProfiles, seedItemVariants, seedRoomLikes, seedRooms, seedShopItems } from "./seed";
@@ -30,6 +31,8 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
   const profiles = new Map<UserId, Profile>(seedProfiles().map((p) => [p.userId, p] as [UserId, Profile]));
   const rooms = new Map<UserId, RoomLayout>(seedRooms().map((r) => [r.ownerId, r] as [UserId, RoomLayout]));
   const friends = new Map<UserId, Friend[]>(Object.entries(seedFriends()));
+  // Starts empty and is never seeded: a pending request is state a session creates, not a fact about the demo world, and a fixture request would put a permanent unearned badge on the requests tab.
+  const requests: FriendRequest[] = [];
   // Keyed by "ownerId:furnitureId" — one resumable save per furniture per user.
   const buildKey = (ownerId: UserId, furnitureId: string) => `${ownerId}:${furnitureId}`;
   const builds = new Map<string, BuildSave>(seedBuilds().map((b) => [buildKey(b.ownerId, b.furnitureId), b] as [string, BuildSave]));
@@ -88,6 +91,13 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
         .filter((p): p is Profile => Boolean(p))
         .map(withDerived);
     },
+    async findByUsername(username) {
+      await delay(latency);
+      for (const p of profiles.values()) {
+        if (p.username === username) return withDerived(p);
+      }
+      return null;
+    },
     async update(userId, patch: ProfilePatch) {
       await delay(latency);
       const current = profiles.get(userId);
@@ -104,12 +114,21 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
       const found = rooms.get(ownerId);
       if (found) return clone(found);
       // No room yet: hand back an empty one so callers never special-case null.
-      return { ownerId, version: 1, placements: [], updatedAt: new Date().toISOString() };
+      return { ownerId, version: ROOM_LAYOUT_VERSION, placements: [], updatedAt: new Date().toISOString() };
     },
     async save(ownerId, layout) {
       await delay(latency);
       rooms.set(ownerId, clone({ ...layout, ownerId }));
     },
+  };
+
+  // One directed edge, deduped. The primitive behind friendsRepo.add and behind BOTH writes an accept performs.
+  const addEdge = (userId: UserId, friendId: UserId) => {
+    const list = friends.get(userId) ?? [];
+    if (!list.some((f) => f.userId === friendId)) {
+      list.push({ userId: friendId, since: new Date().toISOString() });
+    }
+    friends.set(userId, list);
   };
 
   const friendsRepo: FriendsRepo = {
@@ -119,15 +138,43 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
     },
     async add(userId, friendId) {
       await delay(latency);
-      const list = friends.get(userId) ?? [];
-      if (!list.some((f) => f.userId === friendId)) {
-        list.push({ userId: friendId, since: new Date().toISOString() });
-      }
-      friends.set(userId, list);
+      addEdge(userId, friendId);
     },
     async remove(userId, friendId) {
       await delay(latency);
       friends.set(userId, (friends.get(userId) ?? []).filter((f) => f.userId !== friendId));
+    },
+  };
+
+  const friendRequestsRepo: FriendRequestsRepo = {
+    async listIncoming(userId) {
+      await delay(latency);
+      return clone(requests.filter((r) => r.toId === userId));
+    },
+    async listOutgoing(userId) {
+      await delay(latency);
+      return clone(requests.filter((r) => r.fromId === userId));
+    },
+    async send(fromId, toId) {
+      await delay(latency);
+      // friend_requests_not_self in the migration; mirrored here so fixtures fail the same way the DB would.
+      if (fromId === toId) throw new Error("cannot send a friend request to yourself");
+      if (requests.some((r) => r.fromId === fromId && r.toId === toId)) return;
+      requests.push({ fromId, toId, createdAt: new Date().toISOString() });
+    },
+    async accept(recipientId, requesterId) {
+      await delay(latency);
+      // Mirrors accept_friend_request: removing the request IS the authorisation check, and both edges are written together or not at all.
+      const index = requests.findIndex((r) => r.fromId === requesterId && r.toId === recipientId);
+      if (index === -1) throw new Error(`no pending friend request from ${requesterId}`);
+      requests.splice(index, 1);
+      addEdge(recipientId, requesterId);
+      addEdge(requesterId, recipientId);
+    },
+    async withdraw(fromId, toId) {
+      await delay(latency);
+      const index = requests.findIndex((r) => r.fromId === fromId && r.toId === toId);
+      if (index !== -1) requests.splice(index, 1);
     },
   };
 
@@ -259,5 +306,5 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
     },
   };
 
-  return { catalog: catalogRepo, profiles: profileRepo, rooms: roomRepo, friends: friendsRepo, builds: buildsRepo, likes: likesRepo, store: storeRepo, variants: variantsRepo };
+  return { catalog: catalogRepo, profiles: profileRepo, rooms: roomRepo, friends: friendsRepo, friendRequests: friendRequestsRepo, builds: buildsRepo, likes: likesRepo, store: storeRepo, variants: variantsRepo };
 }

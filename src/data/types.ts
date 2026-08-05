@@ -59,11 +59,15 @@ export interface PlacedFurniture {
   rotSteps: 0 | 1 | 2 | 3;
   // The chosen color variant (a colors.id, e.g. "white"). Undefined = the furniture's default variant / no color axis.
   color?: string;
+  // Whether THIS lamp is switched on, for pieces that emit light (category 'lit'). Undefined means ON, which is what makes the field free to add: every row saved before it existed reads as a lit lamp, which is what those rooms already looked like, so no layout version bump and no migration. Only `false` is ever written — see fromGrid, which omits it otherwise.
+  // Per INSTANCE, deliberately: item_lights is keyed by item, so two of the same lamp in one room could never differ, and "switch that one off" is the whole point.
+  lightOn?: boolean;
 }
 
 // Bump when cell dimensions or surface semantics change; loaders treat any other version as an
 // empty room rather than mis-reading old rows (user_room.placements is unvalidated jsonb).
-export const ROOM_LAYOUT_VERSION = 1;
+// v2 (2026-08-04): floor cells quartered from 0.5 m to 0.25 m — v1 floor anchors double on read (src/data/roomLayoutMigrate.ts).
+export const ROOM_LAYOUT_VERSION = 2;
 
 // The persisted contents of a room, keyed by its owner. Fetched by ownerId so one RoomScene renders yours (editable) or a friend's (read-only).
 export interface RoomLayout {
@@ -78,6 +82,14 @@ export interface RoomLayout {
 export interface Friend {
   userId: UserId;
   since: string;
+}
+
+// A pending friend request. Render a list by fetching each id's Profile via ProfileRepo.getMany, exactly as Friend is rendered.
+export interface FriendRequest {
+  fromId: UserId;
+  toId: UserId;
+  // ISO-8601. Only for ordering and display; the (fromId, toId) pair is the identity.
+  createdAt: string;
 }
 
 // A resumable in-progress assembly: which furniture, what's done, and partial in-gesture progress. One per (owner, furniture); cleared when the build completes or is abandoned.
