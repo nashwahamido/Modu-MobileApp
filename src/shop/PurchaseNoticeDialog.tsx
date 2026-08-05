@@ -7,7 +7,7 @@ import { CoinMedalIcon } from "@/src/components/Icons";
 import { Button } from "@/src/game/ui/Button";
 import { OverlaySheet } from "@/src/game/ui/OverlaySheet";
 import { RADIUS, SPACE, TYPE, useStyles, useTheme } from "@/src/game/ui/theme";
-import { LevelBadge } from "./LevelBadge";
+import { LevelBadge } from "@/src/components/catalogue/LevelBadge";
 import type { Theme } from "@/src/game/ui/theme";
 
 // Why the purchase can't happen: the player's level is too low, or their coins are.

@@ -7,7 +7,7 @@ import {
   View,
 } from "react-native";
 
-import { avatarForProfile } from "@/src/game/core/avatar";
+import { avatarForProfile } from "@/src/components/avatarAssets";
 import { useGameStore } from "@/src/game/core/store";
 import { ELEVATION, Theme, useStyles } from "@/src/game/ui/theme";
 import { tutorialPresentationForProfile } from "./presentation";

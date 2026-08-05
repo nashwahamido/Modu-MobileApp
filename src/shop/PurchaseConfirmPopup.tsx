@@ -3,7 +3,7 @@
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 
 import { COIN_ICON } from "@/src/components/iconAssets";
-import { useStyles } from "@/src/game/ui/theme";
+import { useStyles, LEXEND } from "@/src/game/ui/theme";
 import type { Theme } from "@/src/game/ui/theme";
 
 const TEXT_COLOR = "#231F20";
@@ -121,12 +121,12 @@ const makeStyles = (t: Theme) =>
       flexWrap: "wrap",
     },
     ask: {
-      fontFamily: "Lexend_400Regular",
+      ...LEXEND.regular,
       fontSize: 17,
       color: TEXT_COLOR,
     },
     askName: {
-      fontFamily: "Lexend_700Bold",
+      ...LEXEND.bold,
     },
     priceBadge: {
       flexDirection: "row",
@@ -153,7 +153,7 @@ const makeStyles = (t: Theme) =>
       justifyContent: "center",
     },
     priceText: {
-      fontFamily: "Lexend_700Bold",
+      ...LEXEND.bold,
       fontSize: 13,
       color: TEXT_COLOR,
       transform: [{ translateX: -3 }],
@@ -189,7 +189,7 @@ const makeStyles = (t: Theme) =>
       opacity: 0.75,
     },
     buttonText: {
-      fontFamily: "Lexend_400Regular",
+      ...LEXEND.regular,
       fontSize: 15,
       color: TEXT_COLOR,
     },

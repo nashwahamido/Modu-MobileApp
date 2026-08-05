@@ -6,7 +6,7 @@ import Svg, { Circle, Defs, Path, RadialGradient, Stop } from "react-native-svg"
 import { SHOP_ICON } from "@/src/components/iconAssets";
 import { CATEGORY_LABELS, SHOP_CATEGORY_TABS } from "@/src/data";
 import type { ShopCategory } from "@/src/data";
-import { useStyles } from "@/src/game/ui/theme";
+import { useStyles, LEXEND } from "@/src/game/ui/theme";
 import type { Theme } from "@/src/game/ui/theme";
 import { IconPlaceholder } from "@/src/components/IconPlaceholder";
 
@@ -179,7 +179,7 @@ const makeStyles = (t: Theme) =>
     },
     label: {
       marginTop: 2,
-      fontFamily: "Lexend_400Regular",
+      ...LEXEND.regular,
       fontSize: 12,
       lineHeight: 16,
       color: TEXT_COLOR,
@@ -217,7 +217,7 @@ const makeStyles = (t: Theme) =>
       transform: [{ translateX: -3 }],
     },
     badgeLabel: {
-      fontFamily: "Lexend_600SemiBold",
+      ...LEXEND.semibold,
       fontSize: 13,
       letterSpacing: 0.5,
       color: TEXT_COLOR,

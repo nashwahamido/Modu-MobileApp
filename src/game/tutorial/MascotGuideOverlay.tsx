@@ -12,7 +12,7 @@ import { useTutorialTargets, type TutorialFrame } from './targetRegistry';
 import { useTutorialAudio } from './useTutorialAudio';
 import { Button } from '@/src/game/ui/Button';
 import { useGameStore } from '@/src/game/core/store';
-import { avatarForProfile } from '@/src/game/core/avatar';
+import { avatarForProfile } from '@/src/components/avatarAssets';
 import { ELEVATION, RADIUS, Theme, TYPE, useStyles } from '@/src/game/ui/theme';
 import { tutorialPresentationForProfile } from './presentation';
 import { VisualLongPressCue } from './VisualLongPressCue';

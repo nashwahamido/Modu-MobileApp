@@ -9,13 +9,8 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { BulbIcon, MoonIcon, SunIcon } from '../../components/Icons';
 import { TIME_OF_DAY, TIME_OF_DAY_IDS, sunPreset, type TimeOfDayId } from '../core/timeOfDay';
-import { ELEVATION, useStyles } from '@/src/game/ui/theme';
+import { ELEVATION, useStyles, LEXEND } from '@/src/game/ui/theme';
 import type { Theme } from '@/src/game/ui/theme';
-
-// Pinned to the mockup rather than the theme, so it holds across light/dark — the same table RoomExperience and RoomBottomBar keep.
-const LEXEND = {
-  semibold: 'Lexend_600SemiBold',
-} as const;
 
 // Matched to the settings button above it, so the column reads as one run of controls down the left edge rather than as two unrelated widgets.
 const BUTTON = 42;
@@ -168,7 +163,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     shadowRadius: 8,
   },
   panelLabel: {
-    fontFamily: LEXEND.semibold,
+    ...LEXEND.semibold,
     fontSize: 12,
     lineHeight: 16,
     color: '#231F20',

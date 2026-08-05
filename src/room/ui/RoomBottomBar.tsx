@@ -279,8 +279,8 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   // Matched to the shop's category labels so both bars share a type scale
   barLabel: {
     ...LEXEND.regular,
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 10.5,
+    lineHeight: 13,
     color: TEXT_COLOR,
     marginTop: 4,
     textAlign: 'center',

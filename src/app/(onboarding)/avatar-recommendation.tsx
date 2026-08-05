@@ -8,7 +8,7 @@ import type { ModeId } from "@/src/onboarding/questionnaire";
 import { VoiceButton } from "@/src/game/ui/VoiceButton";
 import { useGameStore } from "@/src/game/core/store";
 import type { ProfileId } from "@/src/game/core/profile";
-import { AVATAR_IMAGES } from "@/src/game/core/avatar";
+import { AVATAR_IMAGES } from "@/src/components/avatarAssets";
 import { useTutorialStore } from "@/src/game/tutorial/store";
 import { saveSelectedAvatarMode } from "@/src/services/onboarding";
 import { Button } from "@/src/game/ui/Button";

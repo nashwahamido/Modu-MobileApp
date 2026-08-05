@@ -9,7 +9,7 @@ import { Button } from "@/src/game/ui/Button";
 import { SettingsIcon, StarIcon } from "@/src/components/Icons";
 import { RADIUS, TYPE, ELEVATION, SPACE, useStyles, useTheme, SIZE } from "@/src/game/ui/theme";
 import { FURNITURE_METAS } from "@/src/game/content/furnitures/furnitures";
-import { avatarForProfile } from "@/src/game/core/avatar";
+import { avatarForProfile } from "@/src/components/avatarAssets";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import type { Profile } from "@/src/data";
 import type { Theme } from "@/src/game/ui/theme";

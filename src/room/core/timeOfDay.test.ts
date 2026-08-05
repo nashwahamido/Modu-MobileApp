@@ -40,18 +40,18 @@ test("pool length tracks elevation, and midday is the shortest of the day", () =
   );
   // A high sun drops a short patch at the sill; a low one rakes across the floor.
   assert.ok(lengths.midday < lengths.morning, "midday sun is the highest, so its pool is the shortest");
-  assert.ok(lengths.evening > lengths.afternoon, "evening sits lower than afternoon");
+  assert.ok(lengths.sunset > lengths.afternoon, "sunset sits lower than afternoon");
   // Nothing may throw so far it crosses the whole 4.5 m room and defeats the point.
   for (const [id, len] of Object.entries(lengths)) {
     assert.ok(len < 8, `${id}: pool of ${len.toFixed(2)} m is implausibly long`);
   }
 });
 
-test("the day warms and dims from midday to evening", () => {
-  assert.ok(TIME_OF_DAY.evening.kelvin < TIME_OF_DAY.afternoon.kelvin);
+test("the day warms and dims from midday to sunset", () => {
+  assert.ok(TIME_OF_DAY.sunset.kelvin < TIME_OF_DAY.afternoon.kelvin);
   assert.ok(TIME_OF_DAY.afternoon.kelvin < TIME_OF_DAY.midday.kelvin);
-  assert.ok(TIME_OF_DAY.evening.intensity < TIME_OF_DAY.midday.intensity);
-  assert.ok(TIME_OF_DAY.evening.ambient < TIME_OF_DAY.midday.ambient);
+  assert.ok(TIME_OF_DAY.sunset.intensity < TIME_OF_DAY.midday.intensity);
+  assert.ok(TIME_OF_DAY.sunset.ambient < TIME_OF_DAY.midday.ambient);
 });
 
 test("an unknown id falls back rather than throwing", () => {
@@ -63,7 +63,7 @@ test("the ceiling light is on by default exactly once it is dark outside", () =>
   assert.equal(TIME_OF_DAY.morning.interiorLight.defaultOn, false);
   assert.equal(TIME_OF_DAY.midday.interiorLight.defaultOn, false);
   assert.equal(TIME_OF_DAY.afternoon.interiorLight.defaultOn, false);
-  assert.equal(TIME_OF_DAY.evening.interiorLight.defaultOn, true);
+  assert.equal(TIME_OF_DAY.sunset.interiorLight.defaultOn, true);
   assert.equal(TIME_OF_DAY.night.interiorLight.defaultOn, true);
 });
 

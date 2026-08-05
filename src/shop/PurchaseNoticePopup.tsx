@@ -3,7 +3,7 @@
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 
 import { COIN_ICON } from "@/src/components/iconAssets";
-import { useStyles } from "@/src/game/ui/theme";
+import { useStyles, LEXEND } from "@/src/game/ui/theme";
 import type { Theme } from "@/src/game/ui/theme";
 
 const TEXT_COLOR = "#231F20";
@@ -138,20 +138,20 @@ const makeStyles = (t: Theme) =>
       justifyContent: "center",
     },
     priceText: {
-      fontFamily: "Lexend_700Bold",
+      ...LEXEND.bold,
       fontSize: 13,
       color: TEXT_COLOR,
       transform: [{ translateX: -3 }],
     },
     message: {
       marginTop: 22,
-      fontFamily: "Lexend_400Regular",
+      ...LEXEND.regular,
       fontSize: 17,
       color: TEXT_COLOR,
       textAlign: "center",
     },
     messageName: {
-      fontFamily: "Lexend_700Bold",
+      ...LEXEND.bold,
     },
     // Same footprint and radius as the confirm popup's Yes/No, so the two read as one set
     button: {
@@ -173,7 +173,7 @@ const makeStyles = (t: Theme) =>
       opacity: 0.75,
     },
     buttonText: {
-      fontFamily: "Lexend_400Regular",
+      ...LEXEND.regular,
       fontSize: 15,
       color: CLOSE_TEXT,
     },

@@ -1,13 +1,13 @@
 // A friend's room, read-only: their furniture under YOUR light (room decor is a local setting, not saved per room — see the spec). Its own route rather than a layer over the hub because it runs a Filament scene, and only one engine may run at a time: the route name `visit` is exactly what RoomExperience's HEAVY_ROUTES matches to drop the hub's scene, which is why this file sits in a group with NO _layout.tsx and the owner id travels as a query param instead of a path segment.
 import { useEffect, useRef, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 
 import { Button } from "@/src/game/ui/Button";
 import { SceneBackdrop } from "@/src/game/ui/SceneBackdrop";
 import { useGameStore } from "@/src/game/core/store";
-import { TYPE, SPACE, useStyles, useTheme } from "@/src/game/ui/theme";
+import { TYPE, SPACE, useStyles } from "@/src/game/ui/theme";
 import type { Theme } from "@/src/game/ui/theme";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import type { Profile } from "@/src/data";
@@ -18,13 +18,13 @@ import { ORBIT } from "@/src/room/input/orbit";
 import { RoomScene } from "@/src/room/scene/RoomScene";
 import { roomBackdropView } from "@/src/room/ui/roomBackdrops";
 import { RoomLightControls } from "@/src/room/ui/RoomLightControls";
+import { RoomLoadingOverlay } from "@/src/room/ui/RoomLoadingOverlay";
 import { VisitHud } from "@/src/room/ui/VisitHud";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN } from "@/src/hooks/use-safe-insets";
 
 export default function VisitScreen() {
   const s = useStyles(makeStyles);
-  const t = useTheme();
   const repos = useRepos();
   const me = useCurrentUserId();
   const { ownerId } = useLocalSearchParams<{ ownerId?: string }>();
@@ -48,6 +48,9 @@ export default function VisitScreen() {
   const [empty, setEmpty] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  // The two halves of the wait this screen covers: their room's rows, then their furniture's models. Nobody arrives at a friend's house to watch it being furnished, so the overlay stays up for both.
+  const [sceneReady, setSceneReady] = useState(false);
+  const [revealed, setRevealed] = useState(false);
 
   // Camera state is PER SCREEN: returning from a visit must not leave the hub's camera wherever this one was left. Mirrors applyRoomControls in RoomExperience, clamp included, so both paths share one zoom range.
   const [roomRotation, setRoomRotation] = useState(0);
@@ -142,25 +145,24 @@ export default function VisitScreen() {
     );
   }
 
-  if (loading) {
-    return (
-      <View style={[s.screen, s.center]}>
-        <ActivityIndicator color={t.accent} />
-      </View>
-    );
-  }
+  // The host's name, once known — the ring's initial and the line under it, so the wait says whose door you are standing at rather than just "loading".
+  const hostName = host?.username ?? "Builder";
 
   return (
     <View style={s.screen}>
       {/* The backdrop sits UNDER a transparent Filament view, so the artwork frames the diorama without touching the 3D scene. */}
       <SceneBackdrop {...roomBackdropView(roomBackdrop, darkTheme)} style={s.stage}>
-        <RoomScene
-          rotationY={roomRotation}
-          zoom={roomZoom}
-          onRotationChange={(next) => applyRoomControls(next, roomZoomRef.current)}
-          onZoomChange={(next) => applyRoomControls(roomRotationRef.current, next)}
-          ceilingLight={ceilingLight}
-        />
+        {/* Mounted only once the fetch has landed, and that is not merely tidiness: RoomScene reads `viewing ?? layout`, so a scene standing up before startViewing() would load the PLAYER'S OWN furniture into a friend's room and then swap it out piece by piece. */}
+        {loading ? null : (
+          <RoomScene
+            rotationY={roomRotation}
+            zoom={roomZoom}
+            onRotationChange={(next) => applyRoomControls(next, roomZoomRef.current)}
+            onZoomChange={(next) => applyRoomControls(roomRotationRef.current, next)}
+            ceilingLight={ceilingLight}
+            onReady={() => setSceneReady(true)}
+          />
+        )}
       </SceneBackdrop>
 
       {/* Sits under VisitHud's header row, the same way it sits under the settings button at home — 42 for the back button plus the 8 gap. */}
@@ -186,6 +188,17 @@ export default function VisitScreen() {
         onToggleLike={toggleLike}
         onBack={() => router.back()}
       />
+
+      {/* Last child, and opaque: the room and its HUD both assemble underneath. Its own error state is unused here — a room that cannot be fetched at all takes the loadError branch above, and a single piece that will not load is not worth refusing the visit over. */}
+      {revealed ? null : (
+        <RoomLoadingOverlay
+          dataReady={!loading}
+          sceneReady={sceneReady}
+          avatar={{ initial: hostName.charAt(0).toUpperCase() }}
+          label={`${hostName}'s room`}
+          onRevealed={() => setRevealed(true)}
+        />
+      )}
       <StatusBar style="dark" />
     </View>
   );

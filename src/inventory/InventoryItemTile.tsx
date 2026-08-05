@@ -2,7 +2,7 @@
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 
 import { brandFor } from "@/src/game/content/brands";
-import { useStyles } from "@/src/game/ui/theme";
+import { useStyles, LEXEND } from "@/src/game/ui/theme";
 import type { Theme } from "@/src/game/ui/theme";
 
 const TEXT_COLOR = "#231F20";
@@ -107,7 +107,7 @@ const makeStyles = (t: Theme) =>
     },
     name: {
       marginTop: 8,
-      fontFamily: "Lexend_400Regular",
+      ...LEXEND.regular,
       fontSize: 14,
       color: TEXT_COLOR,
       textAlign: "center",

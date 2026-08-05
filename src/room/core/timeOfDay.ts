@@ -8,9 +8,9 @@
 import type { Vec3 } from "./roomShell";
 import type { RoomBackdropId } from "../ui/roomBackdrops";
 
-export type TimeOfDayId = "morning" | "midday" | "afternoon" | "evening" | "night";
+export type TimeOfDayId = "morning" | "midday" | "afternoon" | "sunset" | "night";
 
-export const TIME_OF_DAY_IDS: readonly TimeOfDayId[] = ["morning", "midday", "afternoon", "evening", "night"];
+export const TIME_OF_DAY_IDS: readonly TimeOfDayId[] = ["morning", "midday", "afternoon", "sunset", "night"];
 
 // The room's built-in ceiling light AT ONE HOUR. Every preset carries a full spec, the daylight ones included: the switch stays live at every hour, so morning needs a brightness for the case where a player turns it on.
 export type CeilingLight = {
@@ -70,18 +70,18 @@ export const TIME_OF_DAY: Record<TimeOfDayId, SunPreset> = {
     backdrop: "day",
     direction: { x: 0.55, y: -0.78, z: -0.72 },
     intensity: 120_000,
-    kelvin: 4_100,
+    kelvin: 4_500,
     ambient: 5_500,
     interiorLight: { defaultOn: false, lumens: 165_000, kelvin: 3_200 },
   },
   // Nearly horizontal and deep orange. Dim enough that a lamp would start to matter.
-  evening: {
-    label: "Evening",
+  sunset: {
+    label: "Sunset",
     backdrop: "night",
     direction: { x: 0.3, y: -0.42, z: -0.92 },
     intensity: 40_000,
-    kelvin: 2_900,
-    // Cut from 1500 when the ceiling light arrived. That figure was set while evening had nothing but the probe to light it after the sun dropped; evening now defaults a 120k ceiling light ON, so keeping the old fill on top of it lit the room twice and washed out the very contrast the low sun is here to draw. Same rule as night's, read backwards: a light is placed now, so the probe can go back to doing only a probe's job.
+    kelvin: 2_500,
+    // Cut from 1500 when the ceiling light arrived. That figure was set while sunset had nothing but the probe to light it after the sun dropped; sunset now defaults a 120k ceiling light ON, so keeping the old fill on top of it lit the room twice and washed out the very contrast the low sun is here to draw. Same rule as night's, read backwards: a light is placed now, so the probe can go back to doing only a probe's job.
     ambient: 400,
     interiorLight: { defaultOn: true, lumens: 120_000, kelvin: 2_900 },
   },

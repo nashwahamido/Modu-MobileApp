@@ -2,7 +2,7 @@
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 
 import { COIN_ICON, STAR_ICON } from "@/src/components/iconAssets";
-import { useStyles } from "@/src/game/ui/theme";
+import { useStyles, LEXEND } from "@/src/game/ui/theme";
 import type { Theme } from "@/src/game/ui/theme";
 
 const TEXT_COLOR = "#231F20";
@@ -130,7 +130,7 @@ const makeStyles = (t: Theme) =>
     // Absolute, so it centres on the star
     lockLevel: {
       position: "absolute",
-      fontFamily: "Lexend_700Bold",
+      ...LEXEND.bold,
       fontSize: 17,
       color: "#FBFAF3",
     },
@@ -166,7 +166,7 @@ const makeStyles = (t: Theme) =>
       justifyContent: "center",
     },
     priceText: {
-      fontFamily: "Lexend_700Bold",
+      ...LEXEND.bold,
       fontSize: 11,
       color: TEXT_COLOR,
       transform: [{ translateX: PRICE_TEXT_NUDGE_X }],
@@ -186,13 +186,13 @@ const makeStyles = (t: Theme) =>
       justifyContent: "center",
     },
     ownedText: {
-      fontFamily: "Lexend_700Bold",
+      ...LEXEND.bold,
       fontSize: 11,
       color: TEXT_COLOR,
     },
     name: {
       marginTop: 8,
-      fontFamily: "Lexend_400Regular",
+      ...LEXEND.regular,
       fontSize: 14,
       color: TEXT_COLOR,
       textAlign: "center",

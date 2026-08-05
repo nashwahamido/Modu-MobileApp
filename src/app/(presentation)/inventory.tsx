@@ -11,10 +11,10 @@ import { nextSort, useCurrentUserId, useRepos, viewCatalogue } from "@/src/data"
 import type { CategoryFilter, ShopCategory, ShopSort } from "@/src/data";
 import { usePlacementStore } from "@/src/room/core/placement";
 import { useRoomCatalogStore } from "@/src/room/core/placeableItems";
-import { CatalogueChrome } from "@/src/shop/CatalogueChrome";
-import { ItemCard } from "@/src/shop/ItemCard";
+import { CatalogueChrome } from "@/src/components/catalogue/CatalogueChrome";
+import { ItemCard } from "@/src/components/catalogue/ItemCard";
 import { CatalogThumb } from "@/src/components/CatalogThumb";
-import { makeStyles } from "@/src/shop/catalogueScreen.styles";
+import { makeStyles } from "@/src/components/catalogue/catalogueScreen.styles";
 
 // What the inventory owns = user_build (built furniture, described by item_build) ∪ user_buy (bought items, described by item_buy). Both halves get their name and category from the backend; built furniture has no price because it is earned. One shape for both.
 type OwnedItem = { id: string; name: string; category: ShopCategory; price?: number; source: "built" | "bought" };

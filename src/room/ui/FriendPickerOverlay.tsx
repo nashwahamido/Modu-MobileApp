@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import type { Href } from "expo-router";
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { avatarFor } from "@/src/components/avatarAssets";
+import { avatarForProfile } from "@/src/components/avatarAssets";
 import { Button } from "@/src/game/ui/Button";
 import { OverlaySheet } from "@/src/game/ui/OverlaySheet";
 import { RADIUS, SIZE, SPACE, TYPE, useStyles, useTheme } from "@/src/game/ui/theme";
@@ -82,7 +82,7 @@ export function FriendPickerOverlay({ onClose }: { onClose: () => void }) {
               style={s.row}
               onPress={() => visit(f.userId)}
             >
-              <Image source={avatarFor(f.avatarMode)} style={s.avatar} />
+              <Image source={avatarForProfile(f.avatarMode)} style={s.avatar} />
               <View style={s.rowBody}>
                 <Text style={s.name} numberOfLines={1}>
                   {f.username ?? "Builder"}

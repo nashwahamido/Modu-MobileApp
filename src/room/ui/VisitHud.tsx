@@ -2,19 +2,14 @@
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { avatarFor } from "@/src/components/avatarAssets";
-import { useStyles, useTheme } from "@/src/game/ui/theme";
+import { avatarForProfile } from "@/src/components/avatarAssets";
+import { useStyles, useTheme, LEXEND } from "@/src/game/ui/theme";
 import type { Theme } from "@/src/game/ui/theme";
 import type { Profile } from "@/src/data";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN } from "../../hooks/use-safe-insets";
 
 // Pinned to the mockup rather than the theme, so it holds across light/dark — same choice the other room HUDs make.
 const TEXT_COLOR = "#231F20";
-const LEXEND = {
-  regular: "Lexend_400Regular",
-  semibold: "Lexend_600SemiBold",
-  bold: "Lexend_700Bold",
-} as const;
 
 export function VisitHud({
   host,
@@ -47,7 +42,7 @@ export function VisitHud({
           <Text style={s.backGlyph}>‹</Text>
         </Pressable>
         <View style={s.hostCard}>
-          <Image source={avatarFor(host?.avatarMode ?? null)} style={s.hostAvatar} />
+          <Image source={avatarForProfile(host?.avatarMode)} style={s.hostAvatar} />
           <Text style={s.hostName} numberOfLines={1}>
             {host?.username ?? "Builder"}&apos;s room
           </Text>
@@ -95,7 +90,7 @@ const makeStyles = (t: Theme) =>
     },
     backGlyph: {
       color: TEXT_COLOR,
-      fontFamily: LEXEND.bold,
+      ...LEXEND.bold,
       fontSize: 26,
       // The glyph reads right-heavy in its box; nudge it back onto the centre.
       marginRight: 3,
@@ -121,7 +116,7 @@ const makeStyles = (t: Theme) =>
     },
     hostName: {
       color: TEXT_COLOR,
-      fontFamily: LEXEND.semibold,
+      ...LEXEND.semibold,
       fontSize: 13,
       maxWidth: 180,
     },
@@ -138,7 +133,7 @@ const makeStyles = (t: Theme) =>
     },
     emptyText: {
       color: TEXT_COLOR,
-      fontFamily: LEXEND.regular,
+      ...LEXEND.regular,
       fontSize: 12,
     },
     heart: {
@@ -161,7 +156,7 @@ const makeStyles = (t: Theme) =>
     },
     heartCount: {
       color: TEXT_COLOR,
-      fontFamily: LEXEND.bold,
+      ...LEXEND.bold,
       fontSize: 14,
     },
   });

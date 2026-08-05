@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, ActivityIndicator, Text, View, useWindowDimensions } from "react-native";
+import { StyleSheet, View, useWindowDimensions } from "react-native";
 import * as Haptics from "expo-haptics";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import {
@@ -97,6 +97,8 @@ export type RoomSceneProps = {
   onZoomChange: (zoom: number) => void;
   /** Whether the room's built-in ceiling light is lit. Resolved in RoomExperience via ceilingLightOn rather than here, because the switch's override is HUD state and the scene has no business owning it. */
   ceilingLight: boolean;
+  /** Fired ONCE, when the room is worth looking at: the layout is settled, the shell has parsed, and every piece the scene is currently rendering has its GLB in hand. The screens keep their loading overlay up until this lands — see src/room/ui/RoomLoadingOverlay.tsx. Nothing waits on it, so a screen that doesn't pass it simply shows the room filling in. */
+  onReady?: () => void;
 };
 
 type OrbitState = {
@@ -478,21 +480,26 @@ const PlacedItem = memo(function PlacedItem({
   placement,
   tint,
   orbit,
+  onLoaded,
 }: {
   placement: GridPlacement;
   tint?: "valid" | "blocked";
   orbit: ReturnType<typeof useSharedValue<OrbitState>>;
+  /** Reports this instance's GLB as parsed, so the scene can tell when the WHOLE room has landed. */
+  onLoaded?: (instanceId: string) => void;
 }) {
   // Reactive: a bought piece in a saved layout only gets its item row once the catalog syncs.
   const item = useRoomItem(placement.itemId);
   // The colour the player chose, when that variant GLB is in storage; the bundled single-colour model
   // otherwise. Swapping colour swaps this source, and the transform effect below re-runs on the new model.
   const source = useVariantModelSource(placement.itemId, placement.variation);
+  // Bound to the instance id here so LoadedItem's effect can depend on a callback that only changes when the piece does — an inline arrow would re-fire it on every render of a dragged ghost.
+  const loaded = useCallback(() => onLoaded?.(placement.instanceId), [onLoaded, placement.instanceId]);
   // No model yet — a bought item whose storage URL is still being probed (it has no bundled
   // fallback) — must render NOTHING: useModel has no empty source, and feeding it the room shell
   // would briefly draw a second whole room as the "piece".
   if (!item || !source) return null;
-  return <LoadedItem item={item} source={source} placement={placement} tint={tint} orbit={orbit} />;
+  return <LoadedItem item={item} source={source} placement={placement} tint={tint} orbit={orbit} onLoaded={loaded} />;
 });
 
 const LoadedItem = memo(function LoadedItem({
@@ -501,15 +508,22 @@ const LoadedItem = memo(function LoadedItem({
   placement,
   tint,
   orbit,
+  onLoaded,
 }: {
   item: RoomItemModel;
   source: NonNullable<ReturnType<typeof useVariantModelSource>>;
   placement: GridPlacement;
   tint?: "valid" | "blocked";
   orbit: ReturnType<typeof useSharedValue<OrbitState>>;
+  onLoaded?: () => void;
 }) {
   const model = useModel(source);
   const { renderableManager, transformManager, scene } = useFilamentContext();
+
+  // Parsed — not yet transformed or painted, both of which happen in effects below, in the same commit. Depends on model.STATE rather than on `model`, which useModel rebuilds as a fresh object literal every render.
+  useEffect(() => {
+    if (model.state === "loaded") onLoaded?.();
+  }, [model.state, onLoaded]);
 
   useEffect(() => {
     if (model.state !== "loaded") return;
@@ -721,7 +735,7 @@ function OrbitCameraRig({ orbit }: { orbit: ReturnType<typeof useSharedValue<Orb
   return null;
 }
 
-export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange, ceilingLight }: RoomSceneProps) {
+export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange, ceilingLight, onReady }: RoomSceneProps) {
   const [loaded, setLoaded] = useState(false);
   // The player's chosen hour. Every preset is authored to enter through walls the resting camera can see — see src/room/core/timeOfDay.ts for why that constraint exists and what breaks without it.
   const hour = useGameStore((s) => s.roomTimeOfDay);
@@ -734,12 +748,34 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange, cei
 
   // The player's own room in the hub, a friend's while visiting. Placement is refused at the store while viewing, so activeEdit below is always null on that path and every ghost, overlay and drag branch is inert without needing its own check.
   const layout = usePlacementStore((s) => s.viewing?.layout ?? s.layout);
+  // Is the layout above the REAL one, or the empty placeholder a hydrate that hasn't answered yet leaves behind? Nothing may be called ready against the placeholder: an empty room parses instantly and would fire onReady before the saved furniture had even been asked for. A visit is settled by construction — its layout arrives with startViewing, in one commit.
+  const layoutSettled = usePlacementStore((s) => s.viewing !== null || s.hydrated);
   const activeEdit = usePlacementStore((s) => s.activeEdit);
   // Subscribed (not getState) so pieces whose item rows arrive with the catalog sync appear then.
   const roomItems = useRoomCatalogStore((s) => s.items);
   // The ghost re-renders through the store on every cell change; committed pieces only when the
   // layout itself changes.
   const editing = activeEdit !== null;
+
+  // Everything the scene is actually asked to draw right now, resolved once and used by the render tree AND by the ready gate below — the two must be looking at the same list or the gate would wait on a piece that is never mounted.
+  // An id the catalog doesn't know (yet) has no model or dimensions and is skipped; sanitizeLayout deliberately KEEPS such a row (the catalog syncs after first paint), so it is normal for this to be shorter than the layout, and the gate must not wait for the missing rows — a piece whose row lands late simply appears late, exactly as it did before.
+  const placements = activeEdit ? [...layout, activeEdit.placement] : layout;
+  const scenePlacements = placements.filter((placement) => roomItems[placement.itemId]);
+
+  // Which pieces have their GLB in hand. A set in state rather than a counter: pieces mount, unmount and re-key freely (a ghost morphs into a committed piece), and only identity survives that.
+  const [modelled, setModelled] = useState<ReadonlySet<string>>(() => new Set());
+  const markModelled = useCallback((instanceId: string) => {
+    setModelled((prev) => (prev.has(instanceId) ? prev : new Set(prev).add(instanceId)));
+  }, []);
+
+  // The whole-room ready signal, fired exactly once per mount. Once is the point: the screens use it to lift a loading screen, and a room that is being lived in — a piece dragged in, a colour swapped — is not loading any more, so later arrivals must not re-announce anything.
+  const announced = useRef(false);
+  useEffect(() => {
+    if (announced.current || !loaded || !layoutSettled) return;
+    if (!scenePlacements.every((placement) => modelled.has(placement.instanceId))) return;
+    announced.current = true;
+    onReady?.();
+  }, [loaded, layoutSettled, scenePlacements, modelled, onReady]);
 
   const home = orbitFromControls(rotationY, zoom);
   const orbit = useSharedValue<OrbitState>({
@@ -1024,25 +1060,24 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange, cei
           <RoomModel onReady={handleReady} orbit={orbit} />
           {/* Committed pieces AND the ghost render from ONE array, and that is load-bearing: React keys only match within the same children array, so a ghost in its own sibling slot is a different element even with the same key — pick-up and confirm then unmount/remount the piece, and useModel reloads the whole GLB each time (useBuffer has no cache). That remount is what made a dragged piece invisible until seconds after settling, and where the old "Pointer FilamentAssetWrapper has already been manually released" race lived. In one array the key genuinely matches, the component morphs, and the model loads exactly once per piece.
               An id the catalog doesn't know (yet) has no model or dimensions — skip it. */}
-          {(activeEdit ? [...layout, activeEdit.placement] : layout)
-            .filter((placement) => roomItems[placement.itemId])
-            .map((placement) => (
-              <PlacedItem
-                key={placement.instanceId}
-                placement={placement}
-                tint={
-                  activeEdit && placement.instanceId === activeEdit.placement.instanceId
-                    ? activeEdit.check.ok
-                      ? "valid"
-                      : "blocked"
-                    : undefined
-                }
-                orbit={orbit}
-              />
-            ))}
+          {scenePlacements.map((placement) => (
+            <PlacedItem
+              key={placement.instanceId}
+              placement={placement}
+              tint={
+                activeEdit && placement.instanceId === activeEdit.placement.instanceId
+                  ? activeEdit.check.ok
+                    ? "valid"
+                    : "blocked"
+                  : undefined
+              }
+              orbit={orbit}
+              onLoaded={markModelled}
+            />
+          ))}
           {/* Lamps light the room from wherever their piece stands. The ghost is included, so the
               light previews while the piece is still under the finger. */}
-          {(activeEdit ? [...layout, activeEdit.placement] : layout)
+          {placements
             // lightOn !== false rather than === true: undefined means ON, which is what lets every lamp saved before the switch existed keep burning.
             .filter((p) => getRoomItemDef(p.itemId)?.emitsLight && p.surface.kind === "floor" && p.lightOn !== false)
             .map((p) => {
@@ -1075,12 +1110,7 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange, cei
           style={styles.gestureLayer}
         />
       </GestureDetector>
-      {!loaded ? (
-        <View style={styles.loading} pointerEvents="none">
-          <ActivityIndicator color="#666" />
-          <Text style={styles.loadingText}>Loading room model...</Text>
-        </View>
-      ) : null}
+      {/* No spinner of its own any more: waiting is the SCREEN's to show, through the app's one loading look (src/room/ui/RoomLoadingOverlay.tsx over src/game/ui/LoadingScreen.tsx), and it covers the room until onReady above says the whole thing has landed — not just the shell, which is all a spinner here could ever know about. */}
     </View>
   );
 }
@@ -1089,12 +1119,4 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "transparent" },
   filament: { flex: 1 },
   gestureLayer: { ...StyleSheet.absoluteFillObject, zIndex: 2 },
-  loading: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 3,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-  },
-  loadingText: { color: "#666", fontSize: 12 },
 });

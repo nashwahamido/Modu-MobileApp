@@ -1,7 +1,7 @@
 // The shop. Browse the catalogue by category/sort and buy items with coins. Reads the catalogue,
 // the player's coin balance and their owned items through the repo seam (src/data), and buys
 // through repos.store.purchase — so it runs on fixtures today and on Supabase when the flag flips.
-// Twin of the Inventory route — the two catalogue surfaces share one set of components and one stylesheet (src/shop).
+// Twin of the Inventory route — the two catalogue surfaces share one set of components and one stylesheet (src/components/catalogue).
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, Text, View } from "react-native";
@@ -12,11 +12,11 @@ import { Button } from "@/src/game/ui/Button";
 import { SPACE, useStyles, useTheme } from "@/src/game/ui/theme";
 import { nextSort, useCurrentUserId, useRepos, viewCatalogue } from "@/src/data";
 import type { CategoryFilter, ShopItem, ShopItemId, ShopSort } from "@/src/data";
-import { CatalogueChrome } from "@/src/shop/CatalogueChrome";
-import { ItemCard } from "@/src/shop/ItemCard";
+import { CatalogueChrome } from "@/src/components/catalogue/CatalogueChrome";
+import { ItemCard } from "@/src/components/catalogue/ItemCard";
 import { CatalogThumb } from "@/src/components/CatalogThumb";
 import { PurchaseConfirmDialog, PurchaseNoticeDialog, PurchaseBlock } from "@/src/shop/PurchaseNoticeDialog";
-import { makeStyles } from "@/src/shop/catalogueScreen.styles";
+import { makeStyles } from "@/src/components/catalogue/catalogueScreen.styles";
 
 export default function StoreScreen() {
   const styles = useStyles(makeStyles);

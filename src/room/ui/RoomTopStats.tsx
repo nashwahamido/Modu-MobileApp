@@ -118,7 +118,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     width: '100%',
     color: TEXT_COLOR,
     ...LEXEND.semibold,
-    fontSize: 12,
+    fontSize: 11,
     textAlign: 'center',
   },
   currencyGroup: {

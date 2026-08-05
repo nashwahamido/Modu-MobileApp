@@ -6,7 +6,7 @@ import { INVENTORY_ICON } from "@/src/components/iconAssets";
 import { IconPlaceholder } from "@/src/components/IconPlaceholder";
 import { CATEGORY_LABELS, SHOP_CATEGORY_TABS } from "@/src/data";
 import type { ShopCategory } from "@/src/data";
-import { useStyles } from "@/src/game/ui/theme";
+import { useStyles, LEXEND } from "@/src/game/ui/theme";
 import type { Theme } from "@/src/game/ui/theme";
 
 const ACTIVE_TILE = "#D3CBD2";
@@ -165,7 +165,7 @@ const makeStyles = (t: Theme) =>
     },
     label: {
       marginTop: 2,
-      fontFamily: "Lexend_400Regular",
+      ...LEXEND.regular,
       fontSize: 12,
       lineHeight: 16,
       color: TEXT_COLOR,
@@ -198,7 +198,7 @@ const makeStyles = (t: Theme) =>
       height: BADGE_ICON_SIZE,
     },
     badgeLabel: {
-      fontFamily: "Lexend_600SemiBold",
+      ...LEXEND.semibold,
       fontSize: 10.5,
       letterSpacing: 0.4,
       color: TEXT_COLOR,

@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CloseIcon } from "@/src/components/Icons";
 import { Button } from "@/src/game/ui/Button";
-import { useStyles, useTheme } from "@/src/game/ui/theme";
+import { useStyles, useTheme, LEXEND } from "@/src/game/ui/theme";
 import type { Theme } from "@/src/game/ui/theme";
 import { useCatalogStore } from "@/src/data/catalogStore";
 import { useCurrentUserId, useRepos, viewCatalogue } from "@/src/data";
@@ -193,7 +193,7 @@ const makeStyles = (t: Theme) =>
       gap: 14,
     },
     empty: {
-      fontFamily: "Lexend_400Regular",
+      ...LEXEND.regular,
       fontSize: 14,
       color: t.textDim,
       textAlign: "center",
