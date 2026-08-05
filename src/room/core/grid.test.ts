@@ -113,9 +113,7 @@ test("the floor is far wider in scene space than the old 0.9 constant assumed", 
   // 0.9-wide plane, which is what the mirror and sign hacks in RoomExperience were compensating for.
   const left = roomToScene({ x: ROOM_SHELL.floor.minX, y: ROOM_SHELL.floor.y, z: 0 });
   const right = roomToScene({ x: ROOM_SHELL.floor.maxX, y: ROOM_SHELL.floor.y, z: 0 });
-  // 1.69 at the current shell. The bound tracks SCENE_SCALE, which is set by the LARGEST axis of the
-  // whole model — so widening the plinth (as the four-wall shell did) shrinks the floor's share of
-  // the unit cube without the floor itself moving. Only the distance from the 0.9 bug matters here.
+  // 1.69 at the current shell. The bound tracks SCENE_SCALE, which is set by the LARGEST axis of the whole model — so widening the plinth (as the four-wall shell did) shrinks the floor's share of the unit cube without the floor itself moving. Only the distance from the 0.9 bug matters here.
   assert.ok(right.x - left.x > 1.6);
 });
 
@@ -267,8 +265,7 @@ test("a room point on the wall maps to its wall cell", () => {
 });
 
 test("a window's covered cells map to the shell's removable node names", () => {
-  // Anchored at the band's min corner (WINDOW_BANDS cols/rows start at 2/4), so the names are the
-  // band-local origin block: c00..c03 × r0..r4.
+  // Anchored at the band's min corner (WINDOW_BANDS cols/rows start at 2/4), so the names are the band-local origin block: c00..c03 × r0..r4.
   const names = windowCellNamesFor(
     place({ itemId: "window-sash", surface: { kind: "wall", wall: "z-max" }, cell: { x: 2, y: 4 } }),
     sashWindow,
@@ -315,9 +312,7 @@ test("a centred drag anchors so the piece sits under the finger", () => {
 });
 
 test("every shell wall is a placement surface, with a band and a grid", () => {
-  // All four walls now carry a diced window band and a wall grid — x-max and z-min used to be
-  // geometry and light blockers only. This is the guard that a wall never gets shell geometry
-  // without the placement data to match, which would let a window be placed into nothing.
+  // All four walls now carry a diced window band and a wall grid — x-max and z-min used to be geometry and light blockers only. This is the guard that a wall never gets shell geometry without the placement data to match, which would let a window be placed into nothing.
   assert.deepEqual([...SHELL_WALL_IDS].sort(), ["x-max", "x-min", "z-max", "z-min"]);
   for (const wall of SHELL_WALL_IDS) {
     assert.ok(ROOM_SHELL.walls[wall], `${wall} must have a placement spec`);
@@ -329,8 +324,7 @@ test("every shell wall is a placement surface, with a band and a grid", () => {
 });
 
 test("wall mount yaw and outward normal agree on which way each wall faces", () => {
-  // A model is authored facing the room with its wall behind it, so rotating by the mount yaw must
-  // send its back along the wall's OUTWARD normal. Getting these out of step seats windows backwards.
+  // A model is authored facing the room with its wall behind it, so rotating by the mount yaw must send its back along the wall's OUTWARD normal. Getting these out of step seats windows backwards.
   for (const wall of SHELL_WALL_IDS) {
     // Authored BACK is +z (the wall sits behind the model), so a yaw about Y sends it to (sin, cos).
     const yaw = wallMountYaw(wall);
@@ -341,8 +335,7 @@ test("wall mount yaw and outward normal agree on which way each wall faces", () 
 });
 
 test("the orbit target is the room's centre", () => {
-  // The shell is unit-cube centred on the origin; framing (radius, lens) is owned by ./orbit and
-  // guarded by its own tests.
+  // The shell is unit-cube centred on the origin; framing (radius, lens) is owned by ./orbit and guarded by its own tests.
   assert.deepEqual(ROOM_TARGET, { x: 0, y: 0, z: 0 });
 });
 
@@ -391,8 +384,7 @@ test("a small piece fits inside the L's notch but not its arm", () => {
   // A 2x2 piece at the notch's min corner (x 0..1, y 3..4) sits entirely inside the empty region.
   const crateInNotch = place({ instanceId: "c", itemId: "crate", cell: { x: 0, y: 3 } });
   assert.deepEqual(canPlaceInLayout(crateInNotch, [placedSofa], sofaDefs), { ok: true });
-  // The same crate at x:4 straddles the notch's edge: its x:4 column is still empty notch, but its
-  // x:5 column lands in the solid chaise arm (row3/row4 are 'X' from x=5), so it must be rejected.
+  // The same crate at x:4 straddles the notch's edge: its x:4 column is still empty notch, but its x:5 column lands in the solid chaise arm (row3/row4 are 'X' from x=5), so it must be rejected.
   const crateOnEdge = place({ instanceId: "c", itemId: "crate", cell: { x: 4, y: 3 } });
   assert.deepEqual(canPlaceInLayout(crateOnEdge, [placedSofa], sofaDefs), { ok: false, reason: "occupied" });
 });

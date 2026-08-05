@@ -1,7 +1,4 @@
-// Screen point → floor cell, by analytic ray-vs-plane intersection — no physics raycaster.
-// The camera is fully known (orbit state + the 68 mm lens + viewport), so a finger position maps
-// to a grid cell with plain algebra. Pure math: testable by projecting a known cell centre to the
-// screen and picking it back.
+// Screen point → floor cell, by analytic ray-vs-plane intersection — no physics raycaster. The camera is fully known (orbit state + the 68 mm lens + viewport), so a finger position maps to a grid cell with plain algebra. Pure math: testable by projecting a known cell centre to the screen and picking it back.
 import { eyeFor, ORBIT, type OrbitAngles } from "./orbit";
 import { roomPointToFloorCell, roomPointToTopCell, roomPointToWallCell, surfaceExtent, type Cell, type HostContext, type SurfaceId } from "../core/grid";
 import { ROOM_SHELL, ROOM_TARGET, roomToScene, sceneToRoom, type Vec3, type WallId,
@@ -54,8 +51,7 @@ function screenRay(
   };
 }
 
-// The scene-space point where the ray through (px, py) meets the floor plane, or null when the
-// finger points above the horizon of the floor.
+// The scene-space point where the ray through (px, py) meets the floor plane, or null when the finger points above the horizon of the floor.
 export function screenPointToFloorScene(
   px: number,
   py: number,
@@ -69,9 +65,7 @@ export function screenPointToFloorScene(
   return { x: eye.x + dir.x * t, y: floorY, z: eye.z + dir.z * t };
 }
 
-// The wall cell under a finger — the same analytic pick against the wall's inner-face plane
-// instead of the floor. May be off-grid (past the wall's run or above its top); callers clamp or
-// reject via canPlace, exactly like the floor path.
+// The wall cell under a finger — the same analytic pick against the wall's inner-face plane instead of the floor. May be off-grid (past the wall's run or above its top); callers clamp or reject via canPlace, exactly like the floor path.
 export function screenPointToWallCell(
   px: number,
   py: number,
@@ -93,10 +87,7 @@ export function screenPointToWallCell(
   return roomPointToWallCell(wall, sceneToRoom(hit));
 }
 
-// Which wall a wall-ghost being dragged belongs on now, and the cell under the finger there — the corner-hop, with HYSTERESIS.
-// The ghost stays LOYAL to the wall it is already on while the finger is anywhere over that wall's run, and hops only once the finger has left that run AND points inside another wall's run. A naive nearest-plane pick teleported the piece every time the ray grazed a corner, because at a corner the finger is a pixel away from being over either wall.
-// The hop candidates are the walls the camera can actually SEE (visibleWalls, already sorted best-facing first), never all four. Every wall plane is infinite and a forward ray crosses the two walls BETWEEN the eye and the room from outside, so a hidden wall answers a pick perfectly happily — and would drop the piece on a surface the player is standing behind. Best-facing first settles the remaining ambiguity in the player's favour: with two walls visible and the finger over both runs, the piece lands on the one being looked at most squarely.
-// Null means the finger is over no candidate's run at all, which the caller reads as "leave the ghost where it is" — the same answer the old two-wall code gave by falling off its second `if`.
+// Which wall a wall-ghost being dragged belongs on now, and the cell under the finger there — the corner-hop, with HYSTERESIS. The ghost stays LOYAL to the wall it is already on while the finger is anywhere over that wall's run, and hops only once the finger has left that run AND points inside another wall's run. A naive nearest-plane pick teleported the piece every time the ray grazed a corner, because at a corner the finger is a pixel away from being over either wall. The hop candidates are the walls the camera can actually SEE (visibleWalls, already sorted best-facing first), never all four. Every wall plane is infinite and a forward ray crosses the two walls BETWEEN the eye and the room from outside, so a hidden wall answers a pick perfectly happily — and would drop the piece on a surface the player is standing behind. Best-facing first settles the remaining ambiguity in the player's favour: with two walls visible and the finger over both runs, the piece lands on the one being looked at most squarely. Null means the finger is over no candidate's run at all, which the caller reads as "leave the ghost where it is" — the same answer the old two-wall code gave by falling off its second `if`.
 export function dragWallTarget(
   here: WallId,
   px: number,
@@ -114,9 +105,7 @@ export function dragWallTarget(
   return null;
 }
 
-// Does this finger point at the surface a ghost lives on? The drag layer's OWNERSHIP question: while a piece is being placed, a finger on its surface moves the PIECE and a finger anywhere else — another surface, the cornice, the backdrop past the diorama — orbits the CAMERA instead. Both used to be the piece, which left no way to look behind a wall mid-placement.
-// "Where the piece can go" is the whole rule, so this tests the full grid on both axes rather than dragWallTarget's run-only loyalty test: the sky above a wall's top row is backdrop, and the floor in front of it is not a wall. The candidates for a wall ghost are its OWN wall plus the ones the camera can see, because ownership is asked at touch-down, before any hop — a drag aimed at the wall round the corner has to belong to the piece too, or carrying a window round that corner would orbit instead.
-// The answer is only ever needed at touch-down: the drag latches its mode there and holds it, so a piece being dragged to the room's edge keeps its finger even as that finger strays off the floor.
+// Does this finger point at the surface a ghost lives on? The drag layer's OWNERSHIP question: while a piece is being placed, a finger on its surface moves the PIECE and a finger anywhere else — another surface, the cornice, the backdrop past the diorama — orbits the CAMERA instead. Both used to be the piece, which left no way to look behind a wall mid-placement. "Where the piece can go" is the whole rule, so this tests the full grid on both axes rather than dragWallTarget's run-only loyalty test: the sky above a wall's top row is backdrop, and the floor in front of it is not a wall. The candidates for a wall ghost are its OWN wall plus the ones the camera can see, because ownership is asked at touch-down, before any hop — a drag aimed at the wall round the corner has to belong to the piece too, or carrying a window round that corner would orbit instead. The answer is only ever needed at touch-down: the drag latches its mode there and holds it, so a piece being dragged to the room's edge keeps its finger even as that finger strays off the floor.
 export function pointsAtSurface(
   px: number,
   py: number,
@@ -153,8 +142,7 @@ function onWallRun(wall: WallId, cell: Cell): boolean {
   return cell.x >= 0 && cell.x < surfaceExtent({ kind: "wall", wall }).w;
 }
 
-// The floor cell under a finger. May be off-grid — callers run it through anchor/clamp/canPlace,
-// which is what keeps the ghost inside the room.
+// The floor cell under a finger. May be off-grid — callers run it through anchor/clamp/canPlace, which is what keeps the ghost inside the room.
 export function screenPointToFloorCell(
   px: number,
   py: number,
@@ -211,9 +199,7 @@ export function dragTopTarget(
 // A pickable volume in authored room units — see floorPlacementBox in ../core/grid.
 export type PickBox = { min: Vec3; max: Vec3 };
 
-// Where the ray enters a scene-space box, or null if it misses. Standard slab test, with tmin
-// starting at 0 so a ray that begins INSIDE a box (the camera zoomed into a wardrobe) still counts
-// as a hit rather than reporting the entry behind the eye.
+// Where the ray enters a scene-space box, or null if it misses. Standard slab test, with tmin starting at 0 so a ray that begins INSIDE a box (the camera zoomed into a wardrobe) still counts as a hit rather than reporting the entry behind the eye.
 function rayBoxEntry(eye: Vec3, dir: Vec3, min: Vec3, max: Vec3): number | null {
   let tmin = 0;
   let tmax = Infinity;
@@ -234,10 +220,7 @@ function rayBoxEntry(eye: Vec3, dir: Vec3, min: Vec3, max: Vec3): number | null 
   return tmin;
 }
 
-// The index of the NEAREST box the finger's ray enters, or null when it points at none of them.
-// Nearest rather than first, so pressing a piece can never reach through it to something standing
-// behind: that is the whole of the occlusion the room needs, since the pieces are the only things
-// a player can pick up.
+// The index of the NEAREST box the finger's ray enters, or null when it points at none of them. Nearest rather than first, so pressing a piece can never reach through it to something standing behind: that is the whole of the occlusion the room needs, since the pieces are the only things a player can pick up.
 export function pickBoxAt(
   px: number,
   py: number,
@@ -249,8 +232,7 @@ export function pickBoxAt(
   let best: number | null = null;
   let bestT = Infinity;
   boxes.forEach((box, index) => {
-    // roomToScene is a positive uniform scale about a fixed centre, so the box's min/max corners
-    // stay its min/max corners — no re-sorting needed.
+    // roomToScene is a positive uniform scale about a fixed centre, so the box's min/max corners stay its min/max corners — no re-sorting needed.
     const t = rayBoxEntry(eye, dir, roomToScene(box.min), roomToScene(box.max));
     if (t !== null && t < bestT) {
       bestT = t;
@@ -260,8 +242,7 @@ export function pickBoxAt(
   return best;
 }
 
-// Forward projection — room point to screen — used by tests to prove pick(project(cell)) round-trips,
-// and by any UI that wants to badge a placement.
+// Forward projection — room point to screen — used by tests to prove pick(project(cell)) round-trips, and by any UI that wants to badge a placement.
 export function roomPointToScreen(
   point: Vec3,
   viewport: { width: number; height: number },

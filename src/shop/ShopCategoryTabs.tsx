@@ -1,41 +1,27 @@
-// The shop popup's header: a SHOP badge that flows into a pill holding the category tabs
-// Tabs come from src/data/shopItems.ts, so adding a category is a one-line change there
+// The shop popup's header: a SHOP badge that flows into a pill holding the category tabs. Tabs come from src/data/shop/items.ts, so adding a category is a one-line change there.
 import { StyleSheet, Image, Pressable, ScrollView, Text, View } from "react-native";
 import Svg, { Circle, Defs, Path, RadialGradient, Stop } from "react-native-svg";
 
+import { badgeArcPath } from "@/src/components/badgeArc";
 import { SHOP_ICON } from "@/src/components/iconAssets";
+import { IconPlaceholder } from "@/src/components/IconPlaceholder";
 import { CATEGORY_LABELS, SHOP_CATEGORY_TABS } from "@/src/data";
 import type { ShopCategory } from "@/src/data";
-import { useStyles, LEXEND } from "@/src/game/ui/theme";
-import type { Theme } from "@/src/game/ui/theme";
-import { IconPlaceholder } from "@/src/components/IconPlaceholder";
+import { CREAM, useStyles, LEXEND } from "@/src/game/ui/system/theme";
+import type { Theme } from "@/src/game/ui/system/theme";
 
-// The one lavender in the shop, meaning exactly one thing: the category you are in
-const ACTIVE_TILE = "#D3CBD2";
-const TEXT_COLOR = "#231F20";
-const CHROME = "#F7F0E6";
+// Kept in step with InventoryCategoryTabs, its twin. The two headers are separate components on purpose, so anything that must LOOK the same is a shared token or a shared helper rather than a number copied between them.
 const BAR_HEIGHT = 80;
 // Bigger than the bar, so the badge overhangs and reads as sitting in front of the pill
 const CIRCLE_SIZE = 100;
-// The room's bottom-bar hairline, reused so every piece of chrome is the same material
-const HAIRLINE = "#D7D1CE";
-const HAIRLINE_WIDTH = 0.4;
+// Sized to the word: SHOP is short, so the icon can run large without crowding the label. Its twin runs both smaller for the much longer INVENTORY.
 const BADGE_ICON_SIZE = 54;
+const BADGE_LABEL_SIZE = 13;
+const BADGE_LABEL_TRACKING = 0.5;
 // Well beyond the icon, so the glow's falloff has room to fade out
 const BADGE_GLOW_SIZE = 92;
-const BADGE_GLOW = "#FFFCF7";
 
-// An arc not a border: the circle's right side is buried in the pill, and a full ring would draw a seam across the join
-const BADGE_ARC = (() => {
-  // Radius pulled in by the stroke width, or the line clips at the canvas edge
-  const r = CIRCLE_SIZE / 2 - HAIRLINE_WIDTH;
-  const c = CIRCLE_SIZE / 2;
-  // Ends where the circle crosses the pill's edges, so the two strokes meet end to end
-  const dy = Math.min(BAR_HEIGHT / 2, r);
-  const dx = Math.sqrt(Math.max(r * r - dy * dy, 0));
-  // Top edge, round the left, to the bottom edge: counter-clockwise, always >180deg
-  return `M ${c + dx} ${c - dy} A ${r} ${r} 0 1 0 ${c + dx} ${c + dy}`;
-})();
+const BADGE_ARC = badgeArcPath(CIRCLE_SIZE, BAR_HEIGHT, CREAM.hairlineWidth);
 
 export function ShopCategoryTabs({
   category,
@@ -96,16 +82,16 @@ export function ShopCategoryTabs({
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         >
-          <Path d={BADGE_ARC} fill="none" stroke={HAIRLINE} strokeWidth={HAIRLINE_WIDTH} />
+          <Path d={BADGE_ARC} fill="none" stroke={CREAM.hairline} strokeWidth={CREAM.hairlineWidth} />
         </Svg>
         {/* Inside the icon's wrapper, so it centres on the cart and not on the badge. */}
         <View style={s.badgeIconWrap}>
           <Svg width={BADGE_GLOW_SIZE} height={BADGE_GLOW_SIZE} style={s.badgeGlow} pointerEvents="none">
             <Defs>
               <RadialGradient id="shopBadgeGlow" cx="50%" cy="50%" r="50%">
-                <Stop offset="0" stopColor={BADGE_GLOW} stopOpacity={1} />
-                <Stop offset="0.5" stopColor={BADGE_GLOW} stopOpacity={0.65} />
-                <Stop offset="1" stopColor={BADGE_GLOW} stopOpacity={0} />
+                <Stop offset="0" stopColor={CREAM.badgeGlow} stopOpacity={1} />
+                <Stop offset="0.5" stopColor={CREAM.badgeGlow} stopOpacity={0.65} />
+                <Stop offset="1" stopColor={CREAM.badgeGlow} stopOpacity={0} />
               </RadialGradient>
             </Defs>
             <Circle
@@ -136,9 +122,9 @@ const makeStyles = (t: Theme) =>
       // Half the diameter, so the pill's edge runs through the badge's centre
       marginLeft: CIRCLE_SIZE * 0.5,
       borderRadius: 24,
-      backgroundColor: CHROME,
-      borderWidth: HAIRLINE_WIDTH,
-      borderColor: HAIRLINE,
+      backgroundColor: CREAM.chrome,
+      borderWidth: CREAM.hairlineWidth,
+      borderColor: CREAM.hairline,
       // So a scrolled row is cut off by the pill's rounded edge rather than drawn past it
       overflow: "hidden",
     },
@@ -170,10 +156,9 @@ const makeStyles = (t: Theme) =>
       justifyContent: "center",
       flexShrink: 0,
     },
-    // Repeats the radius: on Android, swapping in a background can otherwise redraw the view
-    // with a square drawable and lose the base style's rounding
+    // Repeats the radius: on Android, swapping in a background can otherwise redraw the view with a square drawable and lose the base style's rounding
     iconWrapActive: {
-      backgroundColor: ACTIVE_TILE,
+      backgroundColor: CREAM.activeTile,
       borderRadius: 18,
       overflow: "hidden",
     },
@@ -182,7 +167,7 @@ const makeStyles = (t: Theme) =>
       ...LEXEND.regular,
       fontSize: 12,
       lineHeight: 16,
-      color: TEXT_COLOR,
+      color: CREAM.ink,
       textAlign: "center",
       textTransform: "lowercase",
     },
@@ -195,7 +180,7 @@ const makeStyles = (t: Theme) =>
       width: CIRCLE_SIZE,
       height: CIRCLE_SIZE,
       borderRadius: CIRCLE_SIZE / 2,
-      backgroundColor: CHROME,
+      backgroundColor: CREAM.chrome,
       alignItems: "center",
       justifyContent: "center",
       gap: 2,
@@ -218,8 +203,8 @@ const makeStyles = (t: Theme) =>
     },
     badgeLabel: {
       ...LEXEND.semibold,
-      fontSize: 13,
-      letterSpacing: 0.5,
-      color: TEXT_COLOR,
+      fontSize: BADGE_LABEL_SIZE,
+      letterSpacing: BADGE_LABEL_TRACKING,
+      color: CREAM.ink,
     },
   });

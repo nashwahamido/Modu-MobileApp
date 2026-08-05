@@ -14,8 +14,7 @@ import { ROOM_SHELL } from "./roomShell";
 
 const CELL = ROOM_SHELL.cellSize;
 
-// The registry is module state; every test starts from the same catalog — the bundled built set
-// plus bought rows shaped like the DB seed: a floor item (malm-chest) and a wall item (a window).
+// The registry is module state; every test starts from the same catalog — the bundled built set plus bought rows shaped like the DB seed: a floor item (malm-chest) and a wall item (a window).
 beforeEach(() => {
   registerPlaceables([
     { id: "malm-chest", source: "bought", category: "fur", size: { x: 0.804, y: 1.004, z: 0.483 }, baseOffsetY: 0 },
@@ -24,8 +23,7 @@ beforeEach(() => {
 });
 
 test("every item renders at the one world scale — no per-item drift", () => {
-  // The whole point of the factor: pieces keep their true proportions relative to EACH OTHER.
-  // With ceil-derived footprints the fitScale guard can never bind, bought rows included — and wall items bypass the guard entirely by design, since their footprint is a hole sized to the NEAREST cell and deliberately allowed to be smaller than the model (see fitScale).
+  // The whole point of the factor: pieces keep their true proportions relative to EACH OTHER. With ceil-derived footprints the fitScale guard can never bind, bought rows included — and wall items bypass the guard entirely by design, since their footprint is a hole sized to the NEAREST cell and deliberately allowed to be smaller than the model (see fitScale).
   for (const [itemId] of roomItemDefs()) {
     const item = getRoomItem(itemId)!;
     assert.equal(
@@ -92,8 +90,7 @@ test("asset subtree follows acquisition — the catalog row decides, the bundle 
 });
 
 test("built items need a colour for a storage path — no colour means the bundled model", () => {
-  // Null is the caller's signal to fall back (variantModel.ts). An id the room cannot place must
-  // never produce a path that would 404 at load time.
+  // Null is the caller's signal to fall back (variantModel.ts). An id the room cannot place must never produce a path that would 404 at load time.
   assert.equal(getRoomItemStoragePath("eket-cabinet", null), null);
   assert.equal(getRoomItemStoragePath("eket-cabinet", undefined), null);
   assert.equal(getRoomItemStoragePath("not-an-item", "black"), null);

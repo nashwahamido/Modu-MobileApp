@@ -32,11 +32,7 @@ export const CLUSTERS = {
 } as Record<ClusterId, ClusterDef>;
 
 export const STRUCTURE = {
-  // WORLD FRAME, measured from parts.gen.ts: +Y = UP (topPlane y=+0.499); FRONT = −X (step x=−0.118, frontBottomRail x=−0.156, backBottomRail x=+0.156); +Z = RIGHT (legR z=+0.183, legL z=−0.183).
-  // Every joint comes from the fasteners' attached pairs — no fastener-free contacts, so no directJoins anywhere. placeDir is the direction each part TRAVELS as it seats (park offset is its negation).
-  // The two side panels are DISTINCT parts (mirrored, not interchangeable). Legs and step are all seeds — the player picks which starts the build.
-  // The dowels are PIN connectors, so the preload locks drive the real BEKVÄM order by themselves: a leg down → tap its dowel → step presses on → tap the other dowel → the other leg presses on — only then do the rails open up. The authored array is one such sequence (legL first).
-  // No placeDir on the legs or step: every press here is onto a standing dowel, and pressParkInfo derives the travel from the pin's signed engage axis — the step approaches whichever leg is up, in either build order.
+  // WORLD FRAME, measured from parts.gen.ts: +Y = UP (topPlane y=+0.499); FRONT = −X (step x=−0.118, frontBottomRail x=−0.156, backBottomRail x=+0.156); +Z = RIGHT (legR z=+0.183, legL z=−0.183). Every joint comes from the fasteners' attached pairs — no fastener-free contacts, so no directJoins anywhere. placeDir is the direction each part TRAVELS as it seats (park offset is its negation). The two side panels are DISTINCT parts (mirrored, not interchangeable). Legs and step are all seeds — the player picks which starts the build. The dowels are PIN connectors, so the preload locks drive the real BEKVÄM order by themselves: a leg down → tap its dowel → step presses on → tap the other dowel → the other leg presses on — only then do the rails open up. The authored array is one such sequence (legL first). No placeDir on the legs or step: every press here is onto a standing dowel, and pressParkInfo derives the travel from the pin's signed engage axis — the step approaches whichever leg is up, in either build order.
   legL: { seed: true },
   step: { seed: true },
   legR: { seed: true },

@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 
 import type { TutorialFrame } from "./targetRegistry";
-import { ELEVATION, Theme, useStyles } from "@/src/game/ui/theme";
+import { ELEVATION, Theme, useStyles } from "@/src/game/ui/system/theme";
 
 interface Props {
   frame: TutorialFrame;

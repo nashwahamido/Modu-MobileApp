@@ -13,12 +13,12 @@ import {
   type Handedness,
   type HintId,
 } from "@/src/onboarding/questionnaire";
-import { VoiceButton } from "@/src/game/ui/VoiceButton";
-import { Button } from "@/src/game/ui/Button";
-import { SPACE, TYPE, ELEVATION, useStyles, FONT } from "@/src/game/ui/theme";
+import { VoiceButton } from "@/src/game/ui/hud/VoiceButton";
+import { Button } from "@/src/game/ui/system/Button";
+import { ACCENT_LIGHT, SPACE, TYPE, ELEVATION, useStyles, FONT } from "@/src/game/ui/system/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import { saveOnboardingResults } from "@/src/services/onboarding";
-import type { Theme } from "@/src/game/ui/theme";
+import type { Theme } from "@/src/game/ui/system/theme";
 
 import Reanimated, {
   Easing,
@@ -36,7 +36,7 @@ import type { PressableProps, StyleProp, ViewProps, ViewStyle } from "react-nati
  *  the eye off the thing being read. */
 const BG_SOLID = "#A9BFD9";
 /** The card's rim. Lavender at 3pt, matching the catalogue's selected-card treatment. */
-const BUBBLE_RIM = "#8D7BA8";
+const BUBBLE_RIM = ACCENT_LIGHT;
 /** One source for the bubble's width: the reveal animates a clip to exactly this, and the card
  *  inside is pinned to it so nothing squeezes as the clip opens. */
 const BUBBLE_W = 470;
@@ -234,8 +234,7 @@ export default function QuestionnaireScreen() {
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const referenceScaleRef = useRef(1);
   const referencePinchStartScaleRef = useRef(1);
-  // Where the zoomed page has been dragged to, in view units. Kept in a ref as well as state for the
-  // same reason the scale is: the gesture reads the CURRENT value on every frame, and state lags.
+  // Where the zoomed page has been dragged to, in view units. Kept in a ref as well as state for the same reason the scale is: the gesture reads the CURRENT value on every frame, and state lags.
   const [referenceOffset, setReferenceOffset] = useState({ x: 0, y: 0 });
   const referenceOffsetRef = useRef({ x: 0, y: 0 });
   const referencePanStartRef = useRef({ x: 0, y: 0 });
@@ -770,8 +769,7 @@ export default function QuestionnaireScreen() {
                 style={[
                   styles.referenceExpandedImage,
                   {
-                    // Translate BEFORE scale: the offsets are clamped in view units, and scaling
-                    // first would multiply them and let the page slide past its own bounds.
+                    // Translate BEFORE scale: the offsets are clamped in view units, and scaling first would multiply them and let the page slide past its own bounds.
                     transform: [
                       { translateX: referenceOffset.x },
                       { translateY: referenceOffset.y },
@@ -799,8 +797,7 @@ const makeStyles = (t: Theme) =>
     root: {
       flex: 1,
       backgroundColor: BG_SOLID,
-      // Padding is applied inline (base + safe inset) so the questionnaire clears the cutout
-      // and the immersive-hidden bars the same way every other screen does.
+      // Padding is applied inline (base + safe inset) so the questionnaire clears the cutout and the immersive-hidden bars the same way every other screen does.
     },
     introStage: {
       flex: 1,
@@ -808,8 +805,7 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       justifyContent: "center",
       gap: 20,
-      // Room at the foot for the Next button and its halo, so the bubble clears it — but modest:
-      // too much and the row is pushed into the top margin instead.
+      // Room at the foot for the Next button and its halo, so the bubble clears it — but modest: too much and the row is pushed into the top margin instead.
       paddingBottom: 58,
     },
     mascotCircle: {
@@ -842,8 +838,7 @@ const makeStyles = (t: Theme) =>
       paddingVertical: 24,
       gap: 14,
     },
-    // Straddling the top-left corner of the rim. Absolute, so it contributes no height — in the flow
-    // it was pushing every line of the message down by its own 44pt.
+    // Straddling the top-left corner of the rim. Absolute, so it contributes no height — in the flow it was pushing every line of the message down by its own 44pt.
     bubbleWrap: { position: "relative" },
     bubbleVoice: { position: "absolute", top: -20, left: 22, zIndex: 3 },
     introText: {
@@ -889,9 +884,7 @@ const makeStyles = (t: Theme) =>
       fontWeight: "800",
     },
     // Layout only — the fill, radius, and padding now come from the shared Button.
-    // Outside the bubble entirely: it is what you do NEXT, not part of what Modu is saying.
-    // Offsets are set at the call site from the safe insets: an absolute child is not inset by the
-    // parent's padding, so a literal here could never account for the device.
+    // Outside the bubble entirely: it is what you do NEXT, not part of what Modu is saying. Offsets are set at the call site from the safe insets: an absolute child is not inset by the parent's padding, so a literal here could never account for the device.
     introNextWrap: { position: "absolute" },
     introNextButton: { minWidth: 116 },
     questionHeader: {
@@ -958,8 +951,7 @@ const makeStyles = (t: Theme) =>
       paddingRight: 52,
       paddingTop: 68,
     },
-    // Both bubbles hold two short lines and one glyph. The old padding was sized for a card and
-    // left more empty space than message.
+    // Both bubbles hold two short lines and one glyph. The old padding was sized for a card and left more empty space than message.
     navHintCard: {
       width: 300,
       borderColor: t.accent,
@@ -984,8 +976,7 @@ const makeStyles = (t: Theme) =>
     },
     // No second ring: VoiceButton draws its own, and the wrapper's was a circle around a circle.
     voiceHintIconWrap: { alignSelf: "flex-start", marginBottom: 4 },
-    // Bare arrows. The frame around them read as a control you could press — it is a picture of
-    // the buttons up in the header, not a copy of them.
+    // Bare arrows. The frame around them read as a control you could press — it is a picture of the buttons up in the header, not a copy of them.
     navHintArrowDemo: {
       alignSelf: "flex-end",
       flexDirection: "row",
@@ -1023,8 +1014,7 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       gap: 14,
       paddingTop: 0,
-      // The audio buttons now hang over the cards' top rim, so the gap has to clear the BUTTON, not
-      // the card — at 4 they were colliding with the question line.
+      // The audio buttons now hang over the cards' top rim, so the gap has to clear the BUTTON, not the card — at 4 they were colliding with the question line.
       marginBottom: 26,
     },
     prompt: {
@@ -1046,13 +1036,9 @@ const makeStyles = (t: Theme) =>
       color: t.success,
       fontWeight: "800",
     },
-    // No container: the instruction art IS the panel. A card around a picture that already has its
-    // own white field was two boxes deep for one thing to look at.
-    // Narrower than before so the three answer cards get the width back — on this question the
-    // captions are the longest in the set and were wrapping to four lines in a tall thin box.
+    // No container: the instruction art IS the panel. A card around a picture that already has its own white field was two boxes deep for one thing to look at. Narrower than before so the three answer cards get the width back — on this question the captions are the longest in the set and were wrapping to four lines in a tall thin box.
     referencePanel: { width: 178, alignItems: "center", gap: 8 },
-    // The rounding lives on a CLIPPING wrapper, not on the Image: borderRadius on an Image with
-    // resizeMode contain leaves the letterboxed field square on Android.
+    // The rounding lives on a CLIPPING wrapper, not on the Image: borderRadius on an Image with resizeMode contain leaves the letterboxed field square on Android.
     referenceImageClip: { width: "100%", borderRadius: 18, overflow: "hidden" },
     referencePanelImage: {
       width: "100%",
@@ -1098,25 +1084,19 @@ const makeStyles = (t: Theme) =>
       gap: 22,
     },
     optionCard: {
-      // width, NOT flex. The card now sits inside ScaleOnSelect's wrapper, which is a column — so
-      // `flex: 1` there meant "fill the available HEIGHT" and quietly beat the height below. The
-      // wrapper carries the row's flex; the card just fills it.
+      // width, NOT flex. The card now sits inside ScaleOnSelect's wrapper, which is a column — so `flex: 1` there meant "fill the available HEIGHT" and quietly beat the height below. The wrapper carries the row's flex; the card just fills it.
       width: "100%",
-      // 152 is what the contents actually need at full size: 14 padding + 66 circle + 10 gap +
-      // three 16pt lines + 14 padding. The old 176 was that plus a 44pt gutter for an audio button
-      // that now hangs on the rim, so the card loses the gutter and keeps everything else.
+      // 152 is what the contents actually need at full size: 14 padding + 66 circle + 10 gap + three 16pt lines + 14 padding. The old 176 was that plus a 44pt gutter for an audio button that now hangs on the rim, so the card loses the gutter and keeps everything else.
       height: 152,
       alignItems: "center",
-      // The card is art then words, with the space shared between them rather than pooled at the
-      // bottom — "flex-start" left the picture stranded at the top and the caption on the floor.
+      // The card is art then words, with the space shared between them rather than pooled at the bottom — "flex-start" left the picture stranded at the top and the caption on the floor.
       justifyContent: "center",
       borderColor: t.border,
       borderRadius: 24,
       borderWidth: 2,
       backgroundColor: t.surface,
       paddingHorizontal: 16,
-      // No top gutter for the audio button any more: it hangs on the rim, so the card is sized by
-      // its contents and the caption gets the room the gutter used to take.
+      // No top gutter for the audio button any more: it hangs on the rim, so the card is sized by its contents and the caption gets the room the gutter used to take.
       paddingTop: 14,
       paddingBottom: 14,
       gap: 10,
@@ -1168,8 +1148,7 @@ const makeStyles = (t: Theme) =>
       width: "100%",
       height: "100%",
     },
-    // Left-aligned inside a full-width block: centred captions of different lengths gave three
-    // cards three different silhouettes, and the eye reads a common left edge faster.
+    // Left-aligned inside a full-width block: centred captions of different lengths gave three cards three different silhouettes, and the eye reads a common left edge faster.
     optionText: {
       width: "100%",
       color: t.textDim,
@@ -1206,9 +1185,7 @@ const makeStyles = (t: Theme) =>
       ...StyleSheet.absoluteFillObject,
       backgroundColor: t.scrim,
     },
-    // No card. The manual page is white artwork on its own — a cream panel with a gold rim around
-    // it was a frame around a frame, and it is what made the zoom read as a document viewer rather
-    // than as the page itself.
+    // No card. The manual page is white artwork on its own — a cream panel with a gold rim around it was a frame around a frame, and it is what made the zoom read as a document viewer rather than as the page itself.
     referenceExpandedCard: {
       width: "84%",
       height: "88%",

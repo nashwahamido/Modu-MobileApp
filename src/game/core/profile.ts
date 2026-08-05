@@ -10,8 +10,7 @@ import { AssemblyMode, FurnitureId } from "@/src/game/core/type";
 export const DEFAULT_SETTINGS: AccessibilitySettings = {
   textLevel: "standard",
   audio: false,
-  // On by default: effects are expected in a game, and unlike narration they do not talk over
-  // anything. Profiles that need a quiet build turn it off explicitly.
+  // On by default: effects are expected in a game, and unlike narration they do not talk over anything. Profiles that need a quiet build turn it off explicitly.
   soundEffects: true,
   softHints: true,
   showInstructions: true,

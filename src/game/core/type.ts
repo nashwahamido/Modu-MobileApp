@@ -249,9 +249,7 @@ export interface RenderStyle {
 }
 export type StyleSet = Partial<Record<RenderStyleId, RenderStyle>>;
 
-// What the BUNDLE knows about a furniture: its id, its artwork, and the counts derived from the recipe.
-// Everything a human authors — name, brand, type, duration, link — lives in item_build and is read
-// through the catalogue store, so it can be edited without shipping a build.
+// What the BUNDLE knows about a furniture: its id, its artwork, and the counts derived from the recipe. Everything a human authors — name, brand, type, duration, link — lives in item_build and is read through the catalogue store, so it can be edited without shipping a build.
 export interface FurnitureMeta {
   id: FurnitureId;
   thumbnail: ThumbSet;

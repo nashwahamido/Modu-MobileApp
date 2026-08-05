@@ -5,15 +5,12 @@ import type { Href } from 'expo-router';
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 import Svg, { Circle, Path } from "react-native-svg";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChevronIcon } from '../../components/Icons';
 import { ASSEMBLE_ICON, INVENTORY_ICON, SHOP_ICON, VISIT_FRIENDS_ICON, YOU_ICON } from '../../components/iconAssets';
-import { ELEVATION, useStyles, useTheme, LEXEND } from "@/src/game/ui/theme";
-import type { Theme } from "@/src/game/ui/theme";
-import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN } from '../../hooks/use-safe-insets';
+import { CREAM, ELEVATION, useStyles, useTheme, LEXEND } from "@/src/game/ui/system/theme";
+import type { Theme } from "@/src/game/ui/system/theme";
+import { useScreenInsets } from '../../hooks/use-safe-insets';
 
-// This bar's text is pinned to the mockup's exact ink colour rather than the theme's t.text — a deliberate override for this redesign, not an oversight, so it does not shift with the light/dark/high-contrast theme. The family is the app-wide Lexend.
-const TEXT_COLOR = '#231F20';
 
 // Reanimated, not RN's LayoutAnimation, which doesn't fire reliably on the New Architecture
 const BAR_LAYOUT = LinearTransition.duration(220);
@@ -68,9 +65,9 @@ export function RoomBottomBar({
   // t.bg is the room's backdrop colour, used for the chevron's outline
   const t = useTheme();
   // Immersive mode reports 0 insets, so these floors sit UNDER the design's own offsets
-  const insets = useSafeAreaInsets();
-  const padL = 22 + Math.max(insets.left, SCREEN_SIDE_MARGIN);
-  const padBottom = 22 + Math.max(insets.bottom, SCREEN_VERTICAL_MARGIN);
+  const safe = useScreenInsets();
+  const padL = 22 + safe.left;
+  const padBottom = 22 + safe.bottom;
   const [barOpen, setBarOpen] = useState(true);
 
   return (
@@ -281,7 +278,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     ...LEXEND.regular,
     fontSize: 10.5,
     lineHeight: 13,
-    color: TEXT_COLOR,
+    color: CREAM.ink,
     marginTop: 4,
     textAlign: 'center',
   },

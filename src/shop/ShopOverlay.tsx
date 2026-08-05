@@ -1,23 +1,23 @@
-// The shop, as a popup layer over the room rather than a route, so the scene stays mounted
-// The full-screen route at src/app/(presentation)/store.tsx still exists and is unchanged
+// The shop, as a popup layer over the room rather than a route, so the scene stays mounted. Twin of InventoryOverlay, and separate on purpose: anything that must LOOK the same is a shared token or a shared helper, never a number copied between them. The conventions this file follows are listed at the top of game/ui/theme.ts. Read them before restyling.
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, StyleSheet, Pressable, ScrollView, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ActivityIndicator, Animated, StyleSheet, Pressable, ScrollView, Text, View } from "react-native";
 
 import { CloseIcon } from "@/src/components/Icons";
-import { Button } from "@/src/game/ui/Button";
-import { useStyles, useTheme, LEXEND } from "@/src/game/ui/theme";
-import type { Theme } from "@/src/game/ui/theme";
+import { Button } from "@/src/game/ui/system/Button";
+import { CREAM, CREAM_LIFT, useStyles, useTheme, LEXEND } from "@/src/game/ui/system/theme";
+import { useSlideUpPresentation } from "@/src/game/ui/system/slideUp";
+import type { Theme } from "@/src/game/ui/system/theme";
 import { useCurrentUserId, useRepos, viewCatalogue } from "@/src/data";
 import type { ShopCategory, ShopItem, ShopItemId } from "@/src/data";
-import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN } from "@/src/hooks/use-safe-insets";
+import { useProfileStore } from "@/src/data/player/profileStore";
+import { useShopStore } from "@/src/data/shop/store";
+import { useScreenInsets } from '@/src/hooks/use-safe-insets';
 import { ShopCategoryTabs } from "./ShopCategoryTabs";
 import { ShopItemTile } from "./ShopItemTile";
-import type { PurchaseBlock } from "./PurchaseNoticeDialog";
+import type { PurchaseBlock } from "./purchaseBlock";
 import { PurchaseConfirmPopup } from "./PurchaseConfirmPopup";
 import { PurchaseNoticePopup } from "./PurchaseNoticePopup";
 
-const TEXT_COLOR = "#231F20";
 // Fixed four columns; the tile width is solved from the measured row width
 const GRID_COLUMNS = 4;
 const GRID_GAP = 22;
@@ -27,18 +27,23 @@ const GRID_EDGE = 22;
 export function ShopOverlay({ onClose }: { onClose: () => void }) {
   const s = useStyles(makeStyles);
   const t = useTheme();
-  const insets = useSafeAreaInsets();
+  const safe = useScreenInsets();
   const repos = useRepos();
   const me = useCurrentUserId();
+  // Slides up over the room and dims it, the way this surface did when it was a (presentation) route. requestClose replaces every direct onClose call, so the sheet is off-screen before the parent unmounts it.
+  const { sheetStyle, scrimStyle, requestClose } = useSlideUpPresentation(onClose);
 
-  const [items, setItems] = useState<ShopItem[]>([]);
-  const [owned, setOwned] = useState<Set<ShopItemId>>(new Set());
-  const [coins, setCoins] = useState(0);
-  const [level, setLevel] = useState(1);
-  const [loading, setLoading] = useState(true);
-  // Distinct from "loaded and empty", which is a legitimate state.
-  const [loadError, setLoadError] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
+  // The catalogue and the owned set are shared with the inventory popup (src/data/shop/store). So opening one after the other does not fetch the same reference data twice, and a purchase here is visible there without a refetch.
+  const items = useShopStore((c) => c.items);
+  const owned = useShopStore((c) => c.owned);
+  const status = useShopStore((c) => c.status);
+  const loading = status === "loading" || status === "empty";
+  const loadError = status === "error";
+  // Coins and level come from the same store the room's HUD reads (src/data/player/profileStore), so spending here moves the pill behind the popup too.
+  const profile = useProfileStore((p) => p.profile);
+  const coins = profile?.coins ?? 0;
+  const level = profile?.level ?? 1;
+
   const [category, setCategory] = useState<ShopCategory>("fur");
   const [busyId, setBusyId] = useState<ShopItemId | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -50,34 +55,11 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
     (gridWidth - GRID_EDGE * 2 - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS,
   );
 
+  // load() is a no-op once this user's catalogue is in, so re-opening the popup costs nothing. The profile IS re-read on open, because a build finished elsewhere may have paid out since.
   useEffect(() => {
-    let alive = true;
-    setLoading(true);
-    setLoadError(false);
-    (async () => {
-      try {
-        const [catalogue, ownedIds, profile] = await Promise.all([
-          repos.store.listItems(),
-          repos.store.listOwned(me),
-          repos.profiles.get(me),
-        ]);
-        if (!alive) return;
-        setItems(catalogue);
-        setOwned(new Set(ownedIds));
-        setCoins(profile?.coins ?? 0);
-        setLevel(profile?.level ?? 1);
-      } catch (err) {
-        // The repos throw, so this is the ordinary failure path, not an exotic one
-        console.warn("[shop] could not load the shop:", (err as Error).message);
-        if (alive) setLoadError(true);
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [me, repos, reloadKey]);
+    void useShopStore.getState().load(repos, me);
+    void useProfileStore.getState().load(repos, me);
+  }, [me, repos]);
 
   // Sorted by name: the popup has no sort control, so one stable order it is
   const visible = useMemo(() => viewCatalogue(items, category, "name"), [items, category]);
@@ -98,8 +80,9 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
     try {
       const res = await repos.store.purchase(me, item.id);
       if (res.ok) {
-        setOwned((prev) => new Set(prev).add(item.id));
-        setCoins(res.coinsRemaining);
+        // Both writes land on shared state: the inventory popup sees the new item, and the room's coin pill behind this popup sees the new balance. Neither needs a re-read.
+        useShopStore.getState().markOwned(item.id);
+        useProfileStore.getState().setCoins(res.coinsRemaining);
         setNote(`Bought ${item.name}`);
       } else if (res.reason === "level_locked" || res.reason === "insufficient_coins") {
         // The server is authoritative, so echo its refusal
@@ -116,17 +99,22 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const padTop = 18 + Math.max(insets.top, SCREEN_VERTICAL_MARGIN);
-  // Wider than the vertical inset, so the room still reads down both sides
-  const padSide = 62 + Math.max(Math.max(insets.left, insets.right), SCREEN_SIDE_MARGIN);
-  const padBottom = 18 + Math.max(insets.bottom, SCREEN_VERTICAL_MARGIN);
+  const padTop = 18 + safe.top;
+  // Wider than the vertical inset, so the room still reads down both sides safe.side, not left or right: the panel is centred, so both edges take the LARGER inset or it sits off-centre
+  const padSide = 62 + safe.side;
+  const padBottom = 18 + safe.bottom;
 
   return (
     <View style={s.layer}>
-      {/* Also closes; Unlabelled since the cross is the labelled affordance */}
-      <Pressable style={s.scrim} onPress={onClose} />
+      {/* The dim fades in with the sheet. The Pressable is a child rather than the scrim itself, because an animated opacity belongs on a View. */}
+      <Animated.View style={[s.scrim, scrimStyle]}>
+        {/* Also closes; unlabelled since the cross is the labelled affordance */}
+        <Pressable style={StyleSheet.absoluteFill} onPress={requestClose} />
+      </Animated.View>
 
-      <View style={[s.panel, { top: padTop, bottom: padBottom, left: padSide, right: padSide }]}>
+      <Animated.View
+        style={[s.panel, { top: padTop, bottom: padBottom, left: padSide, right: padSide }, sheetStyle]}
+      >
         <ShopCategoryTabs category={category} onCategory={setCategory} rightInset={GRID_EDGE} />
 
         {note ? <Text style={s.note}>{note}</Text> : null}
@@ -138,7 +126,11 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
         ) : loadError ? (
           <View style={s.center}>
             <Text style={s.empty}>Couldn&apos;t load the shop. Check your connection.</Text>
-            <Button label="Try again" variant="primary" onPress={() => setReloadKey((k) => k + 1)} />
+            <Button
+              label="Try again"
+              variant="primary"
+              onPress={() => void useShopStore.getState().reload(repos, me)}
+            />
           </View>
         ) : visible.length === 0 ? (
           <View style={s.center}>
@@ -167,18 +159,20 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
               : null}
           </ScrollView>
         )}
-      </View>
+      </Animated.View>
 
-      {/* Outside the panel so it can straddle the corner, as in the mockup*/}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Close the shop"
-        hitSlop={12}
-        style={[s.close, { top: padTop - 16, right: padSide - 16 }]}
-        onPress={onClose}
-      >
-        <CloseIcon size={22} color="#FBFAF3" />
-      </Pressable>
+      {/* Outside the panel so it can straddle the corner, as in the mockup. Rides the same slide, or it would pop in against a moving sheet. */}
+      <Animated.View style={[s.close, { top: padTop - 16, right: padSide - 16 }, sheetStyle]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close the shop"
+          hitSlop={12}
+          style={s.closeHit}
+          onPress={requestClose}
+        >
+          <CloseIcon size={22} color={CREAM.card} />
+        </Pressable>
+      </Animated.View>
 
       {notice ? (
         <PurchaseNoticePopup
@@ -216,15 +210,11 @@ const makeStyles = (t: Theme) =>
     panel: {
       position: "absolute",
       borderRadius: 28,
-      backgroundColor: "#FBFAF3",
+      backgroundColor: CREAM.card,
       paddingTop: 18,
       paddingHorizontal: 22,
       overflow: "hidden",
-      shadowColor: "#929292",
-      shadowOpacity: 0.22,
-      shadowRadius: 18,
-      shadowOffset: { width: 0, height: 4 },
-      elevation: 6,
+      ...CREAM_LIFT.panel,
     },
     grid: {
       flexDirection: "row",
@@ -251,8 +241,9 @@ const makeStyles = (t: Theme) =>
       marginBottom: 8,
       ...LEXEND.regular,
       fontSize: 13,
-      color: TEXT_COLOR,
+      color: CREAM.ink,
     },
+    // The animated wrapper: it carries the position, the disc and the shadow, and rides the sheet's slide.
     close: {
       position: "absolute",
       width: 40,
@@ -260,11 +251,13 @@ const makeStyles = (t: Theme) =>
       borderRadius: 20,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: "#3D3A38",
-      shadowColor: "#000",
-      shadowOpacity: 0.2,
-      shadowRadius: 6,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 6,
+      backgroundColor: CREAM.darkChip,
+      ...CREAM_LIFT.chip,
+    },
+    // The Pressable inside it. Fills the disc so the whole circle is tappable, and re-centres the cross because the icon is now a grandchild.
+    closeHit: {
+      ...StyleSheet.absoluteFillObject,
+      alignItems: "center",
+      justifyContent: "center",
     },
   });

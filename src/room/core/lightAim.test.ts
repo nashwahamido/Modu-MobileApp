@@ -3,10 +3,7 @@ import test from "node:test";
 
 import { AIM_DOWN, aimToDirection } from "./lightAim";
 
-// THE CROSS-REPO FIXTURE. These pairs are copied verbatim from the convention block in
-// supabase/migrations/014_light_aim.sql, and the workshop portal carries the same table. They are the
-// only thing standing between the two repos and a silent convention mismatch — if either side flips a
-// sign, its own copy of this test fails immediately rather than every lamp shipping aimed backwards.
+// THE CROSS-REPO FIXTURE. These pairs are copied verbatim from the convention block in supabase/migrations/014_light_aim.sql, and the workshop portal carries the same table. They are the only thing standing between the two repos and a silent convention mismatch — if either side flips a sign, its own copy of this test fails immediately rather than every lamp shipping aimed backwards.
 //
 // DO NOT "simplify" these by deriving the expected vectors from the same trig the implementation uses.
 // A test that recomputes the thing it is checking passes for any convention, including the wrong one;
@@ -34,8 +31,7 @@ test("the aim convention matches migration 014 exactly", () => {
   }
 });
 
-// Coverage, which is the question the representation had to answer before it was chosen: two angles
-// have to reach every direction on the sphere, or some lamp is unaimable.
+// Coverage, which is the question the representation had to answer before it was chosen: two angles have to reach every direction on the sphere, or some lamp is unaimable.
 test("pitch and yaw together reach every direction, and always as a unit vector", () => {
   for (let pitch = 0; pitch <= 180; pitch += 15) {
     for (let yaw = 0; yaw < 360; yaw += 15) {
@@ -63,9 +59,7 @@ test("yaw wraps rather than being rejected, because 360 and 0 are the same aim",
   }
 });
 
-// A point light stores NULL for both angles (item_lights constrains it), and the catalog is a network
-// fetch — a stale cache or a hand-edited row must not take the room down. A lamp aimed the wrong way is
-// a bug someone reports; a crash on entering the room is not.
+// A point light stores NULL for both angles (item_lights constrains it), and the catalog is a network fetch — a stale cache or a hand-edited row must not take the room down. A lamp aimed the wrong way is a bug someone reports; a crash on entering the room is not.
 test("missing or nonsense angles fall back to straight down rather than throwing", () => {
   assert.deepEqual(aimToDirection(null, null), AIM_DOWN);
   assert.deepEqual(aimToDirection(45, null), AIM_DOWN);

@@ -136,9 +136,7 @@ export function buildPhase(
 ): { index: number; total: number } {
   const ids = focusableClusterIds(f);
 
-  // A build with no sub-assemblies to choose between (LACK) has no map phases to count, so
-  // it falls back to the AUTHORED stage — which is the only meaningful progress marker it
-  // has. Counting nodes there would pin it at "Stage 1" for the whole build.
+  // A build with no sub-assemblies to choose between (LACK) has no map phases to count, so it falls back to the AUTHORED stage — which is the only meaningful progress marker it has. Counting nodes there would pin it at "Stage 1" for the whole build.
   if (ids.length === 0) {
     const stages = f.actions.map((a) => a.stage);
     return {

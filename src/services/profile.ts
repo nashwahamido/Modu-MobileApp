@@ -29,9 +29,7 @@ export async function getProfile(userId: string) {
   return data as UserProfile | null;
 }
 
-// A SAFETY NET, not the provisioning path. The row is created by the on_auth_user_created trigger
-// (migration 007_auth_provisioning.sql), which covers every sign-in route including ones that never reach this
-// code. This stays for accounts that predate the trigger, and to stamp last_login on each sign-in.
+// A SAFETY NET, not the provisioning path. The row is created by the on_auth_user_created trigger (migration 007_auth_provisioning.sql), which covers every sign-in route including ones that never reach this code. This stays for accounts that predate the trigger, and to stamp last_login on each sign-in.
 export async function createProfileIfMissing(userId: string, email?: string | null) {
   const now = new Date().toISOString();
   const existingProfile = await getProfile(userId);
@@ -56,9 +54,7 @@ export async function createProfileIfMissing(userId: string, email?: string | nu
   return data as UserProfile;
 }
 
-// Mirrors the trigger's naming rule. The EMAIL LOCAL-PART only — user_profile is readable by every
-// authenticated user, so a full address stored here would be published to all of them. The uid suffix
-// keeps the NOT NULL + UNIQUE constraint satisfied without a round-trip to check for collisions.
+// Mirrors the trigger's naming rule. The EMAIL LOCAL-PART only — user_profile is readable by every authenticated user, so a full address stored here would be published to all of them. The uid suffix keeps the NOT NULL + UNIQUE constraint satisfied without a round-trip to check for collisions.
 function fallbackUsername(userId: string, email?: string | null): string {
   const local = (email ?? "").split("@")[0].trim();
   return `${local || "builder"}-${userId.replace(/-/g, "").slice(0, 8)}`;

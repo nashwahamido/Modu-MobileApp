@@ -9,7 +9,7 @@ import {
 } from "react-native";
 
 import { useGameStore } from "@/src/game/core/store";
-import { ELEVATION, Theme, useStyles } from "@/src/game/ui/theme";
+import { ACCENT_LIGHT, ELEVATION, Theme, useStyles } from "@/src/game/ui/system/theme";
 import { tutorialPresentationForProfile } from "./presentation";
 import { useTutorialStore } from "./store";
 
@@ -223,7 +223,7 @@ const makeStyles = (theme: Theme) =>
       paddingHorizontal: 13,
       paddingVertical: 8,
       borderRadius: 11,
-      backgroundColor: "#8D7BA8",
+      backgroundColor: ACCENT_LIGHT,
     },
     resumeButtonText: {
       color: "#FFFFFF",

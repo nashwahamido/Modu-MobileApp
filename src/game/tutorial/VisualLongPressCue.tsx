@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 
 import type { TutorialFrame } from "./targetRegistry";
-import { Theme, useStyles } from "@/src/game/ui/theme";
+import { Theme, useStyles } from "@/src/game/ui/system/theme";
 
 interface Props {
   frame: TutorialFrame;
@@ -33,8 +33,7 @@ export function VisualLongPressCue({ frame }: Props) {
   }, [pulse]);
 
   const centerX = frame.x + frame.width / 2;
-  // The first item in the parts tray is the tabletop. Keep the cue near the
-  // top card rather than centring it over the entire vertical tray.
+  // The first item in the parts tray is the tabletop. Keep the cue near the top card rather than centring it over the entire vertical tray.
   const centerY = frame.y + Math.min(52, frame.height * 0.16);
 
   return (

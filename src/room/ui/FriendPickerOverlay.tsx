@@ -5,10 +5,10 @@ import type { Href } from "expo-router";
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { avatarForProfile } from "@/src/components/avatarAssets";
-import { Button } from "@/src/game/ui/Button";
-import { OverlaySheet } from "@/src/game/ui/OverlaySheet";
-import { RADIUS, SIZE, SPACE, TYPE, useStyles, useTheme } from "@/src/game/ui/theme";
-import type { Theme } from "@/src/game/ui/theme";
+import { Button } from "@/src/game/ui/system/Button";
+import { OverlaySheet } from "@/src/game/ui/system/OverlaySheet";
+import { RADIUS, SIZE, SPACE, TYPE, useStyles, useTheme } from "@/src/game/ui/system/theme";
+import type { Theme } from "@/src/game/ui/system/theme";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import type { Profile } from "@/src/data";
 

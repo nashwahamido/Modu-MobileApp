@@ -1,5 +1,4 @@
-// The filter that stands between a SAVED room and a rendered one. Saved rows are re-validated against TODAY'S rules, not the rules they were placed under: grids have shrunk and window bands have moved this project, and a stale row otherwise renders verbatim forever — a window frozen outside its band with no way to grab it.
-// Its own module rather than a function inside placement.ts so node:test can import it: placement.ts reaches the repo seam and through it react-native, which the test runner's esbuild cannot transform. Same constraint placeableItems.ts documents in its own header.
+// The filter that stands between a SAVED room and a rendered one. Saved rows are re-validated against TODAY'S rules, not the rules they were placed under: grids have shrunk and window bands have moved this project, and a stale row otherwise renders verbatim forever — a window frozen outside its band with no way to grab it. Its own module rather than a function inside placement.ts so node:test can import it: placement.ts reaches the repo seam and through it react-native, which the test runner's esbuild cannot transform. Same constraint placeableItems.ts documents in its own header.
 import { canPlaceInLayout, type GridPlacement } from "./grid";
 import { getRoomItemDef, roomItemDefs } from "./placeableItems";
 

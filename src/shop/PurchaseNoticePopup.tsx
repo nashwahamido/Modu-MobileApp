@@ -3,20 +3,14 @@
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 
 import { COIN_ICON } from "@/src/components/iconAssets";
-import { useStyles, LEXEND } from "@/src/game/ui/theme";
-import type { Theme } from "@/src/game/ui/theme";
+import { CREAM, CREAM_LIFT, useStyles, LEXEND } from "@/src/game/ui/system/theme";
+import type { Theme } from "@/src/game/ui/system/theme";
+import type { PurchaseBlock } from "./purchaseBlock";
 
-const TEXT_COLOR = "#231F20";
-const CARD = "#FBFAF3";
-const CLOSE_FILL = "#3D3A38";
-const CLOSE_TEXT = "#FBFAF3";
 const COIN_SIZE = 34;
 const PILL_HEIGHT = 22;
 // How far the price pill hides behind the coin, as on the item tiles
 const PRICE_TUCK = 22;
-
-/** Why the item cannot be bought. Mirrors the shop's own PurchaseBlock */
-export type NoticeBlock = "level" | "coins";
 
 export function PurchaseNoticePopup({
   name,
@@ -28,7 +22,7 @@ export function PurchaseNoticePopup({
   name: string;
   price: number;
   minLevel: number;
-  block: NoticeBlock;
+  block: PurchaseBlock;
   onClose: () => void;
 }) {
   const s = useStyles(makeStyles);
@@ -87,16 +81,12 @@ const makeStyles = (t: Theme) =>
       width: 460,
       maxWidth: "86%",
       borderRadius: 24,
-      backgroundColor: CARD,
+      backgroundColor: CREAM.card,
       paddingHorizontal: 30,
       paddingTop: 26,
       paddingBottom: 22,
       alignItems: "center",
-      shadowColor: "#929292",
-      shadowOpacity: 0.22,
-      shadowRadius: 18,
-      shadowOffset: { width: 0, height: 4 },
-      elevation: 8,
+      ...CREAM_LIFT.card,
     },
     // Top padding gives the price badge room to overhang without clipping
     wellWrap: {
@@ -133,21 +123,21 @@ const makeStyles = (t: Theme) =>
       paddingRight: 8,
       backgroundColor: "#FFFFFF",
       borderWidth: 0.6,
-      borderColor: "#D7D1CE",
+      borderColor: CREAM.hairline,
       alignItems: "center",
       justifyContent: "center",
     },
     priceText: {
       ...LEXEND.bold,
       fontSize: 13,
-      color: TEXT_COLOR,
+      color: CREAM.ink,
       transform: [{ translateX: -3 }],
     },
     message: {
       marginTop: 22,
       ...LEXEND.regular,
       fontSize: 17,
-      color: TEXT_COLOR,
+      color: CREAM.ink,
       textAlign: "center",
     },
     messageName: {
@@ -160,14 +150,10 @@ const makeStyles = (t: Theme) =>
       height: 34,
       borderRadius: 13,
       paddingHorizontal: 18,
-      backgroundColor: CLOSE_FILL,
+      backgroundColor: CREAM.darkChip,
       alignItems: "center",
       justifyContent: "center",
-      shadowColor: "#929292",
-      shadowOpacity: 0.22,
-      shadowRadius: 4,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 2,
+      ...CREAM_LIFT.control,
     },
     pressed: {
       opacity: 0.75,
@@ -175,6 +161,6 @@ const makeStyles = (t: Theme) =>
     buttonText: {
       ...LEXEND.regular,
       fontSize: 15,
-      color: CLOSE_TEXT,
+      color: CREAM.card,
     },
   });

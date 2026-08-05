@@ -42,18 +42,11 @@ export function useBuildPersistence(target: FurnitureId): void {
       if (!save) return;
       const { completedCount, totalCount } = state.progress();
       if (totalCount > 0 && completedCount >= totalCount) {
-        // Finished: grant the reward (server-authoritative amount from item_build; idempotent — one
-        // per build, so the debounce + unmount flush can't double-pay), record the completion (backs
-        // assembly_count), and drop the save.
-        // complete() only runs once reward() has settled: complete() DELETES the in-progress save, so
-        // running them concurrently means a failed reward loses both the coins and the progress that
-        // would let the player earn them again. Both are idempotent, so a retry costs nothing.
+        // Finished: grant the reward (server-authoritative amount from item_build; idempotent — one per build, so the debounce + unmount flush can't double-pay), record the completion (backs assembly_count), and drop the save. complete() only runs once reward() has settled: complete() DELETES the in-progress save, so running them concurrently means a failed reward loses both the coins and the progress that would let the player earn them again. Both are idempotent, so a retry costs nothing.
         repos.builds
           .reward(me, save.furnitureId)
           .then(() => repos.builds.complete(me, save.furnitureId))
-          // The repos THROW on any Postgrest error. This runs from an effect cleanup, so there is no
-          // UI left to tell — but an uncaught rejection here meant a finished build silently paid
-          // nothing while BuildComplete promised the player coins and XP.
+          // The repos THROW on any Postgrest error. This runs from an effect cleanup, so there is no UI left to tell — but an uncaught rejection here meant a finished build silently paid nothing while BuildComplete promised the player coins and XP.
           .catch((err) => console.warn(`[build] reward/complete failed for ${save.furnitureId}`, err));
       } else {
         repos.builds.save(save).catch((err) => console.warn(`[build] autosave failed for ${save.furnitureId}`, err));

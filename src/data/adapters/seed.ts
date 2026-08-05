@@ -1,10 +1,10 @@
 // Demo seed data for the in-memory adapter: a fake "me" plus demo friends, each with a profile and a room. Doubles as demo data (the DEV panel) and test fixtures.
 import type { FurnitureId } from "@/src/game/core/type";
-import type { LevelRow } from "../levels";
-import type { ShopCategory, ShopItem, ShopItemId } from "../shopItems";
-import type { BuildCatalogRow, ItemVariant, PlaceableRoomRow } from "../repos";
-import type { BuildSave, Friend, Profile, RoomLayout, UserId } from "../types";
-import { ROOM_LAYOUT_VERSION } from "../types";
+import type { LevelRow } from "../player/levels";
+import type { ShopCategory, ShopItem, ShopItemId } from "../shop/items";
+import type { BuildCatalogRow, ItemVariant, PlaceableRoomRow } from "../core/repos";
+import type { BuildSave, Friend, Profile, RoomLayout, UserId } from "../core/types";
+import { ROOM_LAYOUT_VERSION } from "../core/types";
 
 // The fake current user for local/dev runs. Real code derives the id from Supabase auth (useAuth().user.id).
 export const DEMO_ME: UserId = "me";
@@ -16,8 +16,7 @@ const SEED_TS = "2026-01-01T00:00:00.000Z";
 
 export function seedProfiles(): Profile[] {
   return [
-    // title (from level), xpIntoLevel/xpForNextLevel (from the level curve), itemsAssembled (from seedCompleted) and likes (from seedRoomLikes) are all derived on read — the values here are placeholders the adapter overwrites.
-    // level must agree with xp under seedLevelRows(), the way the reward path keeps them: 340 -> 2, 980 -> 4, 150 -> 1.
+    // title (from level), xpIntoLevel/xpForNextLevel (from the level curve), itemsAssembled (from seedCompleted) and likes (from seedRoomLikes) are all derived on read — the values here are placeholders the adapter overwrites. level must agree with xp under seedLevelRows(), the way the reward path keeps them: 340 -> 2, 980 -> 4, 150 -> 1.
     { userId: DEMO_ME, username: "You", avatarMode: "control", level: 2, coins: 120, xp: 340, onboardingCompleted: true, title: null, xpIntoLevel: 0, xpForNextLevel: null, itemsAssembled: 0, likes: 0 },
     { userId: DEMO_FRIEND_A, username: "Astrid", avatarMode: "visual", level: 4, coins: 410, xp: 980, onboardingCompleted: true, title: null, xpIntoLevel: 0, xpForNextLevel: null, itemsAssembled: 0, likes: 0 },
     { userId: DEMO_FRIEND_B, username: "Noah", avatarMode: "momentum", level: 1, coins: 60, xp: 150, onboardingCompleted: true, title: null, xpIntoLevel: 0, xpForNextLevel: null, itemsAssembled: 0, likes: 0 },
@@ -116,8 +115,7 @@ export function seedInventory(): Record<UserId, ShopItemId[]> {
   };
 }
 
-// The colour/finish axis per item — the in-memory mirror of the item_variants seed in migration 003_catalog.sql, copied verbatim for the same reason seedShopItems is: this is what the picker offers when the backend is not "supabase", so it is only useful insofar as it matches the real table.
-// Exactly one is_default per item id, like the partial unique index enforces.
+// The colour/finish axis per item — the in-memory mirror of the item_variants seed in migration 003_catalog.sql, copied verbatim for the same reason seedShopItems is: this is what the picker offers when the backend is not "supabase", so it is only useful insofar as it matches the real table. Exactly one is_default per item id, like the partial unique index enforces.
 export function seedItemVariants(): ItemVariant[] {
   const v = (itemId: string, variation: string | null, isDefault = false): ItemVariant => ({ itemId, variation, isDefault });
   return [

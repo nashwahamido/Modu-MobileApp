@@ -7,17 +7,13 @@ import { completeAuthFromUrl } from "../services/authLink";
 // linkError carries a refused or expired magic link. Nothing renders it yet — see the note on the deep-link effect below.
 type AuthState = { user: User | null; session: Session | null; loading: boolean; linkError: string | null };
 
-// One shared session for the whole app. A per-component hook would give each caller its own async
-// getSession()/subscription — so a screen mounting just after sign-in would briefly see user=null and
-// query the DB with the DEMO_ME fallback ("me") before its own copy resolved. A single context means
-// every consumer reads the same user in the same commit, so that race can't happen.
+// One shared session for the whole app. A per-component hook would give each caller its own async getSession()/subscription — so a screen mounting just after sign-in would briefly see user=null and query the DB with the DEMO_ME fallback ("me") before its own copy resolved. A single context means every consumer reads the same user in the same commit, so that race can't happen.
 const AuthContext = createContext<AuthState>({ user: null, session: null, loading: true, linkError: null });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  // Two gates, because a cold start launched BY a magic link has to finish the token exchange before
-  // loading drops — otherwise getSession() resolves null first and the app flashes the login screen.
+  // Two gates, because a cold start launched BY a magic link has to finish the token exchange before loading drops — otherwise getSession() resolves null first and the app flashes the login screen.
   const [sessionReady, setSessionReady] = useState(false);
   const [linkReady, setLinkReady] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
@@ -41,9 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // The magic-link callback. A successful exchange fires onAuthStateChange above, so the session lands
-  // through the one path everything else already reads. linkError is set but NOT rendered anywhere yet:
-  // an expired link currently fails quietly apart from this warning.
+  // The magic-link callback. A successful exchange fires onAuthStateChange above, so the session lands through the one path everything else already reads. linkError is set but NOT rendered anywhere yet: an expired link currently fails quietly apart from this warning.
   useEffect(() => {
     let cancelled = false;
 

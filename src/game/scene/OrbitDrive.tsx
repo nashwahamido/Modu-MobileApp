@@ -9,8 +9,7 @@ export interface StickDeflection {
   y: number;
 }
 
-// Matches the old JS-thread ORBIT_RATE * per-frame-seconds. The render callback runs per
-// frame (~60fps) like the old 16ms interval, so the same rate constant gives the same feel.
+// Matches the old JS-thread ORBIT_RATE * per-frame-seconds. The render callback runs per frame (~60fps) like the old 16ms interval, so the same rate constant gives the same feel.
 const ORBIT_RATE = 220;
 const FRAME_DT = 0.016;
 
@@ -41,9 +40,7 @@ export function OrbitDrive({
   /** True while a stick grab session is open (set by useOrbitCamera's start/end). */
   active: ISharedValue<boolean>;
 }) {
-  // Accumulated grab coordinates, render-thread-local, plus a one-bit memory of last
-  // frame's active state so we can detect a fresh grab and zero the accumulator — otherwise
-  // the second session would resume from the first's total and the camera would jump.
+  // Accumulated grab coordinates, render-thread-local, plus a one-bit memory of last frame's active state so we can detect a fresh grab and zero the accumulator — otherwise the second session would resume from the first's total and the camera would jump.
   const gx = useWorkletSharedValue(0);
   const gy = useWorkletSharedValue(0);
   const wasActive = useWorkletSharedValue(false);
@@ -55,8 +52,7 @@ export function OrbitDrive({
       return;
     }
     if (!manipulator) return;
-    // Rising edge: new grab session (useOrbitCamera just called grabBegin(0,0)), so start
-    // the accumulator from zero to match the fresh grab origin.
+    // Rising edge: new grab session (useOrbitCamera just called grabBegin(0,0)), so start the accumulator from zero to match the fresh grab origin.
     if (!wasActive.value) {
       gx.value = 0;
       gy.value = 0;

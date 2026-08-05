@@ -1,5 +1,4 @@
-// Local design tokens for the dev harness only, so src/dev/ stays
-// self-contained and can be deleted without touching shared code.
+// Local design tokens for the dev harness only, so src/dev/ stays self-contained and can be deleted without touching shared code.
 
 export const Status = {
   discover: "#2f6fed",

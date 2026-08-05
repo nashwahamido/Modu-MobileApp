@@ -1,12 +1,8 @@
 // The assembly task's sound effects.
 //
-// Players are created ONCE at module load, not through useAudioPlayer. A hook ties a player to a
-// component's lifetime, and these are one-shots fired from a store subscription — the tap that ends
-// a mallet strike must not depend on whichever control happens to be mounted. Creating them up front
-// also means the first tap is not the one that pays for the decode.
+// Players are created ONCE at module load, not through useAudioPlayer. A hook ties a player to a component's lifetime, and these are one-shots fired from a store subscription — the tap that ends a mallet strike must not depend on whichever control happens to be mounted. Creating them up front also means the first tap is not the one that pays for the decode.
 //
-// The clips shipped here are PLACEHOLDERS, synthesised for timing. Replace the files; nothing in the
-// code needs to change, because everything is keyed by name.
+// The clips shipped here are PLACEHOLDERS, synthesised for timing. Replace the files; nothing in the code needs to change, because everything is keyed by name.
 import { createAudioPlayer, type AudioPlayer } from "expo-audio";
 
 export type SfxName =

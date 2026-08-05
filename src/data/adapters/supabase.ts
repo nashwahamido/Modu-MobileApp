@@ -2,15 +2,15 @@
 import type { PostgrestError } from "@supabase/supabase-js";
 import { supabase } from "@/src/config/supabase";
 import type { AssemblyMode, BrandId, FurnitureId } from "@/src/game/core/type";
-import type { BuildProgressRepo, CatalogRepo, FriendRequestsRepo, FriendsRepo, ItemVariant, PlaceableRoomRow, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo, VariantsRepo } from "../repos";
-import type { BuildSave, FriendRequest, Profile, ProfilePatch, RoomLayout } from "../types";
-import { ROOM_LAYOUT_VERSION } from "../types";
-import type { ShopCategory, ShopItem } from "../shopItems";
-import type { AvatarRef } from "../avatars";
-import { idForMode, modeForId } from "../avatars";
-import type { LevelRow } from "../levels";
-import { levelSpan, titleForLevel } from "../levels";
-import { migrateRoomPlacements } from "../roomLayoutMigrate";
+import type { BuildProgressRepo, CatalogRepo, FriendRequestsRepo, FriendsRepo, ItemVariant, PlaceableRoomRow, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo, VariantsRepo } from "../core/repos";
+import type { BuildSave, FriendRequest, Profile, ProfilePatch, RoomLayout } from "../core/types";
+import { ROOM_LAYOUT_VERSION } from "../core/types";
+import type { ShopCategory, ShopItem } from "../shop/items";
+import type { AvatarRef } from "../player/avatars";
+import { idForMode, modeForId } from "../player/avatars";
+import type { LevelRow } from "../player/levels";
+import { levelSpan, titleForLevel } from "../player/levels";
+import { migrateRoomPlacements } from "../room/layoutMigrate";
 
 // Throw on any Postgrest error so callers get a real failure instead of a silent null.
 function check(error: PostgrestError | null): void {
@@ -90,8 +90,7 @@ function rowToProfile(r: ProfileRow, refs: Refs): Profile {
   };
 }
 
-// Only the patched keys are sent, mapped to their columns. title is derived (not writable); avatarMode maps to the avatar_id FK.
-// coin/xp/level are absent BY DESIGN — see ProfilePatch. They are economy state and move only through the RPCs; the DB revokes UPDATE on those columns, so adding them back here would fail at the API anyway.
+// Only the patched keys are sent, mapped to their columns. title is derived (not writable); avatarMode maps to the avatar_id FK. coin/xp/level are absent BY DESIGN — see ProfilePatch. They are economy state and move only through the RPCs; the DB revokes UPDATE on those columns, so adding them back here would fail at the API anyway.
 function profilePatchToRow(patch: ProfilePatch, avatars: AvatarRef[]): Record<string, unknown> {
   const row: Record<string, unknown> = {};
   if ("username" in patch) row.username = patch.username;
@@ -184,10 +183,7 @@ const catalogRepo: CatalogRepo = {
         category: r.category_id as PlaceableRoomRow["category"],
         size: { x: r.size_x, y: r.size_y, z: r.size_z },
         baseOffsetY: r.base_offset_y,
-        // Null for everything but a lamp — the view LEFT JOINs item_lights. The required columns are
-        // NOT NULL in that table, so light_type carrying a value means the rest do too. bulb_* are NOT
-        // NULL with a 0 default, hence the ?? 0: a row written before migration 014 reads as a bulb at
-        // the piece's own origin, which is wrong but harmless, rather than as NaN.
+        // Null for everything but a lamp — the view LEFT JOINs item_lights. The required columns are NOT NULL in that table, so light_type carrying a value means the rest do too. bulb_* are NOT NULL with a 0 default, hence the ?? 0: a row written before migration 014 reads as a bulb at the piece's own origin, which is wrong but harmless, rather than as NaN.
         light:
           r.light_type != null
             ? {
@@ -197,8 +193,7 @@ const catalogRepo: CatalogRepo = {
                 reachMetres: r.light_reach_m as number,
                 coneDeg: r.light_cone_deg ?? undefined,
                 bulb: { x: r.light_bulb_x ?? 0, y: r.light_bulb_y ?? 0, z: r.light_bulb_z ?? 0 },
-                // Both angles or neither — item_lights constrains them together, so a half-set pair
-                // means a hand-edited row and is treated as no aim rather than as half an aim.
+                // Both angles or neither — item_lights constrains them together, so a half-set pair means a hand-edited row and is treated as no aim rather than as half an aim.
                 aim:
                   r.light_aim_pitch_deg != null && r.light_aim_yaw_deg != null
                     ? { pitchDeg: r.light_aim_pitch_deg, yawDeg: r.light_aim_yaw_deg }
@@ -492,8 +487,7 @@ const storeRepo: StoreRepo = {
 
 const variantsRepo: VariantsRepo = {
   async list() {
-    // Whole table, no filter: reference data of a few rows per item, cached client-side by variantStore.
-    // Ordered so the picker's swatch row is stable across sessions rather than following the DB's whim.
+    // Whole table, no filter: reference data of a few rows per item, cached client-side by variantStore. Ordered so the picker's swatch row is stable across sessions rather than following the DB's whim.
     const { data, error } = await supabase
       .from("item_variants")
       .select("item_id, variation, is_default")

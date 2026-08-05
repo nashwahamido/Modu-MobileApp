@@ -10,15 +10,15 @@ import {
 import { useTutorialStore } from './store';
 import { useTutorialTargets, type TutorialFrame } from './targetRegistry';
 import { useTutorialAudio } from './useTutorialAudio';
-import { Button } from '@/src/game/ui/Button';
+import { Button } from '@/src/game/ui/system/Button';
 import { useGameStore } from '@/src/game/core/store';
 import { avatarForProfile } from '@/src/components/avatarAssets';
-import { ELEVATION, RADIUS, Theme, TYPE, useStyles } from '@/src/game/ui/theme';
+import { ACCENT_LIGHT, ELEVATION, RADIUS, Theme, TYPE, useStyles } from '@/src/game/ui/system/theme';
 import { tutorialPresentationForProfile } from './presentation';
 import { VisualLongPressCue } from './VisualLongPressCue';
 import { VisualToolboxCue } from './VisualToolboxCue';
 import { VisualJoystickCue } from './VisualJoystickCue';
-import { VoiceButton } from '@/src/game/ui/VoiceButton';
+import { VoiceButton } from '@/src/game/ui/hud/VoiceButton';
 const PADDING = 0;
 
 interface Props {
@@ -140,9 +140,7 @@ export function MascotGuideOverlay({
     const overlayNode = findNodeHandle(overlayRef.current);
     if (!step || !overlayNode || !targetNode) return;
 
-    // Filament adds native containers whose layout origin is not the visual
-    // origin of the overlay. Window coordinates are global, so subtracting the
-    // overlay's window origin gives a frame that the cutout and border share.
+    // Filament adds native containers whose layout origin is not the visual origin of the overlay. Window coordinates are global, so subtracting the overlay's window origin gives a frame that the cutout and border share.
     const measureTarget = () => {
       UIManager.measureInWindow(overlayNode, (overlayX, overlayY) => {
         UIManager.measureInWindow(targetNode, (targetX, targetY, measuredWidth, measuredHeight) => {
@@ -252,15 +250,13 @@ export function MascotGuideOverlay({
 
   const rawFrame = frames[step.targetId];
   // Targets can briefly unmount while the assembly advances (notably when the
-  // Allen key step hands over to the leg step). Do not manufacture a fallback
-  // message for that gap: it flashes for a frame and competes with the next cue.
+  // Allen key step hands over to the leg step). Do not manufacture a fallback message for that gap: it flashes for a frame and competes with the next cue.
   if (!rawFrame) {
     return <View ref={overlayRef} style={styles.layer} pointerEvents="none" onLayout={handleLayout} />;
   }
   const frame = expandFrame(rawFrame, width, height);
 
-  // The finishing beat already has its own swipe card. In Visual mode a second
-  // mascot bubble repeats the same instruction and obscures the furniture.
+  // The finishing beat already has its own swipe card. In Visual mode a second mascot bubble repeats the same instruction and obscures the furniture.
   if (presentation.showVisualDemo && step.id === 'stand-table-upright') {
     return <View ref={overlayRef} style={styles.layer} pointerEvents="none" onLayout={handleLayout} />;
   }
@@ -415,9 +411,7 @@ function bubblePosition(
   const left = Math.min(Math.max(edge, frame.x), Math.max(edge, screenW - bubbleW - edge));
   const targetCoversMostScreen = frame.width > screenW * 0.72 || frame.height > screenH * 0.6;
 
-  // Visual guidance belongs beside the real control it describes. These
-  // placements keep a fixed gap around the registered target so the bubble
-  // cannot intercept the action required to advance the tutorial.
+  // Visual guidance belongs beside the real control it describes. These placements keep a fixed gap around the registered target so the bubble cannot intercept the action required to advance the tutorial.
   if (visualMode && targetId === 'partsTray') {
     return {
       right: Math.max(edge, screenW - frame.x + 18),
@@ -494,7 +488,7 @@ const makeStyles = (t: Theme) =>
       position: 'absolute',
       borderRadius: 18,
       borderWidth: 3,
-      borderColor: '#8D7BA8',
+      borderColor: ACCENT_LIGHT,
       backgroundColor: 'rgba(255,255,255,0.08)',
     },
     highlightEmphasized: {

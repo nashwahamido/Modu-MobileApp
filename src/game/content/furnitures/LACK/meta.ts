@@ -15,9 +15,7 @@ export const ACTIONS = composeFurnitureActions(
   CLUSTERS,
 );
 
-// Hand-authored catalogue art, deliberately NOT the generated render in thumbs.gen.ts: that file
-// is regenerated from the model, so an override placed there is lost on the next gen:thumbs. The
-// asset lives outside the generated tree for the same reason.
+// Hand-authored catalogue art, deliberately NOT the generated render in thumbs.gen.ts: that file is regenerated from the model, so an override placed there is lost on the next gen:thumbs. The asset lives outside the generated tree for the same reason.
 const CATALOGUE_THUMBS: Record<string, ThumbSet> = {
   wooden: { light: require("../../../../assets/thumbnails/catalogue/LACK-wooden.png") },
   black: { light: require("../../../../assets/thumbnails/catalogue/LACK-black.png") },

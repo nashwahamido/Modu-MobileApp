@@ -7,7 +7,7 @@ import {
 } from "react-native";
 
 import { useGameStore } from "@/src/game/core/store";
-import { Theme, useStyles } from "@/src/game/ui/theme";
+import { ACCENT_LIGHT, Theme, useStyles } from "@/src/game/ui/system/theme";
 import { tutorialPresentationForProfile } from "./presentation";
 import { useTutorialStore } from "./store";
 
@@ -125,12 +125,12 @@ const makeStyles = (theme: Theme) =>
     currentRow: {
       backgroundColor: "rgba(141,123,168,0.18)",
       borderLeftWidth: 3,
-      borderLeftColor: "#8D7BA8",
+      borderLeftColor: ACCENT_LIGHT,
       paddingLeft: 7,
     },
     marker: {
       width: 14,
-      color: "#8D7BA8",
+      color: ACCENT_LIGHT,
       fontSize: 11,
       fontWeight: "900",
       textAlign: "center",

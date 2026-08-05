@@ -1,9 +1,6 @@
 // Sound effects, driven from the STORE rather than from the controls.
 //
-// Every gesture in this app ends in the same few store transitions — a part is held, an action
-// completes, a tighten accumulates degrees. Subscribing once here means a new control gets its
-// sounds for free, and no control has to remember to make a noise. It also keeps the audio out of
-// the gesture path, which is the part that has to stay at 60fps.
+// Every gesture in this app ends in the same few store transitions — a part is held, an action completes, a tighten accumulates degrees. Subscribing once here means a new control gets its sounds for free, and no control has to remember to make a noise. It also keeps the audio out of the gesture path, which is the part that has to stay at 60fps.
 import { useEffect, useRef } from "react";
 import { actionCluster } from "@/src/game/core/evaluation/clusters";
 import { useGameStore } from "@/src/game/core/store";
@@ -24,8 +21,7 @@ export function useAssemblySfx(enabled: boolean): void {
     if (!enabled) return;
     preloadSfx();
 
-    // Seed from the CURRENT state, not from zero: resuming a saved build would otherwise replay a
-    // seat sound for every step already finished.
+    // Seed from the CURRENT state, not from zero: resuming a saved build would otherwise replay a seat sound for every step already finished.
     const start = useGameStore.getState();
     prevCompletedRef.current = start.completed.length;
     prevHeldRef.current = start.heldActionId;
@@ -37,8 +33,7 @@ export function useAssemblySfx(enabled: boolean): void {
       // ── picking up and putting down ──────────────────────────────────────
       if (s.heldActionId !== prevHeldRef.current) {
         if (s.heldActionId) playSfx("pickup");
-        // Only a genuine put-back: a release that COMPLETED the action is a seat, and the seat sound
-        // fires below. Playing both would double up on every successful placement.
+        // Only a genuine put-back: a release that COMPLETED the action is a seat, and the seat sound fires below. Playing both would double up on every successful placement.
         else if (s.completed.length === prevCompletedRef.current) playSfx("drop");
         prevHeldRef.current = s.heldActionId;
       }
@@ -46,8 +41,7 @@ export function useAssemblySfx(enabled: boolean): void {
       // ── an action finishing ──────────────────────────────────────────────
       if (s.completed.length > prevCompletedRef.current) {
         const justDone = s.completed[s.completed.length - 1];
-        // The finished build is deliberately SILENT here: the completion screen has its own
-        // celebration, and a fanfare firing the instant the last action lands would collide with it.
+        // The finished build is deliberately SILENT here: the completion screen has its own celebration, and a fanfare firing the instant the last action lands would collide with it.
         if (s.furniture) {
           const action = s.furniture.actions.find((a) => a.actionId === justDone);
           const cluster = action ? actionCluster(s.furniture, action) : null;

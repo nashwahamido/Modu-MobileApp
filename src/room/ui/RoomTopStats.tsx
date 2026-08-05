@@ -2,16 +2,13 @@
 import { router } from 'expo-router';
 import type { Href } from 'expo-router';
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useStyles, LEXEND } from "@/src/game/ui/theme";
-import type { Theme } from "@/src/game/ui/theme";
+import { CREAM, useStyles, LEXEND } from "@/src/game/ui/system/theme";
+import type { Theme } from "@/src/game/ui/system/theme";
 import { COIN_ICON, STAR_ICON } from '../../components/iconAssets';
-import { levelProgressFraction } from '../../data/levels';
+import { levelProgressFraction } from '../../data/player/levels';
 import { useProfileHud } from '../../hooks/useProfileHud';
-import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN } from '../../hooks/use-safe-insets';
+import { useScreenInsets } from '../../hooks/use-safe-insets';
 
-// This bar's text is pinned to the mockup's exact ink colour rather than the theme's t.text — a deliberate override for this redesign, not an oversight, so it does not shift with the light/dark/high-contrast theme. The family is the app-wide Lexend.
-const TEXT_COLOR = '#231F20';
 // How far each bar is tucked under its icon, so it reads as flowing out from behind it
 const BAR_TUCK = 30;
 // Negative = up, A five-point star reads low even when its box is centred
@@ -20,9 +17,9 @@ const LEVEL_ICON_NUDGE_Y = -3;
 export function RoomTopStats() {
   const s = useStyles(makeStyles);
   // Immersive mode reports 0 insets, so these floors sit UNDER the design's own offsets
-  const insets = useSafeAreaInsets();
-  const padTop = 12 + Math.max(insets.top, SCREEN_VERTICAL_MARGIN);
-  const padR = 18 + Math.max(insets.right, SCREEN_SIDE_MARGIN);
+  const safe = useScreenInsets();
+  const padTop = 12 + safe.top;
+  const padR = 18 + safe.right;
   // Null until the first fetch lands — an em dash beats a fake number
   const profile = useProfileHud();
   // Reads full at the top of the curve, where xpForNextLevel is null
@@ -87,8 +84,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Absolute, so it centres on the star. Carries the star's own nudge, or the number would
-  // sit low against a shape that has been lifted
+  // Absolute, so it centres on the star. Carries the star's own nudge, or the number would sit low against a shape that has been lifted
   levelNumber: {
     position: 'absolute',
     color: '#FBFAF3',
@@ -116,7 +112,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   },
   progressText: {
     width: '100%',
-    color: TEXT_COLOR,
+    color: CREAM.ink,
     ...LEXEND.semibold,
     fontSize: 11,
     textAlign: 'center',
@@ -135,7 +131,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     justifyContent: 'center',
   },
   currencyText: {
-    color: TEXT_COLOR,
+    color: CREAM.ink,
     ...LEXEND.bold,
     fontSize: 12,
   },

@@ -1,10 +1,10 @@
 // In-memory adapter for the repo seam. Values are cloned on the way in and out so callers can't mutate the backing store by reference — the same isolation a network round-trip gives you.
 import type { FurnitureId } from "@/src/game/core/type";
-import type { BuildProgressRepo, CatalogRepo, FriendRequestsRepo, FriendsRepo, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo, VariantsRepo } from "../repos";
-import type { BuildSave, Friend, FriendRequest, Profile, ProfilePatch, RoomLayout, UserId } from "../types";
-import { ROOM_LAYOUT_VERSION } from "../types";
-import type { ShopItemId } from "../shopItems";
-import { levelForXp, levelSpan, titleForLevel } from "../levels";
+import type { BuildProgressRepo, CatalogRepo, FriendRequestsRepo, FriendsRepo, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo, VariantsRepo } from "../core/repos";
+import type { BuildSave, Friend, FriendRequest, Profile, ProfilePatch, RoomLayout, UserId } from "../core/types";
+import { ROOM_LAYOUT_VERSION } from "../core/types";
+import type { ShopItemId } from "../shop/items";
+import { levelForXp, levelSpan, titleForLevel } from "../player/levels";
 import { seedBuildCatalog, seedBuilds, seedBuiltItems, seedCompleted, seedFriends, seedInventory, seedLevelRows, seedPlaceableItems, seedProfiles, seedItemVariants, seedRoomLikes, seedRooms, seedShopItems } from "./seed";
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
@@ -17,8 +17,7 @@ export interface InMemoryReposOptions {
   latencyMs?: number;
 }
 
-// Mirror of item_build' generated xp_reward/coin_reward totals (the reward-catalog seed) — keep in sync with the 003_catalog.sql migration. Furnitures not listed reward 0 (matches the DB).
-// Each row is steps × the DB-authored rates (coins_per_step=3, xp_per_step=6, xp_bonus=0), with steps = the recipe's actions.length, exactly what sync_furniture_counts writes into step_count: lack 14, bekvam 35, dalfred 58, eket 147. Recompose a recipe and these go stale — the real adapter re-syncs, this table does not.
+// Mirror of item_build' generated xp_reward/coin_reward totals (the reward-catalog seed) — keep in sync with the 003_catalog.sql migration. Furnitures not listed reward 0 (matches the DB). Each row is steps × the DB-authored rates (coins_per_step=3, xp_per_step=6, xp_bonus=0), with steps = the recipe's actions.length, exactly what sync_furniture_counts writes into step_count: lack 14, bekvam 35, dalfred 58, eket 147. Recompose a recipe and these go stale — the real adapter re-syncs, this table does not.
 const DEFAULT_BUILT_REWARDS: Record<string, { coins: number; xp: number }> = {
   "eket-cabinet": { coins: 441, xp: 882 },
   "bekvam-stool": { coins: 105, xp: 210 },
@@ -40,8 +39,7 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
   const completed = new Map<UserId, Set<FurnitureId>>(
     Object.entries(seedCompleted()).map(([id, list]) => [id, new Set(list)] as [UserId, Set<FurnitureId>]),
   );
-  // Which builds have been rewarded — mirrors the transaction one-per-build unique index, so a
-  // repeat reward() is an idempotent no-op just like the Supabase RPC.
+  // Which builds have been rewarded — mirrors the transaction one-per-build unique index, so a repeat reward() is an idempotent no-op just like the Supabase RPC.
   const rewarded = new Map<UserId, Set<FurnitureId>>();
   const roomLikes = new Map<UserId, Set<UserId>>(
     Object.entries(seedRoomLikes()).map(([id, list]) => [id, new Set(list)] as [UserId, Set<UserId>]),
@@ -264,8 +262,7 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
     },
   };
 
-  // The purchasable catalog. Read once into a local like every other seed above, rather than calling
-  // seedShopItems() per request — purchase() and listItems() must agree on one set of rows.
+  // The purchasable catalog. Read once into a local like every other seed above, rather than calling seedShopItems() per request — purchase() and listItems() must agree on one set of rows.
   const shopItems = seedShopItems();
 
   const storeRepo: StoreRepo = {

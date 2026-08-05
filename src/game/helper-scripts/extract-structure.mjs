@@ -1,29 +1,18 @@
 // Run after a model re-export (alongside read-parts.mjs).
 //
-// Drafts a FULL authored.ts for each furniture from its combined GLB + parts.gen
-// and writes src/game/content/furnitures/<ID>/dev/authored.derived.ts — a starting skeleton
-// to review, NOT shipped logic. What it fills in vs leaves for a human:
+// Drafts a FULL authored.ts for each furniture from its combined GLB + parts.gen and writes src/game/content/furnitures/<ID>/dev/authored.derived.ts — a starting skeleton to review, NOT shipped logic. What it fills in vs leaves for a human:
 //
 //   DERIVED (rough, edit freely):
 //     LABELS            humanised group names
 //     CLUSTERS          the distinct clusters
 //     FASTENER_RULES    one per fastener group (generic requires = attachedSnaps)
 //     AUTHORED_ACTIONS  one placement per structural part (stage 1)
-//     STRUCTURE.directJoins fastener-free contacts found (fastened joints are in
-//                           the mesh names, so they're NOT repeated here)
-//   GUESSED (derived, human VERIFIES): seed (footprint) · unstable (fastened-
-//     only) · stages (Γ waves) · requires (geometric traps) · difficulty/duration
-//   TODO (human must decide): META catalogue facts · slide/screw join intent ·
-//     beat prose overrides · hardware.ts line per unseen article
+//     STRUCTURE.directJoins fastener-free contacts found (fastened joints are in the mesh names, so they're NOT repeated here) GUESSED (derived, human VERIFIES): seed (footprint) · unstable (fastened- only) · stages (Γ waves) · requires (geometric traps) · difficulty/duration
+//   TODO (human must decide): META catalogue facts · slide/screw join intent · beat prose overrides · hardware.ts line per unseen article
 //
-// Alongside the draft it writes dev/GAPS.json — the FINITE, machine-readable list
-// of every decision it guessed or couldn't classify, one targeted question each.
-// Feed that + the manual to a review agent (see helper-scripts/REVIEW-PROMPT.md)
-// so the gaps are closed explicitly instead of hunted for by eye.
+// Alongside the draft it writes dev/GAPS.json — the FINITE, machine-readable list of every decision it guessed or couldn't classify, one targeted question each. Feed that + the manual to a review agent (see helper-scripts/REVIEW-PROMPT.md) so the gaps are closed explicitly instead of hunted for by eye.
 //
-// The draft AIMS TO SOLVE as-is (derived stages = Γ waves, geometric trap
-// requires, guessed seeds) — verify everything against the manual. Copy what's
-// useful into authored.ts. The script never touches your authored.ts.
+// The draft AIMS TO SOLVE as-is (derived stages = Γ waves, geometric trap requires, guessed seeds) — verify everything against the manual. Copy what's useful into authored.ts. The script never touches your authored.ts.
 //
 //   node src/game/helper-scripts/extract-structure.mjs
 import fs from "node:fs";
@@ -80,10 +69,7 @@ function rotQ([x, y, z, w], [vx, vy, vz]) {
     vz + w * tz + (x * ty - y * tx),
   ];
 }
-// A fastener GROUP by name — prefixes from the SHARED table
-// core/fastener-kinds.json (same source as read-parts.mjs and the runtime's
-// fastenerKindOf). A furniture with an unseen hardware word needs one line
-// there, or a typeOverride in read-parts.mjs.
+// A fastener GROUP by name — prefixes from the SHARED table core/fastener-kinds.json (same source as read-parts.mjs and the runtime's fastenerKindOf). A furniture with an unseen hardware word needs one line there, or a typeOverride in read-parts.mjs.
 const FASTENER_PREFIXES = Object.keys(
   JSON.parse(
     fs.readFileSync(path.join(ROOT, "..", "core", "model", "fastener-kinds.json"), "utf8"),
@@ -91,8 +77,7 @@ const FASTENER_PREFIXES = Object.keys(
 );
 const isFastenerName = (group) =>
   FASTENER_PREFIXES.some((p) => group.toLowerCase().startsWith(p));
-// node name → ids. Convention: cluster_group[_index][__jointA&jointB]
-// fastener names the part(s) it's attached to after "__"
+// node name → ids. Convention: cluster_group[_index][__jointA&jointB] fastener names the part(s) it's attached to after "__"
 function parseName(name) {
   const dd = name.indexOf("__");
   const head = dd === -1 ? name : name.slice(0, dd);
@@ -183,21 +168,14 @@ function deriveGamma(structural, fasteners) {
   const structuralIds = new Set(structural.map((p) => p.partId));
   for (const f of fasteners) {
     const ends = (f.attached ?? []).filter((p) => structuralIds.has(p));
-    // A fastener that names TWO structural endpoints (…__a&b) keys the joint
-    // between them — exactly like runtime buildLiaisons, and regardless of the
-    // securer/connector ROLE (that role comes from the hardware name, not the
-    // endpoint count, and isn't needed here). Record the edge so press-fit
-    // detection won't re-report an already-fastened pair.
+    // A fastener that names TWO structural endpoints (…__a&b) keys the joint between them — exactly like runtime buildLiaisons, and regardless of the securer/connector ROLE (that role comes from the hardware name, not the endpoint count, and isn't needed here). Record the edge so press-fit detection won't re-report an already-fastened pair.
     if (ends.length === 2) {
       const e = edgeKey(ends[0], ends[1]);
       gamma.add(e);
       source.set(e, "fastened");
       continue;
     }
-    // ONE endpoint: a securer fastening a single part onto an already-existing
-    // joint (e.g. a cap). Keys no joint on its own — like runtime — so it adds
-    // nothing to Γ; the underlying joint surfaces via press-fit or a 2-end
-    // fastener, and ordering is handled by FASTENER_RULES' attachedSnaps.
+    // ONE endpoint: a securer fastening a single part onto an already-existing joint (e.g. a cap). Keys no joint on its own — like runtime — so it adds nothing to Γ; the underlying joint surfaces via press-fit or a 2-end fastener, and ordering is handled by FASTENER_RULES' attachedSnaps.
     if (ends.length === 1) continue;
     // names no structural endpoint at all — genuinely unusable. Flag it.
     console.warn(
@@ -307,9 +285,7 @@ function emit(id, parts) {
     const inC = structural.filter((p) => p.cluster === c);
     seedGuess.add(inC.reduce((m, p) => (footprint(p) > footprint(m) ? p : m), inC[0]).partId);
   }
-  // ── derived STAGES: Γ waves out from the seed (per cluster). Seed layer is
-  // stage 1; each layer of parts touching earlier layers is the next stage.
-  // Plausible and SOLVABLE — align to the manual's step numbers when reviewing.
+  // ── derived STAGES: Γ waves out from the seed (per cluster). Seed layer is stage 1; each layer of parts touching earlier layers is the next stage. Plausible and SOLVABLE — align to the manual's step numbers when reviewing.
   const nb = new Map(structural.map((p) => [p.partId, new Set()]));
   for (const e of gamma) {
     const [a, b] = e.split("__");
@@ -334,9 +310,7 @@ function emit(id, parts) {
     for (const pid of inC) if (!stageOf.has(pid)) stageOf.set(pid, 1); // isolated part
   }
 
-  // ── geometric REQUIRES: trap windows. If part L, once present, blocks part E
-  // from entering along EVERY axis, E must go in first — authored on the LATER
-  // (closing) part, exactly the drawer-bottom pattern.
+  // ── geometric REQUIRES: trap windows. If part L, once present, blocks part E from entering along EVERY axis, E must go in first — authored on the LATER (closing) part, exactly the drawer-bottom pattern.
   const trapReq = new Map(); // laterPartId -> Set(earlier partIds)
   for (const c of clusters) {
     const inC = structural.filter((p) => p.cluster === c);
@@ -359,8 +333,7 @@ function emit(id, parts) {
     }
   }
 
-  // ── UNSTABLE guess: held ONLY by fasteners (every Γ edge 'fastened'), so it
-  // is loose until secured. A guess — delete where the part actually rests.
+  // ── UNSTABLE guess: held ONLY by fasteners (every Γ edge 'fastened'), so it is loose until secured. A guess — delete where the part actually rests.
   const unstableGuess = new Set();
   for (const p of structural) {
     if (seedGuess.has(p.partId)) continue;
@@ -468,12 +441,7 @@ function emit(id, parts) {
   L.push(`//     the generic wording isn't good enough.`);
   L.push(`export const BEATS: Record<string, InstructionContent> = {};`);
 
-  // ── GAPS manifest: the FINITE list of decisions this draft couldn't settle,
-  //    one targeted question each. Feeds the AI/human review loop (see
-  //    helper-scripts/REVIEW-PROMPT.md) so nothing is resolved by silent guess.
-  //    Categories mirror what geometry can't know: physical facts it GUESSED
-  //    (seed/unstable), join INTENT it can't see (press vs slide vs screw), and
-  //    the manual-only decisions (drive steps, stages, requires, meta, beats).
+  // ── GAPS manifest: the FINITE list of decisions this draft couldn't settle, one targeted question each. Feeds the AI/human review loop (see helper-scripts/REVIEW-PROMPT.md) so nothing is resolved by silent guess. Categories mirror what geometry can't know: physical facts it GUESSED (seed/unstable), join INTENT it can't see (press vs slide vs screw), and the manual-only decisions (drive steps, stages, requires, meta, beats).
   const gaps = [];
   for (const pid of seedGuess)
     gaps.push({ kind: "seed", part: pid, generatorGuess: true, confidence: "med",
@@ -495,10 +463,7 @@ function emit(id, parts) {
         : `Contact "${a}"↔"${b}" is drafted as a PRESS (directJoins). Is it press | slide | screw?` });
   }
   // DRIVE steps — a structural part that is TAPPED or SCREWED home is a
-  // TOOL-DRIVEN PLACEMENT (press/slide/screw + placeDir + a tool), NOT a
-  // separate tighten. A part joined by a TWO-endpoint fastener is already driven
-  // home by THAT fastener's tighten, so it's not a candidate; flag only the
-  // fastener-free (press) / loose parts, whose own placement must drive them.
+  // TOOL-DRIVEN PLACEMENT (press/slide/screw + placeDir + a tool), NOT a separate tighten. A part joined by a TWO-endpoint fastener is already driven home by THAT fastener's tighten, so it's not a candidate; flag only the fastener-free (press) / loose parts, whose own placement must drive them.
   const securedByFastener = new Set();
   for (const f of fasteners) {
     const ends = (f.attached ?? []).filter((x) => parts[x]?.type === "structural");
@@ -530,14 +495,7 @@ function emit(id, parts) {
   const gapsOut = path.join(dir, "dev", "GAPS.json");
   fs.writeFileSync(gapsOut, JSON.stringify(gaps, null, 2) + "\n");
 
-  // ── REVIEW KIT (additive — new file names; nothing above is replaced) ──
-  // dev/draft.gen.json           — the draft's DECISIONS, machine-readable
-  // dev/ANSWERS.template.json    — ONE simple, default-prefilled answer per decision
-  // Workflow: copy the template to review/ANSWERS.json, flip the few wrong
-  // defaults (accuracy stays a HUMAN/manual call — the defaults just make the
-  // right answer one keystroke away), then:
-  //   node src/game/helper-scripts/apply-review.mjs <ID>   → review/authored.review.ts
-  //   node --import tsx src/game/helper-scripts/verify-review.ts <ID> [--compare]
+  // ── REVIEW KIT (additive — new file names; nothing above is replaced) ── dev/draft.gen.json           — the draft's DECISIONS, machine-readable dev/ANSWERS.template.json    — ONE simple, default-prefilled answer per decision Workflow: copy the template to review/ANSWERS.json, flip the few wrong defaults (accuracy stays a HUMAN/manual call — the defaults just make the right answer one keystroke away), then: node src/game/helper-scripts/apply-review.mjs <ID>   → review/authored.review.ts node --import tsx src/game/helper-scripts/verify-review.ts <ID> [--compare]
   const pressJoints = [...gamma]
     .filter((e) => source.get(e) === "press-fit")
     .map((e) => {

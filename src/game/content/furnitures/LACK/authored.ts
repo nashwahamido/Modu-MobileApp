@@ -27,15 +27,12 @@ export const CLUSTERS = {
 } as Record<ClusterId, ClusterDef>;
 
 export const STRUCTURE = {
-  // The tabletop is the fixed starting surface. Legs only become available
-  // after it is placed, so tutorial and regular LACK builds share the same
-  // tabletop-first assembly order.
+  // The tabletop is the fixed starting surface. Legs only become available after it is placed, so tutorial and regular LACK builds share the same tabletop-first assembly order.
   tableTop: { seed: true },
 } as StructureOverlay;
 
 export const FASTENER_RULES: FastenerRule[] = [
-  // The double-ended bolt is driven into the tabletop first. Once tightened,
-  // its missing endpoint unlocks the matching leg, which slides onto it.
+  // The double-ended bolt is driven into the tabletop first. Once tightened, its missing endpoint unlocks the matching leg, which slides onto it.
   {
     group: asGroupId("bolt115980"),
     stage: 1,

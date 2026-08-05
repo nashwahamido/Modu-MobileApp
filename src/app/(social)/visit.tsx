@@ -4,11 +4,11 @@ import { router, useLocalSearchParams } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 
-import { Button } from "@/src/game/ui/Button";
-import { SceneBackdrop } from "@/src/game/ui/SceneBackdrop";
+import { Button } from "@/src/game/ui/system/Button";
+import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
 import { useGameStore } from "@/src/game/core/store";
-import { TYPE, SPACE, useStyles } from "@/src/game/ui/theme";
-import type { Theme } from "@/src/game/ui/theme";
+import { TYPE, SPACE, useStyles } from "@/src/game/ui/system/theme";
+import type { Theme } from "@/src/game/ui/system/theme";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import type { Profile } from "@/src/data";
 import { ceilingLightOn, sunPreset, type CeilingLightOverride } from "@/src/room/core/timeOfDay";
@@ -20,8 +20,7 @@ import { roomBackdropView } from "@/src/room/ui/roomBackdrops";
 import { RoomLightControls } from "@/src/room/ui/RoomLightControls";
 import { RoomLoadingOverlay } from "@/src/room/ui/RoomLoadingOverlay";
 import { VisitHud } from "@/src/room/ui/VisitHud";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN } from "@/src/hooks/use-safe-insets";
+import { useScreenInsets } from '@/src/hooks/use-safe-insets';
 
 export default function VisitScreen() {
   const s = useStyles(makeStyles);
@@ -29,8 +28,7 @@ export default function VisitScreen() {
   const me = useCurrentUserId();
   const { ownerId } = useLocalSearchParams<{ ownerId?: string }>();
   // Immersive mode reports 0 insets, so these floors sit UNDER the design's own offsets — the same treatment VisitHud gives its own header.
-  const insets = useSafeAreaInsets();
-
+  const safe = useScreenInsets();
   // The visitor's own dressing: the backdrop follows the hour they chose, same as in their room.
   const hour = useGameStore((g) => g.roomTimeOfDay);
   const roomBackdrop = sunPreset(hour).backdrop;
@@ -174,8 +172,8 @@ export default function VisitScreen() {
         style={[
           s.lightControls,
           {
-            top: 12 + Math.max(insets.top, SCREEN_VERTICAL_MARGIN) + 50,
-            left: 22 + Math.max(insets.left, SCREEN_SIDE_MARGIN),
+            top: 12 + safe.top + 50,
+            left: 22 + safe.left,
           },
         ]}
       />

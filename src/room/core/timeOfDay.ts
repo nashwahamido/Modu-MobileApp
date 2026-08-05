@@ -92,10 +92,7 @@ export const TIME_OF_DAY: Record<TimeOfDayId, SunPreset> = {
     direction: null,
     intensity: 0,
     kelvin: 4_000,
-    // 900 still read as daylight, because this probe is ~4.4x more potent per unit than the stock one
-    // (see the scale warning on `ambient`) — 900 here is roughly 4000 in stock terms. At 200 the probe
-    // does only what a probe should after dark: keep surfaces from crushing to pure black, while the
-    // LIGHTING placed in the room is what actually lights it. Do not raise this to fix "too dark"; place a light.
+    // 900 still read as daylight, because this probe is ~4.4x more potent per unit than the stock one (see the scale warning on `ambient`) — 900 here is roughly 4000 in stock terms. At 200 the probe does only what a probe should after dark: keep surfaces from crushing to pure black, while the LIGHTING placed in the room is what actually lights it. Do not raise this to fix "too dark"; place a light.
     ambient: 200,
     interiorLight: { defaultOn: true, lumens: 100_000, kelvin: 2_800 },
   },
@@ -118,8 +115,7 @@ export function poolLength(preset: SunPreset, wallHeight = 2.92): number {
   return (wallHeight * Math.hypot(d.x, d.z)) / Math.abs(d.y);
 }
 
-// Whether the ceiling light is lit right now. NOT PERSISTED ANYWHERE, and that is the design: because the default comes from the hour, and the hour is the VIEWER's own setting, a room lights itself correctly for whoever is looking at it — including a visitor, who brings their own. There is no owned state for two clients to disagree about.
-// An override is scoped to the hour it was made at: pick a different hour and that hour's default takes over again, because a player who turned the light off at night did not thereby make a decision about midday.
+// Whether the ceiling light is lit right now. NOT PERSISTED ANYWHERE, and that is the design: because the default comes from the hour, and the hour is the VIEWER's own setting, a room lights itself correctly for whoever is looking at it — including a visitor, who brings their own. There is no owned state for two clients to disagree about. An override is scoped to the hour it was made at: pick a different hour and that hour's default takes over again, because a player who turned the light off at night did not thereby make a decision about midday.
 export function ceilingLightOn(hour: TimeOfDayId, override: CeilingLightOverride): boolean {
   return override?.hour === hour ? override.on : sunPreset(hour).interiorLight.defaultOn;
 }

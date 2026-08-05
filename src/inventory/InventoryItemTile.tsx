@@ -1,14 +1,15 @@
-
+// One owned tile in the inventory popup: brand mark, picture well, name
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 
 import { brandFor } from "@/src/game/content/brands";
-import { useStyles, LEXEND } from "@/src/game/ui/theme";
-import type { Theme } from "@/src/game/ui/theme";
+import { CREAM, useStyles, LEXEND } from "@/src/game/ui/system/theme";
+import type { Theme } from "@/src/game/ui/system/theme";
 
-const TEXT_COLOR = "#231F20";
+// Well height as a fraction of the tile's width; the grid owns the width
 const WELL_ASPECT = 0.79;
-const IKEA_LOGO = brandFor("IKEA").logo;
+// Room for the brand mark to sit at the well's top-right without clipping. Its twin uses the same pad for its price badge, so the two grids' wells start on the same line.
 const WELL_TOP_PAD = 14;
+const IKEA_LOGO = brandFor("IKEA").logo;
 
 const LOGO_CANVAS = { w: 3000, h: 2000 };
 const LOGO_BLOCK = { x: 345, y: 517, w: 2310, h: 945 };
@@ -109,7 +110,7 @@ const makeStyles = (t: Theme) =>
       marginTop: 8,
       ...LEXEND.regular,
       fontSize: 14,
-      color: TEXT_COLOR,
+      color: CREAM.ink,
       textAlign: "center",
     },
   });

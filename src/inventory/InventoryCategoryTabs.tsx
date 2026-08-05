@@ -1,34 +1,27 @@
-// The inventory popup's header, an INVENTORY badge that flows into a pill holding the categories
+// The inventory popup's header: an INVENTORY badge that flows into a pill holding the category tabs. Tabs come from src/data/shop/items.ts, so adding a category is a one-line change there.
 import { StyleSheet, Image, Pressable, ScrollView, Text, View } from "react-native";
 import Svg, { Circle, Defs, Path, RadialGradient, Stop } from "react-native-svg";
 
+import { badgeArcPath } from "@/src/components/badgeArc";
 import { INVENTORY_ICON } from "@/src/components/iconAssets";
 import { IconPlaceholder } from "@/src/components/IconPlaceholder";
 import { CATEGORY_LABELS, SHOP_CATEGORY_TABS } from "@/src/data";
 import type { ShopCategory } from "@/src/data";
-import { useStyles, LEXEND } from "@/src/game/ui/theme";
-import type { Theme } from "@/src/game/ui/theme";
+import { CREAM, useStyles, LEXEND } from "@/src/game/ui/system/theme";
+import type { Theme } from "@/src/game/ui/system/theme";
 
-const ACTIVE_TILE = "#D3CBD2";
-const TEXT_COLOR = "#231F20";
-const CHROME = "#F7F0E6";
+// Kept in step with ShopCategoryTabs, its twin. The two headers are separate components on purpose, so anything that must LOOK the same is a shared token or a shared helper rather than a number copied between them.
 const BAR_HEIGHT = 80;
+// Bigger than the bar, so the badge overhangs and reads as sitting in front of the pill
 const CIRCLE_SIZE = 100;
-const HAIRLINE = "#D7D1CE";
-const HAIRLINE_WIDTH = 0.4;
+// Sized to the word: INVENTORY is long, so both the icon and the label come down to keep the label on one line inside the disc. Its twin runs both larger for the short SHOP.
 const BADGE_ICON_SIZE = 46;
+const BADGE_LABEL_SIZE = 10.5;
+const BADGE_LABEL_TRACKING = 0.4;
+// Well beyond the icon, so the glow's falloff has room to fade out
 const BADGE_GLOW_SIZE = 92;
-const BADGE_GLOW = "#FFFCF7";
-const BADGE_ARC = (() => {
-  // Radius pulled in by the stroke width or the line clips at the canvas edge
-  const r = CIRCLE_SIZE / 2 - HAIRLINE_WIDTH;
-  const c = CIRCLE_SIZE / 2;
-  // Ends where the circle crosses the pill's edges so two strokes meet end to end
-  const dy = Math.min(BAR_HEIGHT / 2, r);
-  const dx = Math.sqrt(Math.max(r * r - dy * dy, 0));
-  // Top edge, round the left, to the bottom edge- counter-clockwise, always >180deg
-  return `M ${c + dx} ${c - dy} A ${r} ${r} 0 1 0 ${c + dx} ${c + dy}`;
-})();
+
+const BADGE_ARC = badgeArcPath(CIRCLE_SIZE, BAR_HEIGHT, CREAM.hairlineWidth);
 
 export function InventoryCategoryTabs({
   category,
@@ -37,12 +30,13 @@ export function InventoryCategoryTabs({
 }: {
   category: ShopCategory;
   onCategory: (next: ShopCategory) => void;
+  /** The grid's side padding, so the pill ends level with the last column of items. */
   rightInset?: number;
 }) {
   const s = useStyles(makeStyles);
   return (
     <View style={s.header}>
-     
+      {/* Indented from the left, leaving the space the badge is positioned into. */}
       <View style={[s.bar, { marginRight: rightInset }]}>
         {/* Scrolls, because six fixed-width tabs are already wider than the pill on a phone and the panel's overflow:hidden simply clipped the last ones away — windows and lighting were unreachable rather than merely cramped */}
         <ScrollView
@@ -75,7 +69,7 @@ export function InventoryCategoryTabs({
         </ScrollView>
       </View>
 
-      
+      {/* Last, so it paints over the pill's left end. Not a button: it only says where you are. */}
       <View
         style={s.badge}
         pointerEvents="none"
@@ -88,16 +82,16 @@ export function InventoryCategoryTabs({
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         >
-          <Path d={BADGE_ARC} fill="none" stroke={HAIRLINE} strokeWidth={HAIRLINE_WIDTH} />
+          <Path d={BADGE_ARC} fill="none" stroke={CREAM.hairline} strokeWidth={CREAM.hairlineWidth} />
         </Svg>
         {/* Inside the icon's wrapper, so it centres on the icon and not on the badge. */}
         <View style={s.badgeIconWrap}>
           <Svg width={BADGE_GLOW_SIZE} height={BADGE_GLOW_SIZE} style={s.badgeGlow} pointerEvents="none">
             <Defs>
               <RadialGradient id="inventoryBadgeGlow" cx="50%" cy="50%" r="50%">
-                <Stop offset="0" stopColor={BADGE_GLOW} stopOpacity={1} />
-                <Stop offset="0.5" stopColor={BADGE_GLOW} stopOpacity={0.65} />
-                <Stop offset="1" stopColor={BADGE_GLOW} stopOpacity={0} />
+                <Stop offset="0" stopColor={CREAM.badgeGlow} stopOpacity={1} />
+                <Stop offset="0.5" stopColor={CREAM.badgeGlow} stopOpacity={0.65} />
+                <Stop offset="1" stopColor={CREAM.badgeGlow} stopOpacity={0} />
               </RadialGradient>
             </Defs>
             <Circle
@@ -117,6 +111,7 @@ export function InventoryCategoryTabs({
 
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
+    // zIndex, or the grid below (a later sibling) paints over the badge's overhang
     header: {
       zIndex: 2,
       justifyContent: "center",
@@ -124,11 +119,12 @@ const makeStyles = (t: Theme) =>
     // The frame only. Everything about how the tabs sit inside it now belongs to the scroller below, since the row is no longer laid out against this box's width
     bar: {
       height: BAR_HEIGHT,
+      // Half the diameter, so the pill's edge runs through the badge's centre
       marginLeft: CIRCLE_SIZE * 0.5,
       borderRadius: 24,
-      backgroundColor: CHROME,
-      borderWidth: HAIRLINE_WIDTH,
-      borderColor: HAIRLINE,
+      backgroundColor: CREAM.chrome,
+      borderWidth: CREAM.hairlineWidth,
+      borderColor: CREAM.hairline,
       // So a scrolled row is cut off by the pill's rounded edge rather than drawn past it
       overflow: "hidden",
     },
@@ -138,18 +134,20 @@ const makeStyles = (t: Theme) =>
     },
     tabs: {
       alignItems: "center",
-      // flexGrow, so the centring still applies on a screen wide enough to hold every tab — where this scroller never scrolls and the pill looks exactly as it did before
+      // Centred with a fixed gap, so the tabs sit as a group instead of spreading. flexGrow, so that centring still applies on a screen wide enough to hold every tab — where this scroller never scrolls and the pill looks exactly as it did before
       flexGrow: 1,
       justifyContent: "center",
       gap: 33,
+      // Clears the badge overlapping this end, without moving the pill
       paddingLeft: 62,
       paddingRight: 14,
     },
+    // flexShrink:0, or a cramped row squeezes the tabs and distorts the frame below
     tab: {
       alignItems: "center",
       flexShrink: 0,
     },
-    // fixed size, not padding: keeps every frame identical and stops row shifting
+    // Fixed size, not padding: keeps every frame identical and stops the row shifting
     iconWrap: {
       width: 70,
       height: 52,
@@ -158,8 +156,9 @@ const makeStyles = (t: Theme) =>
       justifyContent: "center",
       flexShrink: 0,
     },
+    // Repeats the radius: on Android, swapping in a background can otherwise redraw the view with a square drawable and lose the base style's rounding
     iconWrapActive: {
-      backgroundColor: ACTIVE_TILE,
+      backgroundColor: CREAM.activeTile,
       borderRadius: 18,
       overflow: "hidden",
     },
@@ -168,18 +167,20 @@ const makeStyles = (t: Theme) =>
       ...LEXEND.regular,
       fontSize: 12,
       lineHeight: 16,
-      color: TEXT_COLOR,
+      color: CREAM.ink,
       textAlign: "center",
       textTransform: "lowercase",
     },
+    // No border: the stroke is the SVG arc, so it stops at the pill
     badge: {
       position: "absolute",
       left: 0,
+      // Absolute children ignore justifyContent, so the centring is solved here
       top: (BAR_HEIGHT - CIRCLE_SIZE) / 2,
       width: CIRCLE_SIZE,
       height: CIRCLE_SIZE,
       borderRadius: CIRCLE_SIZE / 2,
-      backgroundColor: CHROME,
+      backgroundColor: CREAM.chrome,
       alignItems: "center",
       justifyContent: "center",
       gap: 2,
@@ -188,19 +189,21 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       justifyContent: "center",
     },
+    // Bigger than the icon, so it is centred by offset rather than by flex
     badgeGlow: {
       position: "absolute",
       left: (BADGE_ICON_SIZE - BADGE_GLOW_SIZE) / 2,
       top: (BADGE_ICON_SIZE - BADGE_GLOW_SIZE) / 2,
     },
+    // No nudge, unlike the shop's cart: this icon's mass is centred in its box
     badgeIcon: {
       width: BADGE_ICON_SIZE,
       height: BADGE_ICON_SIZE,
     },
     badgeLabel: {
       ...LEXEND.semibold,
-      fontSize: 10.5,
-      letterSpacing: 0.4,
-      color: TEXT_COLOR,
+      fontSize: BADGE_LABEL_SIZE,
+      letterSpacing: BADGE_LABEL_TRACKING,
+      color: CREAM.ink,
     },
   });

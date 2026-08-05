@@ -1,11 +1,8 @@
-// The room's own backdrop set, kept apart from the assembly scene's (src/game/ui/backdrops.ts): the room is a place you live in, so its photos change independently of the build screen's artwork.
-// Room-only images live in src/assets/images/backdrops/room/ — drop a file there and add one entry below. Metro resolves require() at build time, so every image needs its own literal path (no globbing, no runtime paths).
-// Each entry names the same photo for light and dark on purpose: "Daytime" and "Nighttime" are the player's choice of hour, not a follower of the app theme — the theme must not turn a daytime room dark.
+// The room's own backdrop set, kept apart from the assembly scene's (src/game/ui/backdrop/backdrops.ts): the room is a place you live in, so its photos change independently of the build screen's artwork. Room-only images live in src/assets/images/backdrops/room/ — drop a file there and add one entry below. Metro resolves require() at build time, so every image needs its own literal path (no globbing, no runtime paths). One entry per hour in TIME_OF_DAY (src/room/core/timeOfDay.ts), keyed by the same id: the sun preset names the photo it belongs with, so an hour and its view out of the window are chosen together and cannot drift apart. Each entry names the same photo for light and dark on purpose: the hour is the player's choice, not a follower of the app theme — switching the app to dark must not turn a midday room into a night one. No labels here: an hour is presented by SunPreset.label next to its lighting, and a second set of names for the same five ids could only disagree with it.
 
 export type RoomBackdrop = {
   id: string;
-  label: string;
-  /** Omitted only for "clear": no image at all, so the screen's own themed background shows through. */
+  /** Optional so an entry can carry no image at all, leaving the screen's own themed background to show through. Every hour in the current set has one. */
   light?: number;
   /** Optional — a photo with no night version is shown in both themes. */
   dark?: number;
@@ -16,41 +13,32 @@ export type RoomBackdrop = {
 export const ROOM_BACKDROPS = [
   {
     id: "morning",
-    label: "Morning",
-    light: require("../../assets/images/backdrops/room/daytime.png"),
-    dark: require("../../assets/images/backdrops/room/daytime.png"),
+    light: require("../../assets/images/backdrops/room/morning.png"),
+    dark: require("../../assets/images/backdrops/room/morning.png"),
   },
   {
     id: "midday",
-    label: "Midday",
-    light: require("../../assets/images/backdrops/room/daytime.png"),
-    dark: require("../../assets/images/backdrops/room/daytime.png"),
+    light: require("../../assets/images/backdrops/room/midday.png"),
+    dark: require("../../assets/images/backdrops/room/midday.png"),
   },
   {
     id: "afternoon",
-    label: "Afternoon",
-    light: require("../../assets/images/backdrops/room/daytime.png"),
-    dark: require("../../assets/images/backdrops/room/daytime.png"),
+    light: require("../../assets/images/backdrops/room/afternoon.png"),
+    dark: require("../../assets/images/backdrops/room/afternoon.png"),
   },
   {
     id: "sunset",
-    label: "Sunset",
-    light: require("../../assets/images/backdrops/room/daytime.png"),
-    dark: require("../../assets/images/backdrops/room/daytime.png"),
+    light: require("../../assets/images/backdrops/room/sunset.png"),
+    dark: require("../../assets/images/backdrops/room/sunset.png"),
   },
   {
     id: "night",
-    label: "Night",
-    light: require("../../assets/images/backdrops/room/nighttime.png"),
-    dark: require("../../assets/images/backdrops/room/nighttime.png"),
+    light: require("../../assets/images/backdrops/room/night.png"),
+    dark: require("../../assets/images/backdrops/room/night.png"),
   },
 ] as const satisfies readonly RoomBackdrop[];
 
 export type RoomBackdropId = (typeof ROOM_BACKDROPS)[number]["id"];
-
-// The Settings picker reads this, so a new entry above shows up in the app without touching the settings screen.
-export const ROOM_BACKDROP_OPTIONS: { value: RoomBackdropId; label: string }[] =
-  ROOM_BACKDROPS.map((b) => ({ value: b.id, label: b.label }));
 
 /** What the room screen hands to SceneBackdrop: the image for this backdrop (undefined when it has none, or the id is no longer in the table) and how to fit it. */
 export function roomBackdropView(

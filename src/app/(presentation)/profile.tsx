@@ -2,17 +2,16 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, ActivityIndicator, Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN } from "@/src/hooks/use-safe-insets";
+import { useScreenInsets } from '@/src/hooks/use-safe-insets';
 
-import { Button } from "@/src/game/ui/Button";
+import { Button } from "@/src/game/ui/system/Button";
 import { SettingsIcon, StarIcon } from "@/src/components/Icons";
 import { avatarForProfile } from "@/src/components/avatarAssets";
-import { RADIUS, TYPE, ELEVATION, SPACE, useStyles, useTheme, SIZE } from "@/src/game/ui/theme";
+import { RADIUS, TYPE, ELEVATION, SPACE, useStyles, useTheme, SIZE } from "@/src/game/ui/system/theme";
 import { FURNITURE_METAS } from "@/src/game/content/furnitures/furnitures";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import type { FriendRequest, Profile } from "@/src/data";
-import type { Theme } from "@/src/game/ui/theme";
+import type { Theme } from "@/src/game/ui/system/theme";
 
 // The "/N" denominator for items assembled: the same buildable set the catalogue counts.
 const TOTAL_BUILDS = FURNITURE_METAS.length;
@@ -22,7 +21,7 @@ type FriendsTab = "friends" | "requests";
 export default function ProfileScreen() {
   const styles = useStyles(makeStyles);
   const t = useTheme();
-  const insets = useSafeAreaInsets();
+  const safe = useScreenInsets();
   const repos = useRepos();
   const me = useCurrentUserId();
 
@@ -70,8 +69,7 @@ export default function ProfileScreen() {
         setOutgoing(sent.map((r) => r.toId));
         setIncoming(senderIds.map((id) => byId.get(id)).filter((c): c is Profile => Boolean(c)));
       } catch (err) {
-        // The repos THROW on any Postgrest error, and the guard below renders a spinner whenever
-        // profile is null — so without this the screen hangs on a dropped connection.
+        // The repos THROW on any Postgrest error, and the guard below renders a spinner whenever profile is null — so without this the screen hangs on a dropped connection.
         console.warn("[profile] could not load:", (err as Error).message);
         if (alive) setLoadError(true);
       } finally {
@@ -91,8 +89,7 @@ export default function ProfileScreen() {
       const next = await repos.profiles.update(me, { username: name });
       setProfile(next);
     } catch (err) {
-      // The username column is NOT NULL + UNIQUE, so a collision is an ordinary outcome here, not an
-      // exceptional one. Leaving `profile` untouched reverts the field to the stored name.
+      // The username column is NOT NULL + UNIQUE, so a collision is an ordinary outcome here, not an exceptional one. Leaving `profile` untouched reverts the field to the stored name.
       console.warn("[profile] could not save the name:", (err as Error).message);
     }
   };
@@ -104,8 +101,7 @@ export default function ProfileScreen() {
     try {
       await repos.friends.remove(me, id);
     } catch (err) {
-      // Put them back. Without the rollback the friend stays gone on screen but is still in the DB,
-      // so the list silently disagrees with the backend until the next load.
+      // Put them back. Without the rollback the friend stays gone on screen but is still in the DB, so the list silently disagrees with the backend until the next load.
       console.warn("[profile] could not remove the friend:", (err as Error).message);
       setFriends(previous);
     }
@@ -189,7 +185,7 @@ export default function ProfileScreen() {
   }
 
   return (
-    <View style={[styles.root, { paddingTop: SPACE.sm + Math.max(insets.top, SCREEN_VERTICAL_MARGIN), paddingLeft: SPACE.xl + Math.max(insets.left, SCREEN_SIDE_MARGIN), paddingRight: SPACE.xl + Math.max(insets.right, SCREEN_SIDE_MARGIN) }]}>
+    <View style={[styles.root, { paddingTop: SPACE.sm + safe.top, paddingLeft: SPACE.xl + safe.left, paddingRight: SPACE.xl + safe.right }]}>
       <View style={styles.header}>
         <Pressable style={styles.settingsLink} onPress={() => router.push("/settings")} hitSlop={8}>
           <SettingsIcon size={24} color={t.textDim} />

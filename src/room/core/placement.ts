@@ -1,14 +1,11 @@
-// Room layout state: the committed placements plus at most ONE active edit (a ghost being
-// dragged). Lifted out of RoomExperience so any route can start a placement (Inventory,
-// BuildComplete) and so the scene can render the layout without owning it.
+// Room layout state: the committed placements plus at most ONE active edit (a ghost being dragged). Lifted out of RoomExperience so any route can start a placement (Inventory, BuildComplete) and so the scene can render the layout without owning it.
 //
-// The scene is a pure function of this store; persistence is repos.rooms and nothing else. Save
-// happens on commit (confirm/remove), never mid-drag — a half-finished ghost must not be written.
+// The scene is a pure function of this store; persistence is repos.rooms and nothing else. Save happens on commit (confirm/remove), never mid-drag — a half-finished ghost must not be written.
 import { create } from "zustand";
 
 import { getRepos } from "../../data";
-import type { PlacedFurniture, RoomLayout, UserId } from "../../data/types";
-import { defaultVariationOf } from "../../data/variantStore";
+import type { PlacedFurniture, RoomLayout, UserId } from "../../data/core/types";
+import { defaultVariationOf } from "../../data/catalog/variantStore";
 import {
   anchorForCentre,
   canPlace,
@@ -28,12 +25,9 @@ import { ORBIT } from "../input/orbit";
 import { FLOOR_CELLS, WINDOW_BANDS } from "./roomShell";
 import { visibleWalls } from "./wallCulling";
 import { getRoomItemDef, roomItemDefs } from "./placeableItems";
-import { ROOM_LAYOUT_VERSION } from "../../data/types";
+import { ROOM_LAYOUT_VERSION } from "../../data/core/types";
 
-// Where the camera is looking, mirrored here by the scene so store actions can consult it.
-// Deliberately a plain module value and NOT store state: it changes every frame while a finger is
-// down, and putting it in zustand would re-render every subscriber of the layout at 60 Hz. Nothing
-// reads it reactively — it is only ever sampled at the instant a placement begins.
+// Where the camera is looking, mirrored here by the scene so store actions can consult it. Deliberately a plain module value and NOT store state: it changes every frame while a finger is down, and putting it in zustand would re-render every subscriber of the layout at 60 Hz. Nothing reads it reactively — it is only ever sampled at the instant a placement begins.
 let cameraAzimuth = ORBIT.restTheta;
 
 export function setCameraAzimuth(theta: number): void {
@@ -87,8 +81,7 @@ interface PlacementState {
   startViewing: (ownerId: UserId, layout: GridPlacement[]) => void;
   stopViewing: () => void;
   startPlacing: (itemId: string, opts?: { firstPlacementGuide?: boolean; variation?: string | null }) => boolean;
-  // Recolour the ghost mid-placement. Variation is a pure LOOK: same footprint, same validity, so
-  // nothing is re-validated — only the model the scene loads changes.
+  // Recolour the ghost mid-placement. Variation is a pure LOOK: same footprint, same validity, so nothing is re-validated — only the model the scene loads changes.
   setGhostVariation: (variation: string | null) => void;
   // Re-edit a committed piece (long-press / tap on it).
   editPlacement: (instanceId: string) => void;
@@ -120,8 +113,7 @@ const validate = (placement: GridPlacement, layout: GridPlacement[]): PlacementC
     placement.surface.kind === "furniture" ? resolveHost(placement.surface.hostInstanceId, layout, roomItemDefs()) : null,
   );
 
-// Saves are queued so two quick commits cannot land out of order (the later snapshot must win
-// server-side). A lost write still self-heals on the next commit.
+// Saves are queued so two quick commits cannot land out of order (the later snapshot must win server-side). A lost write still self-heals on the next commit.
 let saveQueue: Promise<void> = Promise.resolve();
 const persist = (ownerId: UserId | null, layout: GridPlacement[]) => {
   if (!ownerId) return;
@@ -146,8 +138,7 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
 
   async hydrate(ownerId) {
     if (get().ownerId === ownerId && get().hydrated) return;
-    // A ghost started before the first hydrate (BuildComplete's "place it now") belongs to the
-    // incoming owner — keep it. Only an actual account SWITCH throws the edit away.
+    // A ghost started before the first hydrate (BuildComplete's "place it now") belongs to the incoming owner — keep it. Only an actual account SWITCH throws the edit away.
     const keepEdit = get().ownerId === null || get().ownerId === ownerId;
     set((s) => ({ ownerId, layout: [], activeEdit: keepEdit ? s.activeEdit : null, hydrated: false }));
     try {
@@ -158,8 +149,7 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
         // Saved rows are re-validated against TODAY'S rules, not the rules they were placed under — see sanitizeLayout for what that defends against and why an unknown def is kept.
         const layout = sanitizeLayout(saved.placements.map(toGrid));
         let activeEdit = s.activeEdit;
-        // A pre-hydration ghost was keyed and validated against an empty room; redo both against
-        // the real layout so it cannot collide with a saved piece or reuse its instanceId.
+        // A pre-hydration ghost was keyed and validated against an empty room; redo both against the real layout so it cannot collide with a saved piece or reuse its instanceId.
         if (activeEdit && activeEdit.previous === null) {
           const placement = {
             ...activeEdit.placement,
@@ -170,8 +160,7 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
         return { layout, activeEdit, hydrated: true };
       });
     } catch (err) {
-      // Leave hydrated=false: the room renders empty but commits stay blocked (see confirm/remove),
-      // so a failed load can never cause a save that wipes the real layout.
+      // Leave hydrated=false: the room renders empty but commits stay blocked (see confirm/remove), so a failed load can never cause a save that wipes the real layout.
       console.warn("[room] layout load failed", err);
     }
   },
@@ -196,14 +185,9 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
     // No room model for this item: refuse to enter placement rather than drag an invisible ghost.
     if (!def) return false;
     set((s) => {
-      // Starting over an in-progress EDIT must not discard the edited piece: put it back first,
-      // exactly as cancel() would (a new ghost just evaporates).
+      // Starting over an in-progress EDIT must not discard the edited piece: put it back first, exactly as cancel() would (a new ghost just evaporates).
       const layout = s.activeEdit?.previous ? [...s.layout, s.activeEdit.previous] : s.layout;
-      // The def routes the surface: wall-only items (windows, later frames) ghost onto a wall the
-      // camera can SEE, everything else onto the floor. This used to be hard-coded to z-max, which
-      // was fine while the camera was clamped to a 90-degree arc facing it — with a free 360 orbit
-      // it drops the ghost onto whichever wall happens to be behind the player, and the placement
-      // reads as having silently failed.
+      // The def routes the surface: wall-only items (windows, later frames) ghost onto a wall the camera can SEE, everything else onto the floor. This used to be hard-coded to z-max, which was fine while the camera was clamped to a 90-degree arc facing it — with a free 360 orbit it drops the ghost onto whichever wall happens to be behind the player, and the placement reads as having silently failed.
       const surface: SurfaceId = def.allowedSurfaces.includes("floor")
         ? { kind: "floor" }
         : { kind: "wall", wall: visibleWalls(cameraAzimuth)[0] ?? "z-max" };
@@ -225,8 +209,7 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
       const placement: GridPlacement = {
         instanceId: nextInstanceId(itemId, layout),
         itemId,
-        // Opens on the item's DEFAULT colour, the one its tile showed. Null when the variant table has
-        // not loaded (or the item has no colour axis) — the 'default' model, which is what the bundle has.
+        // Opens on the item's DEFAULT colour, the one its tile showed. Null when the variant table has not loaded (or the item has no colour axis) — the 'default' model, which is what the bundle has.
         variation: opts?.variation ?? defaultVariationOf(itemId),
         surface,
         cell: startCell,
@@ -261,8 +244,7 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
       const existing = s.layout.find((p) => p.instanceId === instanceId);
       if (!existing) return s;
       return {
-        // The piece leaves the committed layout while being edited, so it neither renders twice
-        // nor collides with its own ghost.
+        // The piece leaves the committed layout while being edited, so it neither renders twice nor collides with its own ghost.
         layout: s.layout.filter((p) => p.instanceId !== instanceId),
         activeEdit: {
           placement: existing,
@@ -279,22 +261,18 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
       if (!s.activeEdit) return s;
       const def = getRoomItemDef(s.activeEdit.placement.itemId);
       if (!def) return s;
-      // A surface handoff may only move a piece between surfaces of a KIND it allows — the drag
-      // layer decides WHEN to hop (corner crossing, tabletop entry); this only refuses nonsense. A furniture top takes anything that lives on the FLOOR, mirroring canPlace's rule.
+      // A surface handoff may only move a piece between surfaces of a KIND it allows — the drag layer decides WHEN to hop (corner crossing, tabletop entry); this only refuses nonsense. A furniture top takes anything that lives on the FLOOR, mirroring canPlace's rule.
       const hopKind = surface ? (surface.kind === "furniture" ? "floor" : surface.kind) : null;
       const nextSurface =
         surface && hopKind && def.allowedSurfaces.includes(hopKind) ? surface : s.activeEdit.placement.surface;
-      // occupiedFootprint, not rotatedFootprint: on a wall the second axis is wallHeightCells, and
-      // clamping with the raw depth (1 for a window) would let a tall piece slide up past the top.
+      // occupiedFootprint, not rotatedFootprint: on a wall the second axis is wallHeightCells, and clamping with the raw depth (1 for a window) would let a tall piece slide up past the top.
       const footprint = occupiedFootprint({ ...s.activeEdit.placement, surface: nextSurface }, def);
       const hostFootprint =
         nextSurface.kind === "furniture"
           ? resolveHost(nextSurface.hostInstanceId, s.layout, roomItemDefs())?.def.footprint
           : undefined;
       const clamped = clampToSurface(cell, nextSurface, footprint, hostFootprint);
-      // Cells are a quarter metre — most drag events stay inside the current one. Bail with the SAME
-      // state object so zustand notifies nobody: this runs per pan event, and re-rendering the
-      // whole room per event (instead of per cell crossing) is what blew React's update depth.
+      // Cells are a quarter metre — most drag events stay inside the current one. Bail with the SAME state object so zustand notifies nobody: this runs per pan event, and re-rendering the whole room per event (instead of per cell crossing) is what blew React's update depth.
       const current = s.activeEdit.placement;
       if (
         clamped.x === current.cell.x &&
@@ -311,8 +289,7 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
   rotateGhost(direction) {
     set((s) => {
       if (!s.activeEdit) return s;
-      // Wall items face out of their wall and ignore rotation; re-clamping with a swapped footprint
-      // would corrupt a tall piece's position for nothing.
+      // Wall items face out of their wall and ignore rotation; re-clamping with a swapped footprint would corrupt a tall piece's position for nothing.
       if (s.activeEdit.placement.surface.kind === "wall") return s;
       const def = getRoomItemDef(s.activeEdit.placement.itemId);
       if (!def) return s;
@@ -347,8 +324,7 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
 
   confirm() {
     const s = get();
-    // Never commit before the saved room has loaded: persisting against a not-yet-hydrated (empty
-    // or failed) layout would overwrite the whole saved room with just this ghost.
+    // Never commit before the saved room has loaded: persisting against a not-yet-hydrated (empty or failed) layout would overwrite the whole saved room with just this ghost.
     if (!s.hydrated) return;
     if (!s.activeEdit || !s.activeEdit.check.ok) return;
     const layout = [...s.layout, s.activeEdit.placement];
@@ -359,8 +335,7 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
   cancel() {
     set((s) => {
       if (!s.activeEdit) return s;
-      // An edited piece snaps back to where it stood; a new one evaporates (it still exists in
-      // whatever inventory offered it — nothing was committed).
+      // An edited piece snaps back to where it stood; a new one evaporates (it still exists in whatever inventory offered it — nothing was committed).
       return {
         layout: s.activeEdit.previous ? [...s.layout, s.activeEdit.previous] : s.layout,
         activeEdit: null,

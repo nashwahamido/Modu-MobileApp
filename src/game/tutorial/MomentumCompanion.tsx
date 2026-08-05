@@ -9,7 +9,7 @@ import {
 
 import { avatarForProfile } from "@/src/components/avatarAssets";
 import { useGameStore } from "@/src/game/core/store";
-import { ELEVATION, Theme, useStyles } from "@/src/game/ui/theme";
+import { ELEVATION, Theme, useStyles } from "@/src/game/ui/system/theme";
 import { tutorialPresentationForProfile } from "./presentation";
 import { useTutorialStore } from "./store";
 

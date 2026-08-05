@@ -4,13 +4,7 @@
 //   npm run gen:thumbs:dark
 //   npm run gen:thumbs            # wires the dark variants into thumbs.gen.ts
 //
-// The light thumbnails are transparent renders of (mostly near-black) parts —
-// they read well on the light tray cards but vanish on a dark surface. We
-// produce the dark variant by INVERTING RGB while preserving alpha, so the same
-// silhouette/shading shows up light on dark. It mirrors the folder layout:
-//   furnitures/<ID>/light/**/<name>.png  ->  furnitures/<ID>/dark/**/<name>.png
-// Re-render real dark art later and drop it in the same paths to replace these.
-// Pass --force to overwrite existing dark PNGs.
+// The light thumbnails are transparent renders of (mostly near-black) parts — they read well on the light tray cards but vanish on a dark surface. We produce the dark variant by INVERTING RGB while preserving alpha, so the same silhouette/shading shows up light on dark. It mirrors the folder layout: furnitures/<ID>/light/**/<name>.png  ->  furnitures/<ID>/dark/**/<name>.png Re-render real dark art later and drop it in the same paths to replace these. Pass --force to overwrite existing dark PNGs.
 
 import fs from "node:fs";
 import path from "node:path";

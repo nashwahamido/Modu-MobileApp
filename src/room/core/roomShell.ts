@@ -1,25 +1,9 @@
 // The room's DIMENSIONS, measured from the shell GLB once and frozen here.
-// Everything that needs to know where the floor is — the grid, collision, the renderer, picking —
-// reads these numbers. Nothing measures the mesh at runtime and nothing carries its own copy: the
-// alignment bugs in the old placement code all came from two modules approximating the same plane
-// with different constants.
+// Everything that needs to know where the floor is — the grid, collision, the renderer, picking — reads these numbers. Nothing measures the mesh at runtime and nothing carries its own copy: the alignment bugs in the old placement code all came from two modules approximating the same plane with different constants.
 //
-// Units are AUTHORED units, i.e. exactly what the GLB (and Blender) says. That makes every number
-// here checkable against the source file. Scene space is a pure function of them — see roomToScene.
+// Units are AUTHORED units, i.e. exactly what the GLB (and Blender) says. That makes every number here checkable against the source file. Scene space is a pure function of them — see roomToScene.
 //
-// Provenance: measured 2026-07-29 from the "room" object of print_room.blend at export time (the
-// same numbers were re-read from the GLB's POSITION accessor bounds + node translation as a check).
-// Authored units are REAL METRES — the shell was rescaled against real-size furniture (a 1.43 x 1.95
-// double bed, a 0.75-high desk), landing on a 4.5 x 4.5 m floor with 2.92 m walls: a believable room
-// where a bed reads as bed-sized. The grid is a clean 18 x 18 at cellSize 0.25 — quarter cells, same pitch as the walls.
-// The shell carries FIFTEEN materials, and their NAMES are load-bearing twice over: the decor system retextures Floor and the Wall_* group by material name at runtime and tints FloorEdge and the Trim_* group to match, and camera-facing wall culling fades a wall by writing alpha on the material instance its name identifies (see ./wallCulling). scripts/set-shell-blend-modes.mjs holds the authoritative list and FAILS the build if a re-export drops one.
-//   Floor        the raised walkable slab: top face y -0.3951, sitting on the plinth below
-//   FloorEdge    the plinth (down to y -0.8158) plus the border ledge around the raised slab
-//   Wall_<id>    one material per wall, 0.12 m thick (thinned from the authored 0.22 so window jambs read slim; the plinth and cornice still span the original outer skins, reading as a foundation lip and cornice overhang from outside), band top y 2.5224 (2.92 above the floor); the x-min and z-max bands are diced into removable WCell_* nodes, see WINDOW_BANDS below
-//   Trim_<id>    one cornice run per wall, y 2.5224..2.72, fading with the wall it caps
-// The four walls are ONE material each because gltfio hands out a MaterialInstance per glTF material: a shared 'Wall' would fade all four at once. Each wall's cornice, its share of the band cells, and its corner post all carry the same name, so one alpha write hides the whole wall.
-// x-walls run the FULL depth and therefore own all four corner posts; z-walls butt into them. That is what makes a hidden x-wall leave the neighbouring z-wall ending in a clean face — which is what a wall with its neighbour removed actually looks like — instead of tearing a notch out of it.
-// Re-run the measurement if the shell is re-exported; a moved wall silently invalidates the grid.
+// Provenance: measured 2026-07-29 from the "room" object of print_room.blend at export time (the same numbers were re-read from the GLB's POSITION accessor bounds + node translation as a check). Authored units are REAL METRES — the shell was rescaled against real-size furniture (a 1.43 x 1.95 double bed, a 0.75-high desk), landing on a 4.5 x 4.5 m floor with 2.92 m walls: a believable room where a bed reads as bed-sized. The grid is a clean 18 x 18 at cellSize 0.25 — quarter cells, same pitch as the walls. The shell carries FIFTEEN materials, and their NAMES are load-bearing twice over: the decor system retextures Floor and the Wall_* group by material name at runtime and tints FloorEdge and the Trim_* group to match, and camera-facing wall culling fades a wall by writing alpha on the material instance its name identifies (see ./wallCulling). scripts/set-shell-blend-modes.mjs holds the authoritative list and FAILS the build if a re-export drops one. Floor        the raised walkable slab: top face y -0.3951, sitting on the plinth below FloorEdge    the plinth (down to y -0.8158) plus the border ledge around the raised slab Wall_<id>    one material per wall, 0.12 m thick (thinned from the authored 0.22 so window jambs read slim; the plinth and cornice still span the original outer skins, reading as a foundation lip and cornice overhang from outside), band top y 2.5224 (2.92 above the floor); the x-min and z-max bands are diced into removable WCell_* nodes, see WINDOW_BANDS below Trim_<id>    one cornice run per wall, y 2.5224..2.72, fading with the wall it caps The four walls are ONE material each because gltfio hands out a MaterialInstance per glTF material: a shared 'Wall' would fade all four at once. Each wall's cornice, its share of the band cells, and its corner post all carry the same name, so one alpha write hides the whole wall. x-walls run the FULL depth and therefore own all four corner posts; z-walls butt into them. That is what makes a hidden x-wall leave the neighbouring z-wall ending in a clean face — which is what a wall with its neighbour removed actually looks like — instead of tearing a notch out of it. Re-run the measurement if the shell is re-exported; a moved wall silently invalidates the grid.
 
 export type Vec3 = { x: number; y: number; z: number };
 
@@ -83,8 +67,7 @@ export type RoomShellSpec = {
 };
 
 export const ROOM_SHELL: RoomShellSpec = {
-  // Grew on two axes when the x-max and z-min walls were added: their plinth and cornice overhang the new outer faces by the same 0.1042 the original two always did, so the diorama's lip reads identically from every angle. SCENE_SCALE and SCENE_CENTER follow from these numbers, so every placement moves with them — the GRID does not, because it is derived from floor.* below, and the new walls' inner faces sit exactly on the old floor rect.
-  // min.y is the plinth's underside, and it is the ONLY number here that has moved since the four-wall shell landed: -0.7773, then -1.0598 on 2026-08-02 when the floor slab was thickened to 0.1519 and the plinth deepened with it, then -0.8158 on 2026-08-03 when the plinth was made 24 cm shallower again. Nothing a player stands on has ever moved with it — floor.y and every wall bottom are untouched — but the AABB is what Filament normalizes the shell by while roomToScene normalizes the FURNITURE by the constants here, so the two disagree by exactly half the drift and every piece floats: the 2026-08-02 export left them ~14 cm high, this one would have left them 12.2 cm high. SCENE_SCALE has survived all three, because the largest extent is x at 5.3236 and only y ever changed.
+  // Grew on two axes when the x-max and z-min walls were added: their plinth and cornice overhang the new outer faces by the same 0.1042 the original two always did, so the diorama's lip reads identically from every angle. SCENE_SCALE and SCENE_CENTER follow from these numbers, so every placement moves with them — the GRID does not, because it is derived from floor.* below, and the new walls' inner faces sit exactly on the old floor rect. min.y is the plinth's underside, and it is the ONLY number here that has moved since the four-wall shell landed: -0.7773, then -1.0598 on 2026-08-02 when the floor slab was thickened to 0.1519 and the plinth deepened with it, then -0.8158 on 2026-08-03 when the plinth was made 24 cm shallower again. Nothing a player stands on has ever moved with it — floor.y and every wall bottom are untouched — but the AABB is what Filament normalizes the shell by while roomToScene normalizes the FURNITURE by the constants here, so the two disagree by exactly half the drift and every piece floats: the 2026-08-02 export left them ~14 cm high, this one would have left them 12.2 cm high. SCENE_SCALE has survived all three, because the largest extent is x at 5.3236 and only y ever changed.
   bounds: {
     min: { x: -1.2415, y: -0.8158, z: -3.3687 },
     max: { x: 4.0821, y: 2.7249, z: 1.954 },
@@ -108,9 +91,7 @@ export const ROOM_SHELL: RoomShellSpec = {
   cellSize: 0.25,
 };
 
-// Windows are WALL PLACEMENTS, not fixed sockets: the z-max wall's window band ships in the shell GLB pre-diced into one solid box per wall-grid cell, and the scene knocks out exactly the cells a placed window covers (scene.removeEntity on the named node). The neighbouring boxes' faces then read as the jambs, so removal alone produces a finished opening. Everything outside the band is solid wall and can never hold a window.
-// Each wall's band runs from sill 1.0 m above the floor (real furniture height) to head 2.5, with a solid 0.5 margin at both ends of the run — a structural guarantee that no window can sit flush against the corner or a wall's open end (on x-min the corner-side margin is the grid's natural remainder plus authored fill).
-// Coordinates below are WALL-GRID cells (WALL_CELL_SIZE, 0.25): windows are ordinary wall placements on the same grid as photo frames, so plain occupancy keeps them apart. The band bounds what can become a HOLE: a window's footprint must lie inside them, while a frame may hang anywhere on the wall. Window sizes step by 0.25 in both axes — a 1.0 x 1.31 sash covers a 4 x 5-cell hole and its frame overlaps the remainder.
+// Windows are WALL PLACEMENTS, not fixed sockets: the z-max wall's window band ships in the shell GLB pre-diced into one solid box per wall-grid cell, and the scene knocks out exactly the cells a placed window covers (scene.removeEntity on the named node). The neighbouring boxes' faces then read as the jambs, so removal alone produces a finished opening. Everything outside the band is solid wall and can never hold a window. Each wall's band runs from sill 1.0 m above the floor (real furniture height) to head 2.5, with a solid 0.5 margin at both ends of the run — a structural guarantee that no window can sit flush against the corner or a wall's open end (on x-min the corner-side margin is the grid's natural remainder plus authored fill). Coordinates below are WALL-GRID cells (WALL_CELL_SIZE, 0.25): windows are ordinary wall placements on the same grid as photo frames, so plain occupancy keeps them apart. The band bounds what can become a HOLE: a window's footprint must lie inside them, while a frame may hang anywhere on the wall. Window sizes step by 0.25 in both axes — a 1.0 x 1.31 sash covers a 4 x 5-cell hole and its frame overlaps the remainder.
 export const WINDOW_BANDS: Record<WallId, {
   // Wall-grid columns/rows whose cells are removable in the GLB; end-exclusive.
   cols: { from: number; to: number };
@@ -122,10 +103,7 @@ export const WINDOW_BANDS: Record<WallId, {
   "z-max": { cols: { from: 2, to: 16 }, rows: { from: 4, to: 10 } },
 };
 
-// The GLB node name for the removable cell at wall-grid (col, row), or null where the wall is
-// solid. The name's indices are band-local (c00 is the band's first column, not the wall's).
-// Matching is by NAME via asset.getFirstEntityByName, so this string format is part of the shell's
-// authored contract. The wall id is embedded without its dash: WCell_zmax_c03_r1.
+// The GLB node name for the removable cell at wall-grid (col, row), or null where the wall is solid. The name's indices are band-local (c00 is the band's first column, not the wall's). Matching is by NAME via asset.getFirstEntityByName, so this string format is part of the shell's authored contract. The wall id is embedded without its dash: WCell_zmax_c03_r1.
 export function windowCellEntityName(wall: WallId, col: number, row: number): string | null {
   const band = WINDOW_BANDS[wall];
   if (col < band.cols.from || col >= band.cols.to) return null;
@@ -134,8 +112,7 @@ export function windowCellEntityName(wall: WallId, col: number, row: number): st
 }
 
 // How many square cells cover the floor rect, ROUNDED rather than truncated.
-// Truncating left the old shell's z axis one cell short — ten cells covered 5.00 of a 5.48 floor and the leftover 0.48 showed as a bare strip the full width of the room against the back wall.
-// The current shell was authored so this comes out clean: x is exactly 18 cells (4.5 / 0.25), z is 4.4989 so eighteen cells overhang maxZ by ~0.0011 — which is INSIDE the z-max wall, whose inner face sits exactly at the floor edge. Check again if the shell is re-exported: a remainder near half a cell would push the last row past the wall.
+// Truncating left the old shell's z axis one cell short — ten cells covered 5.00 of a 5.48 floor and the leftover 0.48 showed as a bare strip the full width of the room against the back wall. The current shell was authored so this comes out clean: x is exactly 18 cells (4.5 / 0.25), z is 4.4989 so eighteen cells overhang maxZ by ~0.0011 — which is INSIDE the z-max wall, whose inner face sits exactly at the floor edge. Check again if the shell is re-exported: a remainder near half a cell would push the last row past the wall.
 export const FLOOR_CELLS = {
   w: Math.round((ROOM_SHELL.floor.maxX - ROOM_SHELL.floor.minX) / ROOM_SHELL.cellSize),
   d: Math.round((ROOM_SHELL.floor.maxZ - ROOM_SHELL.floor.minZ) / ROOM_SHELL.cellSize),
@@ -144,10 +121,7 @@ export const FLOOR_CELLS = {
 // Wall and floor grids now share the same 0.25 pitch — wall grids were finer than the floor's old 0.5 until the quarter-cell flip. Wall items are small (frames, shelves, windows) and windows want quarter-metre sizing, so frames and windows share this one fine grid and plain occupancy keeps them apart — no cross-grid rounding anywhere.
 export const WALL_CELL_SIZE = 0.25;
 
-// The walls' authored thickness — HALF a rendering contract: every wall item's GLB is authored
-// with its origin on the mounting plane and its back face exactly this far behind it (the
-// anchor-empty convention, enforced by scripts/fix_window_anchors.py), so the renderer can
-// reconstruct the model's AABB centre from its measured size alone. Re-measure on re-export.
+// The walls' authored thickness — HALF a rendering contract: every wall item's GLB is authored with its origin on the mounting plane and its back face exactly this far behind it (the anchor-empty convention, enforced by scripts/fix_window_anchors.py), so the renderer can reconstruct the model's AABB centre from its measured size alone. Re-measure on re-export.
 export const WALL_THICKNESS = 0.12;
 
 export const WALL_CELLS: Record<WallId, { w: number; h: number }> = {
@@ -165,10 +139,7 @@ function wallCells(wall: WallId): { w: number; h: number } {
   };
 }
 
-// The unit-cube normalization Filament applies to the shell, replicated exactly so placements land
-// in the same space as the room they stand in. From RNFTransformManagerImpl.cpp:139 —
-// scaling(2 / maxExtent) * translation(-center), i.e. centred on the origin and scaled so the
-// model's LARGEST axis spans 2 units. Note the largest axis is what sets the scale, not each axis.
+// The unit-cube normalization Filament applies to the shell, replicated exactly so placements land in the same space as the room they stand in. From RNFTransformManagerImpl.cpp:139 — scaling(2 / maxExtent) * translation(-center), i.e. centred on the origin and scaled so the model's LARGEST axis spans 2 units. Note the largest axis is what sets the scale, not each axis.
 export const SCENE_CENTER: Vec3 = {
   x: (ROOM_SHELL.bounds.min.x + ROOM_SHELL.bounds.max.x) / 2,
   y: (ROOM_SHELL.bounds.min.y + ROOM_SHELL.bounds.max.y) / 2,
@@ -202,11 +173,7 @@ export function sceneToRoom(point: Vec3): Vec3 {
 }
 
 
-// Where the orbit looks: the room's centre in scene space (the shell is unit-cube centred on the
-// origin). Lens and orbit geometry live in ./orbit — solved against these shell measurements.
-// History worth keeping: the original camera sat at distance 2.30 with a 32 mm lens, which put the
-// shell at |ndc| 2.4 vertically — the room was over twice the viewport's height and had its floor
-// and ceiling cut off at every aspect ratio. Framing has been solved, not dialled, ever since.
+// Where the orbit looks: the room's centre in scene space (the shell is unit-cube centred on the origin). Lens and orbit geometry live in ./orbit — solved against these shell measurements. History worth keeping: the original camera sat at distance 2.30 with a 32 mm lens, which put the shell at |ndc| 2.4 vertically — the room was over twice the viewport's height and had its floor and ceiling cut off at every aspect ratio. Framing has been solved, not dialled, ever since.
 export const ROOM_TARGET = { x: 0, y: 0, z: 0 } as const;
 
 // There is deliberately NO yaw clamp here any more. The shell used to have two walls and be open on the other two sides, so only a 90-degree arc read as a room — 45 degrees either way put a wall edge-on and showed the open side straight through it, and MAX_ROOM_YAW existed to stop a drag spinning the room to its missing back. The room is enclosed on all four sides now and the two walls between the camera and the room fade out instead (see ./wallCulling), so every azimuth reads as a room and rotation is free. ORBIT.homeRadius was re-solved against the four-wall silhouette over the full turn: 9.87 holds at |ndc| 0.913, inside the 0.92 budget.

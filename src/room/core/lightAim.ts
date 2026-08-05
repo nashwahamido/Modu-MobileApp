@@ -4,10 +4,7 @@
 //
 // The convention is defined in supabase/migrations/014_light_aim.sql, which is the one file both repos share, and it is defined there as worked examples rather than prose. ./lightAim.test.ts asserts those same pairs; the portal carries the same fixture. If either side flips a sign, its own test fails.
 //
-//   pitch  0 = straight down (the resting case for nearly every lamp)
-//   pitch 90 = horizontal
-//   pitch 180 = straight up
-//   yaw    0 = toward -Z (the model's own forward), increasing toward +X
+//   pitch  0 = straight down (the resting case for nearly every lamp) pitch 90 = horizontal pitch 180 = straight up yaw    0 = toward -Z (the model's own forward), increasing toward +X
 //
 // Angles are in the PIECE'S OWN SPACE at rotSteps 0, so they turn with the furniture — the renderer applies the placement's rotation on top of this.
 import type { Vec3 } from "./roomShell";

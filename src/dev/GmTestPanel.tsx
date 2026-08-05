@@ -38,8 +38,7 @@ export function GmTestPanel() {
   const { height } = useWindowDimensions();
   const maxPanelHeight = Math.max(180, height - PANEL_BOTTOM_INSET - PANEL_TOP_GUTTER);
 
-  // The catalogue picks the furniture now, so nothing here needs the old "/play + an id chosen from
-  // the active profile" special case — that guessed one piece when the point was to choose.
+  // The catalogue picks the furniture now, so nothing here needs the old "/play + an id chosen from the active profile" special case — that guessed one piece when the point was to choose.
   const jumpTo = (route: Href) => {
     setOpen(false);
     router.replace(route);
@@ -95,9 +94,7 @@ export function GmTestPanel() {
 }
 
 const styles = StyleSheet.create({
-  // Sits above the room's bottom-left rotate controls (left:24, bottom:78, 44px tall) rather than in the
-  // corner, which the joystick claims on the assembly screen. This panel is mounted globally, so the slot
-  // has to be clear on every screen.
+  // Sits above the room's bottom-left rotate controls (left:24, bottom:78, 44px tall) rather than in the corner, which the joystick claims on the assembly screen. This panel is mounted globally, so the slot has to be clear on every screen.
   root: {
     position: "absolute",
     left: 24,
@@ -105,8 +102,7 @@ const styles = StyleSheet.create({
     zIndex: 999,
     alignItems: "flex-start",
   },
-  // Faint at rest: a dev affordance riding on top of the real UI should read as an overlay, not as a game
-  // control. Opening it brings it back to full strength.
+  // Faint at rest: a dev affordance riding on top of the real UI should read as an overlay, not as a game control. Opening it brings it back to full strength.
   fab: {
     width: 48,
     height: 48,

@@ -1,7 +1,4 @@
-// The room's own lighting controls: the ceiling light's switch, and the hour that sets the sun behind it.
-// Both live on the room HUD rather than in Settings because they are things you do TO THE ROOM while looking at it — a control whose whole point is the change you see has no business two screens away. See docs/superpowers/specs/2026-08-04-room-ceiling-light-design.md section 6.
-// NOTHING here relates to settings.lightingPreset, which rigs the ASSEMBLY scene; "light" in this file means the room's ceiling fitting and nothing else.
-// Props only, no store: RoomExperience owns the switch's override state and positions this column, exactly as it does for the settings button.
+// The room's own lighting controls: the ceiling light's switch, and the hour that sets the sun behind it. Both live on the room HUD rather than in Settings because they are things you do TO THE ROOM while looking at it — a control whose whole point is the change you see has no business two screens away. See docs/superpowers/specs/2026-08-04-room-ceiling-light-design.md section 6. NOTHING here relates to settings.lightingPreset, which rigs the ASSEMBLY scene; "light" in this file means the room's ceiling fitting and nothing else. Props only, no store: RoomExperience owns the switch's override state and positions this column, exactly as it does for the settings button.
 import { useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
@@ -9,8 +6,8 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { BulbIcon, MoonIcon, SunIcon } from '../../components/Icons';
 import { TIME_OF_DAY, TIME_OF_DAY_IDS, sunPreset, type TimeOfDayId } from '../core/timeOfDay';
-import { ELEVATION, useStyles, LEXEND } from '@/src/game/ui/theme';
-import type { Theme } from '@/src/game/ui/theme';
+import { ELEVATION, useStyles, LEXEND } from '@/src/game/ui/system/theme';
+import type { Theme } from '@/src/game/ui/system/theme';
 
 // Matched to the settings button above it, so the column reads as one run of controls down the left edge rather than as two unrelated widgets.
 const BUTTON = 42;
@@ -59,8 +56,7 @@ export function RoomLightControls({
     onHourChange(next);
   };
 
-  // MEMOIZED, and it must stay that way: handing GestureDetector a fresh instance on each render reattaches the native handler mid-drag, which eats the grab and stutters the scrub — the same lesson play.tsx records for the scene gestures.
-  // One Pan handles tap and drag both, because a tap is just a pan that never moved: onBegin jumps to whatever stop was touched, onUpdate scrubs from there, and there is no Race to tune between two competing recognisers.
+  // MEMOIZED, and it must stay that way: handing GestureDetector a fresh instance on each render reattaches the native handler mid-drag, which eats the grab and stutters the scrub — the same lesson play.tsx records for the scene gestures. One Pan handles tap and drag both, because a tap is just a pan that never moved: onBegin jumps to whatever stop was touched, onUpdate scrubs from there, and there is no Race to tune between two competing recognisers.
   const scrub = useMemo(
     () =>
       Gesture.Pan()

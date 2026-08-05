@@ -66,9 +66,7 @@ const STYLE_DEFAULT: Record<RenderStyleId, Preset> = {
   realistic: "studio",
   cozy: "warm",
   cartoon: "soft",
-  // The two SHADER looks want a flat, even rig: the cel bands should do the
-  // shading, not the lights. A dramatic key fights the ramp and the banding
-  // turns to mush.
+  // The two SHADER looks want a flat, even rig: the cel bands should do the shading, not the lights. A dramatic key fights the ramp and the banding turns to mush.
   toon: "soft",
   illustrated: "soft",
 };

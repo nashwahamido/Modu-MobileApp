@@ -1,13 +1,10 @@
-// The "buy this?" confirmation, as a popup over the shop. Nothing is charged until Yes —
-// the tap that opens this is not itself a purchase
+// The "buy this?" confirmation, as a popup over the shop. Nothing is charged until Yes — the tap that opens this is not itself a purchase
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 
 import { COIN_ICON } from "@/src/components/iconAssets";
-import { useStyles, LEXEND } from "@/src/game/ui/theme";
-import type { Theme } from "@/src/game/ui/theme";
+import { CREAM, CREAM_LIFT, useStyles, LEXEND } from "@/src/game/ui/system/theme";
+import type { Theme } from "@/src/game/ui/system/theme";
 
-const TEXT_COLOR = "#231F20";
-const CARD = "#FBFAF3";
 // Sage for accept, warm clay for decline, each with a darker stroke of its own hue
 const YES_FILL = "#C2CEB1";
 const YES_BORDER = "#919A85";
@@ -94,16 +91,12 @@ const makeStyles = (t: Theme) =>
       width: 460,
       maxWidth: "86%",
       borderRadius: 24,
-      backgroundColor: CARD,
+      backgroundColor: CREAM.card,
       paddingHorizontal: 30,
       paddingTop: 26,
       paddingBottom: 22,
       alignItems: "center",
-      shadowColor: "#929292",
-      shadowOpacity: 0.22,
-      shadowRadius: 18,
-      shadowOffset: { width: 0, height: 4 },
-      elevation: 8,
+      ...CREAM_LIFT.card,
     },
     well: {
       width: 200,
@@ -123,7 +116,7 @@ const makeStyles = (t: Theme) =>
     ask: {
       ...LEXEND.regular,
       fontSize: 17,
-      color: TEXT_COLOR,
+      color: CREAM.ink,
     },
     askName: {
       ...LEXEND.bold,
@@ -148,14 +141,14 @@ const makeStyles = (t: Theme) =>
       paddingRight: 8,
       backgroundColor: "#FFFFFF",
       borderWidth: 0.6,
-      borderColor: "#D7D1CE",
+      borderColor: CREAM.hairline,
       alignItems: "center",
       justifyContent: "center",
     },
     priceText: {
       ...LEXEND.bold,
       fontSize: 13,
-      color: TEXT_COLOR,
+      color: CREAM.ink,
       transform: [{ translateX: -3 }],
     },
     actions: {
@@ -171,11 +164,7 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       justifyContent: "center",
       // Barely there, so the buttons lift off the card without reading as raised chips
-      shadowColor: "#929292",
-      shadowOpacity: 0.22,
-      shadowRadius: 4,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 2,
+      ...CREAM_LIFT.control,
     },
     yes: {
       backgroundColor: YES_FILL,
@@ -191,6 +180,6 @@ const makeStyles = (t: Theme) =>
     buttonText: {
       ...LEXEND.regular,
       fontSize: 15,
-      color: TEXT_COLOR,
+      color: CREAM.ink,
     },
   });

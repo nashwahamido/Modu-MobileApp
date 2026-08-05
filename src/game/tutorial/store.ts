@@ -15,10 +15,7 @@ const DEFAULT_CONTEXT: TutorialContext = {
   softHints: true,
 };
 
-// How long a completed step shows its reward before advancing. The event cooldown
-// matches it exactly, so the only window that blocks (and latches) events is the
-// pending-advance one — which completeCurrentStep drains on advance. A longer
-// cooldown would reopen a gap where an event is latched with nothing to replay it.
+// How long a completed step shows its reward before advancing. The event cooldown matches it exactly, so the only window that blocks (and latches) events is the pending-advance one — which completeCurrentStep drains on advance. A longer cooldown would reopen a gap where an event is latched with nothing to replay it.
 const STEP_ADVANCE_DELAY_MS = 1200;
 
 interface TutorialState {
@@ -107,11 +104,7 @@ export const useTutorialStore = create<TutorialState>()((set, get) => ({
     } = get();
     if (skipped || completed) return;
     const step = steps[currentIndex];
-    // While the previous step's reward is still animating (pendingAdvanceStepId)
-    // or we're inside its cooldown, an event that belongs to the current or the
-    // very next step would otherwise be dropped. Since the action behind it (a
-    // placed part, say) usually can't happen again, latch it and replay it when
-    // that step becomes current — see the advance in completeCurrentStep.
+    // While the previous step's reward is still animating (pendingAdvanceStepId) or we're inside its cooldown, an event that belongs to the current or the very next step would otherwise be dropped. Since the action behind it (a placed part, say) usually can't happen again, latch it and replay it when that step becomes current — see the advance in completeCurrentStep.
     if (pendingAdvanceStepId || Date.now() < acceptsEventsAfter) {
       const upcoming = steps[currentIndex + 1]?.event;
       if (
@@ -174,8 +167,7 @@ export const useTutorialStore = create<TutorialState>()((set, get) => ({
         }
       } else {
         set({ currentIndex: nextIndex, pendingAdvanceStepId: null });
-        // Replay an event that fired early (during this step's reward) and
-        // belongs to the now-current step; otherwise clear any stale latch.
+        // Replay an event that fired early (during this step's reward) and belongs to the now-current step; otherwise clear any stale latch.
         const nextStep = state.steps[nextIndex];
         const { latchedEvents } = get();
         if (nextStep && latchedEvents.includes(nextStep.event)) {

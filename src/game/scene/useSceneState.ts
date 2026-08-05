@@ -245,16 +245,11 @@ export function deriveSceneState(
     else if (outsideFocus) modes[id] = "hidden";
     else if (!placed) {
       const hintActionId = heldIsInsert ? acts.insert : acts.snap;
-      // Spot, with nothing held. The path below needs a heldGroup, which is exactly what a player
-      // standing still and asking for help does not have.
+      // Spot, with nothing held. The path below needs a heldGroup, which is exactly what a player standing still and asking for help does not have.
       //
-      // Snap OR insert: a screw is the part whose motion the player can least guess, so it is the
-      // one that most needs the demo. Inserts were excluded while the ghost rendered at its park
-      // pose — a glowing copy off the side of the assembly read as the model jumping — but the demo
-      // now drives the pose itself, from demoApproach down to the seat, so that reason is spent.
+      // Snap OR insert: a screw is the part whose motion the player can least guess, so it is the one that most needs the demo. Inserts were excluded while the ghost rendered at its park pose — a glowing copy off the side of the assembly read as the model jumping — but the demo now drives the pose itself, from demoApproach down to the seat, so that reason is spent.
       //
-      // Staged parts stay out: their real target is shifted by stageShiftFor, and a demo that
-      // ignores that shift would fly the ghost into the socket the sub-assembly has not reached yet.
+      // Staged parts stay out: their real target is shifted by stageShiftFor, and a demo that ignores that shift would fly the ghost into the socket the sub-assembly has not reached yet.
       const spotAction = acts.snap ?? acts.insert;
       if (
         hintPartId === id &&

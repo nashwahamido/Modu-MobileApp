@@ -1,10 +1,7 @@
 // Grid placement: which cells a piece occupies, and whether it may stand there.
-// Pure logic over plain data — no Filament, no React, no async. The renderer is a function of the
-// layout this module validates, never the other way round.
+// Pure logic over plain data — no Filament, no React, no async. The renderer is a function of the layout this module validates, never the other way round.
 //
-// There is deliberately no physics here. Nothing in a room moves under forces, so placement is a
-// discrete constraint problem: in-bounds, and not overlapping. An occupancy set answers that exactly
-// and in O(footprint), with none of the tunnelling or jitter a rigid-body solver brings.
+// There is deliberately no physics here. Nothing in a room moves under forces, so placement is a discrete constraint problem: in-bounds, and not overlapping. An occupancy set answers that exactly and in O(footprint), with none of the tunnelling or jitter a rigid-body solver brings.
 import {
   FLOOR_CELLS,
   ROOM_SHELL,
@@ -19,9 +16,7 @@ import {
 
 export type SurfaceKind = "floor" | "wall" | "furniture";
 
-// Which grid a placement lives on. Each surface is an INDEPENDENT 2D grid — there is no shared world
-// grid, so collision never has to reason across surfaces. The furniture variant (books on a shelf,
-// a vase on a cabinet) is reserved so adding it later is not a data migration; nothing builds it yet.
+// Which grid a placement lives on. Each surface is an INDEPENDENT 2D grid — there is no shared world grid, so collision never has to reason across surfaces. The furniture variant (books on a shelf, a vase on a cabinet) is reserved so adding it later is not a data migration; nothing builds it yet.
 export type SurfaceId =
   | { kind: "floor" }
   | { kind: "wall"; wall: WallId }
@@ -35,20 +30,16 @@ export type RotSteps = 0 | 1 | 2 | 3;
 // Cells, at rotSteps 0. Rotating by an odd number of steps swaps the two.
 export type Footprint = { w: number; d: number };
 
-// The static per-item metadata the grid needs. Identity, names and variations come from the catalog
-// (placeable_items / item_variants); this is only what placement itself has to know.
+// The static per-item metadata the grid needs. Identity, names and variations come from the catalog (placeable_items / item_variants); this is only what placement itself has to know.
 export type PlaceableItemDef = {
   itemId: string;
   footprint: Footprint;
   allowedSurfaces: SurfaceKind[];
   // Wall items: how far up the wall the piece extends, in cells.
   wallHeightCells?: number;
-  // Windows: this item's footprint is a HOLE — the scene knocks the covered shell cells out of the
-  // wall. Frames hang on the wall surface and leave it intact.
+  // Windows: this item's footprint is a HOLE — the scene knocks the covered shell cells out of the wall. Frames hang on the wall surface and leave it intact.
   opensWall?: boolean;
-  // Lighting (category 'lit'): the renderer hangs a light over this piece and moves it as the piece
-  // moves. Purely a rendering concern — placement, collision and persistence treat a lighting item as
-  // ordinary furniture, so nothing below this line knows or cares that it glows.
+  // Lighting (category 'lit'): the renderer hangs a light over this piece and moves it as the piece moves. Purely a rendering concern — placement, collision and persistence treat a lighting item as ordinary furniture, so nothing below this line knows or cares that it glows.
   emitsLight?: boolean;
   // Which cells of the w×d footprint are solid, at rotSteps 0: d rows of w chars, 'X' solid, '.' empty; row 0 is the -y edge. Absent = solid rectangle. Floor surfaces only — wall footprints are already exact holes.
   mask?: readonly string[];
@@ -56,7 +47,7 @@ export type PlaceableItemDef = {
   hostsTop?: boolean;
 };
 
-// One placed object. This is the persisted shape — see src/data/types.ts PlacedFurniture.
+// One placed object. This is the persisted shape — see src/data/core/types.ts PlacedFurniture.
 export type GridPlacement = {
   instanceId: string;
   itemId: string;
@@ -81,8 +72,7 @@ export type PlacementCheck = { ok: true } | { ok: false; reason: PlacementReject
 
 const OK: PlacementCheck = { ok: true };
 
-// A stable string per surface, so occupancy can be a flat map. Wall and furniture surfaces include
-// their discriminator: two walls are two grids, and two host cabinets are two more.
+// A stable string per surface, so occupancy can be a flat map. Wall and furniture surfaces include their discriminator: two walls are two grids, and two host cabinets are two more.
 export function surfaceKey(surface: SurfaceId): string {
   switch (surface.kind) {
     case "floor":
@@ -134,8 +124,7 @@ export function rotatedMask(mask: readonly string[], rotSteps: RotSteps): readon
   return rows;
 }
 
-// The footprint a placement occupies on its own surface. Wall items are as wide as their footprint
-// and as tall as wallHeightCells, since a wall grid's second axis is vertical, not depth.
+// The footprint a placement occupies on its own surface. Wall items are as wide as their footprint and as tall as wallHeightCells, since a wall grid's second axis is vertical, not depth.
 export function occupiedFootprint(
   placement: GridPlacement,
   def: PlaceableItemDef,
@@ -161,8 +150,7 @@ export function cellsFor(placement: GridPlacement, def: PlaceableItemDef): Cell[
   return cells;
 }
 
-// surfaceKey -> the cells taken on it. Derived from the layout, never stored: a persisted occupancy
-// map is one more thing that can disagree with the placements it describes.
+// surfaceKey -> the cells taken on it. Derived from the layout, never stored: a persisted occupancy map is one more thing that can disagree with the placements it describes.
 export type Occupancy = Map<string, Set<string>>;
 
 export function buildOccupancy(
@@ -200,8 +188,7 @@ export function resolveHost(
   return placement && def ? { placement, def } : null;
 }
 
-// Can this placement stand here? Runs on every drag frame, so it stays allocation-light and returns
-// a reason code rather than display copy — the UI owns the wording.
+// Can this placement stand here? Runs on every drag frame, so it stays allocation-light and returns a reason code rather than display copy — the UI owns the wording.
 export function canPlace(
   placement: GridPlacement,
   def: PlaceableItemDef | undefined,
@@ -252,9 +239,7 @@ export function canPlace(
     return { ok: false, reason: "out-of-bounds" };
   }
 
-  // A hole can only open where the shell has removable cells: the whole footprint must sit inside
-  // the wall's window band. The margins and the solid wall outside the band are in-bounds for a
-  // FRAME, but out-of-bounds for a window — the wall there is structural.
+  // A hole can only open where the shell has removable cells: the whole footprint must sit inside the wall's window band. The margins and the solid wall outside the band are in-bounds for a FRAME, but out-of-bounds for a window — the wall there is structural.
   if (def.opensWall && placement.surface.kind === "wall") {
     const band = WINDOW_BANDS[placement.surface.wall];
     if (
@@ -289,8 +274,7 @@ export function canPlaceInLayout(
   return canPlace(placement, defs.get(placement.itemId), occupancy, host);
 }
 
-// Clamp an anchor so the piece stays fully on its surface. The drag snaps to the nearest legal cell
-// rather than refusing to move, which keeps the ghost under the finger at the room's edges.
+// Clamp an anchor so the piece stays fully on its surface. The drag snaps to the nearest legal cell rather than refusing to move, which keeps the ghost under the finger at the room's edges.
 export function clampToSurface(
   cell: Cell,
   surface: SurfaceId,
@@ -308,9 +292,7 @@ export function clampToSurface(
   };
 }
 
-// The CENTRE of a floor placement in authored room units, with its base on the floor surface.
-// Callers hand the result to roomToScene; keeping this in authored units means it can be checked
-// against the GLB by eye.
+// The CENTRE of a floor placement in authored room units, with its base on the floor surface. Callers hand the result to roomToScene; keeping this in authored units means it can be checked against the GLB by eye.
 export function floorCellToRoom(cell: Cell, footprint: Footprint): Vec3 {
   const { cellSize, floor } = ROOM_SHELL;
   return {
@@ -320,12 +302,7 @@ export function floorCellToRoom(cell: Cell, footprint: Footprint): Vec3 {
   };
 }
 
-// The VOLUME a floor placement occupies, in authored room units: its claimed cells, from the floor
-// surface up to the piece's rendered height. This is what a finger is actually pointing at — a
-// picking ray tested against the floor PLANE instead answers with the cell behind the piece, one
-// for every 20 cm of model height at the rest camera, which is why only a piece's base sliver used
-// to be pickable. Height is the model's measured size.y times its fitScale; callers pass it in so
-// this module stays free of the catalog.
+// The VOLUME a floor placement occupies, in authored room units: its claimed cells, from the floor surface up to the piece's rendered height. This is what a finger is actually pointing at — a picking ray tested against the floor PLANE instead answers with the cell behind the piece, one for every 20 cm of model height at the rest camera, which is why only a piece's base sliver used to be pickable. Height is the model's measured size.y times its fitScale; callers pass it in so this module stays free of the catalog.
 export function floorPlacementBox(
   placement: GridPlacement,
   def: PlaceableItemDef,
@@ -422,8 +399,7 @@ export function topPlacementBox(
   };
 }
 
-// The centre of a wall placement — on the wall's inner face, so a frame hangs flat against it.
-// Wall grids run at WALL_CELL_SIZE (0.25), the same pitch as the floor's cellSize — see roomShell.
+// The centre of a wall placement — on the wall's inner face, so a frame hangs flat against it. Wall grids run at WALL_CELL_SIZE (0.25), the same pitch as the floor's cellSize — see roomShell.
 export function wallCellToRoom(
   wall: WallId,
   cell: Cell,
@@ -437,11 +413,7 @@ export function wallCellToRoom(
     : { x: along, y: up, z: spec.innerFace };
 }
 
-// The shell GLB node names a placement's hole covers — what the scene knocks out of the wall.
-// Empty for anything that does not open the wall (floor items, frames). Cells outside the authored
-// window band have no removable node and resolve to null; they are skipped rather than thrown on,
-// so the renderer stays total even mid-drag over an illegal spot — canPlace is what REJECTS such a
-// placement, this only answers what geometry disappears.
+// The shell GLB node names a placement's hole covers — what the scene knocks out of the wall. Empty for anything that does not open the wall (floor items, frames). Cells outside the authored window band have no removable node and resolve to null; they are skipped rather than thrown on, so the renderer stays total even mid-drag over an illegal spot — canPlace is what REJECTS such a placement, this only answers what geometry disappears.
 export function windowCellNamesFor(placement: GridPlacement, def: PlaceableItemDef): string[] {
   if (placement.surface.kind !== "wall" || !def.opensWall) return [];
   const wall = placement.surface.wall;
@@ -453,8 +425,7 @@ export function windowCellNamesFor(placement: GridPlacement, def: PlaceableItemD
   return names;
 }
 
-// The floor cell containing a point, for turning a picking ray's hit into a cell. Returns the cell
-// the point falls in even when that is off-grid; callers clamp or reject via canPlace.
+// The floor cell containing a point, for turning a picking ray's hit into a cell. Returns the cell the point falls in even when that is off-grid; callers clamp or reject via canPlace.
 export function roomPointToFloorCell(point: Pick<Vec3, "x" | "z">): Cell {
   const { cellSize, floor } = ROOM_SHELL;
   return {
@@ -463,9 +434,7 @@ export function roomPointToFloorCell(point: Pick<Vec3, "x" | "z">): Cell {
   };
 }
 
-// The wall cell containing a point on (or near) the wall's plane — the wall twin of
-// roomPointToFloorCell, and like it may return an off-grid cell for callers to clamp or reject.
-// x is the cell along the wall's run, y the row above the floor, both at WALL_CELL_SIZE.
+// The wall cell containing a point on (or near) the wall's plane — the wall twin of roomPointToFloorCell, and like it may return an off-grid cell for callers to clamp or reject. x is the cell along the wall's run, y the row above the floor, both at WALL_CELL_SIZE.
 export function roomPointToWallCell(wall: WallId, point: Vec3): Cell {
   const spec = ROOM_SHELL.walls[wall];
   const along = isXWall(wall) ? point.z : point.x;
@@ -475,8 +444,7 @@ export function roomPointToWallCell(wall: WallId, point: Vec3): Cell {
   };
 }
 
-// The anchor cell that centres a footprint on the cell under the finger — what a drag actually wants,
-// since the player is pointing at the middle of the piece, not its min corner.
+// The anchor cell that centres a footprint on the cell under the finger — what a drag actually wants, since the player is pointing at the middle of the piece, not its min corner.
 export function anchorForCentre(centre: Cell, footprint: Footprint): Cell {
   return {
     x: centre.x - Math.floor((footprint.w - 1) / 2),

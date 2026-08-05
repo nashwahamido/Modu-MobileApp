@@ -1,8 +1,7 @@
-// Stand-in for icon art that has not been delivered yet. Lives here rather than in a feature
-// folder because the room, the shop and the inventory all degrade the same way
+// Stand-in for icon art that has not been delivered yet. Lives here rather than in a feature folder because the room, the shop and the inventory all degrade the same way
 import { View, type StyleProp, type ViewStyle } from "react-native";
 
-import { useTheme } from "@/src/game/ui/theme";
+import { useTheme } from "@/src/game/ui/system/theme";
 
 export function IconPlaceholder({
   size = 28,

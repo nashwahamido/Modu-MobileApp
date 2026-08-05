@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import type { TimeOfDayId } from "@/src/room/core/timeOfDay";
 // Type-only: the room's backdrop table carries image require()s, and the store must not pull those in.
-import type { RoomBackdropId } from "@/src/room/ui/roomBackdrops";
 import { isPickupType } from "@/src/game/core/ids";
 import {
   availableActions,
@@ -101,9 +100,7 @@ interface GameState {
   renderStyle: RenderStyleId;
   /** Scene background: clean | studio | dot (independent of the model look). */
   backdrop: BackdropId;
-  /** Backdrop behind the room diorama. Its own axis (and its own image set, src/room/ui/roomBackdrops): the room is a place you live in, the build scene is a task, so they are dressed separately. */
-  roomBackdrop: RoomBackdropId;
-  /** Which hour of the day the room's sun is set to. Chosen, not clock-driven: the light's angle is a look the player picks, and every preset is authored to enter through walls the camera can see (see src/room/core/timeOfDay.ts). */
+  /** Which hour of the day the room's sun is set to. The room's backdrop photo comes from this too — sunPreset(roomTimeOfDay).backdrop — so there is no separate backdrop setting: a daytime photo behind a night-lit room reads as a bug. Chosen, not clock-driven: the light's angle is a look the player picks, and every preset is authored to enter through walls the camera can see (see src/room/core/timeOfDay.ts). */
   roomTimeOfDay: TimeOfDayId;
   /** Display theme (backdrop + thumbnails): light | dark | high_contrast. */
   theme: ThemeId;
@@ -120,7 +117,6 @@ interface GameState {
   setMode: (mode: AssemblyMode) => void;
   setRenderStyle: (style: RenderStyleId) => void;
   setBackdrop: (backdrop: BackdropId) => void;
-  setRoomBackdrop: (backdrop: RoomBackdropId) => void;
   setRoomTimeOfDay: (time: TimeOfDayId) => void;
   setTheme: (theme: ThemeId) => void;
 
@@ -215,15 +211,9 @@ export const useGameStore = create<GameState>()((set, get) => ({
   mode: "free",
   renderStyle: "realistic",
   backdrop: "studio",
-  // Daytime: the room set now offers photos only (no "clear"), and day is the neutral one to open on.
-  roomBackdrop: "day",
   // Afternoon: the longest warm pool of the day, and the look the room was tuned against.
   roomTimeOfDay: "afternoon",
-  // Light by default. The palette (ui/theme.ts) was designed against the dark reference,
-  // but light is the safer default for a study: it survives a bright room, a projector,
-  // and a participant's own phone brightness, none of which we control. Dark and
-  // high-contrast are the SAME product in different light — same three accent hues, same
-  // meanings — so switching costs nothing but the setting.
+  // Light by default. The palette (ui/theme.ts) was designed against the dark reference, but light is the safer default for a study: it survives a bright room, a projector, and a participant's own phone brightness, none of which we control. Dark and high-contrast are the SAME product in different light — same three accent hues, same meanings — so switching costs nothing but the setting.
   theme: "light",
 
   loadFurniture: (f) =>
@@ -287,7 +277,6 @@ export const useGameStore = create<GameState>()((set, get) => ({
   setMode: (mode) => set({ mode }),
   setRenderStyle: (renderStyle) => set({ renderStyle }),
   setBackdrop: (backdrop) => set({ backdrop }),
-  setRoomBackdrop: (roomBackdrop) => set({ roomBackdrop }),
   setRoomTimeOfDay: (roomTimeOfDay) => set({ roomTimeOfDay }),
   setTheme: (theme) => set({ theme }),
 

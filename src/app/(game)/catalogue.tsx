@@ -22,22 +22,22 @@ import { StyleSheet,
 // type
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import type { FurnitureMeta, ThumbSet } from "@/src/game/core/type";
-import { type Milestone } from "@/src/game/ui/loadingProgress";
+import { type Milestone } from "@/src/game/ui/loading/loadingProgress";
 
 // data
 import { FURNITURE_METAS } from "@/src/game/content/furnitures/furnitures";
 import { useCurrentUserId, useRepos } from "@/src/data";
-import { useCatalogRow, useCatalogStore } from "@/src/data/catalogStore";
-import { useVariantStore } from "@/src/data/variantStore";
+import { useCatalogRow, useCatalogStore } from "@/src/data/catalog/buildStore";
+import { useVariantStore } from "@/src/data/catalog/variantStore";
 import { brandFor } from "@/src/game/content/brands";
 import { ChevronIcon, ClockIcon, StagesIcon } from "@/src/components/Icons";
-import { ConfettiRain } from "@/src/game/ui/Confetti";
+import { ConfettiRain } from "@/src/game/ui/celebration/Confetti";
 
 // styling
-import { RADIUS, SPACE, TYPE, ELEVATION, useStyles, FONT } from "@/src/game/ui/theme";
-import { Button, GrainOverlay } from "@/src/game/ui/Button";
-import { LoadingScreen } from "@/src/game/ui/LoadingScreen";
-import type { Theme } from "@/src/game/ui/theme";
+import { ACCENT_LIGHT, RADIUS, SPACE, TYPE, ELEVATION, useStyles, FONT } from "@/src/game/ui/system/theme";
+import { Button, GrainOverlay } from "@/src/game/ui/system/Button";
+import { LoadingScreen } from "@/src/game/ui/loading/LoadingScreen";
+import type { Theme } from "@/src/game/ui/system/theme";
 
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 // The catalogue's copy is DB-authored.
@@ -64,8 +64,7 @@ export default function CatalogueScreen() {
   const styles = useStyles(makeStyles);
   const router = useRouter();
   const safe = useSafeInsets();
-  // The catalogue rows carry the display copy; the bundle only knows ids and counts. Reading
-  // the whole map here (not per-card) is what lets the category filter exist at all.
+  // The catalogue rows carry the display copy; the bundle only knows ids and counts. Reading the whole map here (not per-card) is what lets the category filter exist at all.
   const rows = useCatalogStore((st) => st.rows);
   const [category, setCategory] = useState<string | null>(null);
   // One selection for the whole grid, held here rather than per card so opening a second card closes the first.
@@ -108,9 +107,7 @@ export default function CatalogueScreen() {
       alive = false;
     };
   }, [items, me, repos]);
-  // The dropdown stays MOUNTED and animates on a shared value rather than mounting/unmounting with
-  // entering/exiting: an exit animation on an unmounting child races the state that removed it, and
-  // the closed menu still has to be untouchable and invisible to a screen reader either way.
+  // The dropdown stays MOUNTED and animates on a shared value rather than mounting/unmounting with entering/exiting: an exit animation on an unmounting child races the state that removed it, and the closed menu still has to be untouchable and invisible to a screen reader either way.
   const menuOpen = useSharedValue(0);
   useEffect(() => {
     menuOpen.value = withTiming(pickerOpen ? 1 : 0, { duration: 170 });
@@ -241,8 +238,7 @@ export default function CatalogueScreen() {
               xp={rewardXp[m.id] ?? 0}
               selected={selectedId === m.id}
               onSelect={() => setSelectedId((cur) => (cur === m.id ? null : m.id))}
-              // Straight to the build. The experience/profile is set by onboarding (and adjustable in Settings) — not a per-item chooser.
-              // The finish rides along as a param. play.tsx does not read it yet — the assembly model is still the one baked GLB — so this is the tile half of the feature only.
+              // Straight to the build. The experience/profile is set by onboarding (and adjustable in Settings) — not a per-item chooser. The finish rides along as a param. play.tsx does not read it yet — the assembly model is still the one baked GLB — so this is the tile half of the feature only.
               onStart={(variation) =>
                 router.push({
                   pathname: "/play",
@@ -264,7 +260,7 @@ const CELEBRATE_MS = 4200;
 /** This screen's backdrop. Deliberately its own pair rather than a shared token: each screen can be
  *  retuned without touching the others. Keep root.backgroundColor equal to BG_FROM — that is what
  *  shows for the frame before the SVG paints. */
-const BG_FROM = "#8D7BA8";
+const BG_FROM = ACCENT_LIGHT;
 const BG_TO = "#A9BFD9";
 
 /** The single text colour for this screen (wireframe ink). */
@@ -293,7 +289,7 @@ const PILL_LABEL: Record<CardState, string> = {
  *  threshold there is, so that one takes ink (8.65:1). White clears 3.8:1 on the other two,
  *  over the 3:1 bar for 14px bold — but only at that weight and size. */
 const PILL_STYLE: Record<CardState, { bg: string; fg: string }> = {
-  new: { bg: "#8D7BA8", fg: "#FFFFFF" },
+  new: { bg: ACCENT_LIGHT, fg: "#FFFFFF" },
   inProgress: { bg: "#A9BFD9", fg: INK },
   done: { bg: "#A97480", fg: "#FFFFFF" },
 };
@@ -316,9 +312,7 @@ function FurnitureCard({
   onStart: (variation: string | null) => void;
 }) {
   const styles = useStyles(makeStyles);
-  // The finish list comes from item_variants (default first, already sorted by the store) but is
-  // narrowed to the finishes this build ships art for — so a variation authored in the DB ahead of
-  // its artwork simply doesn't appear, rather than rendering a missing image.
+  // The finish list comes from item_variants (default first, already sorted by the store) but is narrowed to the finishes this build ships art for — so a variation authored in the DB ahead of its artwork simply doesn't appear, rather than rendering a missing image.
   const variants = useVariantStore((v) => v.byItem[meta.id]);
   const finishes = useMemo(() => {
     const art = meta.variantThumbnails;
@@ -327,14 +321,9 @@ function FurnitureCard({
       .map((v) => v.variation)
       .filter((v): v is string => v != null && v in art);
   }, [meta.variantThumbnails, variants]);
-  // A first build ARMS before it launches: tapping Start on an unselected card selects it, which
-  // runs the finish carousel, and the second tap goes to the build. Only for "new" — Continue and
-  // Assemble again are returns to something already under way, and a gate on those is just a tax on
-  // a player who has seen the finishes already.
+  // A first build ARMS before it launches: tapping Start on an unselected card selects it, which runs the finish carousel, and the second tap goes to the build. Only for "new" — Continue and Assemble again are returns to something already under way, and a gate on those is just a tax on a player who has seen the finishes already.
   const armsFirst = state === "new" && !selected;
-  // The celebration lives on the CARD, not the screen: it is that model's achievement, and confetti
-  // across the whole grid claims it for every tile at once. Keyed by a counter so a second tap
-  // restarts the fall rather than being swallowed as "already running".
+  // The celebration lives on the CARD, not the screen: it is that model's achievement, and confetti across the whole grid claims it for every tile at once. Keyed by a counter so a second tap restarts the fall rather than being swallowed as "already running".
   const [burst, setBurst] = useState(0);
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   useEffect(() => {
@@ -344,10 +333,7 @@ function FurnitureCard({
   }, [burst]);
   // The build always uses the DEFAULT finish — the carousel is a showcase, not a picker, so a tap on Start mid-slide must not launch whatever frame was on screen.
   const buildFinish = finishes[0] ?? null;
-  // Cells: the alternates in reverse, then the default, then the FIRST cell again — so the pass
-  // opens and closes on the same finish (white for LACK). That repeat is also what makes a REPLAY
-  // seamless: the run ends parked on the last cell, and jumping back to cell 0 to start again lands
-  // on an identical image, so the reset is never seen.
+  // Cells: the alternates in reverse, then the default, then the FIRST cell again — so the pass opens and closes on the same finish (white for LACK). That repeat is also what makes a REPLAY seamless: the run ends parked on the last cell, and jumping back to cell 0 to start again lands on an identical image, so the reset is never seen.
   const track = useMemo(
     () => (finishes.length > 1 ? [...finishes.slice(1).reverse(), finishes[0], finishes[finishes.length - 1]] : []),
     [finishes],
@@ -355,13 +341,11 @@ function FurnitureCard({
   // `dark` survives here for the ARTWORK, not the styling: each meta ships a light and a dark thumbnail, and that choice can't come from a colour token.
   const pickThumb = (set: ThumbSet) => (dark ? set.dark : set.light) ?? set.light;
   const thumb = pickThumb(meta.thumbnail);
-  // Driven entirely on the UI thread: a JS timer chain would need its own cleanup and would drift
-  // against the slide it is supposed to sequence.
+  // Driven entirely on the UI thread: a JS timer chain would need its own cleanup and would drift against the slide it is supposed to sequence.
   const slide = useSharedValue(0);
   useEffect(() => {
     if (!selected || track.length < 2) {
-      // Freeze where it stands. Deselecting mid-pass leaves that finish on the tile rather than
-      // rewinding — the showcase is over, and what it last showed is what it settles on.
+      // Freeze where it stands. Deselecting mid-pass leaves that finish on the tile rather than rewinding — the showcase is over, and what it last showed is what it settles on.
       cancelAnimation(slide);
       return;
     }
@@ -407,8 +391,7 @@ function FurnitureCard({
       ]}
       onPress={() => {
         onSelect();
-        // Only for something already finished — confetti over a model you have not built would be
-        // congratulating you for nothing, and a rebuild in progress has not earned it back yet.
+        // Only for something already finished — confetti over a model you have not built would be congratulating you for nothing, and a rebuild in progress has not earned it back yet.
         if (state === "done") setBurst((b) => b + 1);
       }}
       onLayout={(e) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
@@ -492,9 +475,7 @@ function FurnitureCard({
 
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
-    // Screen palette, per the wireframe. Held here rather than in theme.ts so the rest of the
-    // app keeps its own tokens until these are promoted deliberately. INK is every text on the
-    // screen — one colour, no dimmed secondary tier, so the hierarchy comes from size/weight.
+    // Screen palette, per the wireframe. Held here rather than in theme.ts so the rest of the app keeps its own tokens until these are promoted deliberately. INK is every text on the screen — one colour, no dimmed secondary tier, so the hierarchy comes from size/weight.
     root: { flex: 1, backgroundColor: BG_FROM },
     loadingWrap: { flex: 1 },
     // Matches the grid header's inset so the button doesn't jump when the catalogue lands.
@@ -553,17 +534,14 @@ const makeStyles = (t: Theme) =>
     pickerItemText: { ...TYPE.body, color: INK },
     pickerItemActive: { color: INK, fontFamily: FONT, fontWeight: "700" },
     headerSpacer: { flex: 1 },
-    // Tracked-out slightly: this is a screen label, not a page title competing with the cards.
-    // Ink, not cream: cream measures 1.78:1 against the blue end of the gradient, and ink clears
-    // both ends (4.29 lavender, 8.65 blue).
+    // Tracked-out slightly: this is a screen label, not a page title competing with the cards. Ink, not cream: cream measures 1.78:1 against the blue end of the gradient, and ink clears both ends (4.29 lavender, 8.65 blue).
     title: { fontFamily: FONT, fontSize: 20, fontWeight: "800", color: INK, letterSpacing: 0.4 },
     subtitle: {
       ...TYPE.body,
       color: INK,
       marginTop: SPACE.xs,
     },
-    // space-between with a 48% card is what makes the two columns REACH both edges — a fixed
-    // width computed from the padding left dead space on the right whenever the two disagreed.
+    // space-between with a 48% card is what makes the two columns REACH both edges — a fixed width computed from the padding left dead space on the right whenever the two disagreed.
     grid: {
       flexDirection: "row",
       flexWrap: "wrap",
@@ -585,8 +563,7 @@ const makeStyles = (t: Theme) =>
     },
     cardPressed: { backgroundColor: t.surfaceRaised },
     burstClip: { ...StyleSheet.absoluteFillObject, borderRadius: RADIUS.panel, overflow: "hidden" },
-    // The colour comes from PILL_STYLE at the call site, so the outline and the button always agree
-    // about which state the card is in — one signal in two places, never two signals.
+    // The colour comes from PILL_STYLE at the call site, so the outline and the button always agree about which state the card is in — one signal in two places, never two signals.
     cardSelected: { borderWidth: 3 },
     cardBody: { flexDirection: "row", gap: SPACE.md },
     thumbWrap: {
@@ -606,8 +583,7 @@ const makeStyles = (t: Theme) =>
     // Matches StagesIcon/ClockIcon so the three stat rows share one optical size.
     xpIcon: { width: 22, height: 22 },
     cardCopy: { flex: 1, gap: SPACE.xs },
-    // Centre, not flex-start: the logo now matches the title's cap height, so aligning on the
-    // text baseline row is what makes the pair read as one line.
+    // Centre, not flex-start: the logo now matches the title's cap height, so aligning on the text baseline row is what makes the pair read as one line.
     nameRow: { flexDirection: "row", alignItems: "center", gap: SPACE.sm },
     name: { flex: 1, fontFamily: FONT, fontSize: 17, fontWeight: "700", color: INK },
     brandLogo: { width: 54, height: 24 },

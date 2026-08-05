@@ -2,9 +2,7 @@
 //
 //   npm run render:thumbs:blender
 //
-// npm runs scripts through cmd.exe on Windows and sh elsewhere, so we can't put
-// a POSIX `${BLENDER:-default}` or a macOS-only path in package.json. This Node
-// wrapper resolves the Blender executable for the current OS instead:
+// npm runs scripts through cmd.exe on Windows and sh elsewhere, so we can't put a POSIX `${BLENDER:-default}` or a macOS-only path in package.json. This Node wrapper resolves the Blender executable for the current OS instead:
 //   1. the BLENDER env var, if set (any platform)
 //   2. the usual install location(s) for darwin / win32 / linux
 //   3. `blender` on PATH, as a last resort

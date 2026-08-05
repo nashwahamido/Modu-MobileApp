@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { Theme, useStyles } from "@/src/game/ui/theme";
+import { Theme, useStyles } from "@/src/game/ui/system/theme";
 import { momentumFeedbackForStep } from "./MomentumCompanion";
 import { useTutorialStore } from "./store";
 

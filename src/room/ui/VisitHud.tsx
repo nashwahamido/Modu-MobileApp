@@ -1,15 +1,12 @@
 // The chrome over a visited room: whose room this is, the way out, and the heart. Deliberately thin — a visit is look-and-like, so there is no bar of tools to host.
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { avatarForProfile } from "@/src/components/avatarAssets";
-import { useStyles, useTheme, LEXEND } from "@/src/game/ui/theme";
-import type { Theme } from "@/src/game/ui/theme";
+import { CREAM, useStyles, useTheme, LEXEND } from "@/src/game/ui/system/theme";
+import type { Theme } from "@/src/game/ui/system/theme";
 import type { Profile } from "@/src/data";
-import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN } from "../../hooks/use-safe-insets";
+import { useScreenInsets } from '../../hooks/use-safe-insets';
 
-// Pinned to the mockup rather than the theme, so it holds across light/dark — same choice the other room HUDs make.
-const TEXT_COLOR = "#231F20";
 
 export function VisitHud({
   host,
@@ -29,11 +26,11 @@ export function VisitHud({
   const s = useStyles(makeStyles);
   const t = useTheme();
   // Immersive mode reports 0 insets, so these floors sit UNDER the design's own offsets.
-  const insets = useSafeAreaInsets();
-  const padTop = 12 + Math.max(insets.top, SCREEN_VERTICAL_MARGIN);
-  const padL = 22 + Math.max(insets.left, SCREEN_SIDE_MARGIN);
-  const padR = 22 + Math.max(insets.right, SCREEN_SIDE_MARGIN);
-  const padBottom = 22 + Math.max(insets.bottom, SCREEN_VERTICAL_MARGIN);
+  const safe = useScreenInsets();
+  const padTop = 12 + safe.top;
+  const padL = 22 + safe.left;
+  const padR = 22 + safe.right;
+  const padBottom = 22 + safe.bottom;
 
   return (
     <>
@@ -89,7 +86,7 @@ const makeStyles = (t: Theme) =>
       borderColor: "#D7D1CE",
     },
     backGlyph: {
-      color: TEXT_COLOR,
+      color: CREAM.ink,
       ...LEXEND.bold,
       fontSize: 26,
       // The glyph reads right-heavy in its box; nudge it back onto the centre.
@@ -115,7 +112,7 @@ const makeStyles = (t: Theme) =>
       backgroundColor: t.surfaceRaised,
     },
     hostName: {
-      color: TEXT_COLOR,
+      color: CREAM.ink,
       ...LEXEND.semibold,
       fontSize: 13,
       maxWidth: 180,
@@ -132,7 +129,7 @@ const makeStyles = (t: Theme) =>
       borderColor: "#D7D1CE",
     },
     emptyText: {
-      color: TEXT_COLOR,
+      color: CREAM.ink,
       ...LEXEND.regular,
       fontSize: 12,
     },
@@ -150,12 +147,12 @@ const makeStyles = (t: Theme) =>
       borderColor: "#D7D1CE",
     },
     heartGlyph: {
-      color: TEXT_COLOR,
+      color: CREAM.ink,
       fontSize: 22,
       lineHeight: 26,
     },
     heartCount: {
-      color: TEXT_COLOR,
+      color: CREAM.ink,
       ...LEXEND.bold,
       fontSize: 14,
     },

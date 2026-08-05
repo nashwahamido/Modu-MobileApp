@@ -5,17 +5,17 @@ import { StyleSheet, Animated, Image, Pressable, Text, View } from "react-native
 import { useEffect, useRef, useState } from "react";
 import { avatarModes } from "@/src/onboarding/avatarModes";
 import type { ModeId } from "@/src/onboarding/questionnaire";
-import { VoiceButton } from "@/src/game/ui/VoiceButton";
+import { VoiceButton } from "@/src/game/ui/hud/VoiceButton";
 import { useGameStore } from "@/src/game/core/store";
 import type { ProfileId } from "@/src/game/core/profile";
 import { AVATAR_IMAGES } from "@/src/components/avatarAssets";
 import { useTutorialStore } from "@/src/game/tutorial/store";
 import { saveSelectedAvatarMode } from "@/src/services/onboarding";
-import { Button } from "@/src/game/ui/Button";
-import { RADIUS, SPACE, TYPE, useStyles, useTheme, FONT } from "@/src/game/ui/theme";
+import { Button } from "@/src/game/ui/system/Button";
+import { ACCENT_LIGHT, RADIUS, SPACE, TYPE, useStyles, useTheme, FONT } from "@/src/game/ui/system/theme";
 import { CheckIcon, StarIcon } from "@/src/components/Icons";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
-import type { Theme } from "@/src/game/ui/theme";
+import type { Theme } from "@/src/game/ui/system/theme";
 
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import Reanimated, {
@@ -39,8 +39,7 @@ import type { StyleProp, ViewStyle } from "react-native";
 const STAGE = {
   avatar: 140,
   spark: 260,
-  // The avatar gets the stage to itself: everything below starts at twice its old delay, so the pop
-  // and its glints finish before a single word appears.
+  // The avatar gets the stage to itself: everything below starts at twice its old delay, so the pop and its glints finish before a single word appears.
   title: 1400,
   traits: 1800,
   traitStep: 130,
@@ -83,9 +82,7 @@ function PopIn({
     opacity: Math.min(1, on.value * 3),
     transform: [{ scale: from + on.value * (1 - from) }],
   }));
-  // A PLAIN view when not animating, not an animated one parked at its end value. A shared value's
-  // initialiser only runs on the hook's first render, so a child that mounted mid-intro could keep a
-  // stale 0 and stay invisible. No animated style, no way to be stuck.
+  // A PLAIN view when not animating, not an animated one parked at its end value. A shared value's initialiser only runs on the hook's first render, so a child that mounted mid-intro could keep a stale 0 and stay invisible. No animated style, no way to be stuck.
   if (!animate) return <View style={style}>{children}</View>;
   return <Reanimated.View style={[style, anim]}>{children}</Reanimated.View>;
 }
@@ -180,7 +177,7 @@ const styles_halo = {
   bottom: -10,
   borderRadius: 999,
   borderWidth: 3,
-  borderColor: "#8D7BA8",
+  borderColor: ACCENT_LIGHT,
 };
 
 const BG_FROM = "#E8D48C";
@@ -199,23 +196,15 @@ export default function AvatarRecommendationScreen() {
   const styles = useStyles(makeStyles);
   // The icons take their colour as a prop, so this screen needs the tokens as values, not just the sheet.
   const t = useTheme();
-  // A slow breath on the Recommended tag. Small on purpose — it marks the default choice, it is not
-  // asking to be pressed, and anything stronger would compete with the Confirm button.
-  // The entrance plays ONCE, for the avatar being announced. After that the player is comparing four
-  // modes, and replaying the build-up on every switch read as a wait — the pills and lines are keyed
-  // on their own text, so they remount on each switch and ran their delays again from scratch.
-  // Once this is false they mount fully formed and a switch is instant.
+  // A slow breath on the Recommended tag. Small on purpose — it marks the default choice, it is not asking to be pressed, and anything stronger would compete with the Confirm button. The entrance plays ONCE, for the avatar being announced. After that the player is comparing four modes, and replaying the build-up on every switch read as a wait — the pills and lines are keyed on their own text, so they remount on each switch and ran their delays again from scratch. Once this is false they mount fully formed and a switch is instant.
   //
-  // The two LOOPING animations are deliberately NOT gated by it: the Recommended badge and the
-  // Confirm halo are ongoing states rather than an entrance, and keep breathing whatever mode is up.
+  // The two LOOPING animations are deliberately NOT gated by it: the Recommended badge and the Confirm halo are ongoing states rather than an entrance, and keep breathing whatever mode is up.
   const [introPlaying, setIntroPlaying] = useState(true);
   useEffect(() => {
     const t = setTimeout(() => setIntroPlaying(false), STAGE.tabs + 900);
     return () => clearTimeout(t);
   }, []);
-  // The timer alone was not enough: tapping a mode inside the opening ~4s left the intro "still
-  // playing", so the switch animated. Touching a tab IS the end of the announcement, whenever it
-  // happens — after this the player is comparing, and comparing wants content, not choreography.
+  // The timer alone was not enough: tapping a mode inside the opening ~4s left the intro "still playing", so the switch animated. Touching a tab IS the end of the announcement, whenever it happens — after this the player is comparing, and comparing wants content, not choreography.
   const endIntro = () => setIntroPlaying(false);
   const badgePulse = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -455,8 +444,7 @@ export default function AvatarRecommendationScreen() {
         style={[
           styles.modeTabs,
           {
-            // 38 to match the content column's own inset, so the tab row lines up with the copy
-            // above it rather than running wider than everything else on the screen.
+            // 38 to match the content column's own inset, so the tab row lines up with the copy above it rather than running wider than everything else on the screen.
             left: 38 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
             right: 38 + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN),
             bottom: 26 + Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN),
@@ -558,11 +546,9 @@ const makeStyles = (t: Theme) =>
     audioButton: { position: "absolute", zIndex: 5 },
     // A column, not a card: width comes from the circle, and nothing draws a box around it.
     sparkLayer: { ...StyleSheet.absoluteFillObject },
-    // Narrower than the copy column: a full-width primary action read as a banner rather than a
-    // button, and the halo needs room to swell without touching the text above it.
+    // Narrower than the copy column: a full-width primary action read as a banner rather than a button, and the halo needs room to swell without touching the text above it.
     confirmWrap: { alignSelf: "center", width: 260, marginTop: SPACE.lg, alignItems: "center" },
-    // stretch + auto margin puts the title on the column's BASE, which is where the Confirm button
-    // sits in the column beside it — so the two land on the same line.
+    // stretch + auto margin puts the title on the column's BASE, which is where the Confirm button sits in the column beside it — so the two land on the same line.
     modeColumn: { width: 220, alignItems: "center", alignSelf: "stretch", paddingTop: 12 },
     avatarCircle: {
       width: 210,
@@ -577,8 +563,7 @@ const makeStyles = (t: Theme) =>
       height: 232,
       borderRadius: 116,
     },
-    // Straddling the circle's top edge. alignSelf centre plus a negative top pulls it back over the
-    // rim, so it reads as pinned to the avatar rather than floating above it.
+    // Straddling the circle's top edge. alignSelf centre plus a negative top pulls it back over the rim, so it reads as pinned to the avatar rather than floating above it.
     recommendedBadge: {
       position: "absolute",
       top: 2,
@@ -604,8 +589,7 @@ const makeStyles = (t: Theme) =>
       fontWeight: "900",
       lineHeight: 24,
     },
-    // Space above the primary action, so it is not the next thing after the last tick — a gap is
-    // what makes it read as the conclusion rather than a fourth list item.
+    // Space above the primary action, so it is not the next thing after the last tick — a gap is what makes it read as the conclusion rather than a fourth list item.
     confirmButton: { width: "100%" },
     traitRow: { flexDirection: "row", flexWrap: "wrap", gap: SPACE.sm },
     traitChip: {
@@ -637,8 +621,7 @@ const makeStyles = (t: Theme) =>
       fontFamily: FONT, fontSize: 13,
       fontWeight: "700",
     },
-    // Offsets come from the CALL SITE, not from here: absolute children are not inset by the
-    // parent's padding, so a literal here can never account for a device's safe insets.
+    // Offsets come from the CALL SITE, not from here: absolute children are not inset by the parent's padding, so a literal here can never account for a device's safe insets.
     modeTabs: {
       position: "absolute",
       height: 56,
@@ -696,8 +679,7 @@ const makeStyles = (t: Theme) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "flex-end",
-      // No rim. The shadow already lifts this off the dimmed screen behind it, and an outline on
-      // top of that was drawing a box around something already clearly separated.
+      // No rim. The shadow already lifts this off the dimmed screen behind it, and an outline on top of that was drawing a box around something already clearly separated.
       borderRadius: 28,
       shadowColor: "#000",
       shadowOffset: { width: 0, height: 8 },
