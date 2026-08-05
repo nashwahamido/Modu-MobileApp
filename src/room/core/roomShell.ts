@@ -11,7 +11,7 @@
 // same numbers were re-read from the GLB's POSITION accessor bounds + node translation as a check).
 // Authored units are REAL METRES — the shell was rescaled against real-size furniture (a 1.43 x 1.95
 // double bed, a 0.75-high desk), landing on a 4.5 x 4.5 m floor with 2.92 m walls: a believable room
-// where a bed reads as bed-sized. The grid is a clean 9 x 9 at cellSize 0.5.
+// where a bed reads as bed-sized. The grid is a clean 18 x 18 at cellSize 0.25 — quarter cells, same pitch as the walls.
 // The shell carries FIFTEEN materials, and their NAMES are load-bearing twice over: the decor system retextures Floor and the Wall_* group by material name at runtime and tints FloorEdge and the Trim_* group to match, and camera-facing wall culling fades a wall by writing alpha on the material instance its name identifies (see ./wallCulling). scripts/set-shell-blend-modes.mjs holds the authoritative list and FAILS the build if a re-export drops one.
 //   Floor        the raised walkable slab: top face y -0.3951, sitting on the plinth below
 //   FloorEdge    the plinth (down to y -0.8158) plus the border ledge around the raised slab
@@ -78,7 +78,7 @@ export type RoomShellSpec = {
     y: number;
   };
   walls: Record<WallId, WallSpec>;
-  // Authored units (metres) per grid cell. 0.5 with the 4.5 floor gives a 9 x 9 floor.
+  // Authored units (metres) per grid cell. 0.25 with the 4.5 floor gives an 18 x 18 floor.
   cellSize: number;
 };
 
@@ -105,7 +105,7 @@ export const ROOM_SHELL: RoomShellSpec = {
     "z-min": { innerFace: -2.9569, from: -0.8297, to: 3.6703, bottom: -0.3951, top: 2.5224 },
     "z-max": { innerFace: 1.542, from: -0.8297, to: 3.6703, bottom: -0.3951, top: 2.5224 },
   },
-  cellSize: 0.5,
+  cellSize: 0.25,
 };
 
 // Windows are WALL PLACEMENTS, not fixed sockets: the z-max wall's window band ships in the shell GLB pre-diced into one solid box per wall-grid cell, and the scene knocks out exactly the cells a placed window covers (scene.removeEntity on the named node). The neighbouring boxes' faces then read as the jambs, so removal alone produces a finished opening. Everything outside the band is solid wall and can never hold a window.
@@ -135,15 +135,13 @@ export function windowCellEntityName(wall: WallId, col: number, row: number): st
 
 // How many square cells cover the floor rect, ROUNDED rather than truncated.
 // Truncating left the old shell's z axis one cell short — ten cells covered 5.00 of a 5.48 floor and the leftover 0.48 showed as a bare strip the full width of the room against the back wall.
-// The current shell was authored so this comes out clean: x is exactly 9 cells (4.5 / 0.5), z is 4.4989 so nine cells overhang maxZ by 0.0011 — which is INSIDE the z-max wall, whose inner face sits exactly at the floor edge. Check again if the shell is re-exported: a remainder near half a cell would push the last row past the wall.
+// The current shell was authored so this comes out clean: x is exactly 18 cells (4.5 / 0.25), z is 4.4989 so eighteen cells overhang maxZ by ~0.0011 — which is INSIDE the z-max wall, whose inner face sits exactly at the floor edge. Check again if the shell is re-exported: a remainder near half a cell would push the last row past the wall.
 export const FLOOR_CELLS = {
   w: Math.round((ROOM_SHELL.floor.maxX - ROOM_SHELL.floor.minX) / ROOM_SHELL.cellSize),
   d: Math.round((ROOM_SHELL.floor.maxZ - ROOM_SHELL.floor.minZ) / ROOM_SHELL.cellSize),
 } as const;
 
-// Wall grids are FINER than the floor grid: 0.25 per cell against the floor's 0.5. Wall items are
-// small (frames, shelves, windows) and windows want quarter-metre sizing, so frames and windows
-// share this one fine grid and plain occupancy keeps them apart — no cross-grid rounding anywhere.
+// Wall and floor grids now share the same 0.25 pitch — wall grids were finer than the floor's old 0.5 until the quarter-cell flip. Wall items are small (frames, shelves, windows) and windows want quarter-metre sizing, so frames and windows share this one fine grid and plain occupancy keeps them apart — no cross-grid rounding anywhere.
 export const WALL_CELL_SIZE = 0.25;
 
 // The walls' authored thickness — HALF a rendering contract: every wall item's GLB is authored

@@ -50,9 +50,9 @@ export const TIME_OF_DAY: Record<TimeOfDayId, SunPreset> = {
     backdrop: "day",
     direction: { x: 0.95, y: -0.62, z: -0.28 },
     intensity: 105_000,
-    kelvin: 5_400,
+    kelvin: 4_500,
     ambient: 6_000,
-    interiorLight: { defaultOn: false, lumens: 70_000, kelvin: 3_400 },
+    interiorLight: { defaultOn: false, lumens: 155_000, kelvin: 3_400 },
   },
   // High and near-vertical: a short bright patch under each window and the flattest shadows of the day.
   midday: {
@@ -60,9 +60,9 @@ export const TIME_OF_DAY: Record<TimeOfDayId, SunPreset> = {
     backdrop: "day",
     direction: { x: 0.34, y: -1.55, z: -0.36 },
     intensity: 135_000,
-    kelvin: 5_900,
+    kelvin: 6_500,
     ambient: 7_500,
-    interiorLight: { defaultOn: false, lumens: 90_000, kelvin: 3_600 },
+    interiorLight: { defaultOn: false, lumens: 200_000, kelvin: 3_600 },
   },
   // The reference look: dropping, golden, pools stretched across the floor.
   afternoon: {
@@ -72,17 +72,18 @@ export const TIME_OF_DAY: Record<TimeOfDayId, SunPreset> = {
     intensity: 120_000,
     kelvin: 4_100,
     ambient: 5_500,
-    interiorLight: { defaultOn: false, lumens: 75_000, kelvin: 3_200 },
+    interiorLight: { defaultOn: false, lumens: 165_000, kelvin: 3_200 },
   },
   // Nearly horizontal and deep orange. Dim enough that a lamp would start to matter.
   evening: {
     label: "Evening",
     backdrop: "night",
     direction: { x: 0.3, y: -0.42, z: -0.92 },
-    intensity: 62_000,
+    intensity: 40_000,
     kelvin: 2_900,
-    ambient: 1_500,
-    interiorLight: { defaultOn: true, lumens: 55_000, kelvin: 2_900 },
+    // Cut from 1500 when the ceiling light arrived. That figure was set while evening had nothing but the probe to light it after the sun dropped; evening now defaults a 120k ceiling light ON, so keeping the old fill on top of it lit the room twice and washed out the very contrast the low sun is here to draw. Same rule as night's, read backwards: a light is placed now, so the probe can go back to doing only a probe's job.
+    ambient: 400,
+    interiorLight: { defaultOn: true, lumens: 120_000, kelvin: 2_900 },
   },
   // No sun at all. The ambient floor is deliberately generous rather than realistic: this is the screen a player arranges furniture on, and it has to stay workable. Lamps are what should make it inviting, not legible.
   night: {
@@ -96,7 +97,7 @@ export const TIME_OF_DAY: Record<TimeOfDayId, SunPreset> = {
     // does only what a probe should after dark: keep surfaces from crushing to pure black, while the
     // LIGHTING placed in the room is what actually lights it. Do not raise this to fix "too dark"; place a light.
     ambient: 200,
-    interiorLight: { defaultOn: true, lumens: 45_000, kelvin: 2_800 },
+    interiorLight: { defaultOn: true, lumens: 100_000, kelvin: 2_800 },
   },
 };
 

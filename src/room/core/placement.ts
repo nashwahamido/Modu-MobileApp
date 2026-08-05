@@ -10,6 +10,7 @@ import { getRepos } from "../../data";
 import type { PlacedFurniture, RoomLayout, UserId } from "../../data/types";
 import { defaultVariationOf } from "../../data/variantStore";
 import {
+  anchorForCentre,
   canPlace,
   buildOccupancy,
   clampToSurface,
@@ -21,10 +22,12 @@ import {
   type RotSteps,
   type SurfaceId,
 } from "./grid";
+import { sanitizeLayout } from "./layoutSanitise";
 import { ORBIT } from "../input/orbit";
-import { WINDOW_BANDS } from "./roomShell";
+import { FLOOR_CELLS, WINDOW_BANDS } from "./roomShell";
 import { visibleWalls } from "./wallCulling";
 import { getRoomItemDef, roomItemDefs } from "./placeableItems";
+import { ROOM_LAYOUT_VERSION } from "../../data/types";
 
 // Where the camera is looking, mirrored here by the scene so store actions can consult it.
 // Deliberately a plain module value and NOT store state: it changes every frame while a finger is
@@ -36,15 +39,15 @@ export function setCameraAzimuth(theta: number): void {
   cameraAzimuth = theta;
 }
 
-// The persisted shape and the grid's working shape are the same thing under two names; keep the
-// conversion in one visible place so they cannot drift silently.
-const toGrid = (p: PlacedFurniture): GridPlacement => ({
+// The persisted shape and the grid's working shape are the same thing under two names; keep the conversion in one visible place so they cannot drift silently. Exported for the visit screen, which loads a friend's saved room without going through hydrate.
+export const toGrid = (p: PlacedFurniture): GridPlacement => ({
   instanceId: p.instanceId,
   itemId: p.furnitureId,
   variation: p.color ?? null,
   surface: p.surface,
   cell: p.cell,
   rotSteps: p.rotSteps,
+  lightOn: p.lightOn,
 });
 
 const fromGrid = (p: GridPlacement): PlacedFurniture => ({
@@ -54,6 +57,8 @@ const fromGrid = (p: GridPlacement): PlacedFurniture => ({
   cell: p.cell,
   rotSteps: p.rotSteps,
   ...(p.variation ? { color: p.variation } : {}),
+  // Written ONLY when off, the same way color is written only when set: an absent field is the default, so a room full of lit lamps saves exactly as it did before this field existed.
+  ...(p.lightOn === false ? { lightOn: false } : {}),
 });
 
 export interface ActiveEdit {
@@ -72,9 +77,14 @@ interface PlacementState {
   // Bumped on each fresh start so the scene can recentre its ghost focus.
   startNonce: number;
   hydrated: boolean;
+  // The room being VISITED, or null when the player is in their own. Holds a friend's layout ALONGSIDE `layout`, never instead of it: ownerId stays the player's, so persist() has no reachable path to a friend's room, and coming home costs no refetch.
+  viewing: { ownerId: UserId; layout: GridPlacement[] } | null;
 
   // Load the owner's saved layout. Also the account-switch reset: a new ownerId replaces everything.
   hydrate: (ownerId: UserId) => Promise<void>;
+  // Enter / leave a friend's room. Both synchronous: the player's own layout is never discarded, so returning shows no empty frame the way a re-hydrate would.
+  startViewing: (ownerId: UserId, layout: GridPlacement[]) => void;
+  stopViewing: () => void;
   startPlacing: (itemId: string, opts?: { firstPlacementGuide?: boolean; variation?: string | null }) => boolean;
   // Recolour the ghost mid-placement. Variation is a pure LOOK: same footprint, same validity, so
   // nothing is re-validated — only the model the scene loads changes.
@@ -84,6 +94,8 @@ interface PlacementState {
   // Optionally with a new surface: dragging a wall item past the corner hands it to the other wall.
   moveGhost: (cell: { x: number; y: number }, surface?: SurfaceId) => void;
   rotateGhost: (direction: -1 | 1) => void;
+  // Flips the lamp being edited on or off. Rides the edit like rotation does, so the switch commits with the placement and cancel discards it — one rule for everything a piece carries, rather than a light that changes under a ghost the player then abandons.
+  toggleGhostLight: () => void;
   confirm: () => void;
   cancel: () => void;
   remove: () => void;
@@ -112,7 +124,7 @@ const persist = (ownerId: UserId | null, layout: GridPlacement[]) => {
   if (!ownerId) return;
   const snapshot: RoomLayout = {
     ownerId,
-    version: 1,
+    version: ROOM_LAYOUT_VERSION,
     placements: layout.map(fromGrid),
     updatedAt: new Date().toISOString(),
   };
@@ -127,6 +139,7 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
   activeEdit: null,
   startNonce: 0,
   hydrated: false,
+  viewing: null,
 
   async hydrate(ownerId) {
     if (get().ownerId === ownerId && get().hydrated) return;
@@ -139,21 +152,8 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
       // An account switch mid-fetch must not land the old owner's rows in the new owner's room.
       if (get().ownerId !== ownerId) return;
       set((s) => {
-        // Saved rows are re-validated against TODAY'S rules, not the rules they were placed under:
-        // grids have shrunk and window bands have moved this project, and a stale row otherwise
-        // renders verbatim forever — a window frozen outside the band with no way to grab it.
-        // Sequential accept keeps the earlier of two now-colliding pieces. An item whose def is
-        // missing (catalog not synced yet) is KEPT — the scene already skips rendering unknowns,
-        // and dropping it here would delete bought furniture on every cold start.
-        const layout: GridPlacement[] = [];
-        for (const row of saved.placements.map(toGrid)) {
-          const def = getRoomItemDef(row.itemId);
-          if (def && !canPlace(row, def, buildOccupancy(layout, roomItemDefs())).ok) {
-            console.warn("[room] dropping stale placement", row.instanceId, row.surface, row.cell);
-            continue;
-          }
-          layout.push(row);
-        }
+        // Saved rows are re-validated against TODAY'S rules, not the rules they were placed under — see sanitizeLayout for what that defends against and why an unknown def is kept.
+        const layout = sanitizeLayout(saved.placements.map(toGrid));
         let activeEdit = s.activeEdit;
         // A pre-hydration ghost was keyed and validated against an empty room; redo both against
         // the real layout so it cannot collide with a saved piece or reuse its instanceId.
@@ -173,7 +173,22 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
     }
   },
 
+  startViewing(ownerId, layout) {
+    set((s) => ({
+      // A ghost in flight belongs to the player's OWN room, and the bottom bar stays live during placement — so entering a visit puts the edited piece back exactly as cancel() would rather than carrying it into someone else's room. A never-committed ghost evaporates, which is also cancel's behaviour.
+      layout: s.activeEdit?.previous ? [...s.layout, s.activeEdit.previous] : s.layout,
+      activeEdit: null,
+      viewing: { ownerId, layout },
+    }));
+  },
+
+  stopViewing() {
+    set({ viewing: null });
+  },
+
   startPlacing(itemId, opts) {
+    // Nothing may be placed into a room the player is only visiting. This and editPlacement are the ONLY ways an activeEdit comes into being, so refusing here leaves every path below it inert: moveGhost, rotateGhost, confirm and remove all bail on a null edit, and the ghost and GridOverlay only render when one exists.
+    if (get().viewing) return false;
     const def = getRoomItemDef(itemId);
     // No room model for this item: refuse to enter placement rather than drag an invisible ghost.
     if (!def) return false;
@@ -189,9 +204,11 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
       const surface: SurfaceId = def.allowedSurfaces.includes("floor")
         ? { kind: "floor" }
         : { kind: "wall", wall: visibleWalls(cameraAzimuth)[0] ?? "z-max" };
-      // Ghost starts centred on its surface — for a window, centred in the WINDOW BAND, since the
-      // structural wall outside it can never accept the hole; the first drag snaps it under the finger.
-      let startCell = { x: 5, y: 4 };
+      // Ghost starts centred on its surface, whatever the grid's resolution — for a window, centred in the WINDOW BAND instead, since the structural wall outside it can never accept the hole; the first drag snaps it under the finger.
+      let startCell =
+        surface.kind === "floor"
+          ? anchorForCentre({ x: Math.floor(FLOOR_CELLS.w / 2), y: Math.floor(FLOOR_CELLS.d / 2) }, def.footprint)
+          : { x: 7, y: 5 };
       if (surface.kind === "wall") {
         const band = WINDOW_BANDS[surface.wall];
         const h = def.wallHeightCells ?? def.footprint.d;
@@ -237,7 +254,7 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
 
   editPlacement(instanceId) {
     set((s) => {
-      if (s.activeEdit) return s;
+      if (s.activeEdit || s.viewing) return s;
       const existing = s.layout.find((p) => p.instanceId === instanceId);
       if (!existing) return s;
       return {
@@ -267,7 +284,7 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
       // clamping with the raw depth (1 for a window) would let a tall piece slide up past the top.
       const footprint = occupiedFootprint({ ...s.activeEdit.placement, surface: nextSurface }, def);
       const clamped = clampToSurface(cell, nextSurface, footprint);
-      // Cells are half a metre — most drag events stay inside the current one. Bail with the SAME
+      // Cells are a quarter metre — most drag events stay inside the current one. Bail with the SAME
       // state object so zustand notifies nobody: this runs per pan event, and re-rendering the
       // whole room per event (instead of per cell crossing) is what blew React's update depth.
       const current = s.activeEdit.placement;
@@ -306,6 +323,17 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
     });
   },
 
+  toggleGhostLight() {
+    set((s) => {
+      if (!s.activeEdit) return s;
+      // Only a piece that actually emits light has a switch: without this a flag would persist on furniture nothing ever reads it for.
+      if (!getRoomItemDef(s.activeEdit.placement.itemId)?.emitsLight) return s;
+      const placement = { ...s.activeEdit.placement, lightOn: s.activeEdit.placement.lightOn === false };
+      // Not re-validated, unlike rotateGhost: a switch moves no geometry, so the placement check cannot have changed and re-running it would only risk disagreeing with itself.
+      return { activeEdit: { ...s.activeEdit, placement } };
+    });
+  },
+
   confirm() {
     const s = get();
     // Never commit before the saved room has loaded: persisting against a not-yet-hydrated (empty
@@ -340,5 +368,5 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
     if (wasCommitted) persist(s.ownerId, s.layout);
   },
 
-  reset: () => set({ ownerId: null, layout: [], activeEdit: null, hydrated: false }),
+  reset: () => set({ ownerId: null, layout: [], activeEdit: null, hydrated: false, viewing: null }),
 }));

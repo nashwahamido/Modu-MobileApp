@@ -10,7 +10,8 @@ import {
   Lexend_800ExtraBold,
   Lexend_900Black,
 } from "@expo-google-fonts/lexend";
-import { CheckIcon, RotateLeftIcon, RotateRightIcon, TrashIcon } from '../../components/Icons';
+import { BulbIcon, CheckIcon, RotateLeftIcon, RotateRightIcon, TrashIcon } from '../../components/Icons';
+import { getRoomItemDef } from '../core/placeableItems';
 import { SETTINGS_ICON } from '../../components/iconAssets';
 import { Button } from '../../game/ui/Button';
 import { OverlaySheet } from '../../game/ui/OverlaySheet';
@@ -22,6 +23,7 @@ import { useStyles, useTheme } from "@/src/game/ui/theme";
 import { useCurrentUserId } from '../../data';
 import { RoomScene } from '../scene/RoomScene';
 import { ColourPicker } from './ColourPicker';
+import { FriendPickerOverlay } from './FriendPickerOverlay';
 import { RoomBottomBar } from './RoomBottomBar';
 import { RoomLightControls } from './RoomLightControls';
 import { RoomTopStats } from './RoomTopStats';
@@ -71,6 +73,8 @@ export function RoomExperience() {
   // Only the Filament view unmounts under a heavy route; the screen stays mounted
   const rootNav = useRootNavigationState();
   const heavySceneActive = !!rootNav && HEAVY_ROUTES.has(rootNav.routes[rootNav.index]?.name ?? '');
+  // The hub's scene must stay down until the visit's teardown has actually landed: stopViewing() runs from a cleanup, which React fires in the passive-effect phase AFTER the commit that re-mounts RoomScene here, so heavySceneActive alone flips back to false one commit too early and the hub's first frame would read s.viewing?.layout ?? s.layout as the friend's room, mounting and then immediately unmounting every visited item's Filament asset (see the visit.tsx cleanup and RoomScene's asset-release churn).
+  const stillViewingFriend = usePlacementStore((p) => p.viewing !== null);
   // Backdrop follows the HOUR (Settings → "Time of day") rather than being its own axis: the view out
   // of the room and the light inside it are the same fact, and letting them disagree only ever produces
   // a daytime photo behind a night-lit room. Each preset names its backdrop; see core/timeOfDay.
@@ -93,6 +97,13 @@ export function RoomExperience() {
   const cancelPlacement = usePlacementStore((p) => p.cancel);
   const removePlacement = usePlacementStore((p) => p.remove);
   const rotateGhost = usePlacementStore((p) => p.rotateGhost);
+  const toggleGhostLight = usePlacementStore((p) => p.toggleGhostLight);
+  // Three-valued on purpose: null means "the selected piece is not a lamp", which is how the place bar knows to show no switch at all. A boolean could not tell that apart from a lamp that is off.
+  const ghostLightOn = usePlacementStore((p) =>
+    p.activeEdit && getRoomItemDef(p.activeEdit.placement.itemId)?.emitsLight
+      ? p.activeEdit.placement.lightOn !== false
+      : null,
+  );
   useEffect(() => {
     hydrate(me);
   }, [hydrate, me]);
@@ -101,6 +112,7 @@ export function RoomExperience() {
   // A layer not a route, so the room stays alive and shows through the scrim
   const [shopOpen, setShopOpen] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [visitPickerOpen, setVisitPickerOpen] = useState(false);
   const [roomRotation, setRoomRotation] = useState(0);
   const [roomZoom, setRoomZoom] = useState(1);
   const roomRotationRef = useRef(roomRotation);
@@ -109,7 +121,7 @@ export function RoomExperience() {
     roomRotationRef.current = roomRotation;
     roomZoomRef.current = roomZoom;
   }, [roomRotation, roomZoom]);
-  // Every path into the view goes through here — orbit drag, pinch — so the zoom range is enforced once and cannot be forgotten by a new input path. Rotation is NOT clamped any more: the shell is enclosed on all four sides and the walls between the camera and the room fade out, so the room reads as a room at every azimuth (see src/room/core/wallCulling).
+  // Every path into THIS view goes through here — orbit drag, pinch — so the zoom range is enforced once and cannot be forgotten by a new input path. Rotation is NOT clamped any more: the shell is enclosed on all four sides and the walls between the camera and the room fade out, so the room reads as a room at every azimuth (see src/room/core/wallCulling). NOTE: src/app/(social)/visit.tsx carries an identical copy of this function for the friend's-room screen, so this is one of TWO places the clamp lives — change both or the two scenes drift apart.
   const applyRoomControls = (nextRotation: number, nextZoom: number) => {
     const clampedZoom = Math.max(ORBIT.zoom.min, Math.min(ORBIT.zoom.max, nextZoom));
     roomRotationRef.current = nextRotation;
@@ -130,7 +142,7 @@ export function RoomExperience() {
     <View style={s.screen}>
       {/* The backdrop sits UNDER a transparent Filament view, so the artwork frames the diorama without touching the 3D scene. "clear": the themed app background (screen) shows through. */}
       <SceneBackdrop {...roomBackdropView(roomBackdrop, darkTheme)} style={s.stage}>
-        {heavySceneActive ? null : (
+        {heavySceneActive || stillViewingFriend ? null : (
           <RoomScene
             rotationY={roomRotation}
             zoom={roomZoom}
@@ -178,12 +190,25 @@ export function RoomExperience() {
       <RoomBottomBar
         onOpenShop={() => setShopOpen(true)}
         onOpenInventory={() => setInventoryOpen(true)}
+        onOpenVisit={() => setVisitPickerOpen(true)}
       />
 
       {editing ? <ColourPicker /> : null}
 
       {editing ? (
         <View style={[s.placeBar, blocked && s.placeBarBlocked, { bottom: 78 + Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN) }]}>
+          {/* Only a lamp gets a switch, and it sits with rotate and delete because it is the same kind of thing: a property of the piece you are holding, committed when you confirm it. */}
+          {ghostLightOn !== null ? (
+            <Pressable
+              accessibilityRole="switch"
+              accessibilityLabel="Lamp light"
+              accessibilityState={{ checked: ghostLightOn }}
+              style={[s.ghostRotate, ghostLightOn && s.ghostLightOn]}
+              onPress={toggleGhostLight}
+            >
+              <BulbIcon size={20} on={ghostLightOn} color={ghostLightOn ? '#8a6b1f' : '#807277'} />
+            </Pressable>
+          ) : null}
           <Pressable
             accessibilityLabel="Rotate furniture left"
             style={s.ghostRotate}
@@ -229,6 +254,8 @@ export function RoomExperience() {
       {shopOpen ? <ShopOverlay onClose={() => setShopOpen(false)} /> : null}
 
       {inventoryOpen ? <InventoryOverlay onClose={() => setInventoryOpen(false)} /> : null}
+
+      {visitPickerOpen ? <FriendPickerOverlay onClose={() => setVisitPickerOpen(false)} /> : null}
 
       {unavailableFeature ? (
         <OverlaySheet size="dialog" onClose={() => setUnavailableFeature(null)}>
@@ -304,6 +331,10 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   placeHintBlocked: {
     color: t.danger,
     fontSize: 11,
+  },
+  // Lit reads as warm rather than as "selected", matching the ceiling light's own switch in RoomLightControls.
+  ghostLightOn: {
+    backgroundColor: '#f6e6b8',
   },
   ghostRotate: {
     width: 36,

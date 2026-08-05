@@ -20,7 +20,7 @@ import { modelPath, type ItemSource } from "../../data/catalogAssets";
 import { catalogUrl } from "../../data/catalogUrls";
 import type { PlaceableRoomRow, RoomItemLight } from "../../data/repos";
 import type { AssetSrc } from "../../game/core/type";
-import type { PlaceableItemDef } from "./grid";
+import type { Footprint, PlaceableItemDef } from "./grid";
 import { ROOM_SHELL, WALL_CELL_SIZE } from "./roomShell";
 
 export type RoomItemModel = {
@@ -62,6 +62,24 @@ const wallCells = (meters: number): number => Math.max(1, Math.round(meters / WA
 // by the placeable_items view — migration 012). A 'lit' row with no light row is a seeding mistake, and
 // it degrades quietly: emitsLight is true but there is nothing to build a light from, so the piece
 // places as ordinary furniture. That is the failure the audit query in 012 exists to catch.
+// A mask that disagrees with its footprint is a seeding mistake; warn and fall back to the solid rect, which can only over-claim, never let pieces intersect. The border rule: every edge row/column must hold an 'X', or the bbox (which bounds checks and clamping still use) lies about the piece's extent.
+function sanitizedMask(joined: string | undefined, footprint: Footprint): readonly string[] | undefined {
+  if (!joined) return undefined;
+  const rows = joined.split("/");
+  const ok =
+    rows.length === footprint.d &&
+    rows.every((row) => row.length === footprint.w && /^[X.]+$/.test(row)) &&
+    rows[0].includes("X") &&
+    rows[footprint.d - 1].includes("X") &&
+    rows.some((row) => row[0] === "X") &&
+    rows.some((row) => row[footprint.w - 1] === "X");
+  if (!ok) {
+    console.warn("[room] footprint mask does not match footprint; using solid rect", joined, footprint);
+    return undefined;
+  }
+  return rows;
+}
+
 function toModel(row: PlaceableRoomRow): RoomItemModel {
   const def: PlaceableItemDef =
     row.category === "win"
@@ -72,12 +90,17 @@ function toModel(row: PlaceableRoomRow): RoomItemModel {
           allowedSurfaces: ["wall"],
           opensWall: true,
         }
-      : {
-          itemId: row.id,
-          footprint: { w: cells(row.size.x), d: cells(row.size.z) },
-          allowedSurfaces: ["floor"],
-          emitsLight: row.category === "lit" && row.light != null,
-        };
+      : (() => {
+          const footprint = { w: cells(row.size.x), d: cells(row.size.z) };
+          const mask = sanitizedMask(row.footprintMask, footprint);
+          return {
+            itemId: row.id,
+            footprint,
+            ...(mask ? { mask } : {}),
+            allowedSurfaces: ["floor" as const],
+            emitsLight: row.category === "lit" && row.light != null,
+          };
+        })();
   return { def, source: row.source, size: row.size, baseOffsetY: row.baseOffsetY, light: row.light };
 }
 
@@ -186,6 +209,8 @@ export function roomItemDefs(): ReadonlyMap<string, PlaceableItemDef> {
 // Footprint is at rotSteps 0; rotation permutes cells and model together, so the fit is
 // rotation-invariant.
 export function fitScale(item: RoomItemModel): number {
+  // Wall items (windows) are exempt: their footprint is a HOLE sized to the NEAREST wall cell, deliberately allowed to be smaller than the model's own glazing so the cut opening tracks the authored size rather than always overshooting it — the floor spill guard below assumes a ceil-derived footprint that always contains the piece, which is backwards here and would shrink the model below its hole, leaving wall showing through the glass.
+  if (!item.def.allowedSurfaces.includes("floor")) return FURNITURE_WORLD_SCALE;
   return Math.min(
     FURNITURE_WORLD_SCALE,
     (item.def.footprint.w * CELL) / item.size.x,

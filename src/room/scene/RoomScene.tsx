@@ -39,6 +39,7 @@ import {
 import { useVariantModelSource } from "./variantModel";
 import { GridOverlay } from "./GridOverlay";
 import { setCameraAzimuth, usePlacementStore } from "../core/placement";
+import { aimToDirection } from "../core/lightAim";
 import { useGameStore } from "../../game/core/store";
 import { sunDirection, sunPreset, type CeilingLight } from "../core/timeOfDay";
 import {
@@ -88,6 +89,7 @@ const ROOM_MODEL = require("../../assets/models/room/virtualroom_empty.glb");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const ROOM_IBL = require("../../assets/ibl/room_ibl.ktx");
 
+
 export type RoomSceneProps = {
   rotationY: number;
   zoom: number;
@@ -106,7 +108,8 @@ function RoomModel({ onReady, orbit }: { onReady: () => void; orbit: ReturnType<
   // addToScene OFF, and it must stay off: this component decides what of the shell is in the scene, cell by cell, and useModel's own add is not a call it can sequence against. That add is `scene.addAssetEntities(asset)` — every node of the asset, unconditionally — dispatched from a WORKLET effect, i.e. queued onto the worklet thread while the effects below run synchronously on the JS thread. Whichever thread got there second won, so a shell that finished loading while the layout already held a window had its knocked-out cells put straight back, leaving the window buried in solid wall and every band showing its panel AND its 84 cells at once. Nothing healed it either: the effects below diff against the refs here, which still claimed the work was done.
   const model = useModel(ROOM_MODEL, { addToScene: false });
   const { transformManager, scene, renderableManager } = useFilamentContext();
-  const layout = usePlacementStore((s) => s.layout);
+  // Through the viewing layer, so a visited room knocks out ITS windows' wall cells rather than the player's.
+  const layout = usePlacementStore((s) => s.viewing?.layout ?? s.layout);
   const activeEdit = usePlacementStore((s) => s.activeEdit);
   // Entity handles for the wall cells currently knocked out, by GLB node name. A ref, not state:
   // this is imperative scene bookkeeping — the entities must be RE-ADDED when a window moves away,
@@ -388,16 +391,40 @@ const RoomLit = memo(function RoomLit({ placement, item }: { placement: GridPlac
 
   const footprint = rotatedFootprint(item.def.footprint, placement.rotSteps);
   const centre = floorCellToRoom(placement.cell, footprint);
+
+  // The bulb's offset is authored in the piece's OWN space at rotSteps 0, so it has to be turned with
+  // the piece — otherwise rotating a desk lamp leaves its light behind, pointing at where the lamp used
+  // to be. Only x/z turn; height is unaffected by a yaw.
+  const spin = (placement.rotSteps * Math.PI) / 2;
+  const cos = Math.cos(spin);
+  const sin = Math.sin(spin);
+  const turn = (x: number, z: number) => ({ x: x * cos + z * sin, z: -x * sin + z * cos });
+
+  // A bulb at exactly the base is meaningless for a lamp — it would sit inside the floor — so 0 is a
+  // reliable "not authored yet" sentinel, which is what a row cached before migration 014 reads as.
+  // Falling back to the old whole-catalog heuristic keeps such a row looking roughly right until the
+  // next catalog sync replaces it, instead of dropping its light through the floor for one session.
+  const authored = light?.bulb;
+  const offset = authored && authored.y !== 0 ? authored : { x: 0, y: item.size.y + LIT.bulbAboveTopMetres, z: 0 };
+  const local = turn(offset.x, offset.z);
   const bulb = roomToScene({
-    x: centre.x,
-    y: ROOM_SHELL.floor.y + item.size.y + LIT.bulbAboveTopMetres,
-    z: centre.z,
+    x: centre.x + local.x,
+    y: ROOM_SHELL.floor.y + offset.y,
+    z: centre.z + local.z,
   });
+
+  // Aim, turned by the same rotation. Absent for a point light, which ignores direction entirely.
+  const aimed = light?.type === "spot" ? aimToDirection(light.aim?.pitchDeg ?? null, light.aim?.yawDeg ?? null) : null;
+  const aimTurned = aimed ? turn(aimed.x, aimed.z) : null;
+  const direction: [number, number, number] | undefined =
+    aimed && aimTurned ? [aimTurned.x, aimed.y, aimTurned.z] : undefined;
 
   // Latest position, read at CREATION only — keeping it out of the create effect's deps is what stops
   // the entity being rebuilt (and leaked) on every drag step.
   const spawnRef = useRef(bulb);
   spawnRef.current = bulb;
+  const dirRef = useRef(direction);
+  dirRef.current = direction;
 
   useEffect(() => {
     if (!light) return;
@@ -406,7 +433,7 @@ const RoomLit = memo(function RoomLit({ placement, item }: { placement: GridPlac
       light.type,
       light.kelvin,
       light.lumens,
-      undefined,
+      dirRef.current,
       [at.x, at.y, at.z],
       // No shadows: a point light needs a six-face cube shadow map, the most expensive thing
       // available here, and a lamp reads fine without it against the sun's shadows.
@@ -433,8 +460,19 @@ const RoomLit = memo(function RoomLit({ placement, item }: { placement: GridPlac
     if (entity) lightManager.setPosition(entity, [bulb.x, bulb.y, bulb.z] as never);
   }, [lightManager, bulb.x, bulb.y, bulb.z]);
 
+  // Rotating a spot has to move its beam too. Guarded on `direction` being present: setDirection on a
+  // point light is meaningless, and Filament treats a zero-length direction as an error rather than
+  // ignoring it.
+  // Depends on the COMPONENTS, not on `direction` itself: that array is rebuilt every render, so
+  // depending on it would fire this on every frame of a drag rather than only when the aim moves.
+  useEffect(() => {
+    const entity = entityRef.current;
+    if (entity && dirRef.current) lightManager.setDirection(entity, dirRef.current as never);
+  }, [lightManager, aimTurned?.x, aimed?.y, aimTurned?.z]);
+
   return null;
 });
+
 
 const PlacedItem = memo(function PlacedItem({
   placement,
@@ -694,7 +732,8 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange, cei
   const viewportRef = useRef({ width, height });
   viewportRef.current = { width, height };
 
-  const layout = usePlacementStore((s) => s.layout);
+  // The player's own room in the hub, a friend's while visiting. Placement is refused at the store while viewing, so activeEdit below is always null on that path and every ghost, overlay and drag branch is inert without needing its own check.
+  const layout = usePlacementStore((s) => s.viewing?.layout ?? s.layout);
   const activeEdit = usePlacementStore((s) => s.activeEdit);
   // Subscribed (not getState) so pieces whose item rows arrive with the catalog sync appear then.
   const roomItems = useRoomCatalogStore((s) => s.items);
@@ -774,7 +813,8 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange, cei
   // front of walls from this camera), then each wall's plane.
   const pickUpAt = useCallback((px: number, py: number) => {
     const state = usePlacementStore.getState();
-    if (state.activeEdit) return;
+    // `viewing` too: this searches state.layout — the player's OWN room — so in a friend's room it would raycast against pieces that are not on screen and buzz for a piece nobody can see. editPlacement refuses as well; this is the cheap pre-check that keeps the work and the haptic from happening at all.
+    if (state.activeEdit || state.viewing) return;
     const hits = (surface: GridPlacement["surface"], pointed: { x: number; y: number } | null) =>
       pointed
         ? state.layout.find((p) => {
@@ -982,32 +1022,33 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange, cei
           {ceilingLight ? <RoomCeilingLight light={sun.interiorLight} /> : null}
           <RoomPostProcess />
           <RoomModel onReady={handleReady} orbit={orbit} />
-          {/* An id the catalog doesn't know (yet) has no model or dimensions — skip it. */}
-          {layout
+          {/* Committed pieces AND the ghost render from ONE array, and that is load-bearing: React keys only match within the same children array, so a ghost in its own sibling slot is a different element even with the same key — pick-up and confirm then unmount/remount the piece, and useModel reloads the whole GLB each time (useBuffer has no cache). That remount is what made a dragged piece invisible until seconds after settling, and where the old "Pointer FilamentAssetWrapper has already been manually released" race lived. In one array the key genuinely matches, the component morphs, and the model loads exactly once per piece.
+              An id the catalog doesn't know (yet) has no model or dimensions — skip it. */}
+          {(activeEdit ? [...layout, activeEdit.placement] : layout)
             .filter((placement) => roomItems[placement.itemId])
             .map((placement) => (
-              <PlacedItem key={placement.instanceId} placement={placement} orbit={orbit} />
+              <PlacedItem
+                key={placement.instanceId}
+                placement={placement}
+                tint={
+                  activeEdit && placement.instanceId === activeEdit.placement.instanceId
+                    ? activeEdit.check.ok
+                      ? "valid"
+                      : "blocked"
+                    : undefined
+                }
+                orbit={orbit}
+              />
             ))}
           {/* Lamps light the room from wherever their piece stands. The ghost is included, so the
               light previews while the piece is still under the finger. */}
           {(activeEdit ? [...layout, activeEdit.placement] : layout)
-            .filter((p) => getRoomItemDef(p.itemId)?.emitsLight && p.surface.kind === "floor")
+            // lightOn !== false rather than === true: undefined means ON, which is what lets every lamp saved before the switch existed keep burning.
+            .filter((p) => getRoomItemDef(p.itemId)?.emitsLight && p.surface.kind === "floor" && p.lightOn !== false)
             .map((p) => {
               const item = roomItems[p.itemId];
               return item ? <RoomLit key={`lit:${p.instanceId}`} placement={p} item={item} /> : null;
             })}
-          {/* SAME key as a committed piece, on purpose: confirm and pick-up then morph this
-              component instead of unmount/remounting it, so the model is neither reloaded nor
-              released mid-flight — the release/addAssetEntities race in useModel ("Pointer
-              FilamentAssetWrapper has already been manually released") lived in that remount. */}
-          {activeEdit ? (
-            <PlacedItem
-              key={activeEdit.placement.instanceId}
-              placement={activeEdit.placement}
-              tint={activeEdit.check.ok ? "valid" : "blocked"}
-              orbit={orbit}
-            />
-          ) : null}
           <OrbitCameraRig orbit={orbit} />
         </FilamentView>
       </FilamentScene>
@@ -1017,10 +1058,9 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange, cei
         <GridOverlay
           viewport={{ width, height }}
           angles={{ ...orbitFromControls(rotationY, zoom), phi: orbit.value.raw.phi }}
-          ghostCell={activeEdit.placement.cell}
-          ghostFootprint={rotatedFootprint(
-            getRoomItemDef(activeEdit.placement.itemId)?.footprint ?? { w: 1, d: 1 },
-            activeEdit.placement.rotSteps,
+          ghostCells={cellsFor(
+            activeEdit.placement,
+            getRoomItemDef(activeEdit.placement.itemId) ?? { itemId: activeEdit.placement.itemId, footprint: { w: 1, d: 1 }, allowedSurfaces: ["floor"] },
           )}
           ghostValid={activeEdit.check.ok}
         />

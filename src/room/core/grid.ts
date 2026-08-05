@@ -50,6 +50,8 @@ export type PlaceableItemDef = {
   // moves. Purely a rendering concern — placement, collision and persistence treat a lighting item as
   // ordinary furniture, so nothing below this line knows or cares that it glows.
   emitsLight?: boolean;
+  // Which cells of the w×d footprint are solid, at rotSteps 0: d rows of w chars, 'X' solid, '.' empty; row 0 is the -y edge. Absent = solid rectangle. Floor surfaces only — wall footprints are already exact holes.
+  mask?: readonly string[];
 };
 
 // One placed object. This is the persisted shape — see src/data/types.ts PlacedFurniture.
@@ -61,6 +63,8 @@ export type GridPlacement = {
   // Anchor cell, min-corner convention: the footprint extends towards +x / +y from here.
   cell: Cell;
   rotSteps: RotSteps;
+  // Mirrors PlacedFurniture.lightOn: undefined means ON, so only an explicitly switched-off lamp carries it. Nothing in this module reads it — placement and collision do not care whether a lamp is lit — it rides along so the round trip through toGrid/fromGrid preserves it.
+  lightOn?: boolean;
 };
 
 export type PlacementRejection =
@@ -110,6 +114,23 @@ export function rotatedFootprint(footprint: Footprint, rotSteps: RotSteps): Foot
     : { w: footprint.d, d: footprint.w };
 }
 
+// The mask as rotated — the grid twin of the renderer's yaw (rotSteps × 90° about Y), which maps mask cell (dx, dy) to (dy, w-1-dx) per step. Applied stepwise so one derivation covers all four turns.
+export function rotatedMask(mask: readonly string[], rotSteps: RotSteps): readonly string[] {
+  let rows = mask;
+  for (let step = 0; step < rotSteps; step += 1) {
+    const w = rows[0]?.length ?? 0;
+    const d = rows.length;
+    const next: string[] = [];
+    for (let dy = 0; dy < w; dy += 1) {
+      let row = "";
+      for (let dx = 0; dx < d; dx += 1) row += rows[dx][w - 1 - dy];
+      next.push(row);
+    }
+    rows = next;
+  }
+  return rows;
+}
+
 // The footprint a placement occupies on its own surface. Wall items are as wide as their footprint
 // and as tall as wallHeightCells, since a wall grid's second axis is vertical, not depth.
 export function occupiedFootprint(
@@ -125,9 +146,12 @@ export function occupiedFootprint(
 // Every cell a placement covers, anchor included.
 export function cellsFor(placement: GridPlacement, def: PlaceableItemDef): Cell[] {
   const { w, d } = occupiedFootprint(placement, def);
+  // Masks apply on the floor only — wall footprints are already exact holes, and the furniture surface is reserved and undecided.
+  const mask = placement.surface.kind === "floor" && def.mask ? rotatedMask(def.mask, placement.rotSteps) : null;
   const cells: Cell[] = [];
   for (let dx = 0; dx < w; dx += 1) {
     for (let dy = 0; dy < d; dy += 1) {
+      if (mask && mask[dy]?.[dx] !== "X") continue;
       cells.push({ x: placement.cell.x + dx, y: placement.cell.y + dy });
     }
   }
@@ -266,7 +290,7 @@ export function floorPlacementBox(
 }
 
 // The centre of a wall placement — on the wall's inner face, so a frame hangs flat against it.
-// Wall grids run at WALL_CELL_SIZE (0.25), finer than the floor's cellSize — see roomShell.
+// Wall grids run at WALL_CELL_SIZE (0.25), the same pitch as the floor's cellSize — see roomShell.
 export function wallCellToRoom(
   wall: WallId,
   cell: Cell,

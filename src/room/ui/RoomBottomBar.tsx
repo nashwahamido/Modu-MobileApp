@@ -65,9 +65,11 @@ const ASSEMBLE_COLLAR_ARC = (() => {
 export function RoomBottomBar({
   onOpenShop,
   onOpenInventory,
+  onOpenVisit,
 }: {
   onOpenShop: () => void;
   onOpenInventory: () => void;
+  onOpenVisit: () => void;
 }) {
   const s = useStyles(makeStyles);
   // t.bg is the room's backdrop colour, used for the chevron's outline
@@ -171,7 +173,7 @@ export function RoomBottomBar({
               accessibilityRole="button"
               accessibilityLabel="Visit friends"
               style={s.barItem}
-              onPress={() => router.push("/profile" as Href)}
+              onPress={onOpenVisit}
             >
               <View style={s.iconSlot}>
                 <Image source={VISIT_FRIENDS_ICON} style={s.friendsIcon} resizeMode="contain" />

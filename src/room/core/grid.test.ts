@@ -13,6 +13,7 @@ import {
   roomPointToFloorCell,
   roomPointToWallCell,
   rotatedFootprint,
+  rotatedMask,
   surfaceExtent,
   surfaceKey,
   wallCellToRoom,
@@ -70,9 +71,9 @@ const place = (over: Partial<GridPlacement> = {}): GridPlacement => ({
 });
 
 test("floor grid is derived from the measured shell, not hand-authored", () => {
-  // 4.5 x 4.4989 authored metres at 0.5 per cell — the shell was authored to make this land clean.
-  assert.deepEqual({ w: FLOOR_CELLS.w, d: FLOOR_CELLS.d }, { w: 9, d: 9 });
-  assert.deepEqual(surfaceExtent({ kind: "floor" }), { w: 9, h: 9 });
+  // 4.5 x 4.4989 authored metres at 0.25 per cell — quarter cells, matching the walls' grid.
+  assert.deepEqual({ w: FLOOR_CELLS.w, d: FLOOR_CELLS.d }, { w: 18, d: 18 });
+  assert.deepEqual(surfaceExtent({ kind: "floor" }), { w: 18, h: 18 });
 });
 
 test("the grid covers the whole floor, to within a fraction of a cell", () => {
@@ -219,8 +220,8 @@ test("clamping keeps a piece fully on the floor", () => {
 test("a floor cell maps to its centre, sitting on the floor surface", () => {
   const point = floorCellToRoom({ x: 0, y: 0 }, { w: 1, d: 1 });
   assert.equal(point.y, ROOM_SHELL.floor.y);
-  assert.ok(Math.abs(point.x - (ROOM_SHELL.floor.minX + 0.25)) < 1e-9);
-  assert.ok(Math.abs(point.z - (ROOM_SHELL.floor.minZ + 0.25)) < 1e-9);
+  assert.ok(Math.abs(point.x - (ROOM_SHELL.floor.minX + 0.125)) < 1e-9);
+  assert.ok(Math.abs(point.z - (ROOM_SHELL.floor.minZ + 0.125)) < 1e-9);
 });
 
 test("a wall cell sits on the wall's inner face", () => {
@@ -300,7 +301,7 @@ test("a picked point resolves to the cell it falls in", () => {
     x: ROOM_SHELL.floor.minX + 1.2,
     z: ROOM_SHELL.floor.minZ + 0.6,
   });
-  assert.deepEqual(cell, { x: 2, y: 1 });
+  assert.deepEqual(cell, { x: 4, y: 2 });
 });
 
 test("a centred drag anchors so the piece sits under the finger", () => {
@@ -340,4 +341,59 @@ test("the orbit target is the room's centre", () => {
   // The shell is unit-cube centred on the origin; framing (radius, lens) is owned by ./orbit and
   // guarded by its own tests.
   assert.deepEqual(ROOM_TARGET, { x: 0, y: 0, z: 0 });
+});
+
+// An 8x6 L-sofa at rotSteps 0: back rows solid, notch (x 0..4, y 3..5) empty. Matches the seeded sofa-modular mask.
+const SOFA_MASK = ["XXXXXXXX", "XXXXXXXX", "XXXXXXXX", ".....XXX", ".....XXX", ".....XX."] as const;
+const sofa: PlaceableItemDef = {
+  itemId: "sofa-modular",
+  footprint: { w: 8, d: 6 },
+  allowedSurfaces: ["floor"],
+  mask: SOFA_MASK,
+};
+
+test("mask rotation matches the renderer's yaw: (dx, dy) -> (dy, w-1-dx) per quarter turn", () => {
+  const m = ["XX.", "X.."] as const; // 3 wide, 2 deep; solid at (0,0), (1,0), (0,1)
+  assert.deepEqual(rotatedMask(m, 0), ["XX.", "X.."]);
+  // One +90° yaw about Y: solid cells land at (0,2), (0,1), (1,2) on the swapped 2-wide 3-deep grid.
+  assert.deepEqual(rotatedMask(m, 1), ["..", "X.", "XX"]);
+  // Two turns are the 180° flip: rows reversed, each row reversed.
+  assert.deepEqual(rotatedMask(m, 2), ["..X", ".XX"]);
+  assert.deepEqual(rotatedMask(m, 3), ["XX", ".X", ".."]);
+  // Four turns are identity.
+  assert.deepEqual(rotatedMask(rotatedMask(m, 3), 1), ["XX.", "X.."]);
+});
+
+test("cellsFor omits a masked item's empty cells", () => {
+  const cells = cellsFor(place({ itemId: "sofa-modular", cell: { x: 0, y: 0 } }), sofa);
+  assert.equal(cells.length, 32); // 48 bbox cells minus 16 '.' cells
+  assert.ok(!cells.some((c) => c.x === 0 && c.y === 3), "notch cell must be free");
+  assert.ok(!cells.some((c) => c.x === 7 && c.y === 5), "17%-coverage corner must be free");
+  assert.ok(cells.some((c) => c.x === 7 && c.y === 4), "chaise arm must be claimed");
+});
+
+const crate: PlaceableItemDef = {
+  itemId: "crate",
+  footprint: { w: 2, d: 2 },
+  allowedSurfaces: ["floor"],
+};
+
+test("a small piece fits inside the L's notch but not its arm", () => {
+  const sofaDefs = new Map([[sofa.itemId, sofa], [stool.itemId, stool], [table.itemId, table], [crate.itemId, crate]]);
+  const placedSofa = place({ instanceId: "sofa", itemId: "sofa-modular", cell: { x: 0, y: 0 } });
+  const inNotch = place({ instanceId: "s", itemId: "dalfred-stool", cell: { x: 1, y: 4 } });
+  assert.deepEqual(canPlaceInLayout(inNotch, [placedSofa], sofaDefs), { ok: true });
+  const onArm = place({ instanceId: "s", itemId: "dalfred-stool", cell: { x: 6, y: 4 } });
+  assert.deepEqual(canPlaceInLayout(onArm, [placedSofa], sofaDefs), { ok: false, reason: "occupied" });
+  // A 2x2 piece at the notch's min corner (x 0..1, y 3..4) sits entirely inside the empty region.
+  const crateInNotch = place({ instanceId: "c", itemId: "crate", cell: { x: 0, y: 3 } });
+  assert.deepEqual(canPlaceInLayout(crateInNotch, [placedSofa], sofaDefs), { ok: true });
+  // The same crate at x:4 straddles the notch's edge: its x:4 column is still empty notch, but its
+  // x:5 column lands in the solid chaise arm (row3/row4 are 'X' from x=5), so it must be rejected.
+  const crateOnEdge = place({ instanceId: "c", itemId: "crate", cell: { x: 4, y: 3 } });
+  assert.deepEqual(canPlaceInLayout(crateOnEdge, [placedSofa], sofaDefs), { ok: false, reason: "occupied" });
+});
+
+test("a maskless def still claims its full rectangle", () => {
+  assert.equal(cellsFor(place({ cell: { x: 0, y: 0 } }), table).length, 2);
 });
