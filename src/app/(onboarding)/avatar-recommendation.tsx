@@ -5,38 +5,218 @@ import { StyleSheet, Animated, Image, Pressable, Text, View } from "react-native
 import { useEffect, useRef, useState } from "react";
 import { avatarModes } from "@/src/onboarding/avatarModes";
 import type { ModeId } from "@/src/onboarding/questionnaire";
-import { VoiceButton } from "@/src/game/ui/VoiceButton";
+import { VoiceButton } from "@/src/game/ui/hud/VoiceButton";
 import { useGameStore } from "@/src/game/core/store";
 import type { ProfileId } from "@/src/game/core/profile";
+import { AVATAR_IMAGES } from "@/src/components/avatarAssets";
 import { useTutorialStore } from "@/src/game/tutorial/store";
 import { saveSelectedAvatarMode } from "@/src/services/onboarding";
-import { Button } from "@/src/game/ui/Button";
-import { RADIUS, SPACE, TYPE, useStyles } from "@/src/game/ui/theme";
-import { useSafeInsets } from "@/src/hooks/use-safe-insets";
-import type { Theme } from "@/src/game/ui/theme";
+import { Button } from "@/src/game/ui/system/Button";
+import { ACCENT_LIGHT, RADIUS, SPACE, TYPE, useStyles, useTheme, FONT } from "@/src/game/ui/system/theme";
+import { CheckIcon, StarIcon } from "@/src/components/Icons";
+import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
+import type { Theme } from "@/src/game/ui/system/theme";
+
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
+import Reanimated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
+import type { ReactNode } from "react";
+import type { StyleProp, ViewStyle } from "react-native";
+
+/** This screen's backdrop. Deliberately its own pair rather than a shared token: each screen can
+ *  be retuned without touching the others. Keep root.backgroundColor equal to BG_FROM — that is
+ *  what shows for the frame before the SVG paints. */
+/** The entrance, as ONE block. Every value is the moment that element starts, so re-timing the whole
+ *  screen means editing this and nothing else. The order is the order a person reads the page:
+ *  the avatar arrives, then its name, then what it is like, then what it does, then the choice. */
+const STAGE = {
+  avatar: 140,
+  spark: 260,
+  // The avatar gets the stage to itself: everything below starts at twice its old delay, so the pop and its glints finish before a single word appears.
+  title: 1400,
+  traits: 1800,
+  traitStep: 130,
+  bullets: 2200,
+  bulletStep: 150,
+  confirm: 2900,
+  tabs: 3200,
+} as const;
+
+/** Scales up past its resting size and settles. For things that should feel like they LANDED.
+ *
+ *  `big` is the avatar's version: starts far smaller and springs on a looser damping, so it
+ *  overshoots visibly and rocks back. On a trait pill that would be slapstick; on the one thing the
+ *  screen is about, it is the arrival. */
+function PopIn({
+  delay,
+  style,
+  big = false,
+  animate = true,
+  children,
+}: {
+  delay: number;
+  style?: StyleProp<ViewStyle>;
+  big?: boolean;
+  /** False = mount fully formed. The entrance is a one-shot, so after it every child renders flat. */
+  animate?: boolean;
+  children: ReactNode;
+}) {
+  const on = useSharedValue(0);
+  useEffect(() => {
+    if (!animate) return;
+    on.value = withDelay(
+      delay,
+      withSpring(1, big ? { damping: 7.5, stiffness: 190, mass: 0.9 } : { damping: 11, stiffness: 170, mass: 0.7 }),
+    );
+  }, [animate, big, delay, on]);
+  const from = big ? 0.35 : 0.7;
+  const anim = useAnimatedStyle(() => ({
+    // Faster than the scale, so it is never seen at its smallest.
+    opacity: Math.min(1, on.value * 3),
+    transform: [{ scale: from + on.value * (1 - from) }],
+  }));
+  // A PLAIN view when not animating, not an animated one parked at its end value. A shared value's initialiser only runs on the hook's first render, so a child that mounted mid-intro could keep a stale 0 and stay invisible. No animated style, no way to be stuck.
+  if (!animate) return <View style={style}>{children}</View>;
+  return <Reanimated.View style={[style, anim]}>{children}</Reanimated.View>;
+}
+
+/** Drops in from above. For lines of copy, which read top-down anyway. */
+function SlideDown({
+  delay,
+  style,
+  animate = true,
+  children,
+}: {
+  delay: number;
+  style?: StyleProp<ViewStyle>;
+  /** False = mount fully formed. The entrance is a one-shot, so after it every child renders flat. */
+  animate?: boolean;
+  children: ReactNode;
+}) {
+  const on = useSharedValue(0);
+  useEffect(() => {
+    if (!animate) return;
+    on.value = withDelay(delay, withTiming(1, { duration: 320, easing: Easing.out(Easing.cubic) }));
+  }, [animate, delay, on]);
+  const anim = useAnimatedStyle(() => ({
+    opacity: on.value,
+    transform: [{ translateY: -18 * (1 - on.value) }],
+  }));
+  // Same reasoning as PopIn: when the entrance is over, this is just a View.
+  if (!animate) return <View style={style}>{children}</View>;
+  return <Reanimated.View style={[style, anim]}>{children}</Reanimated.View>;
+}
+
+/** One glint around the avatar as it lands. Rotated so it reads as a sparkle rather than a dot. */
+function Spark({ x, y, size, delay }: { x: number; y: number; size: number; delay: number }) {
+  const pop = useSharedValue(0);
+  useEffect(() => {
+    pop.value = withDelay(delay, withTiming(1, { duration: 780, easing: Easing.out(Easing.quad) }));
+  }, [delay, pop]);
+  const anim = useAnimatedStyle(() => ({
+    // Up and out, brightest in the middle of its life.
+    opacity: pop.value < 0.4 ? pop.value / 0.4 : 1 - (pop.value - 0.4) / 0.6,
+    transform: [
+      { translateY: -22 * pop.value },
+      { scale: 0.3 + pop.value * 1.5 },
+      { rotate: `${45 + pop.value * 120}deg` },
+    ],
+  }));
+  return (
+    <Reanimated.View
+      style={[{ position: "absolute", left: x, top: y, width: size, height: size, backgroundColor: "#FFF6D8" }, anim]}
+    />
+  );
+}
+
+/** The ring breathing behind Confirm. Swells and fades rather than pulsing the button itself: the
+ *  button has to stay a stable target, and a control that changes size under the thumb is a control
+ *  you can miss. */
+function ConfirmHalo() {
+  const on = useSharedValue(0);
+  useEffect(() => {
+    on.value = withDelay(
+      STAGE.confirm + 300,
+      withRepeat(withTiming(1, { duration: 1400, easing: Easing.out(Easing.quad) }), -1, false),
+    );
+  }, [on]);
+  const anim = useAnimatedStyle(() => ({
+    opacity: 0.5 * (1 - on.value),
+    transform: [{ scale: 1 + on.value * 0.16 }],
+  }));
+  return <Reanimated.View style={[styles_halo, anim]} pointerEvents="none" />;
+}
+
+/** Where the glints sit around the 210pt circle, and when each fires. */
+const SPARKS = [
+  { x: 6, y: 40, size: 13, delay: 0 },
+  { x: 186, y: 26, size: 10, delay: 70 },
+  { x: 200, y: 132, size: 15, delay: 140 },
+  { x: 24, y: 168, size: 12, delay: 210 },
+  { x: 96, y: -10, size: 16, delay: 280 },
+  { x: 150, y: 200, size: 10, delay: 350 },
+  { x: -6, y: 108, size: 11, delay: 420 },
+  { x: 118, y: 210, size: 13, delay: 490 },
+  { x: 214, y: 74, size: 9, delay: 560 },
+  { x: 54, y: -2, size: 12, delay: 630 },
+];
+
+/** Plain object, not a themed sheet: the halo is one fixed accent and ConfirmHalo takes no props. */
+const styles_halo = {
+  position: "absolute" as const,
+  left: -10,
+  right: -10,
+  top: -10,
+  bottom: -10,
+  borderRadius: 999,
+  borderWidth: 3,
+  borderColor: ACCENT_LIGHT,
+};
+
+const BG_FROM = "#E8D48C";
+const BG_TO = "#A9BFD9";
 
 const mascot = require("../../assets/images/mascot/mascot.png");
-const lumiAvatar = require("../../assets/images/avatars/lumi.jpg");
-const sparkyAvatar = require("../../assets/images/avatars/sparky.jpg");
-const ciaraAvatar = require("../../assets/images/avatars/ciara.jpg");
-const felixAvatar = require("../../assets/images/avatars/felix.jpg");
 // The room is the post-onboarding hub now that the home tab is gone.
 const homeRoute = "/room" as Href;
 
-const avatarImages = {
-  visual: lumiAvatar,
-  momentum: sparkyAvatar,
-  "clearPath": ciaraAvatar,
-  control: felixAvatar,
-};
-
 const modes = avatarModes.map((mode) => ({
   ...mode,
-  image: avatarImages[mode.id],
+  image: AVATAR_IMAGES[mode.id],
 }));
 
 export default function AvatarRecommendationScreen() {
   const styles = useStyles(makeStyles);
+  // The icons take their colour as a prop, so this screen needs the tokens as values, not just the sheet.
+  const t = useTheme();
+  // A slow breath on the Recommended tag. Small on purpose — it marks the default choice, it is not asking to be pressed, and anything stronger would compete with the Confirm button. The entrance plays ONCE, for the avatar being announced. After that the player is comparing four modes, and replaying the build-up on every switch read as a wait — the pills and lines are keyed on their own text, so they remount on each switch and ran their delays again from scratch. Once this is false they mount fully formed and a switch is instant.
+  //
+  // The two LOOPING animations are deliberately NOT gated by it: the Recommended badge and the Confirm halo are ongoing states rather than an entrance, and keep breathing whatever mode is up.
+  const [introPlaying, setIntroPlaying] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setIntroPlaying(false), STAGE.tabs + 900);
+    return () => clearTimeout(t);
+  }, []);
+  // The timer alone was not enough: tapping a mode inside the opening ~4s left the intro "still playing", so the switch animated. Touching a tab IS the end of the announcement, whenever it happens — after this the player is comparing, and comparing wants content, not choreography.
+  const endIntro = () => setIntroPlaying(false);
+  const badgePulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(badgePulse, { toValue: 1, duration: 900, useNativeDriver: true }),
+        Animated.timing(badgePulse, { toValue: 0, duration: 900, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [badgePulse]);
   const safe = useSafeInsets();
   const params = useLocalSearchParams<{ mode?: string }>();
   const initialModeId = modes.some((mode) => mode.id === params.mode) ? (params.mode as ModeId) : "momentum";
@@ -87,7 +267,7 @@ export default function AvatarRecommendationScreen() {
   const speakSelectedMode = () => {
     Speech.stop();
     Speech.speak(
-      `Based on your choices, I recommend ${selectedMode.avatarName} in ${selectedMode.title}. ${selectedMode.avatarName} is ${selectedMode.personality}. ${selectedMode.slogan}. ${selectedMode.explanation}. ${selectedMode.bullets.join(". ")}.`,
+      `Your recommended avatar is ${selectedMode.avatarName} in ${selectedMode.title}. ${selectedMode.avatarName} is ${selectedMode.personality}. ${selectedMode.explanation}. ${selectedMode.bullets.join(". ")}.`,
       {
         language: "en-US",
         pitch: 1.08,
@@ -113,8 +293,40 @@ export default function AvatarRecommendationScreen() {
   };
 
   return (
-    <View style={styles.root}>
-      <View style={[styles.header, { right: 42 + safe.raw.right, top: 18 + safe.raw.top }]}>
+    <View style={styles.screen}>
+      {/* The gradient owns a FULL-BLEED wrapper of its own. It used to sit inside the padded root,
+          where absolute positioning resolves against the padding box — which left the ramp floating
+          in the middle of the screen with a flat border all round it. A wrapper with no padding is
+          the only way to be sure the backdrop is the whole backdrop. */}
+      <Svg style={StyleSheet.absoluteFill} width="100%" height="100%" pointerEvents="none">
+        <Defs>
+          <LinearGradient id="avatarBg" x1="0" y1="0" x2="1" y2="0">
+            <Stop offset="0" stopColor={BG_FROM} />
+            <Stop offset="1" stopColor={BG_TO} />
+          </LinearGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100%" height="100%" fill="url(#avatarBg)" />
+      </Svg>
+      <View
+        style={[
+          styles.root,
+          {
+            paddingLeft: 38 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+            paddingRight: 38 + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN),
+            paddingTop: 18 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
+            paddingBottom: 18 + Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN),
+          },
+        ]}
+      >
+      <View
+        style={[
+          styles.header,
+          {
+            top: 20 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
+            right: 4 + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN),
+          },
+        ]}
+      >
         <Pressable
           onPress={() => {
             Speech.stop();
@@ -122,55 +334,123 @@ export default function AvatarRecommendationScreen() {
           }}
           style={styles.navButton}
         >
-          <Text style={styles.navText}>{"<"}</Text>
+          {/* The drawn arrow head, same asset the questionnaire uses — a "<" glyph is a
+              less-than sign that happens to look like an arrow, and it renders differently in
+              every font. */}
+          <Image
+            source={require("@/src/assets/ui/icons/arrow-back.png")}
+            style={styles.navArrow}
+            resizeMode="contain"
+          />
         </Pressable>
       </View>
 
-      <View style={styles.recommendationLayout}>
-        <VoiceButton onPress={speakSelectedMode} style={styles.audioButton} />
+      {/* Top-left of the SCREEN, not of the layout row: it reads the page aloud, so it belongs with
+          the page's own chrome rather than inside the content it narrates. */}
+      <VoiceButton
+        onPress={speakSelectedMode}
+        style={[
+          styles.audioButton,
+          {
+            top: 20 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
+            left: 4 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+          },
+        ]}
+      />
 
-        <View style={[styles.modeCard, selectedMode.id === initialModeId && styles.modeCardRecommended]}>
-          {selectedMode.id === initialModeId ? (
-            <View style={styles.recommendedBadge}>
-              <Text style={styles.recommendedBadgeText}>Recommended</Text>
+      <View style={styles.recommendationLayout}>
+        {/* No card. The avatar IS the object here, and a frame around a circle was two shapes
+            competing to be the thing you look at. */}
+        <View style={styles.modeColumn}>
+          <PopIn delay={STAGE.avatar} big animate={introPlaying}>
+            <View style={[styles.avatarCircle, { backgroundColor: selectedMode.color }]}>
+              <Image
+                source={selectedMode.image}
+                style={styles.avatarImage}
+                resizeMode="cover"
+              />
             </View>
+            {/* Outside the circle's overflow:hidden, so the glints can sit ON its rim. */}
+            <View style={styles.sparkLayer} pointerEvents="none">
+              {(introPlaying ? SPARKS : []).map((sp, i) => (
+                <Spark key={i} x={sp.x} y={sp.y} size={sp.size} delay={STAGE.spark + sp.delay} />
+              ))}
+            </View>
+          </PopIn>
+          {/* Straddling the top of the circle, so it reads as pinned ON the avatar rather than
+              floating beside it. */}
+          {selectedMode.id === initialModeId ? (
+            <Animated.View
+              style={[
+                styles.recommendedBadge,
+                {
+                  transform: [
+                    { scale: badgePulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] }) },
+                  ],
+                },
+              ]}
+            >
+              <Text style={styles.recommendedBadgeText}>Recommended</Text>
+            </Animated.View>
           ) : null}
-          <View style={[styles.avatarCircle, { backgroundColor: selectedMode.color }]}>
-            <Image source={selectedMode.image} style={styles.avatarImage} />
-          </View>
-          <Text style={styles.modeTitle}>{selectedMode.title}</Text>
-          <Text style={styles.avatarName}>{selectedMode.avatarName}</Text>
         </View>
 
         <View style={styles.recommendationCopy}>
-          <Text style={styles.title}>
-            {selectedMode.id === initialModeId
-              ? "Based on your choices, I recommend..."
-              : "Other available mode"}
-          </Text>
-          <Text style={styles.avatarLine}>Avatar: {selectedMode.avatarName}</Text>
-          <Text style={styles.personalityLine}>{selectedMode.personality}</Text>
-          <Text style={styles.sloganLine}>“{selectedMode.slogan}”</Text>
-          <Text style={styles.explanation}>{selectedMode.explanation}</Text>
+          <SlideDown delay={STAGE.title} animate={introPlaying}>
+            <Text style={styles.title}>
+              {selectedMode.avatarName}: {selectedMode.title}
+            </Text>
+          </SlideDown>
+          {/* The three traits become chips: short, parallel, and read at a glance rather than as a
+              sentence to parse. */}
+          <View style={styles.traitRow}>
+            {selectedMode.personality.split(",").map((trait, i) => (
+              <PopIn key={trait} delay={STAGE.traits + i * STAGE.traitStep} animate={introPlaying} style={styles.traitChip}>
+                <StarIcon size={12} color={t.accent} />
+                <Text style={styles.traitText}>{trait.trim()}</Text>
+              </PopIn>
+            ))}
+          </View>
           <View style={styles.bulletList}>
-            {selectedMode.bullets.map((bullet) => (
-              <View key={bullet} style={styles.bulletRow}>
-                <View style={styles.bulletDot} />
+            {selectedMode.bullets.map((bullet, i) => (
+              <SlideDown
+                key={bullet}
+                delay={STAGE.bullets + i * STAGE.bulletStep} animate={introPlaying}
+                style={styles.bulletRow}
+              >
+                {/* A tick, not a dot: these are what the mode GIVES you, and a check says that where
+                    a bullet only separates lines. */}
+                <CheckIcon size={15} color={t.success} />
                 <Text style={styles.bulletText}>{bullet}</Text>
-              </View>
+              </SlideDown>
             ))}
           </View>
           {saveError ? <Text style={styles.saveErrorText}>{saveError}</Text> : null}
-          <Button
-            label={savingChoice ? "Saving..." : "Confirm this avatar"}
-            variant="primary"
-            onPress={confirmAvatar}
-            disabled={savingChoice}
-          />
+          <PopIn delay={STAGE.confirm} animate={introPlaying} style={styles.confirmWrap}>
+            <ConfirmHalo />
+            <Button
+              label={savingChoice ? "Saving..." : "Confirm"}
+              variant="primary"
+              style={styles.confirmButton}
+              onPress={confirmAvatar}
+              disabled={savingChoice}
+            />
+          </PopIn>
         </View>
       </View>
 
-      <View style={styles.modeTabs}>
+      <SlideDown
+        delay={STAGE.tabs} animate={introPlaying}
+        style={[
+          styles.modeTabs,
+          {
+            // 38 to match the content column's own inset, so the tab row lines up with the copy above it rather than running wider than everything else on the screen.
+            left: 38 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+            right: 38 + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN),
+            bottom: 26 + Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN),
+          },
+        ]}
+      >
         {modes.map((mode) => {
           const isSelected = mode.id === selectedModeId;
           const isRecommended = mode.id === initialModeId;
@@ -179,6 +459,7 @@ export default function AvatarRecommendationScreen() {
               key={mode.id}
               onPress={() => {
                 Speech.stop();
+                endIntro();
                 setSelectedModeId(mode.id as ModeId);
                 setShowModeTip(false);
                 setSaveError(null);
@@ -192,7 +473,7 @@ export default function AvatarRecommendationScreen() {
             </Pressable>
           );
         })}
-      </View>
+      </SlideDown>
 
       {showModeTip && (
         <View style={styles.dimOverlay}>
@@ -228,22 +509,22 @@ export default function AvatarRecommendationScreen() {
           </Animated.View>
         </View>
       )}
+      </View>
     </View>
   );
 }
 
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
+    // The full-bleed layer. No padding here, ever: it is what the gradient measures against.
+    screen: { flex: 1, backgroundColor: BG_FROM },
     root: {
       flex: 1,
-      backgroundColor: t.bg,
       paddingHorizontal: 38,
       paddingVertical: 18,
     },
     header: {
       position: "absolute",
-      right: 42,
-      top: 18,
       zIndex: 10,
       flexDirection: "row",
       gap: 18,
@@ -254,79 +535,48 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       justifyContent: "center",
     },
-    navText: {
-      color: t.text,
-      fontSize: 42,
-      fontWeight: "900",
-      lineHeight: 42,
-    },
+    navArrow: { width: 26, height: 26 },
     recommendationLayout: {
       flex: 1,
       flexDirection: "row",
       alignItems: "center",
       gap: 34,
-      paddingBottom: 66,
-      paddingRight: 54,
+      paddingBottom: 82,
     },
-    audioButton: {
-      alignSelf: "flex-start",
-      flexShrink: 0,
-      marginTop: 42,
-    },
-    modeCard: {
-      width: 190,
-      height: 260,
-      alignItems: "center",
-      justifyContent: "center",
-      borderColor: t.border,
-      borderRadius: 8,
-      borderWidth: 2,
-      backgroundColor: t.surface,
-      gap: SPACE.sm,
-      padding: 14,
-    },
-    modeCardRecommended: {
-      borderColor: t.success,
-      borderWidth: 3,
-      backgroundColor: t.surfaceRaised,
-    },
+    audioButton: { position: "absolute", zIndex: 5 },
+    // A column, not a card: width comes from the circle, and nothing draws a box around it.
+    sparkLayer: { ...StyleSheet.absoluteFillObject },
+    // Narrower than the copy column: a full-width primary action read as a banner rather than a button, and the halo needs room to swell without touching the text above it.
+    confirmWrap: { alignSelf: "center", width: 260, marginTop: SPACE.lg, alignItems: "center" },
+    // stretch + auto margin puts the title on the column's BASE, which is where the Confirm button sits in the column beside it — so the two land on the same line.
+    modeColumn: { width: 220, alignItems: "center", alignSelf: "stretch", paddingTop: 12 },
     avatarCircle: {
-      width: 112,
-      height: 112,
+      width: 210,
+      height: 210,
       alignItems: "center",
       justifyContent: "center",
-      borderRadius: 56,
+      borderRadius: 105,
+      overflow: "hidden",
     },
     avatarImage: {
-      width: 82,
-      height: 82,
-      borderRadius: 22,
+      width: 232,
+      height: 232,
+      borderRadius: 116,
     },
+    // Straddling the circle's top edge. alignSelf centre plus a negative top pulls it back over the rim, so it reads as pinned to the avatar rather than floating above it.
     recommendedBadge: {
       position: "absolute",
-      top: 10,
-      right: 10,
-      borderRadius: 8,
+      top: 2,
+      alignSelf: "center",
+      borderRadius: RADIUS.pill,
       backgroundColor: t.success,
-      paddingHorizontal: SPACE.sm,
+      paddingHorizontal: SPACE.md,
       paddingVertical: SPACE.xs,
     },
     recommendedBadgeText: {
       color: t.onSuccess,
-      fontSize: 9,
+      fontFamily: FONT, fontSize: 9,
       fontWeight: "900",
-    },
-    modeTitle: {
-      color: t.text,
-      fontSize: 21,
-      fontWeight: "900",
-      textAlign: "center",
-    },
-    avatarName: {
-      color: t.textDim,
-      fontSize: 14,
-      fontWeight: "800",
-      textAlign: "center",
     },
     recommendationCopy: {
       flex: 1,
@@ -335,31 +585,27 @@ const makeStyles = (t: Theme) =>
     },
     title: {
       color: t.text,
-      fontSize: 26,
+      fontFamily: FONT, fontSize: 20,
       fontWeight: "900",
-      lineHeight: 31,
+      lineHeight: 24,
     },
-    avatarLine: {
+    // Space above the primary action, so it is not the next thing after the last tick — a gap is what makes it read as the conclusion rather than a fourth list item.
+    confirmButton: { width: "100%" },
+    traitRow: { flexDirection: "row", flexWrap: "wrap", gap: SPACE.sm },
+    traitChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: SPACE.sm,
+      paddingVertical: 3,
+      borderRadius: RADIUS.pill,
+      backgroundColor: t.surface,
+    },
+    traitText: {
       color: t.text,
-      fontSize: 16,
-      fontWeight: "900",
-    },
-    personalityLine: {
-      color: t.text,
-      fontSize: 15,
-      fontWeight: "800",
-    },
-    explanation: {
-      color: t.textDim,
+      fontFamily: FONT,
       fontSize: 13,
-      fontWeight: "700",
-      lineHeight: 18,
-    },
-    sloganLine: {
-      color: t.success,
-      fontSize: 14,
       fontWeight: "800",
-      lineHeight: 18,
     },
     bulletList: {
       gap: 5,
@@ -369,23 +615,15 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       gap: 9,
     },
-    bulletDot: {
-      width: 9,
-      height: 9,
-      borderRadius: 5,
-      backgroundColor: t.text,
-    },
     bulletText: {
       flex: 1,
       color: t.text,
-      fontSize: 13,
+      fontFamily: FONT, fontSize: 13,
       fontWeight: "700",
     },
+    // Offsets come from the CALL SITE, not from here: absolute children are not inset by the parent's padding, so a literal here can never account for a device's safe insets.
     modeTabs: {
       position: "absolute",
-      left: 38,
-      right: 38,
-      bottom: 18,
       height: 56,
       flexDirection: "row",
       gap: SPACE.sm,
@@ -417,7 +655,7 @@ const makeStyles = (t: Theme) =>
     },
     modeTabRecommended: {
       color: t.success,
-      fontSize: 9,
+      fontFamily: FONT, fontSize: 9,
       fontWeight: "900",
       marginTop: 1,
     },
@@ -441,9 +679,8 @@ const makeStyles = (t: Theme) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "flex-end",
-      borderColor: t.gold,
+      // No rim. The shadow already lifts this off the dimmed screen behind it, and an outline on top of that was drawing a box around something already clearly separated.
       borderRadius: 28,
-      borderWidth: 3,
       shadowColor: "#000",
       shadowOffset: { width: 0, height: 8 },
       shadowOpacity: 0.26,
@@ -458,13 +695,13 @@ const makeStyles = (t: Theme) =>
     },
     noteTitle: {
       color: t.text,
-      fontSize: 21,
+      fontFamily: FONT, fontSize: 21,
       fontWeight: "900",
       marginBottom: 5,
     },
     noteText: {
       color: t.text,
-      fontSize: 14,
+      fontFamily: FONT, fontSize: 14,
       fontWeight: "700",
       lineHeight: 19,
     },
@@ -478,7 +715,7 @@ const makeStyles = (t: Theme) =>
       height: 88,
       alignItems: "center",
       justifyContent: "center",
-      borderColor: t.gold,
+      borderColor: t.accent,
       borderRadius: 44,
       borderWidth: 1,
       backgroundColor: t.surface,

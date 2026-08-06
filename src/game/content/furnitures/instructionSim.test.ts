@@ -1,7 +1,6 @@
 // Instruction-following simulation: plays every furniture to completion in every mode by doing exactly what the guidance layer suggests, and fuzzes free-mode orders, asserting at every visited state that
 //   1. the run never deadlocks (some suggestion always exists until the build is done),
-//   2. every soft hint for a blocked part grab points at a step the player can actually do right now (a hint naming a step that is itself blocked bounces the player between two errors — the reported EKET bottomPanel→backPanel circular pair).
-// Pure engine-layer sim: no assets, no store, no scene — fixtures are composed inline exactly like each furniture's index.ts minus the GLB/thumb requires.
+//   2. every soft hint for a blocked part grab points at a step the player can actually do right now (a hint naming a step that is itself blocked bounces the player between two errors — the reported EKET bottomPanel→backPanel circular pair). Pure engine-layer sim: no assets, no store, no scene — fixtures are composed inline exactly like each furniture's index.ts minus the GLB/thumb requires.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 

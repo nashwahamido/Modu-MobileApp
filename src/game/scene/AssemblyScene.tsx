@@ -70,8 +70,7 @@ export function AssemblyScene({
   const manualTools = useGameStore((s) => s.settings.manualTools);
   const lightingPreset = useGameStore((s) => s.settings.lightingPreset);
   const dark = useGameStore((s) => s.theme) === "dark";
-  // The blob shadow only reads correctly on the plain ("clear") backdrop — on the
-  // illustrated backdrops it sits on artwork it doesn't belong to.
+  // The blob shadow only reads correctly on the plain ("clear") backdrop — on the illustrated backdrops it sits on artwork it doesn't belong to.
   const backdrop = useGameStore((s) => s.backdrop);
   const rig = getLightRig(renderStyle, dark, lightingPreset);
 

@@ -1,5 +1,5 @@
 // The bridge between the live game store and a persistable BuildSave. snapshotBuild reads the resumable fields out; applyBuild writes a save back in. Keep this the ONLY place that maps between the two, so the persisted shape and the store can't drift.
-import type { BuildSave, UserId } from "@/src/data/types";
+import type { BuildSave, UserId } from "@/src/data/core/types";
 import { useGameStore } from "@/src/game/core/store";
 
 type GameState = ReturnType<typeof useGameStore.getState>;

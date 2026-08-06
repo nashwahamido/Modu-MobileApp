@@ -51,8 +51,7 @@ export async function saveSelectedAvatarMode(modeId: ModeId) {
     return { skipped: true as const };
   }
 
-  // Re-read the profile rather than carrying the old row's username forward: the user may have
-  // renamed themselves between finishing the questionnaire and overriding the recommended mode.
+  // Re-read the profile rather than carrying the old row's username forward: the user may have renamed themselves between finishing the questionnaire and overriding the recommended mode.
   const profile = await getProfile(user.id);
 
   const { data: latestResult, error: selectError } = await supabase

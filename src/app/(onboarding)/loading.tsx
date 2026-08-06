@@ -7,8 +7,8 @@ import { createProfileIfMissing } from "@/src/services/profile";
 import { getLatestOnboardingMode } from "@/src/services/onboarding";
 import { useGameStore } from "@/src/game/core/store";
 import type { ProfileId } from "@/src/game/core/profile";
-import { LoadingScreen } from "@/src/game/ui/LoadingScreen";
-import { type Milestone } from "@/src/game/ui/loadingProgress";
+import { LoadingScreen } from "@/src/game/ui/loading/LoadingScreen";
+import { type Milestone } from "@/src/game/ui/loading/loadingProgress";
 
 const questionnaireRoute = "/onboarding-questionnaire" as Href;
 const mainRoute = "/room" as Href;

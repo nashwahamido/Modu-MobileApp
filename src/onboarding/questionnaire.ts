@@ -8,13 +8,17 @@ export type QuestionnaireQuestion = {
   options: string[];
 };
 
+export const questionnaireIntroText =
+  "Hey! I'm Modu, your assembly assistant. Let's complete a quick questionnaire to find the avatar that fits you best.";
+export const questionnaireHandednessPrompt =
+  "First, are you left- or right-handed?";
 export const questionnaireIntroVoiceText =
-  "Hey! I am momo, your assembly assistant. Before you get started, let us complete a short questionnaire to help you find the best help mode. Before starting, tell me: are you left or right handed?";
+  `${questionnaireIntroText} ${questionnaireHandednessPrompt}`;
 
 export const questions: QuestionnaireQuestion[] = [
   {
     prompt:
-      "When you first open a brand new piece of furniture to build, I feel...",
+      "When you first open a brand new piece of furniture to build, you feel...",
     options: [
       "Overwhelmed by all the scattered screws, boards & instructions",
       "So excited that I will dismiss reading manual & start assembling",
@@ -61,29 +65,29 @@ export const questions: QuestionnaireQuestion[] = [
 
 export const scoreRules: ScoreMap[][] = [
   [
-    { visual: 0, momentum: 1, "clearPath": 2, control: 0 },
-    { visual: 0, momentum: 2, "clearPath": 1, control: 1 },
-    { visual: 1, momentum: 0, "clearPath": 2, control: 0 },
+    { visual: 0, momentum: 1, clearPath: 2, control: 0 },
+    { visual: 0, momentum: 2, clearPath: 1, control: 1 },
+    { visual: 1, momentum: 0, clearPath: 2, control: 0 },
   ],
   [
-    { visual: 0, momentum: 2, "clearPath": 1, control: 0 },
-    { visual: 0, momentum: 2, "clearPath": 1, control: 0 },
-    { visual: 0, momentum: 0, "clearPath": 0, control: 2 },
+    { visual: 0, momentum: 2, clearPath: 1, control: 0 },
+    { visual: 0, momentum: 2, clearPath: 1, control: 0 },
+    { visual: 0, momentum: 0, clearPath: 0, control: 2 },
   ],
   [
-    { visual: 2, momentum: 0, "clearPath": 0, control: 1 },
-    { visual: 2, momentum: 0, "clearPath": 1, control: 0 },
-    { visual: 0, momentum: 0, "clearPath": 1, control: 2 },
+    { visual: 2, momentum: 0, clearPath: 0, control: 1 },
+    { visual: 2, momentum: 0, clearPath: 1, control: 0 },
+    { visual: 0, momentum: 0, clearPath: 1, control: 2 },
   ],
   [
-    { visual: 0, momentum: 2, "clearPath": 0, control: 0 },
-    { visual: 0, momentum: 0, "clearPath": 2, control: 1 },
-    { visual: 0, momentum: 1, "clearPath": 0, control: 2 },
+    { visual: 0, momentum: 2, clearPath: 0, control: 0 },
+    { visual: 0, momentum: 0, clearPath: 2, control: 1 },
+    { visual: 0, momentum: 1, clearPath: 0, control: 2 },
   ],
   [
-    { visual: 2, momentum: 0, "clearPath": 1, control: 0 },
-    { visual: 2, momentum: 0, "clearPath": 0, control: 1 },
-    { visual: 0, momentum: 0, "clearPath": 0, control: 2 },
+    { visual: 2, momentum: 0, clearPath: 1, control: 0 },
+    { visual: 2, momentum: 0, clearPath: 0, control: 1 },
+    { visual: 0, momentum: 0, clearPath: 0, control: 2 },
   ],
 ];
 
@@ -98,7 +102,7 @@ export const getRecommendedModes = (answers: string[]) => {
   const scores: ScoreMap = {
     visual: 0,
     momentum: 0,
-    "clearPath": 0,
+    clearPath: 0,
     control: 0,
   };
 
@@ -120,8 +124,7 @@ export const getRecommendedModes = (answers: string[]) => {
       return scoreDifference;
     }
     return (
-      tieBreakPriority.indexOf(firstMode) -
-      tieBreakPriority.indexOf(secondMode)
+      tieBreakPriority.indexOf(firstMode) - tieBreakPriority.indexOf(secondMode)
     );
   });
 };

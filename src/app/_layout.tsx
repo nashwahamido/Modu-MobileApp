@@ -16,9 +16,7 @@ import { useCatalogSync } from "@/src/hooks/useCatalogSync";
 import { useSessionGate } from "@/src/hooks/useSessionGate";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 
-// The gated app tree. Lives INSIDE AuthProvider so useDevAutoSignIn reads the one shared session.
-// While the dev session is coming up it holds render, so no screen mounts (and queries the DB) until
-// a real user id is available — everything under here reads the same auth state in the same commit.
+// The gated app tree. Lives INSIDE AuthProvider so useDevAutoSignIn reads the one shared session. While the dev session is coming up it holds render, so no screen mounts (and queries the DB) until a real user id is available — everything under here reads the same auth state in the same commit.
 function AppContent() {
   const holdForDevAuth = useDevAutoSignIn();
   // Called before the early return below: hooks cannot be conditional.
@@ -48,9 +46,7 @@ function AppContent() {
 export default function RootLayout() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
 
-  // Hide Android's system navigation bar (the gesture/3-button handles that were overlapping
-  // the joystick). "inset-swipe" = the bar stays gone and slides back only on an edge swipe,
-  // then auto-hides again — the standard game/immersive behaviour. No-op on iOS.
+  // Hide Android's system navigation bar (the gesture/3-button handles that were overlapping the joystick). "inset-swipe" = the bar stays gone and slides back only on an edge swipe, then auto-hides again — the standard game/immersive behaviour. No-op on iOS.
   useEffect(() => {
     if (Platform.OS !== "android") return;
     NavigationBar.setVisibilityAsync("hidden");

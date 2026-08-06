@@ -2,13 +2,15 @@
 import type { PostgrestError } from "@supabase/supabase-js";
 import { supabase } from "@/src/config/supabase";
 import type { AssemblyMode, BrandId, FurnitureId } from "@/src/game/core/type";
-import type { BuildProgressRepo, CatalogRepo, FriendsRepo, ItemVariant, PlaceableRoomRow, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo, VariantsRepo } from "../repos";
-import type { BuildSave, Profile, ProfilePatch, RoomLayout } from "../types";
-import type { ShopCategory, ShopItem } from "../shopItems";
-import type { AvatarRef } from "../avatars";
-import { idForMode, modeForId } from "../avatars";
-import type { LevelRow } from "../levels";
-import { levelSpan, titleForLevel } from "../levels";
+import type { BuildProgressRepo, CatalogRepo, FriendRequestsRepo, FriendsRepo, ItemVariant, PlaceableRoomRow, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo, VariantsRepo } from "../core/repos";
+import type { BuildSave, FriendRequest, Profile, ProfilePatch, RoomLayout } from "../core/types";
+import { ROOM_LAYOUT_VERSION } from "../core/types";
+import type { ShopCategory, ShopItem } from "../shop/items";
+import type { AvatarRef } from "../player/avatars";
+import { idForMode, modeForId } from "../player/avatars";
+import type { LevelRow } from "../player/levels";
+import { levelSpan, titleForLevel } from "../player/levels";
+import { migrateRoomPlacements } from "../room/layoutMigrate";
 
 // Throw on any Postgrest error so callers get a real failure instead of a silent null.
 function check(error: PostgrestError | null): void {
@@ -88,8 +90,7 @@ function rowToProfile(r: ProfileRow, refs: Refs): Profile {
   };
 }
 
-// Only the patched keys are sent, mapped to their columns. title is derived (not writable); avatarMode maps to the avatar_id FK.
-// coin/xp/level are absent BY DESIGN — see ProfilePatch. They are economy state and move only through the RPCs; the DB revokes UPDATE on those columns, so adding them back here would fail at the API anyway.
+// Only the patched keys are sent, mapped to their columns. title is derived (not writable); avatarMode maps to the avatar_id FK. coin/xp/level are absent BY DESIGN — see ProfilePatch. They are economy state and move only through the RPCs; the DB revokes UPDATE on those columns, so adding them back here would fail at the API anyway.
 function profilePatchToRow(patch: ProfilePatch, avatars: AvatarRef[]): Record<string, unknown> {
   const row: Record<string, unknown> = {};
   if ("username" in patch) row.username = patch.username;
@@ -111,6 +112,13 @@ const profileRepo: ProfileRepo = {
     const { data, error } = await supabase.from("user_profile").select("*").in("user_id", userIds);
     check(error);
     return (data as ProfileRow[]).map((r) => rowToProfile(r, refs));
+  },
+  async findByUsername(username) {
+    const refs = await getRefs();
+    // maybeSingle, not single: "no such player" is an ordinary outcome of a search and must not throw. user_profile_username_key guarantees at most one row.
+    const { data, error } = await supabase.from("user_profile").select("*").eq("username", username).maybeSingle();
+    check(error);
+    return data ? rowToProfile(data as ProfileRow, refs) : null;
   },
   async update(userId, patch) {
     const refs = await getRefs();
@@ -161,10 +169,13 @@ const catalogRepo: CatalogRepo = {
     // The union view spans both item tables; a null size means "no room model authored", so those rows are filtered server-side — the room never sees an item it could not place. category_id rides along because it routes the placement surface (window -> wall).
     const { data, error } = await supabase
       .from("placeable_items")
-      .select("id, source, category_id, size_x, size_y, size_z, base_offset_y")
+      .select("id, source, category_id, size_x, size_y, size_z, base_offset_y, light_type, light_lumens, light_kelvin, light_reach_m, light_cone_deg, light_bulb_x, light_bulb_y, light_bulb_z, light_aim_pitch_deg, light_aim_yaw_deg, footprint_mask, top_surface")
       .not("size_x", "is", null);
     check(error);
-    type Row = { id: string; source: "built" | "bought"; category_id: string; size_x: number; size_y: number; size_z: number; base_offset_y: number };
+    type Row = { id: string; source: "built" | "bought"; category_id: string; size_x: number; size_y: number; size_z: number; base_offset_y: number;
+      light_type: "point" | "spot" | null; light_lumens: number | null; light_kelvin: number | null; light_reach_m: number | null; light_cone_deg: number | null;
+      light_bulb_x: number | null; light_bulb_y: number | null; light_bulb_z: number | null;
+      light_aim_pitch_deg: number | null; light_aim_yaw_deg: number | null; footprint_mask: string | null; top_surface: boolean | null };
     return ((data ?? []) as Row[]).map(
       (r): PlaceableRoomRow => ({
         id: r.id,
@@ -172,6 +183,25 @@ const catalogRepo: CatalogRepo = {
         category: r.category_id as PlaceableRoomRow["category"],
         size: { x: r.size_x, y: r.size_y, z: r.size_z },
         baseOffsetY: r.base_offset_y,
+        // Null for everything but a lamp — the view LEFT JOINs item_lights. The required columns are NOT NULL in that table, so light_type carrying a value means the rest do too. bulb_* are NOT NULL with a 0 default, hence the ?? 0: a row written before migration 014 reads as a bulb at the piece's own origin, which is wrong but harmless, rather than as NaN.
+        light:
+          r.light_type != null
+            ? {
+                type: r.light_type,
+                lumens: r.light_lumens as number,
+                kelvin: r.light_kelvin as number,
+                reachMetres: r.light_reach_m as number,
+                coneDeg: r.light_cone_deg ?? undefined,
+                bulb: { x: r.light_bulb_x ?? 0, y: r.light_bulb_y ?? 0, z: r.light_bulb_z ?? 0 },
+                // Both angles or neither — item_lights constrains them together, so a half-set pair means a hand-edited row and is treated as no aim rather than as half an aim.
+                aim:
+                  r.light_aim_pitch_deg != null && r.light_aim_yaw_deg != null
+                    ? { pitchDeg: r.light_aim_pitch_deg, yawDeg: r.light_aim_yaw_deg }
+                    : undefined,
+              }
+            : undefined,
+        ...(r.footprint_mask ? { footprintMask: r.footprint_mask } : {}),
+        ...(r.top_surface ? { topSurface: true } : {}),
       }),
     );
   },
@@ -179,7 +209,7 @@ const catalogRepo: CatalogRepo = {
 
 // --- rooms ------------------------------------------------------------------
 
-// The jsonb column carries a versioned envelope: { version, placements }. Legacy rows hold a bare array from the pre-grid model — those coordinates are meaningless on the grid, so any shape other than the current envelope reads as an empty room rather than a mis-placed one.
+// The jsonb column carries a versioned envelope: { version, placements }. Legacy rows hold a bare array from the pre-grid model — those coordinates are meaningless on the grid, so any shape other than the current envelope reads as an empty room rather than a mis-placed one. The version history spans 1 (half-metre cells) and 2 (quarter-metre).
 type RoomEnvelope = { version: number; placements: RoomLayout["placements"] };
 type RoomRow = { owner_id: string; placements: RoomEnvelope | unknown[]; updated_at: string };
 
@@ -187,20 +217,15 @@ const roomRepo: RoomLayoutRepo = {
   async get(ownerId) {
     const { data, error } = await supabase.from("user_room").select("*").eq("owner_id", ownerId).maybeSingle();
     check(error);
-    if (!data) return { ownerId, version: 1, placements: [], updatedAt: new Date().toISOString() };
+    if (!data) return { ownerId, version: ROOM_LAYOUT_VERSION, placements: [], updatedAt: new Date().toISOString() };
     const row = data as RoomRow;
-    const envelope = row.placements;
-    // Version AND shape: a malformed row ({version:1} with no/null placements) must read as an empty room, not hand `undefined` to the store to throw on later.
-    const placements =
-      !Array.isArray(envelope) && envelope?.version === 1 && Array.isArray(envelope.placements)
-        ? envelope.placements
-        : [];
-    return { ownerId: row.owner_id, version: 1, placements, updatedAt: row.updated_at };
+    // migrateRoomPlacements owns the whole envelope policy: v1 floor anchors double onto the quarter grid, v2 verbatim, anything else (legacy bare arrays, malformed rows, unknown versions) an empty room.
+    return { ownerId: row.owner_id, version: ROOM_LAYOUT_VERSION, placements: migrateRoomPlacements(row.placements), updatedAt: row.updated_at };
   },
   async save(ownerId, layout) {
     const { error } = await supabase.from("user_room").upsert({
       owner_id: ownerId,
-      placements: { version: 1, placements: layout.placements } satisfies RoomEnvelope,
+      placements: { version: ROOM_LAYOUT_VERSION, placements: layout.placements } satisfies RoomEnvelope,
       updated_at: new Date().toISOString(),
     });
     check(error);
@@ -223,6 +248,41 @@ const friendsRepo: FriendsRepo = {
   },
   async remove(userId, friendId) {
     const { error } = await supabase.from("friends").delete().eq("user_id", userId).eq("friend_id", friendId);
+    check(error);
+  },
+};
+
+// --- friend requests --------------------------------------------------------
+
+type FriendRequestRow = { from_id: string; to_id: string; created_at: string };
+
+const toRequest = (r: FriendRequestRow): FriendRequest => ({ fromId: r.from_id, toId: r.to_id, createdAt: r.created_at });
+
+const friendRequestsRepo: FriendRequestsRepo = {
+  async listIncoming(userId) {
+    // Explicit order, newest first: without it Postgres is free to return rows in any order it likes, which can change between two loads on identical data, unlike the in-memory adapter, whose plain array filter is deterministic by construction.
+    const { data, error } = await supabase.from("friend_requests").select("from_id, to_id, created_at").eq("to_id", userId).order("created_at", { ascending: false });
+    check(error);
+    return (data as FriendRequestRow[]).map(toRequest);
+  },
+  async listOutgoing(userId) {
+    // Same reasoning as listIncoming above: an explicit order keeps this deterministic and in step with the in-memory adapter.
+    const { data, error } = await supabase.from("friend_requests").select("from_id, to_id, created_at").eq("from_id", userId).order("created_at", { ascending: false });
+    check(error);
+    return (data as FriendRequestRow[]).map(toRequest);
+  },
+  async send(fromId, toId) {
+    // (from_id, to_id) is the primary key, so a repeat send collides; ignoreDuplicates turns that into the no-op the UI expects rather than an error the player would see.
+    const { error } = await supabase.from("friend_requests").upsert({ from_id: fromId, to_id: toId }, { ignoreDuplicates: true });
+    check(error);
+  },
+  async accept(_recipientId, requesterId) {
+    // recipientId is deliberately UNUSED here. The RPC reads the recipient from auth.uid(); passing one would mean a caller could name someone else and befriend two accounts that never consented.
+    const { error } = await supabase.rpc("accept_friend_request", { requester: requesterId });
+    check(error);
+  },
+  async withdraw(fromId, toId) {
+    const { error } = await supabase.from("friend_requests").delete().eq("from_id", fromId).eq("to_id", toId);
     check(error);
   },
 };
@@ -427,8 +487,7 @@ const storeRepo: StoreRepo = {
 
 const variantsRepo: VariantsRepo = {
   async list() {
-    // Whole table, no filter: reference data of a few rows per item, cached client-side by variantStore.
-    // Ordered so the picker's swatch row is stable across sessions rather than following the DB's whim.
+    // Whole table, no filter: reference data of a few rows per item, cached client-side by variantStore. Ordered so the picker's swatch row is stable across sessions rather than following the DB's whim.
     const { data, error } = await supabase
       .from("item_variants")
       .select("item_id, variation, is_default")
@@ -443,5 +502,5 @@ const variantsRepo: VariantsRepo = {
 };
 
 export function createSupabaseRepos(): Repos {
-  return { catalog: catalogRepo, profiles: profileRepo, rooms: roomRepo, friends: friendsRepo, builds: buildRepo, likes: likesRepo, store: storeRepo, variants: variantsRepo };
+  return { catalog: catalogRepo, profiles: profileRepo, rooms: roomRepo, friends: friendsRepo, friendRequests: friendRequestsRepo, builds: buildRepo, likes: likesRepo, store: storeRepo, variants: variantsRepo };
 }

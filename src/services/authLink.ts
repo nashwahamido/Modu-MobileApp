@@ -1,10 +1,7 @@
-// Consumes the Supabase auth redirect (the modu:// magic-link callback) and turns it into a session.
-// Without this the email link brings the app up but the tokens ride in on the URL and are dropped:
-// detectSessionInUrl is false on native (it is a web-only concern), so nothing reads them otherwise.
+// Consumes the Supabase auth redirect (the modu:// magic-link callback) and turns it into a session. Without this the email link brings the app up but the tokens ride in on the URL and are dropped: detectSessionInUrl is false on native (it is a web-only concern), so nothing reads them otherwise.
 import { supabase } from "../config/supabase";
 
-// Both auth flows are handled, so switching flowType later needs no change here: implicit returns
-// access_token/refresh_token in the URL fragment, PKCE returns a single-use code in the query.
+// Both auth flows are handled, so switching flowType later needs no change here: implicit returns access_token/refresh_token in the URL fragment, PKCE returns a single-use code in the query.
 export type AuthLinkResult =
   | { status: "signed-in" }
   // Not an auth callback at all — an ordinary deep link, which the caller should ignore.

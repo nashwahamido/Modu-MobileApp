@@ -89,8 +89,7 @@ const HARDWARE_RAW = {
     label: { standard: "Bracket screw", simple: "Screw" },
     note: "fixes the rear runner bracket to the drawer box",
   },
-  // screw110519 (drawer-back screw) is already defined above — shared article number
-  // bolt128918 (drawer front keyhole bolts) removed 2026-07-20: the bolts now ship pre-attached — merged into the side-panel meshes in the GLB — so they are no longer separate parts and need no hardware entry, insert/tighten action or fastener rule
+  // screw110519 (drawer-back screw) is already defined above — shared article number bolt128918 (drawer front keyhole bolts) removed 2026-07-20: the bolts now ship pre-attached — merged into the side-panel meshes in the GLB — so they are no longer separate parts and need no hardware entry, insert/tighten action or fastener rule
   dowel145572: {
     tool: "hand",
     // manual step 22: (1) PRESS the knurled dowel into the stabiliser rod's end at staging (the insert beat), then (2+3) once the rod is seated, DRAW it OUT along its axis into the runner-slider hole and quarter-turn it to lock — folded into the single `drawTurn` tighten beat (DrawTurnControl: slider animates the draw-out translation; the rotate-lock dial is PROMPT-ONLY, the dowel never visibly spins).

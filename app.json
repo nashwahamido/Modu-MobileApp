@@ -26,7 +26,41 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.modu.app"
     },
-    "plugins": ["expo-router", "expo-audio", "expo-asset"],
+    "plugins": [
+      "expo-router",
+      "expo-audio",
+      "expo-asset",
+      [
+        "expo-font",
+        {
+          "android": {
+            "fonts": [
+              {
+                "fontFamily": "Lexend",
+                "fontDefinitions": [
+                  { "path": "./src/assets/fonts/Lexend-Regular.ttf",   "weight": 400 },
+                  { "path": "./src/assets/fonts/Lexend-Medium.ttf",    "weight": 500 },
+                  { "path": "./src/assets/fonts/Lexend-SemiBold.ttf",  "weight": 600 },
+                  { "path": "./src/assets/fonts/Lexend-Bold.ttf",      "weight": 700 },
+                  { "path": "./src/assets/fonts/Lexend-ExtraBold.ttf", "weight": 800 },
+                  { "path": "./src/assets/fonts/Lexend-Black.ttf",     "weight": 900 }
+                ]
+              }
+            ]
+          },
+          "ios": {
+            "fonts": [
+              "./src/assets/fonts/Lexend-Regular.ttf",
+              "./src/assets/fonts/Lexend-Medium.ttf",
+              "./src/assets/fonts/Lexend-SemiBold.ttf",
+              "./src/assets/fonts/Lexend-Bold.ttf",
+              "./src/assets/fonts/Lexend-ExtraBold.ttf",
+              "./src/assets/fonts/Lexend-Black.ttf"
+            ]
+          }
+        }
+      ]
+    ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true

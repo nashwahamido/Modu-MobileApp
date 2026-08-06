@@ -14,8 +14,7 @@ import { ROOM_SHELL } from "./roomShell";
 
 const CELL = ROOM_SHELL.cellSize;
 
-// The registry is module state; every test starts from the same catalog — the bundled built set
-// plus bought rows shaped like the DB seed: a floor item (malm-chest) and a wall item (a window).
+// The registry is module state; every test starts from the same catalog — the bundled built set plus bought rows shaped like the DB seed: a floor item (malm-chest) and a wall item (a window).
 beforeEach(() => {
   registerPlaceables([
     { id: "malm-chest", source: "bought", category: "fur", size: { x: 0.804, y: 1.004, z: 0.483 }, baseOffsetY: 0 },
@@ -24,8 +23,7 @@ beforeEach(() => {
 });
 
 test("every item renders at the one world scale — no per-item drift", () => {
-  // The whole point of the factor: pieces keep their true proportions relative to EACH OTHER.
-  // With ceil-derived footprints the fitScale guard can never bind, bought rows included.
+  // The whole point of the factor: pieces keep their true proportions relative to EACH OTHER. With ceil-derived footprints the fitScale guard can never bind, bought rows included — and wall items bypass the guard entirely by design, since their footprint is a hole sized to the NEAREST cell and deliberately allowed to be smaller than the model (see fitScale).
   for (const [itemId] of roomItemDefs()) {
     const item = getRoomItem(itemId)!;
     assert.equal(
@@ -70,8 +68,8 @@ test("the bundled built set survives any catalog the DB sends", () => {
 
 test("a registered bought item is placeable, with its footprint derived from the measured size", () => {
   const item = getRoomItem("malm-chest")!;
-  // At world scale 1: 0.804 / 0.5 = 1.61 → 2 cells; 0.483 / 0.5 = 0.97 → 1 cell.
-  assert.deepEqual(item.def.footprint, { w: 2, d: 1 });
+  // At world scale 1: 0.804 / 0.25 = 3.22 → 4 cells; 0.483 / 0.25 = 1.93 → 2 cells.
+  assert.deepEqual(item.def.footprint, { w: 4, d: 2 });
   assert.equal(item.source, "bought");
   assert.ok(roomItemDefs().has("malm-chest"));
 });
@@ -92,16 +90,51 @@ test("asset subtree follows acquisition — the catalog row decides, the bundle 
 });
 
 test("built items need a colour for a storage path — no colour means the bundled model", () => {
-  // Null is the caller's signal to fall back (variantModel.ts). An id the room cannot place must
-  // never produce a path that would 404 at load time.
+  // Null is the caller's signal to fall back (variantModel.ts). An id the room cannot place must never produce a path that would 404 at load time.
   assert.equal(getRoomItemStoragePath("eket-cabinet", null), null);
   assert.equal(getRoomItemStoragePath("eket-cabinet", undefined), null);
   assert.equal(getRoomItemStoragePath("not-an-item", "black"), null);
   assert.equal(getRoomItemStoragePath("eket-cabinet", "black"), "room/built/eket-cabinet/black.glb");
 });
 
+test("a top_surface row exposes its top; unflagged and window rows do not", () => {
+  registerPlaceables([
+    { id: "side-table", source: "bought", category: "fur", size: { x: 0.5, y: 0.5, z: 0.5 }, baseOffsetY: 0, topSurface: true },
+    { id: "plain-chest", source: "bought", category: "fur", size: { x: 0.5, y: 0.5, z: 0.5 }, baseOffsetY: 0 },
+    { id: "flagged-window", source: "bought", category: "win", size: { x: 1.0, y: 1.25, z: 0.2 }, baseOffsetY: 0, topSurface: true },
+  ]);
+  assert.equal(roomItemDefs().get("side-table")?.hostsTop, true);
+  assert.equal(roomItemDefs().get("plain-chest")?.hostsTop, undefined);
+  assert.equal(roomItemDefs().get("flagged-window")?.hostsTop, undefined);
+});
+
 test("bought items always resolve to storage — the 'default' segment when no colour is picked", () => {
   // A bought item has no bundled fallback, so even without a colour axis it must load from storage.
   assert.equal(getRoomItemStoragePath("malm-chest", null), "room/bought/malm-chest/default.glb");
   assert.equal(getRoomItemStoragePath("malm-chest", "white"), "room/bought/malm-chest/white.glb");
+});
+
+test("a row's footprint mask reaches the def when it matches the derived footprint", () => {
+  registerPlaceables([
+    { id: "l-couch", source: "bought", category: "fur", size: { x: CELL * 2, y: 0.5, z: CELL * 2 }, baseOffsetY: 0, footprintMask: "XX/X." },
+  ]);
+  assert.deepEqual(roomItemDefs().get("l-couch")?.mask, ["XX", "X."]);
+});
+
+test("a mask that disagrees with the footprint is dropped for the solid rect, not trusted", () => {
+  registerPlaceables([
+    // 2x2 footprint but a 3-wide mask: a seeding mistake — collision must fall back to the rect.
+    { id: "bad-mask", source: "bought", category: "fur", size: { x: CELL * 2, y: 0.5, z: CELL * 2 }, baseOffsetY: 0, footprintMask: "XXX/X.." },
+    // An empty border column lies about the bbox: also dropped.
+    { id: "hollow-border", source: "bought", category: "fur", size: { x: CELL * 2, y: 0.5, z: CELL * 2 }, baseOffsetY: 0, footprintMask: ".X/.X" },
+  ]);
+  assert.equal(roomItemDefs().get("bad-mask")?.mask, undefined);
+  assert.equal(roomItemDefs().get("hollow-border")?.mask, undefined);
+});
+
+test("window rows never carry a mask — their footprint is already the exact hole", () => {
+  registerPlaceables([
+    { id: "masked-window", source: "bought", category: "win", size: { x: 1.0, y: 1.25, z: 0.2 }, baseOffsetY: 0, footprintMask: "XXXX" },
+  ]);
+  assert.equal(roomItemDefs().get("masked-window")?.mask, undefined);
 });

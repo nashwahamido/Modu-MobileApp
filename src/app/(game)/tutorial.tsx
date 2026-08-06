@@ -3,8 +3,7 @@ import { router } from "expo-router";
 import { OrientationLock } from "expo-screen-orientation";
 import { View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { HUD_SIDE_MARGIN, HUD_VERTICAL_MARGIN } from "@/src/hooks/use-safe-insets";
+import { HUD_SIDE_MARGIN, useHudInsets } from '@/src/hooks/use-safe-insets';
 
 import { FilamentScene } from "react-native-filament";
 
@@ -12,24 +11,24 @@ import { AssemblyScene } from "@/src/game/scene/AssemblyScene";
 import { useAssemblyDrivers } from "@/src/game/scene/useAssemblyDrivers";
 import { useSceneState } from "@/src/game/scene/useSceneState";
 
-import { Joystick } from "@/src/game/input/Joystick";
-import { useOrbitCamera } from "@/src/game/input/useOrbitCamera";
-import { usePartDrag } from "@/src/game/input/usePartDrag";
-import { BeatControl } from "@/src/game/input/BeatControl";
-import { TapControl } from "@/src/game/input/TapControl";
-import { TightenControl } from "@/src/game/input/TightenControl";
-import { RotateControl } from "@/src/game/input/RotateControl";
-import { SlideControl } from "@/src/game/input/SlideControl";
-import { PressControl } from "@/src/game/input/PressControl";
-import { ToolBar } from "@/src/game/ui/ToolBar";
-import { ObjectiveBar } from "@/src/game/ui/ObjectiveBar";
+import { Joystick } from "@/src/game/input/camera/Joystick";
+import { useOrbitCamera } from "@/src/game/input/camera/useOrbitCamera";
+import { usePartDrag } from "@/src/game/input/drag/usePartDrag";
+import { BeatControl } from "@/src/game/input/slide/BeatControl";
+import { TapControl } from "@/src/game/input/pad/TapControl";
+import { TightenControl } from "@/src/game/input/dial/TightenControl";
+import { RotateControl } from "@/src/game/input/dial/RotateControl";
+import { SlideControl } from "@/src/game/input/slide/SlideControl";
+import { PressControl } from "@/src/game/input/pad/PressControl";
+import { ToolBar } from "@/src/game/ui/hud/ToolBar";
+import { ObjectiveBar } from "@/src/game/ui/hud/ObjectiveBar";
 import {
   HintButton,
   RecenterButton,
   hudControlStyles as hudControls,
   tutorialChrome as styles,
-} from "@/src/game/ui/hudChrome";
-import { Button } from "@/src/game/ui/Button";
+} from "@/src/game/ui/hud/hudChrome";
+import { Button } from "@/src/game/ui/system/Button";
 import { useStepObjective } from "@/src/game/core/presentation/useStepObjective";
 
 import { useGameStore } from "@/src/game/core/store";
@@ -43,35 +42,41 @@ import {
   loadFurnitureById,
 } from "@/src/game/content/furnitures/furnitures";
 
-import { GreenFlash } from "@/src/game/ui/GreenFlash";
-import { HintToast } from "@/src/game/ui/HintToast";
-import { CenterDropRing } from "@/src/game/ui/CenterDropRing";
-import { FitChip } from "@/src/game/ui/FitChip";
-import { PartsTray } from "@/src/game/ui/PartsTray";
-import { ClusterTray } from "@/src/game/ui/ClusterTray";
-import { UndoButton } from "@/src/game/ui/UndoButton";
-import { TutorialGameSettings } from "@/src/game/tutorial/TutorialGameSettings";
-import { ClusterFocusControl } from "@/src/game/ui/ClusterFocusControl";
-import { SceneBackdrop } from "@/src/game/ui/SceneBackdrop";
+import { GreenFlash } from "@/src/game/ui/feedback/GreenFlash";
+import { HintToast } from "@/src/game/ui/feedback/HintToast";
+import { CenterDropRing } from "@/src/game/ui/feedback/CenterDropRing";
+import { FitChip } from "@/src/game/ui/feedback/FitChip";
+import { PartsTray } from "@/src/game/ui/hud/PartsTray";
+import { ClusterTray } from "@/src/game/ui/hud/ClusterTray";
+import { UndoButton } from "@/src/game/ui/hud/UndoButton";
+import { GameSettings } from "@/src/game/ui/settings/GameSettings";
+import { ClusterFocusControl } from "@/src/game/ui/hud/ClusterFocusControl";
+import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
+import { backdropSource } from "@/src/game/ui/backdrop/backdrops";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 import {
-  currentStageForClusterFocus,
   requiresClusterFocus,
 } from "@/src/game/core/evaluation/clusters";
 import { availableInMode } from "@/src/game/core/evaluation/availability";
 import { TutorialTarget } from "@/src/game/tutorial/TutorialTarget";
 import { MascotGuideOverlay } from "@/src/game/tutorial/MascotGuideOverlay";
+import { TutorialStepRail } from "@/src/game/tutorial/TutorialStepRail";
+import { MomentumCompanion } from "@/src/game/tutorial/MomentumCompanion";
+import { MomentumStepHeader } from "@/src/game/tutorial/MomentumStepHeader";
+import { MomentumAttentionOverlay } from "@/src/game/tutorial/MomentumAttentionOverlay";
 import { useTutorialStore } from "@/src/game/tutorial/store";
 import { furnitureForProfile } from "@/src/game/core/profile";
+import { tutorialPresentationForProfile } from "@/src/game/tutorial/presentation";
 import {
   TUTORIAL_STEP_REWARD_TOKENS,
   type ToolTutorialKind,
 } from "@/src/game/tutorial/steps";
 
+const TUTORIAL_FURNITURE_ID = "lack-table";
+
 function TutorialScreen() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
-  const insets = useSafeAreaInsets();
-
+  const hud = useHudInsets();
   const sceneState = useSceneState();
   const {
     heldDriver,
@@ -94,16 +99,14 @@ function TutorialScreen() {
     onPanEnd,
     resetCamera,
     getFocusPoint,
+    isViewingUnderside,
   } = useOrbitCamera({ stableFraming: true, stickShared });
   const lastScale = useRef(1);
   const joystickTutorialStartedAt = useRef<number | null>(null);
+  const [guideCollapsed, setGuideCollapsed] = useState(false);
 
   // Stabilised with useCallback so <Joystick>'s internal gesture memo actually holds.
-  // The tutorial needs to wrap the raw camera callbacks to drive step tracking; passing
-  // fresh inline arrows would hand Joystick new props every render, defeating its memo
-  // and reattaching the native pan handler mid-drag — the very stutter the memo prevents
-  // on the play screen. getState() and the ref read are non-reactive, so the underlying
-  // camera callback is the only real dependency.
+  // The tutorial needs to wrap the raw camera callbacks to drive step tracking; passing fresh inline arrows would hand Joystick new props every render, defeating its memo and reattaching the native pan handler mid-drag — the very stutter the memo prevents on the play screen. getState() and the ref read are non-reactive, so the underlying camera callback is the only real dependency.
   const handleStickStart = useCallback(() => {
     joystickTutorialStartedAt.current = Date.now();
     onStickStart();
@@ -119,9 +122,14 @@ function TutorialScreen() {
         Math.hypot(x, y) > 0.15
       ) {
         useTutorialStore.getState().completeEvent("joystick_moved");
+        if (isViewingUnderside()) {
+          useTutorialStore
+            .getState()
+            .completeEvent("underside_view_reached");
+        }
       }
     },
-    [onStickMove],
+    [isViewingUnderside, onStickMove],
   );
 
   const handleStickEnd = useCallback(() => {
@@ -139,7 +147,7 @@ function TutorialScreen() {
       manualTools: state.settings.manualTools,
       softHints: state.settings.softHints,
     });
-    loadFurnitureById("tutorial")
+    loadFurnitureById(TUTORIAL_FURNITURE_ID)
       .then((f) => {
         if (active) useGameStore.getState().loadFurniture(f);
       })
@@ -154,6 +162,14 @@ function TutorialScreen() {
       useGameStore.subscribe((state, previous) => {
         const tutorial = useTutorialStore.getState();
         if (!previous.heldActionId && state.heldActionId) {
+          const currentStepId =
+            tutorial.steps[tutorial.currentIndex]?.id;
+          if (
+            currentStepId === "install-four-legs" ||
+            currentStepId === "place-connector"
+          ) {
+            setGuideCollapsed(true);
+          }
           tutorial.completeEvent("part_picked_up");
         }
         if (state.completed.length < previous.completed.length) {
@@ -180,6 +196,9 @@ function TutorialScreen() {
             }
             if (action?.type === "tightenFastener") {
               tutorial.completeEvent("tool_used");
+            }
+            if (action?.type === "reorient") {
+              tutorial.completeEvent("assembly_reoriented");
             }
           }
         }
@@ -214,21 +233,23 @@ function TutorialScreen() {
   );
 
   const furniture = useGameStore((s) => s.furniture);
-  // Subscribe to `completed` by REFERENCE and derive in a useMemo, rather than rebuilding
-  // `new Set(s.completed)` and walking the graph inside the selector on every store write.
-  // Matters most during a drag, where setDragFit fires per frame — same fix as play.tsx.
+  // Subscribe to `completed` by REFERENCE and derive in a useMemo, rather than rebuilding `new Set(s.completed)` and walking the graph inside the selector on every store write. Matters most during a drag, where setDragFit fires per frame — same fix as play.tsx.
   const completed = useGameStore((s) => s.completed);
   const completedSet = useMemo(() => new Set(completed), [completed]);
+  const tutorialStepEvent = useTutorialStore(
+    (s) => s.steps[s.currentIndex]?.event,
+  );
+  const tutorialStepId = useTutorialStore(
+    (s) => s.steps[s.currentIndex]?.id,
+  );
+  const tutorialAdvancing = useTutorialStore(
+    (s) => s.pendingAdvanceStepId !== null,
+  );
   const activeCluster = useGameStore((s) => s.activeCluster);
   const mode = useGameStore((s) => s.mode);
-  const stage = useMemo(
-    () =>
-      furniture
-        ? currentStageForClusterFocus(furniture, completedSet, activeCluster)
-        : 1,
-    [furniture, completedSet, activeCluster],
-  );
   const settings = useGameStore((s) => s.settings);
+  const profile = useGameStore((s) => s.profile);
+  const tutorialPresentation = tutorialPresentationForProfile(profile);
   const heldActionId = useGameStore((s) => s.heldActionId);
   const renderStyle = useGameStore((s) => s.renderStyle);
   const backdrop = useGameStore((s) => s.backdrop);
@@ -251,30 +272,108 @@ function TutorialScreen() {
   const guideStepCount = useTutorialStore((s) => s.steps.length);
   const orientationActionId = useGameStore((s) => s.orientationActionId);
   const totalCount = furniture?.actions.length ?? 0;
+  const installedLegCount = useMemo(
+    () =>
+      furniture?.actions.filter(
+        (action) =>
+          completedSet.has(action.actionId) &&
+          action.type === "placePart" &&
+          action.partId?.startsWith("leg_"),
+      ).length ?? 0,
+    [completedSet, furniture],
+  );
+  const collapsedLegGuide =
+    guideCollapsed && tutorialStepId === "install-four-legs";
+  const collapsedActionGuide =
+    guideCollapsed &&
+    (tutorialStepId === "install-four-legs" ||
+      tutorialStepId === "place-connector");
+  const tutorialTrayItems = useMemo(() => {
+    if (
+      tutorialAdvancing &&
+      (tutorialStepId === "install-four-legs" ||
+        tutorialStepId === "view-under-table" ||
+        tutorialStepId === "place-connector" ||
+        tutorialStepId === "select-allen-key" ||
+        tutorialStepId === "tighten-connector")
+    ) {
+      return [];
+    }
+    if (tutorialStepId === "install-four-legs") {
+      // After the first taught bolt → tool → leg cycle, expose the normal legal sequence so the remaining three cycles can alternate correctly.
+      return sceneState.trayItems;
+    }
+    if (tutorialStepId === "view-under-table") return [];
+    if (tutorialStepId === "place-connector") {
+      return sceneState.trayItems.filter(
+        (item) =>
+          item.action?.type === "placeFastener" ||
+          item.action?.type === "insertFastener",
+      );
+    }
+    if (tutorialStepId === "select-allen-key") return [];
+    if (tutorialStepId === "tighten-connector") return [];
+    return sceneState.trayItems;
+  }, [sceneState.trayItems, tutorialAdvancing, tutorialStepId]);
 
-  // Record the tutorial furniture as a completed build once it's assembled — so the player owns it
-  // (it's a placeable built_item) and it counts toward assembly_count, like any build. Fires once.
+  useEffect(() => {
+    setGuideCollapsed(false);
+  }, [tutorialStepId]);
+
+  // LACK-specific milestones are derived from completed actions so they remain correct even if the player installs parts in a different legal order.
+  useEffect(() => {
+    if (furniture?.meta.id !== TUTORIAL_FURNITURE_ID) return;
+    const completedActions = furniture.actions.filter((action) =>
+      completedSet.has(action.actionId),
+    );
+    const completeEvent = useTutorialStore.getState().completeEvent;
+
+    if (
+      tutorialStepEvent === "all_legs_installed" &&
+      completedActions.filter(
+        (action) =>
+          action.type === "placePart" && action.partId?.startsWith("leg_"),
+      ).length >= 4
+    ) {
+      completeEvent("all_legs_installed");
+    } else if (
+      tutorialStepEvent === "connector_placed" &&
+      completedActions.some(
+        (action) =>
+          action.type === "placeFastener" ||
+          action.type === "insertFastener",
+      )
+    ) {
+      completeEvent("connector_placed");
+    } else if (
+      tutorialStepEvent === "connector_tightened" &&
+      completedActions.some((action) => action.type === "tightenFastener")
+    ) {
+      completeEvent("connector_tightened");
+    }
+  }, [completedSet, furniture, tutorialStepEvent]);
+
+  // Record the LACK table as a completed build once it's assembled — so the player owns it (it's a placeable built_item) and it counts toward assembly_count, like any build. Fires once.
   const repos = useRepos();
   const me = useCurrentUserId();
-  const tutorialRecorded = useRef(false);
-  // The store may still hold a FINISHED build from a previous play session on the first frames
-  // (before loadFurnitureById lands), so "built" only counts when the loaded furniture IS the
-  // tutorial — otherwise entering here right after any completed build records a free tutorial.
-  const tutorialBuilt =
-    furniture?.meta.id === "tutorial" && totalCount > 0 && completedCount >= totalCount;
-  // A failed write re-arms via this counter: bumping it re-fires the effect, which a ref reset
-  // alone never does. Capped so a permanent backend failure cannot loop forever.
+  const lackRecorded = useRef(false);
+  // The store may still hold a FINISHED build from a previous play session on the first frames (before loadFurnitureById lands), so "built" only counts when the loaded furniture is LACK.
+  const lackBuilt =
+    furniture?.meta.id === TUTORIAL_FURNITURE_ID &&
+    totalCount > 0 &&
+    completedCount >= totalCount;
+  // A failed write re-arms via this counter: bumping it re-fires the effect, which a ref reset alone never does. Capped so a permanent backend failure cannot loop forever.
   const [recordAttempt, setRecordAttempt] = useState(0);
   useEffect(() => {
-    if (tutorialBuilt && !tutorialRecorded.current) {
-      tutorialRecorded.current = true;
-      repos.builds.complete(me, "tutorial").catch((err) => {
-        console.warn("[tutorial] could not record the completed build", err);
-        tutorialRecorded.current = false;
+    if (lackBuilt && !lackRecorded.current) {
+      lackRecorded.current = true;
+      repos.builds.complete(me, TUTORIAL_FURNITURE_ID).catch((err) => {
+        console.warn("[tutorial] could not record the completed LACK build", err);
+        lackRecorded.current = false;
         setRecordAttempt((n) => (n < 3 ? n + 1 : n));
       });
     }
-  }, [tutorialBuilt, me, repos, recordAttempt]);
+  }, [lackBuilt, me, repos, recordAttempt]);
   const displayedCompletedCount = guideCompleted
     ? guideStepCount + completedCount
     : completedCount;
@@ -324,9 +423,10 @@ function TutorialScreen() {
   });
 
   const selectedTool = useGameStore((s) => s.selectedTool);
-  const neededTool = settings.manualTools
-    ? (sceneState.activeTighten?.tool ?? driveAction?.tool ?? null)
-    : null;
+  const rawTool = sceneState.activeTighten?.tool ?? driveAction?.tool ?? null;
+  // Hand-driven fasteners have no toolbar entry; LACK explicitly uses the
+  // Allen key, so manual-tools mode waits until it is selected.
+  const neededTool = rawTool !== "hand" ? rawTool : null;
   const toolReady = !neededTool || selectedTool === neededTool;
   const activeToolKind: ToolTutorialKind | null =
     driveKind === "press"
@@ -372,8 +472,7 @@ function TutorialScreen() {
     [onPanStart, onPanMove, onPanEnd],
   );
 
-  // Canvas strafe when NOTHING is held — one-finger drag pans the camera (always on, no toggle). While a part IS held, the canvas gesture from usePartDrag owns the finger and routes: floating part → re-grab, else → these same strafe callbacks.
-  // strafing guards onFinalize: a Pan that FAILS (lost the race) still finalizes, and that must not fire a spurious onPanEnd.
+  // Canvas strafe when NOTHING is held — one-finger drag pans the camera (always on, no toggle). While a part IS held, the canvas gesture from usePartDrag owns the finger and routes: floating part → re-grab, else → these same strafe callbacks. strafing guards onFinalize: a Pan that FAILS (lost the race) still finalizes, and that must not fire a spurious onPanEnd.
   const strafing = useRef(false);
   const strafePan = useMemo(
     () =>
@@ -428,15 +527,13 @@ function TutorialScreen() {
     return Gesture.Race(pinch, pan, strafePan);
   }, [heldAction, pinch, pan, strafePan, canvasGestureFor]);
 
-  // Also holds while the store still shows a PREVIOUS session's furniture: rendering that here
-  // would flash the wrong build (and its finished ObjectiveBar) until the tutorial recipe lands.
-  if (!furniture || furniture.meta.id !== "tutorial")
+  // Also holds while the store still shows a PREVIOUS session's furniture: rendering that here would flash the wrong build (and its finished ObjectiveBar) until the tutorial recipe lands.
+  if (!furniture || furniture.meta.id !== TUTORIAL_FURNITURE_ID)
     return <View style={styles.root} />;
 
   return (
     <SceneBackdrop
-      backdrop={backdrop}
-      dark={theme === "dark"}
+      source={backdropSource(backdrop, theme === "dark")}
       style={[styles.root, theme === "dark" && styles.rootDark]}
     >
       <GestureDetector gesture={sceneGesture}>
@@ -467,29 +564,42 @@ function TutorialScreen() {
         style={[
           styles.chrome,
           {
-            top: Math.max(insets.top, HUD_VERTICAL_MARGIN),
+            top: hud.top,
             // The app runs immersive (status + nav bars hidden in _layout), and Android reports ZERO insets once those bars are gone — even though the display cutout is still physically there. So the side margin cannot come from the inset alone: HUD_SIDE_MARGIN is the floor that actually clears a landscape cutout, and max() still honours a larger inset if a device reports one.
-            left: Math.max(insets.left, HUD_SIDE_MARGIN),
-            right: Math.max(insets.right, HUD_SIDE_MARGIN),
-            bottom: Math.max(insets.bottom, HUD_VERTICAL_MARGIN),
+            left: hud.left,
+            right: hud.right,
+            bottom: hud.bottom,
           },
         ]}
         pointerEvents="box-none"
       >
         {/* Instructions hidden → only the progress bar stays (slim pill). Shared with play.tsx, so the tutorial HUD can never drift from the real one. */}
-        <View style={styles.objectiveWrap} pointerEvents="none">
+        <View style={styles.objectiveWrap} pointerEvents="box-none">
+          <MomentumCompanion />
           <ObjectiveBar
             line={
-              settings.showInstructions
-                ? guideCompleted
-                  ? `Finish the tutorial cabinet · ${displayedCompletedCount}/${displayedTotalCount}`
-                  : `Stage ${stage} · ${objective} · ${completedCount}/${totalCount}`
+              tutorialPresentation.showChecklist ||
+              tutorialPresentation.showMomentumCompanion
+                ? null
+                : settings.showInstructions
+                ? collapsedLegGuide
+                  ? `Install all four legs · ${installedLegCount}/4`
+                  : guideCompleted
+                  ? `Finish the LACK table · ${displayedCompletedCount}/${displayedTotalCount}`
+                  : `${objective} · ${completedCount}/${totalCount}`
                 : null
             }
             fontSize={objectiveFontSize}
             value={displayedCompletedCount}
             total={displayedTotalCount}
             xp={completedCount * furniture.xpPerStep}
+            header={
+              tutorialPresentation.showChecklist ? (
+                <TutorialStepRail />
+              ) : tutorialPresentation.showMomentumCompanion ? (
+                <MomentumStepHeader />
+              ) : undefined
+            }
           />
         </View>
         <CenterDropRing />
@@ -501,7 +611,7 @@ function TutorialScreen() {
           style={styles.undoTarget}
           pointerEvents="none"
         />
-        <TutorialGameSettings />
+        <GameSettings />
         <TutorialTarget
           id="settings"
           style={styles.settingsTarget}
@@ -509,7 +619,7 @@ function TutorialScreen() {
         />
         {mode !== "strict" ? <ClusterFocusControl /> : null}
         <PartsTray
-          items={sceneState.trayItems}
+          items={tutorialTrayItems}
           gestureFor={gestureFor}
           thumbs={furniture.thumbs}
           header={
@@ -524,7 +634,7 @@ function TutorialScreen() {
           style={styles.partsTrayTarget}
           pointerEvents="none"
         />
-        <ToolBar neededTool={neededTool} />
+        <ToolBar neededTool={neededTool} forceVisible />
         <TutorialTarget
           id="toolbar"
           style={styles.toolbarTarget}
@@ -534,6 +644,10 @@ function TutorialScreen() {
           <TutorialTarget id="hint" style={hudControls.hintButton}>
             <HintButton
               onPress={() => {
+                if (collapsedActionGuide) {
+                  setGuideCollapsed(false);
+                  return;
+                }
                 useGameStore.getState().suggestNext();
                 useTutorialStore.getState().completeEvent("hint_requested");
               }}
@@ -586,7 +700,14 @@ function TutorialScreen() {
         !sceneState.activeTighten &&
         !orientationAction &&
         !driveAction ? (
-          <BeatControl action={sceneState.activeBeat} />
+          <BeatControl
+            action={sceneState.activeBeat}
+            onSwipeStart={
+              sceneState.activeBeat.actionId === "finishing_checks"
+                ? resetCamera
+                : undefined
+            }
+          />
         ) : null}
         <TutorialTarget id="joystick" style={styles.joystickZone}>
           <Joystick
@@ -608,8 +729,7 @@ function TutorialScreen() {
           />
         </TutorialTarget>
         {heldActionId && settings.releaseBehavior === "float" ? (
-          // Same control as play.tsx: the settings walkthrough invites switching to Float, so the
-          // way back to the tray must exist here too or a dropped part soft-locks the tutorial.
+          // Same control as play.tsx: the settings walkthrough invites switching to Float, so the way back to the tray must exist here too or a dropped part soft-locks the tutorial.
           <Button
             label="↩ Put back"
             small
@@ -625,6 +745,7 @@ function TutorialScreen() {
         activeToolKind={activeToolKind}
         assemblyComplete={totalCount > 0 && completedCount >= totalCount}
         audioEnabled={settings.audio}
+        blocked={collapsedActionGuide}
         onClaimReward={() => {}}
         onSimulatePinch={() => {
           if (!manipulator) return;
@@ -648,7 +769,14 @@ function TutorialScreen() {
             params: { id: furnitureForProfile(game.profile) },
           });
         }}
+        onDeferAssembly={() => {
+          router.replace({
+            pathname: "/room",
+            params: { welcome: "tutorial" },
+          });
+        }}
       />
+      <MomentumAttentionOverlay />
     </SceneBackdrop>
   );
 }

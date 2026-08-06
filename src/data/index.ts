@@ -1,11 +1,10 @@
-// The injection point. Every feature imports the repo seam from here — never a concrete adapter, never src/services or supabase directly.
-// TODAY: an in-memory adapter with demo fixtures. To go live, implement createSupabaseRepos() against the same Repos interface (wrapping src/services) and swap the one line below. No feature code changes.
+// The injection point. Every feature imports the repo seam from here — never a concrete adapter, never src/services or supabase directly. TODAY: an in-memory adapter with demo fixtures. To go live, implement createSupabaseRepos() against the same Repos interface (wrapping src/services) and swap the one line below. No feature code changes.
 import { useAuth } from "@/src/hooks/useAuth";
 import { createInMemoryRepos } from "./adapters/inMemory";
 import { createSupabaseRepos } from "./adapters/supabase";
 import { DEMO_ME } from "./adapters/seed";
-import type { Repos } from "./repos";
-import type { UserId } from "./types";
+import type { Repos } from "./core/repos";
+import type { UserId } from "./core/types";
 
 // Which backend the seam runs on. Defaults to the in-memory fixtures; set
 // EXPO_PUBLIC_DATA_BACKEND=supabase (after running the migration + signing in) to go live.
@@ -33,9 +32,9 @@ export function useCurrentUserId(): UserId {
   return user?.id ?? DEMO_ME;
 }
 
-export * from "./types";
-export * from "./repos";
-export * from "./shopItems";
-export * from "./catalogAssets";
+export * from "./core/types";
+export * from "./core/repos";
+export * from "./shop/items";
+export * from "./catalog/assets";
 export { createInMemoryRepos } from "./adapters/inMemory";
 export { DEMO_ME } from "./adapters/seed";

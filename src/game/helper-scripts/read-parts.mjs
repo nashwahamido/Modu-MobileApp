@@ -13,9 +13,7 @@ const ROOT = path.dirname(fileURLToPath(import.meta.url)); // .../src/game/helpe
 const MODELS = path.join(ROOT, "..", "..", "assets", "models", "furnitures");
 const OUT = path.join(ROOT, '..', 'data', 'furnitures');
 
-// Furnitures are AUTO-DISCOVERED: every assets/models/furnitures/<ID>/<ID>.glb
-// is ingested — dropping a new model in needs zero script edits. `CONFIG` is
-// the rare escape hatch (typeOverrides forces a part's structural/fastener type).
+// Furnitures are AUTO-DISCOVERED: every assets/models/furnitures/<ID>/<ID>.glb is ingested — dropping a new model in needs zero script edits. `CONFIG` is the rare escape hatch (typeOverrides forces a part's structural/fastener type).
 const CONFIG = {};
 const FURNITURES = Object.fromEntries(
   fs.readdirSync(MODELS, { withFileTypes: true })
@@ -25,14 +23,10 @@ const FURNITURES = Object.fromEntries(
 
 // Parse info in the model node names. See scripts/NAMING.md.
 // Convention:  cluster _ group [_ index] [__ jointA [& jointB]]
-//   A fastener names the structural part(s) it joins after "__": one (a screw securing a part) or two with "&" (a bolt/cam bridging a joint), e.g.
-//     base_screw105251_1__leg_1&circleUpp   → joins ["leg_1","circleUpp"]
-//     whole_bolt115980_4__leg_4&tableTop     → joins ["leg_4","tableTop"]
+//   A fastener names the structural part(s) it joins after "__": one (a screw securing a part) or two with "&" (a bolt/cam bridging a joint), e.g. base_screw105251_1__leg_1&circleUpp   → joins ["leg_1","circleUpp"] whole_bolt115980_4__leg_4&tableTop     → joins ["leg_4","tableTop"]
 
 function parseName(name) {
-  // identity "__" joints. The joint spec is the structural part(s) a fastener
-  // connects — one, or two joined by "&". Legacy names (no "__") put the spec as
-  // the tail after the index, e.g. `..._screw105251_1_leg_1` or `..._bolt_4_a&b`.
+  // identity "__" joints. The joint spec is the structural part(s) a fastener connects — one, or two joined by "&". Legacy names (no "__") put the spec as the tail after the index, e.g. `..._screw105251_1_leg_1` or `..._bolt_4_a&b`.
   const dd = name.indexOf('__');
   const head = dd === -1 ? name : name.slice(0, dd);
   const [cluster, group, i, ...rest] = head.split('_');
@@ -50,10 +44,7 @@ function parseName(name) {
 }
 
 // Fasteners: screws, bolts, cams, dowels… detected by the group's leading word.
-// The prefix list comes from the SHARED table core/fastener-kinds.json — the
-// same table the runtime derives each fastener's KIND from (fastenerKindOf), so
-// this script emits NO kind field at all: name the hardware by its function and
-// everything downstream derives. Unseen hardware word = one line in the table.
+// The prefix list comes from the SHARED table core/fastener-kinds.json — the same table the runtime derives each fastener's KIND from (fastenerKindOf), so this script emits NO kind field at all: name the hardware by its function and everything downstream derives. Unseen hardware word = one line in the table.
 const FASTENER_PREFIXES = Object.keys(
   JSON.parse(
     fs.readFileSync(path.join(ROOT, "..", "core", "model", "fastener-kinds.json"), "utf8"),
@@ -154,8 +145,7 @@ function buildParts(json, bin, typeOverrides = {}) {
       cluster: p.cluster,
       ...(p.attached ? { attached: p.attached } : {}),
       ...(n.mesh != null ? { visualCenterOffset: visualCenterOffset(json, bin, n) } : {}),
-      // NO kind field: the runtime derives it from the group name
-      // (fastenerKindOf ← core/fastener-kinds.json).
+      // NO kind field: the runtime derives it from the group name (fastenerKindOf ← core/fastener-kinds.json).
       ...(type === 'fastener'
         ? { engageDir: snapAxis(rotateByQuat(rotation, LOCAL_ENGAGE)) }
         : {}),

@@ -1,31 +1,22 @@
-// The live level/coins the room HUD shows. Refetches on focus, not just on mount: the room stays mounted under the (presentation) modals, so a shop purchase or a finished build must be picked up when the modal closes rather than on a remount that never comes.
-import { useCallback, useState } from "react";
+// The live level/coins the room HUD shows.
+//
+// Backed by profileStore rather than its own useState, because the shop now spends coins from INSIDE the room. See the note in src/data/player/profileStore.ts: the focus refetch below can no longer see a purchase, since the room never blurs for a popup. So the purchase writes the new balance to the store and this hook renders whatever the store holds. The focus refetch stays and still earns its keep: returning from play, the tutorial or a visit DOES blur the room, and a finished build's reward lands on the profile server-side where only a read will find it.
+import { useCallback } from "react";
 import { useFocusEffect } from "expo-router";
 
 import { useCurrentUserId, useRepos } from "@/src/data";
+import { useProfileStore } from "@/src/data/player/profileStore";
 import type { Profile } from "@/src/data";
 
 export function useProfileHud(): Profile | null {
   const repos = useRepos();
   const me = useCurrentUserId();
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const profile = useProfileStore((s) => s.profile);
 
   useFocusEffect(
     useCallback(() => {
-      let alive = true;
-      (async () => {
-        // Swallowed on purpose: the HUD is decoration, and an unhandled rejection here would take the
-        // whole room down over a transient read. Falls back to the placeholder dashes.
-        try {
-          const p = await repos.profiles.get(me);
-          if (alive) setProfile(p);
-        } catch (err) {
-          console.warn("[hud] could not read the profile:", (err as Error).message);
-        }
-      })();
-      return () => {
-        alive = false;
-      };
+      // No alive flag needed: the store discards a read that lost a race with an account switch, which is the only staleness an unmount could have caused here.
+      void useProfileStore.getState().load(repos, me);
     }, [me, repos]),
   );
 
