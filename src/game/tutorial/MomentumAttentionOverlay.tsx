@@ -26,6 +26,7 @@ export function MomentumAttentionOverlay() {
     (state) => state.setAttentionOverlayActive,
   );
   const heldActionId = useGameStore((state) => state.heldActionId);
+  const mapOpen = useGameStore((state) => state.mapOpen);
   const completedActionCount = useGameStore((state) => state.completed.length);
   const activeToolAction = useGameStore(
     (state) => state.driveActionId ?? state.orientationActionId,
@@ -41,6 +42,7 @@ export function MomentumAttentionOverlay() {
       !presentation.showMomentumCompanion ||
       skipped ||
       completed ||
+      mapOpen ||
       stepRewardReady ||
       resumeVisible
     ) {
@@ -54,6 +56,7 @@ export function MomentumAttentionOverlay() {
     completedActionCount,
     currentIndex,
     heldActionId,
+    mapOpen,
     presentation.showMomentumCompanion,
     resumeVisible,
     skipped,
@@ -115,6 +118,7 @@ export function MomentumAttentionOverlay() {
     !presentation.showMomentumCompanion ||
     skipped ||
     completed ||
+    mapOpen ||
     (!reminderVisible && !resumeVisible)
   ) {
     return null;

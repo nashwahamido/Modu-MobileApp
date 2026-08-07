@@ -3,12 +3,21 @@ import test from "node:test";
 
 import { tutorialPresentationForProfile } from "./presentation";
 
-test("Clear Path enables structured tutorial presentation", () => {
+test("Clear Path uses the shared hint and progress presentation", () => {
   const presentation = tutorialPresentationForProfile("clearPath");
 
-  assert.equal(presentation.showChecklist, true);
+  assert.equal(presentation.showChecklist, false);
   assert.equal(presentation.showMilestoneConfirmation, true);
   assert.equal(presentation.emphasizeTarget, true);
+});
+
+test("all profiles use the same progress-bar header shape", () => {
+  for (const profile of ["control", "visual", "momentum", "clearPath"] as const) {
+    assert.equal(
+      tutorialPresentationForProfile(profile).showChecklist,
+      false,
+    );
+  }
 });
 
 test("Control keeps tutorial presentation minimal", () => {

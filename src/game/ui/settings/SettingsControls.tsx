@@ -1,7 +1,7 @@
 // The one general settings surface, shared by the homepage /settings screen and the in-game gear panel (both write to the same store). Dev/interaction experiments are grouped at the top; then display, guidance, audio.
 //
 // Visual language adopted from the on-release engine: a compact arrow Stepper (‹ Value ›) for multi-choice settings, Switch rows for booleans.
-import { StyleSheet, Alert, Pressable, Switch, Text, View } from "react-native";
+import { StyleSheet, Alert, Pressable, Switch, Text, View, type LayoutChangeEvent } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
 import { useStyles, useTheme, FONT } from "@/src/game/ui/system/theme";
 import type {
@@ -205,7 +205,23 @@ function SectionHeader({ children }: { children: string }) {
 }
 
 // ── the shared controls ──────────────────────────────────────────────────────
-export function SettingsControls() {
+export type SettingsFocusTarget =
+  | "releaseBehavior"
+  | "instructions"
+  | "focusMode"
+  | "autoView";
+
+interface SettingsControlsProps {
+  focusTarget?: SettingsFocusTarget | null;
+  onFocusTargetLayout?: (y: number) => void;
+  onFocusTargetActivated?: () => void;
+}
+
+export function SettingsControls({
+  focusTarget = null,
+  onFocusTargetLayout,
+  onFocusTargetActivated,
+}: SettingsControlsProps = {}) {
   const styles = useStyles(makeStyles);
   const settings = useGameStore((s) => s.settings);
   const profile = useGameStore((s) => s.profile);
@@ -233,6 +249,15 @@ export function SettingsControls() {
       { text: "Cancel", style: "cancel" },
       { text: "Reset", style: "destructive", onPress: reset },
     ]);
+  };
+  const targetLayout =
+    (target: SettingsFocusTarget) => (event: LayoutChangeEvent) => {
+      if (focusTarget === target) {
+        onFocusTargetLayout?.(event.nativeEvent.layout.y);
+      }
+    };
+  const targetActivated = (target: SettingsFocusTarget) => {
+    if (focusTarget === target) onFocusTargetActivated?.();
   };
 
   return (
@@ -274,13 +299,18 @@ export function SettingsControls() {
         options={GHOST}
         onChange={(v) => setSettings({ ghostStyle: v })}
       />
-      <Choice
-        label="Released part"
-        desc="Auto-return to tray, or float where you set it down (float includes canvas re-grab)"
-        value={settings.releaseBehavior}
-        options={RELEASE}
-        onChange={(v) => setSettings({ releaseBehavior: v })}
-      />
+      <View onLayout={targetLayout("releaseBehavior")}>
+        <Choice
+          label="Released part"
+          desc="Auto-return to tray, or float where you set it down (float includes canvas re-grab)"
+          value={settings.releaseBehavior}
+          options={RELEASE}
+          onChange={(v) => {
+            setSettings({ releaseBehavior: v });
+            targetActivated("releaseBehavior");
+          }}
+        />
+      </View>
       <Choice
         label="Drag mechanism"
         desc="Adaptive matches sockets on screen and follows their height; Level fixes the plane at one height (comparison mode — struggles on multi-height sockets)"
@@ -316,13 +346,18 @@ export function SettingsControls() {
         value={theme === "dark"}
         onValueChange={(v) => setTheme(v ? "dark" : "light")}
       />
-      <Choice
-        label="Instructions"
-        desc="Wording detail for each step"
-        value={settings.textLevel}
-        options={LEVELS}
-        onChange={(v) => setSettings({ textLevel: v })}
-      />
+      <View onLayout={targetLayout("instructions")}>
+        <Choice
+          label="Instructions"
+          desc="Wording detail for each step"
+          value={settings.textLevel}
+          options={LEVELS}
+          onChange={(v) => {
+            setSettings({ textLevel: v });
+            targetActivated("instructions");
+          }}
+        />
+      </View>
       <View style={styles.switchRow}>
         <View style={styles.rowText}>
           <Text style={styles.rowLabel}>Text size</Text>
@@ -347,18 +382,28 @@ export function SettingsControls() {
         options={MODES}
         onChange={setMode}
       />
-      <Row
-        label="Focus mode"
-        desc="Show only the current part + action"
-        value={settings.focusMode}
-        onValueChange={(v) => setSettings({ focusMode: v })}
-      />
-      <Row
-        label="Auto-view"
-        desc="Auto-frame the next open socket"
-        value={settings.autoView}
-        onValueChange={(v) => setSettings({ autoView: v })}
-      />
+      <View onLayout={targetLayout("focusMode")}>
+        <Row
+          label="Focus mode"
+          desc="Show only the current part + action"
+          value={settings.focusMode}
+          onValueChange={(v) => {
+            setSettings({ focusMode: v });
+            targetActivated("focusMode");
+          }}
+        />
+      </View>
+      <View onLayout={targetLayout("autoView")}>
+        <Row
+          label="Auto-view"
+          desc="Auto-frame the next open socket"
+          value={settings.autoView}
+          onValueChange={(v) => {
+            setSettings({ autoView: v });
+            targetActivated("autoView");
+          }}
+        />
+      </View>
       <Row
         label="Show instructions"
         desc="Off: only the progress bar stays at the top"

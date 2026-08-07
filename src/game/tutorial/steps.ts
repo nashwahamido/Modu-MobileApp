@@ -8,6 +8,8 @@ export type TutorialTargetId =
   | "toolbar"
   | "hint"
   | "undo"
+  | "focus"
+  | "autoView"
   | "settings";
 
 export type TutorialEvent =
@@ -92,6 +94,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     message: "Open the toolbox and select the Allen key.",
     shortLabel: "Select the Allen key",
     event: "toolbar_used",
+    when: ({ profile }) => profile === "control",
   },
   {
     id: "tighten-connector",
@@ -157,20 +160,70 @@ export const CONTEXTUAL_TUTORIAL_STEPS: TutorialStep[] = [
   },
 ];
 
+/** Momentum and Control explicitly teach the HUD controls requested in the review. */
+export const SHARED_HUD_TUTORIAL_STEPS: TutorialStep[] = [
+  {
+    id: "hud-recenter",
+    targetId: "recenter",
+    message: "Tap Recenter to bring the furniture back into view.",
+    shortLabel: "Try Recenter",
+    event: "camera_recentered",
+  },
+  {
+    id: "hud-undo",
+    targetId: "undo",
+    message: "Tap Back one step to undo the last assembly action.",
+    shortLabel: "Try Undo",
+    event: "step_undone",
+  },
+  {
+    id: "hud-redo",
+    targetId: "undo",
+    message: "Tap Forward one step to restore the action and continue.",
+    shortLabel: "Restore the step",
+    event: "step_redone",
+  },
+  {
+    id: "hud-focus",
+    targetId: "focus",
+    message: "Tap Focus to reduce the screen to the controls you need now.",
+    shortLabel: "Try Focus",
+    event: "focus_mode_toggled",
+  },
+  {
+    id: "hud-auto-view",
+    targetId: "autoView",
+    message: "Tap Auto-view to let the camera frame the next target.",
+    shortLabel: "Try Auto-view",
+    event: "auto_view_toggled",
+  },
+];
+
+/** Hint remains a Control-only affordance; Momentum keeps its lighter flow. */
+export const CONTROL_TUTORIAL_STEPS: TutorialStep[] = [
+  {
+    id: "control-hint",
+    targetId: "hint",
+    message: "Tap Hint whenever you want a suggestion for the next action.",
+    shortLabel: "Try Hint",
+    event: "hint_requested",
+  },
+];
+
 /** Optional preference walkthrough offered after the short core tutorial. */
 export const SETTINGS_TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: "release-behavior-settings",
     targetId: "settings",
     message:
-      "When a part misses its target, what should happen? In Settings, choose Released part: Auto-return or Float.",
+      "In Settings, you can choose how released parts behave: Auto-return or Float.",
     event: "release_behavior_changed",
   },
   {
     id: "guided-instructions-settings",
     targetId: "settings",
     message:
-      "In Settings, choose Instructions: Standard or Simple. Show instructions can also hide or restore the step text.",
+      "You can choose Standard or Simple instructions, and show or hide the step text.",
     event: "instruction_preferences_changed",
     when: ({ mode }) => mode === "guide",
   },
@@ -178,14 +231,14 @@ export const SETTINGS_TUTORIAL_STEPS: TutorialStep[] = [
     id: "focus-mode-settings",
     targetId: "settings",
     message:
-      "In Settings, Focus mode shows only the current part or action and hides extra controls.",
+      "You can use Focus mode to show only the current part or action.",
     event: "focus_mode_toggled",
   },
   {
     id: "auto-view-settings",
     targetId: "settings",
     message:
-      "In Settings, Auto-view frames the next open socket automatically.",
+      "You can use Auto-view to automatically frame the next open socket.",
     event: "auto_view_toggled",
   },
 ];
@@ -206,7 +259,45 @@ export const TUTORIAL_CONTENT_DECISIONS = {
 } as const;
 
 export const tutorialStepsFor = (context: TutorialContext): TutorialStep[] => {
-  return TUTORIAL_STEPS.filter((step) => !step.when || step.when(context));
+  const core = TUTORIAL_STEPS.filter(
+    (step) => !step.when || step.when(context),
+  );
+  const openingSteps = core.slice(0, 2);
+  const remainingCore = core.slice(2);
+  const finishingStep = remainingCore.at(-1);
+  const assemblySteps = finishingStep
+    ? remainingCore.slice(0, -1)
+    : remainingCore;
+  const sharedHudSteps =
+    context.profile === "control" || context.profile === "momentum"
+      ? SHARED_HUD_TUTORIAL_STEPS
+      : [];
+  const controlHudSteps =
+    context.profile === "control"
+      ? [
+          ...sharedHudSteps.slice(0, 3),
+          ...CONTROL_TUTORIAL_STEPS,
+          ...sharedHudSteps.slice(3),
+        ]
+      : sharedHudSteps;
+  const settingsSteps = SETTINGS_TUTORIAL_STEPS.filter(
+    (step) =>
+      (!step.when || step.when(context)) &&
+      !(
+        (context.profile === "control" || context.profile === "momentum") &&
+        (step.id === "focus-mode-settings" || step.id === "auto-view-settings")
+      ),
+  );
+
+  // Introduce the real Settings panel once the tabletop is present, then return
+  // to the profile-specific controls and the rest of the assembly sequence.
+  return [
+    ...openingSteps,
+    ...settingsSteps,
+    ...controlHudSteps,
+    ...assemblySteps,
+    ...(finishingStep ? [finishingStep] : []),
+  ];
 };
 
 export const settingsTutorialStepsFor = (

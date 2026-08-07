@@ -8,37 +8,65 @@ import { SPACE } from "@/src/game/ui/system/theme";
  *  control is lifted and live. It is deliberately not the success green: green means the
  *  build is done, and a toggle being on is not an achievement. */
 export function ToggleChips() {
-  const settings = useGameStore((s) => s.settings);
+  return (
+    <View style={styles.row}>
+      <FocusToggleButton />
+      <SpotButton />
+    </View>
+  );
+}
+
+export function FocusToggleButton() {
+  const focusMode = useGameStore((s) => s.settings.focusMode);
   const setSettings = useGameStore((s) => s.setSettings);
 
   return (
-    <View style={styles.row}>
-      <Button
-        icon={
-          <Image
-            source={require("@/src/assets/ui/icons/icon-focus.png")}
-            style={styles.focusIcon}
-            resizeMode="contain"
-          />
-        }
-        small
-        pill
-        variant={settings.focusMode ? "primary" : "secondary"}
-        onPress={() => setSettings({ focusMode: !settings.focusMode })}
-        accessibilityLabel="Focus mode"
-      />
-      {settings.focusMode ? null : (
-        // Spot is a ONE-SHOT, not a toggle: it fires an arrow at the next socket and puts itself out. Hence always "secondary" — a chip that stayed lit would claim a mode is on. The autoView SETTING still exists and still has its switch in Settings; this chip is no longer its control.
-        <Button
-          label="Spot"
-          small
-          pill
-          variant="secondary"
-          onPress={() => useGameStore.getState().suggestNext()}
-          accessibilityLabel="Spot the next part"
+    <Button
+      icon={
+        <Image
+          source={require("@/src/assets/ui/icons/icon-focus.png")}
+          style={styles.focusIcon}
+          resizeMode="contain"
         />
-      )}
-    </View>
+      }
+      small
+      pill
+      variant={focusMode ? "primary" : "secondary"}
+      onPress={() => setSettings({ focusMode: !focusMode })}
+      accessibilityLabel="Focus mode"
+    />
+  );
+}
+
+export function AutoViewToggleButton() {
+  const autoView = useGameStore((s) => s.settings.autoView);
+  const setSettings = useGameStore((s) => s.setSettings);
+
+  return (
+    <Button
+      label="Auto-view"
+      small
+      pill
+      variant={autoView ? "primary" : "secondary"}
+      onPress={() => setSettings({ autoView: !autoView })}
+      accessibilityLabel="Auto-view"
+    />
+  );
+}
+
+function SpotButton() {
+  const focusMode = useGameStore((s) => s.settings.focusMode);
+
+  if (focusMode) return null;
+  return (
+    <Button
+      label="Spot"
+      small
+      pill
+      variant="secondary"
+      onPress={() => useGameStore.getState().suggestNext()}
+      accessibilityLabel="Spot the next part"
+    />
   );
 }
 

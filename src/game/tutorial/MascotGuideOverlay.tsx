@@ -24,6 +24,7 @@ const PADDING = 0;
 interface Props {
   activeToolKind: ToolTutorialKind | null;
   assemblyComplete: boolean;
+  earnedXp: number;
   onClaimReward: () => void;
   onContinueToAssembly?: () => void;
   onDeferAssembly?: () => void;
@@ -35,6 +36,7 @@ interface Props {
 export function MascotGuideOverlay({
   activeToolKind,
   assemblyComplete,
+  earnedXp,
   onClaimReward,
   onContinueToAssembly,
   onDeferAssembly,
@@ -51,6 +53,7 @@ export function MascotGuideOverlay({
   const height = overlaySize?.height ?? windowSize.height;
   const currentIndex = useTutorialStore((s) => s.currentIndex);
   const profile = useGameStore((s) => s.profile);
+  const mapOpen = useGameStore((s) => s.mapOpen);
   const mascotImage = avatarForProfile(profile);
   const presentation = tutorialPresentationForProfile(profile);
   const steps = useTutorialStore((s) => s.steps);
@@ -76,6 +79,7 @@ export function MascotGuideOverlay({
     audioEnabled &&
       !presentation.showVisualDemo &&
       !blocked &&
+      !mapOpen &&
       !attentionOverlayActive &&
       !skipped &&
       !completed &&
@@ -87,6 +91,7 @@ export function MascotGuideOverlay({
       !presentation.showVisualDemo ||
       !visualSpeechEnabled ||
       blocked ||
+      mapOpen ||
       attentionOverlayActive ||
       skipped ||
       completed ||
@@ -108,6 +113,7 @@ export function MascotGuideOverlay({
   }, [
     attentionOverlayActive,
     blocked,
+    mapOpen,
     completed,
     currentIndex,
     presentation.showVisualDemo,
@@ -161,7 +167,10 @@ export function MascotGuideOverlay({
     return () => clearTimeout(retry);
   }, [completed, currentIndex, nodes, overlaySize, rewardReady, setFrame, skipped, steps]);
 
-  if (skipped || blocked || attentionOverlayActive) return null;
+  // The pause button opens the same build-map modal used by a normal task.
+  // Hide tutorial chrome while it is open so the shared modal remains the
+  // only interactive layer and its close/resume behaviour stays unchanged.
+  if (skipped || blocked || mapOpen || attentionOverlayActive) return null;
 
   if (settingsReady) {
     return (
@@ -173,6 +182,14 @@ export function MascotGuideOverlay({
             <Text style={styles.rewardMessage}>
               Ready to enter your assembly task?
             </Text>
+            <View style={styles.rewardXpRow}>
+              <Image
+                source={require("@/src/assets/ui/icons/icon-xp.png")}
+                style={styles.rewardXpIcon}
+                resizeMode="contain"
+              />
+              <Text style={styles.rewardXpValue}>+{earnedXp} XP</Text>
+            </View>
             <View style={styles.settingsActions}>
               <Button
                 label="Enter assembly task"
@@ -272,6 +289,7 @@ export function MascotGuideOverlay({
     width,
     height,
     presentation.showVisualDemo,
+    presentation.showMomentumCompanion,
   );
 
   return (
@@ -319,7 +337,7 @@ export function MascotGuideOverlay({
         ) : null}
         <View style={styles.copy} pointerEvents="box-none">
           <Text style={styles.stepText}>
-            {phase === 'settings' ? 'SETTINGS · ' : ''}{currentIndex + 1}/{steps.length}
+            {phase === 'settings' || step.targetId === 'settings' ? 'SETTINGS · ' : ''}{currentIndex + 1}/{steps.length}
           </Text>
           <View style={styles.messageRow}>
             <Text style={[styles.message, presentation.showVisualDemo && styles.visualMessage]}>
@@ -405,6 +423,7 @@ function bubblePosition(
   screenW: number,
   screenH: number,
   visualMode = false,
+  momentumMode = false,
 ) {
   const bubbleW = 286;
   const edge = 16;
@@ -449,6 +468,24 @@ function bubblePosition(
     };
   }
 
+  // Momentum's tool is supplied automatically, so its instruction belongs
+  // beside the real turn control rather than in a remote corner of the HUD.
+  if (momentumMode && targetId === 'tool') {
+    const gap = 18;
+    const roomOnRight = screenW - frame.x - frame.width - edge;
+    const adjacentLeft =
+      roomOnRight >= bubbleW + gap
+        ? frame.x + frame.width + gap
+        : frame.x - bubbleW - gap;
+    return {
+      left: Math.max(edge, Math.min(adjacentLeft, screenW - bubbleW - edge)),
+      top: Math.max(
+        edge,
+        Math.min(frame.y + frame.height / 2 - 82, screenH - 190),
+      ),
+    };
+  }
+
   if (targetId === 'scene') {
     return { left: 72, top: Math.min(Math.max(88, screenH * 0.32), screenH - 176) };
   }
@@ -471,7 +508,19 @@ function bubblePosition(
     return { right: Math.max(edge, screenW - frame.x + 14), top: Math.max(84, frame.y) };
   }
   if (targetId === 'tool') {
-    return { left: edge, bottom: 26 };
+    const gap = 18;
+    const roomOnRight = screenW - frame.x - frame.width - edge;
+    const adjacentLeft =
+      roomOnRight >= bubbleW + gap
+        ? frame.x + frame.width + gap
+        : frame.x - bubbleW - gap;
+    return {
+      left: Math.max(edge, Math.min(adjacentLeft, screenW - bubbleW - edge)),
+      top: Math.max(
+        edge,
+        Math.min(frame.y + frame.height / 2 - 82, screenH - 190),
+      ),
+    };
   }
 
   const canPlaceBelow = frame.y + frame.height + 16 < screenH - 150;
