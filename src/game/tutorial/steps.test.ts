@@ -15,14 +15,12 @@ function context(
   };
 }
 
-test("only Control teaches the toolbox", () => {
-  const controlIds = tutorialStepsFor(context("control", true)).map(
-    (step) => step.id,
-  );
-  assert.ok(controlIds.includes("select-allen-key"));
-
-  for (const profile of ["visual", "momentum", "clearPath"] as const) {
-    const ids = tutorialStepsFor(context(profile, false)).map(
+test("no profile teaches a tool step", () => {
+  // LACK's bolt is hand-tightened, so there is no toolbox step to teach. This asserts the ABSENCE
+  // rather than being deleted, because the step was Control-only and a regression would show up on
+  // exactly one profile.
+  for (const profile of ["control", "visual", "momentum", "clearPath"] as const) {
+    const ids = tutorialStepsFor(context(profile, profile === "control")).map(
       (step) => step.id,
     );
     assert.equal(ids.includes("select-allen-key"), false);
@@ -41,7 +39,7 @@ test("Control teaches its user-directed HUD controls", () => {
     "hud-undo",
     "hud-redo",
     "hud-focus",
-    "hud-auto-view",
+    "hud-spot",
   ]) {
     assert.ok(ids.includes(id), `${id} should be included`);
   }
@@ -55,7 +53,7 @@ test("Control teaches its user-directed HUD controls", () => {
       "hud-redo",
       "control-hint",
       "hud-focus",
-      "hud-auto-view",
+      "hud-spot",
     ],
   );
 });
@@ -70,7 +68,7 @@ test("Momentum teaches shared HUD controls without Hint or the toolbox", () => {
     "hud-undo",
     "hud-redo",
     "hud-focus",
-    "hud-auto-view",
+    "hud-spot",
   ]) {
     assert.ok(ids.includes(id), `${id} should be included`);
   }

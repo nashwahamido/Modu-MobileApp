@@ -54,7 +54,9 @@ export function AutoViewToggleButton() {
   );
 }
 
-function SpotButton() {
+// Exported so the tutorial renders the SAME control the build does, rather than its own copy — that
+// divergence is how the tutorial ended up teaching an Auto-view chip the assembly no longer shows.
+export function SpotButton() {
   const focusMode = useGameStore((s) => s.settings.focusMode);
 
   if (focusMode) return null;

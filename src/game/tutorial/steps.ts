@@ -29,6 +29,7 @@ export type TutorialEvent =
   | "release_behavior_changed"
   | "instruction_preferences_changed"
   | "auto_view_toggled"
+  | "spot_used"
   | "focus_mode_toggled"
   | "toolbar_used"
   | "hint_requested"
@@ -89,17 +90,11 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     event: "connector_placed",
   },
   {
-    id: "select-allen-key",
-    targetId: "toolbar",
-    message: "Open the toolbox and select the Allen key.",
-    shortLabel: "Select the Allen key",
-    event: "toolbar_used",
-    when: ({ profile }) => profile === "control",
-  },
-  {
     id: "tighten-connector",
     targetId: "tool",
-    message: "Turn clockwise to tighten the bolt with the Allen key.",
+    // LACK's bolt is hand-tightened: hardware.ts calls it "spun in by hand", and the tool override
+    // that put an Allen key in the toolbox and the scene is gone.
+    message: "Turn clockwise to tighten the bolt by hand.",
     shortLabel: "Tighten the bolt",
     event: "connector_tightened",
   },
@@ -107,7 +102,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     id: "install-four-legs",
     targetId: "partsTray",
     message:
-      "Install the leg onto the bolt. Repeat the bolt, tool, and leg steps for all four legs.",
+      "Install the leg onto the bolt. Repeat the bolt and leg steps for all four legs.",
     shortLabel: "Install all four legs",
     event: "all_legs_installed",
   },
@@ -191,11 +186,13 @@ export const SHARED_HUD_TUTORIAL_STEPS: TutorialStep[] = [
     event: "focus_mode_toggled",
   },
   {
-    id: "hud-auto-view",
+    id: "hud-spot",
     targetId: "autoView",
-    message: "Tap Auto-view to let the camera frame the next target.",
-    shortLabel: "Try Auto-view",
-    event: "auto_view_toggled",
+    // Spot no longer moves the camera. It plays a ghost of the next part travelling into its socket,
+    // so the copy has to describe a demonstration rather than a framing.
+    message: "Tap Spot to see the next part move into place.",
+    shortLabel: "Try Spot",
+    event: "spot_used",
   },
 ];
 

@@ -28,6 +28,19 @@ interface Props {
 
 /** Fixed virtual joystick: a cream dial with four direction arrows and a raised, glossy
  *  knob that springs back on release. */
+/**
+ * Below this fraction of full deflection the stick reports nothing. A thumb resting a few pixels
+ * off-centre was enough to drift the camera, which is most of what "too sensitive" means here — the
+ * model appeared to move on its own.
+ */
+const DEADZONE = 0.14;
+/**
+ * Response curve. Linear deflection gave the same degrees-per-pixel at the centre as at the rim, so
+ * there was no slow end to the stick and nothing to aim with. Squaring the magnitude keeps the top
+ * speed while making the first half of the travel fine control.
+ */
+const CURVE = 2;
+
 function JoystickImpl({ onStart, onMove, onEnd }: Props) {
   const tx = useSharedValue(0);
   const ty = useSharedValue(0);
@@ -42,11 +55,20 @@ function JoystickImpl({ onStart, onMove, onEnd }: Props) {
         .onUpdate((e) => {
           const len = Math.hypot(e.translationX, e.translationY);
           const clamp = len > RADIUS ? RADIUS / len : 1;
+          // The THUMB still tracks the finger exactly — the curve belongs to the camera, not to the
+          // control. A knob that lagged its own finger would read as broken.
           tx.value = e.translationX * clamp;
           ty.value = e.translationY * clamp;
+          // Deadzone and curve applied to the MAGNITUDE, not per axis: shaping x and y separately
+          // would bend the diagonals, so a stick pushed corner-to-corner would not travel corner to
+          // corner.
+          const mag = Math.min(1, len / RADIUS);
+          const shaped =
+            mag <= DEADZONE ? 0 : Math.pow((mag - DEADZONE) / (1 - DEADZONE), CURVE);
+          const scale = mag > 0 ? shaped / mag : 0;
           // onMove (JS hop) keeps API compatibility and updates any JS-side listeners.
           // OrbitDrive reads stickShared on the render thread; writing it here via the same hop is a single cheap assignment (not the old per-frame integration), so even under drag load the camera keeps orbiting at the latest deflection.
-          scheduleOnRN(onMove, tx.value / RADIUS, ty.value / RADIUS);
+          scheduleOnRN(onMove, (tx.value / RADIUS) * scale, (ty.value / RADIUS) * scale);
         })
         .onFinalize(() => {
           tx.value = withSpring(0);

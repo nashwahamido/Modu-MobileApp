@@ -145,6 +145,19 @@ export interface DialTurnOptions {
  * fires one haptic tick per `tickDeg` of accumulated travel. What the turn DOES is entirely the caller's:
  * `onTurn` applies it and hands back the running total.
  */
+/**
+ * Tightening degrees per degree of FINGER travel around the dial.
+ *
+ * At 1 the two were the same, which meant a 720° fastener needed two complete laps of the dial with
+ * one thumb — accurate to the real motion and exhausting to perform. The gain keeps the fastener
+ * turning its full two turns on screen while the hand does less work.
+ *
+ * 2.6 overshot: a leg finished in barely a quarter of a lap, which reads as the gesture doing the
+ * work rather than the player. 1.7 lands a 720° fastener at about 1.2 laps — still well under the
+ * original two, but far enough that a deliberate turn is still a turn.
+ */
+const TURN_GAIN = 1.7;
+
 export function useDialTurn({ resetKey, tickDeg, bidirectional, onTurn }: DialTurnOptions): PanGesture {
   const lastAngle = useRef<number | null>(null);
   const lastTick = useRef(0);
@@ -163,10 +176,11 @@ export function useDialTurn({ resetKey, tickDeg, bidirectional, onTurn }: DialTu
         // Unwrap across the ±180 seam, or crossing it reads as a near-full turn backwards.
         if (d > 180) d -= 360;
         if (d < -180) d += 360;
-        const step = bidirectional ? Math.abs(d) : d;
-        // The upper bound drops a finger that jumped rather than dragged (a lift and re-press across the dial).
-        if (step > 0 && step < 120) {
-          const total = onTurn(step);
+        const raw = bidirectional ? Math.abs(d) : d;
+        // The bound is checked on RAW finger movement, before the gain: it exists to drop a finger
+        // that jumped rather than dragged, and that is a fact about the touch, not about the screw.
+        if (raw > 0 && raw < 120) {
+          const total = onTurn(raw * TURN_GAIN);
           const tick = Math.floor(total / tickDeg);
           if (tick > lastTick.current) {
             lastTick.current = tick;

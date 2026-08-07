@@ -16,7 +16,6 @@ import { avatarForProfile } from '@/src/components/avatarAssets';
 import { ACCENT_LIGHT, ELEVATION, RADIUS, Theme, TYPE, useStyles } from '@/src/game/ui/system/theme';
 import { tutorialPresentationForProfile } from './presentation';
 import { VisualLongPressCue } from './VisualLongPressCue';
-import { VisualToolboxCue } from './VisualToolboxCue';
 import { VisualJoystickCue } from './VisualJoystickCue';
 import { VoiceButton } from '@/src/game/ui/hud/VoiceButton';
 const PADDING = 0;
@@ -317,9 +316,6 @@ export function MascotGuideOverlay({
           {presentation.showVisualDemo && step.id === 'long-press-part' ? (
             <VisualLongPressCue frame={frame} />
           ) : null}
-          {presentation.showVisualDemo && step.id === 'select-allen-key' ? (
-            <VisualToolboxCue frame={frame} />
-          ) : null}
           {presentation.showVisualDemo && step.id === 'view-under-table' ? (
             <VisualJoystickCue frame={frame} />
           ) : null}
@@ -371,11 +367,9 @@ export function MascotGuideOverlay({
               {presentation.reducedText
                   ? step.id === 'long-press-part'
                     ? 'Press and hold.'
-                    : step.id === 'select-allen-key'
-                      ? 'Tap the toolbox.'
-                      : step.id === 'view-under-table'
-                        ? 'Move the joystick.'
-                        : 'Follow the highlighted target.'
+                    : step.id === 'view-under-table'
+                      ? 'Move the joystick.'
+                      : 'Follow the highlighted target.'
                   : 'Complete the highlighted action to continue.'}
             </Text>
             {step.id === 'pinch-to-zoom' && onSimulatePinch ? (
@@ -401,7 +395,6 @@ function visualMessageForStep(stepId: string, fallback: string): string {
     'drag-and-snap': 'Move it to the target',
     'view-under-table': 'Rotate to the underside',
     'place-connector': 'Match the bolt to the hole',
-    'select-allen-key': 'Choose the Allen key',
     'tighten-connector': 'Turn clockwise',
     'install-four-legs': 'Match each leg to a bolt',
     'stand-table-upright': 'Turn the table upright',

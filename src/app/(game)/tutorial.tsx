@@ -58,7 +58,7 @@ import {
   ClusterFocusControl,
 } from "@/src/game/ui/hud/ClusterFocusControl";
 import {
-  AutoViewToggleButton,
+  SpotButton,
   FocusToggleButton,
 } from "@/src/game/ui/hud/ToggleChips";
 import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
@@ -217,6 +217,10 @@ function TutorialScreen() {
         ) {
           tutorial.completeEvent("auto_view_toggled");
         }
+        // Spot writes hintPartId; a rising edge on it IS a press, and it needs no new plumbing.
+        if (!previous.hintPartId && state.hintPartId) {
+          tutorial.completeEvent("spot_used");
+        }
         if (
           !settingsTutorialActive &&
           state.settings.focusMode !== previous.settings.focusMode
@@ -237,9 +241,6 @@ function TutorialScreen() {
               previous.settings.showInstructions)
         ) {
           tutorial.completeEvent("instruction_preferences_changed");
-        }
-        if (!previous.selectedTool && state.selectedTool) {
-          tutorial.completeEvent("toolbar_used");
         }
       }),
     [],
@@ -319,7 +320,6 @@ function TutorialScreen() {
       (tutorialStepId === "install-four-legs" ||
         tutorialStepId === "view-under-table" ||
         tutorialStepId === "place-connector" ||
-        tutorialStepId === "select-allen-key" ||
         tutorialStepId === "tighten-connector")
     ) {
       return [];
@@ -348,7 +348,6 @@ function TutorialScreen() {
           item.action?.type === "insertFastener",
       );
     }
-    if (tutorialStepId === "select-allen-key") return [];
     if (tutorialStepId === "tighten-connector") return [];
     return sceneState.trayItems;
   }, [
@@ -682,7 +681,7 @@ function TutorialScreen() {
               <FocusToggleButton />
             </TutorialTarget>
             <TutorialTarget id="autoView" pointerEvents="auto">
-              <AutoViewToggleButton />
+              <SpotButton />
             </TutorialTarget>
           </View>
         ) : null}
