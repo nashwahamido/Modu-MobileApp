@@ -1,4 +1,4 @@
-import { useStyles } from "@/src/game/ui/system/theme";
+import { ELEVATION, FONT, RADIUS, SIZE, SPACE, useStyles } from "@/src/game/ui/system/theme";
 import { StyleSheet, Pressable, Text } from "react-native";
 import { actionCluster } from "@/src/game/core/evaluation/clusters";
 import { engageAxis } from "@/src/game/core/evaluation/engagement";
@@ -17,7 +17,6 @@ interface Props {
 export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
   const styles = useStyles(makeStyles);
   const heldActionId = useGameStore((s) => s.heldActionId);
-
   const step = () => {
     const store = useGameStore.getState();
     const furniture = store.furniture;
@@ -152,7 +151,7 @@ export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
   if (!__DEV__) return null;
   return (
     <Pressable
-      style={[styles.btn, !!heldActionId && styles.btnBusy]}
+      style={styles.btn}
       onPress={step}
     >
       <Text style={styles.text}>▶ auto</Text>
@@ -162,14 +161,16 @@ export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
 
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
+  // Styled as a HUD CHIP, matching Spot and the recenter button beside it. The old dark translucent
+  // scrim pill read as disabled next to solid cream neighbours — nothing was wrong with its state,
+  // it simply did not look like the other controls on the row.
   btn: {
-    // Flows inside play.tsx's bottom-right togglesRow (her placement).
-    backgroundColor: t.scrim,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 14,
+    minHeight: SIZE.controlHeightSm,
+    paddingHorizontal: SPACE.md,
     justifyContent: "center",
+    borderRadius: RADIUS.pill,
+    backgroundColor: t.surface,
+    ...ELEVATION.card,
   },
-  btnBusy: { opacity: 0.4 },
-  text: { color: t.onAccent, fontSize: 13, fontWeight: "700" },
+  text: { color: t.text, fontFamily: FONT, fontSize: 13, fontWeight: "800" },
   });
