@@ -18,6 +18,7 @@ import { FriendPickerOverlay } from './FriendPickerOverlay';
 import { RoomBottomBar } from './RoomBottomBar';
 import { RoomLightControls } from './RoomLightControls';
 import { RoomLoadingOverlay } from './RoomLoadingOverlay';
+import { RoomFirstPlacementGuide } from './RoomFirstPlacementGuide';
 import { PlacementRail } from './PlacementRail';
 import { RoomTopStats } from './RoomTopStats';
 import { ShopOverlay } from '../../shop/ShopOverlay';
@@ -82,6 +83,7 @@ export function RoomExperience() {
   const [visitPickerOpen, setVisitPickerOpen] = useState(false);
   const [showRoomEditGuide, setShowRoomEditGuide] = useState(false);
   const [showRoomWelcomeGuide, setShowRoomWelcomeGuide] = useState(false);
+  const [firstPlacementGuideSession, setFirstPlacementGuideSession] = useState(false);
   const [roomRotation, setRoomRotation] = useState(0);
   const [roomZoom, setRoomZoom] = useState(1);
   const roomRotationRef = useRef(roomRotation);
@@ -97,6 +99,7 @@ export function RoomExperience() {
       !hydrated ||
       !revealed ||
       editing ||
+      firstPlacementGuideSession ||
       placedFurnitureCount === 0
     )
       return;
@@ -111,6 +114,7 @@ export function RoomExperience() {
     };
   }, [
     editing,
+    firstPlacementGuideSession,
     placedFurnitureCount,
     hydrated,
     revealed,
@@ -215,6 +219,8 @@ export function RoomExperience() {
 
       {/* All of the placement UI — swatches and buttons — lives in one component on the right edge; this screen only decides when it is up. See PlacementRail. */}
       {editing ? <PlacementRail /> : null}
+
+      <RoomFirstPlacementGuide onSessionChange={setFirstPlacementGuideSession} />
 
       {shopOpen ? <ShopOverlay onClose={() => setShopOpen(false)} /> : null}
 

@@ -75,7 +75,7 @@ import { MomentumCompanion } from "@/src/game/tutorial/MomentumCompanion";
 import { MomentumAttentionOverlay } from "@/src/game/tutorial/MomentumAttentionOverlay";
 import { useTutorialStore } from "@/src/game/tutorial/store";
 import { useTutorialHaptics } from "@/src/game/tutorial/useTutorialHaptics";
-import { furnitureForProfile } from "@/src/game/core/profile";
+import { usePlacementStore } from "@/src/room/core/placement";
 import {
   TUTORIAL_STEP_REWARD_TOKENS,
   type ToolTutorialKind,
@@ -830,7 +830,7 @@ function TutorialScreen() {
           onZoomDelta(0.18);
           useTutorialStore.getState().completeEvent("pinch_zoomed");
         }}
-        onContinueToAssembly={() => {
+        onPlaceInRoom={() => {
           const tutorial = useTutorialStore.getState();
           const finishedAllSteps =
             tutorial.completed &&
@@ -842,16 +842,11 @@ function TutorialScreen() {
           const finishedAssembly =
             requiredActions > 0 && game.completed.length >= requiredActions;
           if (!finishedAllSteps || !finishedAssembly) return;
-          router.replace({
-            pathname: "/play",
-            params: { id: furnitureForProfile(game.profile) },
+          const started = usePlacementStore.getState().startPlacing("lack-table", {
+            firstPlacementGuide: true,
           });
-        }}
-        onDeferAssembly={() => {
-          router.replace({
-            pathname: "/room",
-            params: { welcome: "tutorial" },
-          });
+          if (!started) return;
+          router.replace("/room");
         }}
       />
       <MomentumAttentionOverlay />

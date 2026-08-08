@@ -25,8 +25,7 @@ interface Props {
   assemblyComplete: boolean;
   earnedXp: number;
   onClaimReward: () => void;
-  onContinueToAssembly?: () => void;
-  onDeferAssembly?: () => void;
+  onPlaceInRoom?: () => void;
   onSimulatePinch?: () => void;
   blocked?: boolean;
   audioEnabled?: boolean;
@@ -37,8 +36,7 @@ export function MascotGuideOverlay({
   assemblyComplete,
   earnedXp,
   onClaimReward,
-  onContinueToAssembly,
-  onDeferAssembly,
+  onPlaceInRoom,
   onSimulatePinch,
   blocked = false,
   audioEnabled = false,
@@ -179,7 +177,7 @@ export function MascotGuideOverlay({
           <View style={styles.rewardCopy}>
             <Text style={styles.rewardTitle}>Core skills complete!</Text>
             <Text style={styles.rewardMessage}>
-              Ready to enter your assembly task?
+              Your LACK table is ready for its first home.
             </Text>
             <View style={styles.rewardXpRow}>
               <Image
@@ -191,25 +189,15 @@ export function MascotGuideOverlay({
             </View>
             <View style={styles.settingsActions}>
               <Button
-                label="Enter assembly task"
+                label="Place LACK in my room"
                 variant="primary"
                 small
                 style={styles.primaryAction}
                 onPress={() => {
                   skipSettingsTutorial();
-                  onContinueToAssembly?.();
+                  onPlaceInRoom?.();
                 }}
               />
-              <Pressable
-                onPress={() => {
-                  skipSettingsTutorial();
-                  onDeferAssembly?.();
-                }}
-                style={styles.laterAction}
-                hitSlop={8}
-              >
-                <Text style={styles.skipText}>Later</Text>
-              </Pressable>
             </View>
           </View>
         </View>
@@ -228,7 +216,7 @@ export function MascotGuideOverlay({
           <Image source={mascotImage} style={styles.rewardMascot} resizeMode="contain" />
           <View style={styles.rewardCopy}>
             <Text style={styles.rewardTitle}>Tutorial completed!</Text>
-            <Text style={styles.rewardMessage}>Now entering the assembly task.</Text>
+            <Text style={styles.rewardMessage}>Your LACK table is ready for its first home.</Text>
             {/* XP on the left, the CTA on the right, sharing one baseline row. */}
             <View style={styles.rewardActionRow}>
               <View style={styles.rewardXpRow}>
@@ -240,7 +228,7 @@ export function MascotGuideOverlay({
                 <Text style={styles.rewardXpValue}>+{TUTORIAL_REWARD_TOKENS}</Text>
               </View>
               <Button
-                label="Enter assembly task"
+                label="Place LACK in my room"
                 variant="primary"
                 small
                 onPress={() => {
@@ -248,7 +236,7 @@ export function MascotGuideOverlay({
                   if (!tutorial.completed || tutorial.currentIndex !== tutorial.steps.length - 1) return;
                   onClaimReward();
                   dismissReward();
-                  onContinueToAssembly?.();
+                  onPlaceInRoom?.();
                 }}
               />
             </View>
