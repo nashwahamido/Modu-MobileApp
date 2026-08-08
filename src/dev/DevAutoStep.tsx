@@ -48,6 +48,24 @@ export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
       return;
     }
     // Auto drives only the FOCUSED cluster: available() lets cluster-less actions (combineClusters, finishing beats) through no matter what is focused, and stepping those would assemble work that isn't the section on screen. With a focus set, auto goes quiet once that cluster is done rather than running ahead.
+    // A PARKED DRIVE — a slide, a screw-down combine — is its own state: parkDrive sets
+    // driveActionId and the action stays in available() as a placePart, so auto used to take the
+    // pickup branch and call beginPickup on a part already parked mid-drive, which does nothing.
+    // Drives advance through advanceDrive, and stepping it rather than jumping to 1 plays the same
+    // travel the gesture produces.
+    const driveId = store.driveActionId;
+    if (driveId) {
+      const tick = setInterval(() => {
+        const st = useGameStore.getState();
+        if (st.driveActionId !== driveId) {
+          clearInterval(tick);
+          return;
+        }
+        st.advanceDrive(driveId, 0.08);
+      }, 40);
+      return;
+    }
+
     const legal = store.available();
     // Prefer the focused cluster, but never REFUSE because of it. Cluster-less actions (combines,
     // finishing beats) and a focus whose work is already done both left this undefined, and the

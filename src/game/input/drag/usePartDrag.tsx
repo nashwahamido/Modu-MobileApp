@@ -385,17 +385,22 @@ export function usePartDrag({
           const furniture = store.furniture;
           if (!furniture) return;
           const part = furniture.parts[action.partId];
-          const focus = getFocusPoint();
           // Drag plane at the action's OWN target height (her model): on-screen overlap with a socket then means genuine 3D proximity — a finger on a 2D screen cannot steer depth.
           const doneSet0 = new Set(store.completed);
           const ownTarget = targetPositionForAction(action, furniture.parts, doneSet0);
           const grabOffset = part.visualCenterOffset ?? [0, 0, 0];
           // The plane pins the part's VISUAL CENTER (what the finger holds), so anchor it at the socket's visual-center height — origin height alone left tall parts (DALFRED legs: +0.27m center offset) vertically unreachable in level mode.
           const planeY = ownTarget[1] + grabOffset[1];
+          // The finger is on a TRAY CARD at pickup, which is low on the screen — with a near-level
+          // camera that ray never reaches a work plane set at the socket's height, and fingerOnPlane
+          // returns null. The old fallback was a plane FACING the camera through the focus point, so
+          // the part spawned close to the lens and then jumped to the model the first frame the ray
+          // finally hit the real plane. Falling back to the socket itself keeps the part in the
+          // model's own space from frame one; the first successful ray then MOVES it rather than
+          // teleporting it.
+          const socketStart: Float3 = [ownTarget[0], planeY, ownTarget[2]];
           const visualStart =
-            fingerOnPlane(e.absoluteX, e.absoluteY, planeY) ??
-            fingerOnCameraPlaneAt(e.absoluteX, e.absoluteY, focus) ??
-            focus;
+            fingerOnPlane(e.absoluteX, e.absoluteY, planeY) ?? socketStart;
           const base: Float3 = [
             visualStart[0] - grabOffset[0] - part.pose.position[0],
             visualStart[1] - grabOffset[1] - part.pose.position[1],

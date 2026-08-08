@@ -56,10 +56,10 @@ export function AutoViewToggleButton() {
 
 // Exported so the tutorial renders the SAME control the build does, rather than its own copy — that
 // divergence is how the tutorial ended up teaching an Auto-view chip the assembly no longer shows.
+// Rendered in FOCUS MODE too. Focus strips the HUD down to the current step, and Spot is about the
+// current step — "which part, and where does it go" is the question focus mode leaves a player alone
+// with, so it is the last thing that should disappear alongside the rest of the chrome.
 export function SpotButton() {
-  const focusMode = useGameStore((s) => s.settings.focusMode);
-
-  if (focusMode) return null;
   return (
     <Button
       label="Spot"
