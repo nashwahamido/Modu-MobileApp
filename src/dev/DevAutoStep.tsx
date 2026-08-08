@@ -23,31 +23,6 @@ export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
     const furniture = store.furniture;
     if (!furniture) return;
 
-    // A part in hand used to stop auto dead. Finishing what is already held IS the next step — and
-    // it is the state a stuck player is most likely to press this in, since a floating part is
-    // exactly when the gesture is not working for them.
-    if (store.heldActionId) {
-      const heldId = store.heldActionId;
-      const held = furniture.actions.find((a) => a.actionId === heldId);
-      const partId = held?.partId;
-      if (partId) {
-        const part = furniture.parts[partId];
-        const target = targetPositionForAction(held, furniture.parts, new Set(store.completed));
-        const dest: [number, number, number] = [
-          target[0] - part.pose.position[0],
-          target[1] - part.pose.position[1],
-          target[2] - part.pose.position[2],
-        ];
-        useGameStore.getState().setDragFit("nearCorrect", heldId);
-        animateDriver(heldDriver, dest, 450, () => {
-          useGameStore.getState().releaseHeld();
-        });
-      } else {
-        store.completeAction(heldId);
-      }
-      return;
-    }
-    // Auto drives only the FOCUSED cluster: available() lets cluster-less actions (combineClusters, finishing beats) through no matter what is focused, and stepping those would assemble work that isn't the section on screen. With a focus set, auto goes quiet once that cluster is done rather than running ahead.
     // A PARKED DRIVE — a slide, a screw-down combine — is its own state: parkDrive sets
     // driveActionId and the action stays in available() as a placePart, so auto used to take the
     // pickup branch and call beginPickup on a part already parked mid-drive, which does nothing.
@@ -66,6 +41,41 @@ export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
       return;
     }
 
+    // A part in hand used to stop auto dead. Finishing what is already held IS the next step — and
+    // it is the state a stuck player is most likely to press this in, since a floating part is
+    // exactly when the gesture is not working for them.
+    if (store.heldActionId) {
+      const heldId = store.heldActionId;
+      const held = furniture.actions.find((a) => a.actionId === heldId);
+      const partId = held?.partId;
+      if (partId) {
+        const part = furniture.parts[partId];
+        const target = targetPositionForAction(held, furniture.parts, new Set(store.completed));
+        const dest: [number, number, number] = [
+          target[0] - part.pose.position[0],
+          target[1] - part.pose.position[1],
+          target[2] - part.pose.position[2],
+        ];
+        useGameStore.getState().setDragFit("nearCorrect", heldId);
+        animateDriver(heldDriver, dest, 450, () => {
+          const st = useGameStore.getState();
+          st.releaseHeld();
+          // releaseHeld runs a FIT CHECK, and some held actions do not satisfy it — the seat slide
+          // holds its part through a local progress track and finishes with completeAction, not with
+          // a drop. If the release did not take, finish it outright: this is a dev stepper, and
+          // "nothing happened" is the one outcome it must not produce.
+          const after = useGameStore.getState();
+          if (!after.completed.includes(heldId)) {
+            after.completeAction(heldId);
+            after.cancelHeld();
+          }
+        });
+      } else {
+        store.completeAction(heldId);
+      }
+      return;
+    }
+    // Auto drives only the FOCUSED cluster: available() lets cluster-less actions (combineClusters, finishing beats) through no matter what is focused, and stepping those would assemble work that isn't the section on screen. With a focus set, auto goes quiet once that cluster is done rather than running ahead.
     const legal = store.available();
     // Prefer the focused cluster, but never REFUSE because of it. Cluster-less actions (combines,
     // finishing beats) and a focus whose work is already done both left this undefined, and the

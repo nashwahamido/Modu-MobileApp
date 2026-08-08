@@ -1,7 +1,7 @@
 import * as Haptics from "expo-haptics";
 import { CONTROL } from "@/src/game/ui/system/theme";
 import { useEffect, useRef } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Animated, Easing, Image, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useGameStore } from "@/src/game/core/store";
 import { AssemblyAction, Vec3 } from "@/src/game/core/type";
@@ -29,6 +29,21 @@ export function SlideControl({ action, driver, park }: Props) {
     lastY.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [action.actionId]);
+
+  // The arrow that runs the track while it is untouched.
+  const cue = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (progress > 0) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(cue, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.delay(220),
+        Animated.timing(cue, { toValue: 0, duration: 0, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [cue, progress]);
 
   const pan = Gesture.Pan()
     .runOnJS(true)
@@ -69,9 +84,35 @@ export function SlideControl({ action, driver, park }: Props) {
           <View style={[styles.fill, { height: TRACK * progress }]}>
             <Text style={styles.arrow}>↓</Text>
           </View>
+          {/* Untouched, the fill has zero height and its arrow is invisible — so the control shows
+              nothing at all at 0% and the only cue that it slides is the label under it. This runs
+              a real arrow down the track until the drag starts; the motion is the instruction. */}
+          {progress === 0 ? (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.cue,
+                {
+                  opacity: cue.interpolate({ inputRange: [0, 0.15, 0.8, 1], outputRange: [0, 1, 1, 0] }),
+                  transform: [
+                    { translateY: cue.interpolate({ inputRange: [0, 1], outputRange: [0, TRACK - 86] }) },
+                  ],
+                },
+              ]}
+            >
+              <Image
+                source={require("@/src/assets/ui/icons/arrow-next.png")}
+                style={styles.cueArrow}
+                resizeMode="contain"
+              />
+            </Animated.View>
+          ) : null}
         </View>
       </GestureDetector>
-      <Text style={styles.hint}>
+      {/* pointerEvents none: this label is drawn over the HUD row below it, and a Text child of a
+          box-none wrapper still swallows touches — it was eating presses meant for the auto button
+          sitting underneath. Nothing here is interactive. */}
+      <Text style={styles.hint} pointerEvents="none">
         Slide it in · {Math.round(progress * 100)}%
       </Text>
     </View>
@@ -79,6 +120,9 @@ export function SlideControl({ action, driver, park }: Props) {
 }
 
 const styles = StyleSheet.create({
+  cue: { position: "absolute", top: 54, left: 0, right: 0, alignItems: "center" },
+  // The nav arrow head, turned a quarter turn to point down the track.
+  cueArrow: { width: 26, height: 26, transform: [{ rotate: "90deg" }] },
   wrap: {
     position: "absolute",
     right: 160,
