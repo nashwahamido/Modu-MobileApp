@@ -16,6 +16,8 @@ import Svg, { Circle, G, Path } from "react-native-svg";
 
 import { CONTROL } from "@/src/game/ui/system/theme";
 
+import { useGameStore } from "@/src/game/core/store";
+import type { ProfileId } from "@/src/game/core/profile";
 const RING = 96; // outer diameter of the band
 const STROKE = 9; // the band's own width — thin, so it reads as a gauge and not a donut
 const INK = 1.5; // the dark outline, kept fine so it inks the shape without thickening it
@@ -155,12 +157,21 @@ export interface DialTurnOptions {
  * 2.6 overshot: a leg finished in barely a quarter of a lap, which reads as the gesture doing the
  * work rather than the player. 1.7 lands a 720° fastener at about 1.2 laps — still well under the
  * original two, but far enough that a deliberate turn is still a turn.
+ *
+ * PER PROFILE, because effort is exactly the axis these profiles differ on. Momentum is built around
+ * low friction and frequent small wins — a two-lap grind is the opposite of that, and it is the
+ * profile most likely to be abandoned mid-turn. The others keep the deliberate weight.
  */
-const TURN_GAIN = 1.7;
+const TURN_GAIN_DEFAULT = 1.7;
+const TURN_GAIN: Partial<Record<ProfileId, number>> = {
+  momentum: 2.7,
+};
 
 export function useDialTurn({ resetKey, tickDeg, bidirectional, onTurn }: DialTurnOptions): PanGesture {
   const lastAngle = useRef<number | null>(null);
   const lastTick = useRef(0);
+  const profile = useGameStore((s) => s.profile);
+  const gain = TURN_GAIN[profile] ?? TURN_GAIN_DEFAULT;
 
   useEffect(() => {
     lastAngle.current = null;
@@ -180,7 +191,7 @@ export function useDialTurn({ resetKey, tickDeg, bidirectional, onTurn }: DialTu
         // The bound is checked on RAW finger movement, before the gain: it exists to drop a finger
         // that jumped rather than dragged, and that is a fact about the touch, not about the screw.
         if (raw > 0 && raw < 120) {
-          const total = onTurn(raw * TURN_GAIN);
+          const total = onTurn(raw * gain);
           const tick = Math.floor(total / tickDeg);
           if (tick > lastTick.current) {
             lastTick.current = tick;

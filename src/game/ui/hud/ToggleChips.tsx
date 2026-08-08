@@ -66,7 +66,7 @@ export function SpotButton() {
       small
       pill
       variant="secondary"
-      onPress={() => useGameStore.getState().suggestNext()}
+      onPress={() => useGameStore.getState().suggestNext("spot")}
       accessibilityLabel="Spot the next part"
     />
   );

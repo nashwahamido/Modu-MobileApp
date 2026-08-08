@@ -3,7 +3,7 @@ import { router } from "expo-router";
 import { OrientationLock } from "expo-screen-orientation";
 import { View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { HUD_SIDE_MARGIN, useHudInsets } from '@/src/hooks/use-safe-insets';
+import { useHudInsets } from '@/src/hooks/use-safe-insets';
 
 import { FilamentScene } from "react-native-filament";
 

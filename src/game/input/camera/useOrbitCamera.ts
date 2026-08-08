@@ -184,9 +184,30 @@ export function useOrbitCamera(
 
   const manipulator = useStableOrbitManipulator(home.eye, home.target);
 
+  /**
+   * How far the player has TRUCKED the camera away from the computed pivot.
+   *
+   * A two-finger pan is a truck: grabBegin(..., true) slides the eye and the target together. Only
+   * the eye used to be captured, so the next setHome rebuilt the camera with the panned eye and the
+   * un-panned target — which is why orbit still swung about the model's original centre, and why
+   * the drag plane (built from the camera basis) stopped agreeing with where the model actually was.
+   * Recording the offset keeps the pair consistent while still letting the pivot follow the step.
+   */
+  const panOffsetRef = useRef<[number, number, number]>([0, 0, 0]);
+
   const captureEye = useCallback(() => {
     const la = manipulator?.getLookAt();
-    if (la) eyeRef.current = [la[0][0], la[0][1], la[0][2]];
+    if (!la) return;
+    eyeRef.current = [la[0][0], la[0][1], la[0][2]];
+    // The target the manipulator ACTUALLY has, minus the one the app computed for this step. After
+    // an orbit these agree and the offset stays zero; after a truck they do not, and the difference
+    // is exactly the player's pan.
+    const base = targetRef.current;
+    panOffsetRef.current = [
+      la[1][0] - base[0],
+      la[1][1] - base[1],
+      la[1][2] - base[2],
+    ];
   }, [manipulator]);
 
   useEffect(() => {
@@ -194,7 +215,17 @@ export function useOrbitCamera(
     // In the tutorial, the first pickup aims the camera at the real drop point.
     // Keep that exact target after placement so the centre ring stays aligned and the newly placed part does not jump when held state is cleared.
     if (stableFraming && framedHasPlaced) return;
-    const nextTarget = pivot(stage, framingCluster, null, focusPartId, focusCluster);
+    const base = pivot(stage, framingCluster, null, focusPartId, focusCluster);
+    // Carry the player's pan across the re-frame. Without this every step change yanked the view
+    // back to the model centre and silently re-broke the eye/target pairing.
+    const p = panOffsetRef.current;
+    // Mutable tuple, not Vec3: home.target is [number, number, number] and Vec3 is readonly, so the
+    // readonly one cannot be assigned into it.
+    const nextTarget: [number, number, number] = [
+      base[0] + p[0],
+      base[1] + p[1],
+      base[2] + p[2],
+    ];
     const apply = () =>
       setHome((h) =>
         h.target.every((v, i) => Math.abs(v - nextTarget[i]) < 1e-5)
@@ -315,6 +346,8 @@ export function useOrbitCamera(
     resetTick.current += 1;
     const target = pivot(stage, framingCluster, heldFocusPoint, focusPartId, focusCluster);
     eyeRef.current = HOME_EYE;
+    // Recentre means recentre: the accumulated pan is part of what the player is asking to undo.
+    panOffsetRef.current = [0, 0, 0];
     setHome({
       eye: HOME_EYE,
       target: [

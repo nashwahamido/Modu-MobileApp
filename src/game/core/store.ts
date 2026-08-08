@@ -137,7 +137,10 @@ interface GameState {
   /** Reaching for a not-yet-available part in free mode → set a gentle nudge. */
   noteBlocked: (actionId: ActionId) => void;
   /** Free-mode hint BUTTON: suggest one doable next step (never forces it). */
-  suggestNext: () => void;
+  /** `source` is which control asked. The "?" button is a request FOR WORDS and always gets them;
+   *  Spot is a request for a demonstration, and in Control — which has the "?" button as a separate
+   *  affordance — it stays wordless. */
+  suggestNext: (source?: "hint" | "spot") => void;
   clearHint: () => void;
 
   setSelectedTool: (tool: ToolId | null) => void;
@@ -405,7 +408,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
     if (reason)
       set({ hint: hintText(reason, s.furniture, s.settings.textLevel), hintGroup: null });
   },
-  suggestNext: () => {
+  suggestNext: (source = "hint") => {
     const s = get();
     if (!s.furniture) return;
     const next = s.availableForMode()[0];
@@ -421,9 +424,17 @@ export const useGameStore = create<GameState>()((set, get) => ({
     // A pickup hint also names a tray card — flag its group so the tray can flash it and scroll it into view.
     const part = next.partId ? s.furniture.parts[next.partId] : undefined;
     const group = isPickupType(next.type) && part ? part.group : null;
+    // Suppressed only for SPOT in Control: that profile has the "?" button for written hints, so a
+    // toast on top of the demonstration is the same advice twice. Pressing "?" is a request for the
+    // words themselves and always produces them, on every profile.
+    const wantsText = !!text && (source === "hint" || s.profile !== "control");
     set({
-      hint: text ? `Try: ${text}` : null,
-      hintGroup: text ? group : null,
+      hint: wantsText ? `Try: ${text}` : null,
+      // NOT gated on the text. hintGroup drives the parts-tray highlight, which is the other half of
+      // the answer: the ghost shows WHERE the part goes, the tray flash shows WHICH card to pick up.
+      // Suppressing it in Control left the demonstration pointing at a socket with no way to find
+      // the part that fills it.
+      hintGroup: group,
       // The spotlight no longer depends on there being TEXT — a hint with no copy still has a part.
       hintPartId: next.partId ?? null,
       hintPulse: s.hintPulse + 1,
