@@ -37,24 +37,20 @@ test("Control teaches its user-directed HUD controls", () => {
     "hud-recenter",
     "control-hint",
     "hud-undo",
-    "hud-redo",
     "hud-focus",
     "hud-spot",
   ]) {
     assert.ok(ids.includes(id), `${id} should be included`);
   }
 
-  const firstHudIndex = ids.indexOf("hud-recenter");
-  assert.deepEqual(
-    ids.slice(firstHudIndex, firstHudIndex + 6),
-    [
-      "hud-recenter",
-      "hud-undo",
-      "hud-redo",
-      "control-hint",
-      "hud-focus",
-      "hud-spot",
-    ],
+  assert.equal(ids.includes("hud-redo"), false);
+  assert.ok(
+    ids.indexOf("control-hint") > ids.indexOf("tighten-connector"),
+    "Hint should be introduced only after the player has assembled something",
+  );
+  assert.ok(
+    ids.indexOf("control-hint") < ids.indexOf("install-four-legs"),
+    "Hint should remain available before the repeated assembly work",
   );
 });
 
@@ -66,17 +62,17 @@ test("Momentum teaches shared HUD controls without Hint or the toolbox", () => {
   for (const id of [
     "hud-recenter",
     "hud-undo",
-    "hud-redo",
     "hud-focus",
     "hud-spot",
   ]) {
     assert.ok(ids.includes(id), `${id} should be included`);
   }
   assert.equal(ids.includes("control-hint"), false);
+  assert.equal(ids.includes("hud-redo"), false);
   assert.equal(ids.includes("select-allen-key"), false);
 });
 
-test("every profile teaches preferences through the real Settings panel", () => {
+test("every profile keeps the Settings walkthrough short and contextual", () => {
   for (const profile of ["control", "visual", "momentum", "clearPath"] as const) {
     const steps = tutorialStepsFor(context(profile, profile === "control"));
     const settingsSteps = steps.filter((step) => step.targetId === "settings");
@@ -89,9 +85,13 @@ test("every profile teaches preferences through the real Settings panel", () => 
       steps.indexOf(settingsSteps.at(-1)!) <
         steps.findIndex((step) => step.id === "view-under-table"),
     );
-    if (profile !== "control" && profile !== "momentum") {
-      assert.ok(settingsSteps.some((step) => step.id === "focus-mode-settings"));
-      assert.ok(settingsSteps.some((step) => step.id === "auto-view-settings"));
-    }
+    assert.equal(
+      settingsSteps.some((step) => step.id === "focus-mode-settings"),
+      false,
+    );
+    assert.equal(
+      settingsSteps.some((step) => step.id === "auto-view-settings"),
+      false,
+    );
   }
 });

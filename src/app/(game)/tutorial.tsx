@@ -32,6 +32,7 @@ import {
 } from "@/src/game/ui/hud/hudChrome";
 import { Button } from "@/src/game/ui/system/Button";
 import { useStepObjective } from "@/src/game/core/presentation/useStepObjective";
+import { useAssemblySfx } from "@/src/game/audio/useAssemblySfx";
 
 import { useGameStore } from "@/src/game/core/store";
 import { useCurrentUserId, useRepos } from "@/src/data";
@@ -73,6 +74,7 @@ import { MascotGuideOverlay } from "@/src/game/tutorial/MascotGuideOverlay";
 import { MomentumCompanion } from "@/src/game/tutorial/MomentumCompanion";
 import { MomentumAttentionOverlay } from "@/src/game/tutorial/MomentumAttentionOverlay";
 import { useTutorialStore } from "@/src/game/tutorial/store";
+import { useTutorialHaptics } from "@/src/game/tutorial/useTutorialHaptics";
 import { furnitureForProfile } from "@/src/game/core/profile";
 import {
   TUTORIAL_STEP_REWARD_TOKENS,
@@ -83,6 +85,7 @@ const TUTORIAL_FURNITURE_ID = "lack-table";
 
 function TutorialScreen() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
+  useTutorialHaptics();
   const hud = useHudInsets();
   const sceneState = useSceneState();
   const {
@@ -275,6 +278,7 @@ function TutorialScreen() {
   const activeCluster = useGameStore((s) => s.activeCluster);
   const mode = useGameStore((s) => s.mode);
   const settings = useGameStore((s) => s.settings);
+  useAssemblySfx(settings.soundEffects);
   const profile = useGameStore((s) => s.profile);
   const heldActionId = useGameStore((s) => s.heldActionId);
   const renderStyle = useGameStore((s) => s.renderStyle);

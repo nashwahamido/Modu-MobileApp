@@ -147,12 +147,6 @@ export const CONTEXTUAL_TUTORIAL_STEPS: TutorialStep[] = [
     message: "Use Back one step to return to the previous assembly step.",
     event: "step_undone",
   },
-  {
-    id: "redo-step",
-    targetId: "undo",
-    message: "Use Forward one step to restore the step you just returned from.",
-    event: "step_redone",
-  },
 ];
 
 /** Momentum and Control explicitly teach the HUD controls requested in the review. */
@@ -170,13 +164,6 @@ export const SHARED_HUD_TUTORIAL_STEPS: TutorialStep[] = [
     message: "Tap Back one step to undo the last assembly action.",
     shortLabel: "Try Undo",
     event: "step_undone",
-  },
-  {
-    id: "hud-redo",
-    targetId: "undo",
-    message: "Tap Forward one step to restore the action and continue.",
-    shortLabel: "Restore the step",
-    event: "step_redone",
   },
   {
     id: "hud-focus",
@@ -224,20 +211,6 @@ export const SETTINGS_TUTORIAL_STEPS: TutorialStep[] = [
     event: "instruction_preferences_changed",
     when: ({ mode }) => mode === "guide",
   },
-  {
-    id: "focus-mode-settings",
-    targetId: "settings",
-    message:
-      "You can use Focus mode to show only the current part or action.",
-    event: "focus_mode_toggled",
-  },
-  {
-    id: "auto-view-settings",
-    targetId: "settings",
-    message:
-      "You can use Auto-view to automatically frame the next open socket.",
-    event: "auto_view_toggled",
-  },
 ];
 
 export const FUTURE_TUTORIAL_REQUIREMENTS = {
@@ -269,21 +242,13 @@ export const tutorialStepsFor = (context: TutorialContext): TutorialStep[] => {
     context.profile === "control" || context.profile === "momentum"
       ? SHARED_HUD_TUTORIAL_STEPS
       : [];
-  const controlHudSteps =
-    context.profile === "control"
-      ? [
-          ...sharedHudSteps.slice(0, 3),
-          ...CONTROL_TUTORIAL_STEPS,
-          ...sharedHudSteps.slice(3),
-        ]
-      : sharedHudSteps;
+  const assemblyStepsWithContextualHint = assemblySteps.flatMap((step) =>
+    context.profile === "control" && step.id === "tighten-connector"
+      ? [step, ...CONTROL_TUTORIAL_STEPS]
+      : [step],
+  );
   const settingsSteps = SETTINGS_TUTORIAL_STEPS.filter(
-    (step) =>
-      (!step.when || step.when(context)) &&
-      !(
-        (context.profile === "control" || context.profile === "momentum") &&
-        (step.id === "focus-mode-settings" || step.id === "auto-view-settings")
-      ),
+    (step) => !step.when || step.when(context),
   );
 
   // Introduce the real Settings panel once the tabletop is present, then return
@@ -291,8 +256,8 @@ export const tutorialStepsFor = (context: TutorialContext): TutorialStep[] => {
   return [
     ...openingSteps,
     ...settingsSteps,
-    ...controlHudSteps,
-    ...assemblySteps,
+    ...sharedHudSteps,
+    ...assemblyStepsWithContextualHint,
     ...(finishingStep ? [finishingStep] : []),
   ];
 };
