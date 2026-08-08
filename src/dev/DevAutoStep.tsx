@@ -21,14 +21,49 @@ export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
   const step = () => {
     const store = useGameStore.getState();
     const furniture = store.furniture;
-    if (!furniture || store.heldActionId) return;
+    if (!furniture) return;
+
+    // A part in hand used to stop auto dead. Finishing what is already held IS the next step — and
+    // it is the state a stuck player is most likely to press this in, since a floating part is
+    // exactly when the gesture is not working for them.
+    if (store.heldActionId) {
+      const heldId = store.heldActionId;
+      const held = furniture.actions.find((a) => a.actionId === heldId);
+      const partId = held?.partId;
+      if (partId) {
+        const part = furniture.parts[partId];
+        const target = targetPositionForAction(held, furniture.parts, new Set(store.completed));
+        const dest: [number, number, number] = [
+          target[0] - part.pose.position[0],
+          target[1] - part.pose.position[1],
+          target[2] - part.pose.position[2],
+        ];
+        useGameStore.getState().setDragFit("nearCorrect", heldId);
+        animateDriver(heldDriver, dest, 450, () => {
+          useGameStore.getState().releaseHeld();
+        });
+      } else {
+        store.completeAction(heldId);
+      }
+      return;
+    }
     // Auto drives only the FOCUSED cluster: available() lets cluster-less actions (combineClusters, finishing beats) through no matter what is focused, and stepping those would assemble work that isn't the section on screen. With a focus set, auto goes quiet once that cluster is done rather than running ahead.
     const legal = store.available();
-    const action = store.activeCluster
-      ? legal.find((a) => actionCluster(furniture, a) === store.activeCluster)
-      : legal[0];
+    // Prefer the focused cluster, but never REFUSE because of it. Cluster-less actions (combines,
+    // finishing beats) and a focus whose work is already done both left this undefined, and the
+    // button silently did nothing — which reads as broken rather than as scoped.
+    const action =
+      (store.activeCluster
+        ? legal.find((a) => actionCluster(furniture, a) === store.activeCluster)
+        : undefined) ?? legal[0];
     if (!action) return;
     const done = new Set(store.completed);
+    // Equip whatever the step calls for BEFORE driving it. The tool model is rendered from
+    // selectedTool, so auto used to sink a screw with no screwdriver anywhere in the scene — the
+    // motion happened but nothing said which tool did it, which is the part worth demonstrating.
+    if (action.tool && action.tool !== "hand") {
+      store.setSelectedTool(action.tool);
+    }
 
     if (
       (action.type === "placePart" || action.type === "insertFastener") &&
@@ -70,8 +105,18 @@ export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
         }
         if (applied >= TIGHTEN_TOTAL_DEG) clearInterval(tick);
       }, 60);
+    } else if (action.partId && furniture.parts[action.partId]) {
+      // Drives — a mallet strike, a press, a slide. These used to force-complete, so the part simply
+      // appeared home: no travel, no tool, nothing to learn from. Running the sink driver from the
+      // parked pose down to zero plays the same motion the real gesture produces, just unattended.
+      const part = furniture.parts[action.partId];
+      const ld = looseDelta(part, engageAxis(part, done));
+      sinkDriver.set([ld[0], ld[1], ld[2]]);
+      animateDriver(sinkDriver, [0, 0, 0], 700, () => {
+        useGameStore.getState().completeAction(action.actionId);
+      });
     } else {
-      // reorient / combineClusters / drives — force-complete for the dev stepper.
+      // reorient / combineClusters — no part to move, so there is nothing to animate.
       store.completeAction(action.actionId);
     }
   };
