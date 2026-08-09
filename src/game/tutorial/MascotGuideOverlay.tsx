@@ -6,6 +6,7 @@ import {
   TUTORIAL_STEP_REWARD_TOKENS,
   messageForToolStep,
   type ToolTutorialKind,
+  type TutorialTargetId,
 } from './steps';
 import { useTutorialStore } from './store';
 import { useTutorialTargets, type TutorialFrame } from './targetRegistry';
@@ -17,6 +18,7 @@ import { ACCENT_LIGHT, ELEVATION, RADIUS, Theme, TYPE, useStyles } from '@/src/g
 import { tutorialPresentationForProfile } from './presentation';
 import { VisualLongPressCue } from './VisualLongPressCue';
 import { VisualJoystickCue } from './VisualJoystickCue';
+import { VisualSwipeCue } from './VisualSwipeCue';
 import { VoiceButton } from '@/src/game/ui/hud/VoiceButton';
 const PADDING = 0;
 
@@ -29,6 +31,12 @@ interface Props {
   onSimulatePinch?: () => void;
   blocked?: boolean;
   audioEnabled?: boolean;
+  focusReturnPrompt?: boolean;
+  undoPreviewActive?: boolean;
+  onDismissUndoPreview?: () => void;
+  /** Lets a repeated physical step follow the currently actionable control. */
+  guideTargetOverride?: TutorialTargetId | null;
+  guideMessageOverride?: string | null;
 }
 
 export function MascotGuideOverlay({
@@ -40,6 +48,11 @@ export function MascotGuideOverlay({
   onSimulatePinch,
   blocked = false,
   audioEnabled = false,
+  focusReturnPrompt = false,
+  undoPreviewActive = false,
+  onDismissUndoPreview,
+  guideTargetOverride = null,
+  guideMessageOverride = null,
 }: Props) {
   const styles = useStyles(makeStyles);
   const overlayRef = useRef<View>(null);
@@ -75,6 +88,8 @@ export function MascotGuideOverlay({
     step?.audio,
     audioEnabled &&
       !presentation.showVisualDemo &&
+      !focusReturnPrompt &&
+      !undoPreviewActive &&
       !blocked &&
       !mapOpen &&
       !attentionOverlayActive &&
@@ -87,6 +102,8 @@ export function MascotGuideOverlay({
     if (
       !presentation.showVisualDemo ||
       !visualSpeechEnabled ||
+      focusReturnPrompt ||
+      undoPreviewActive ||
       blocked ||
       mapOpen ||
       attentionOverlayActive ||
@@ -100,7 +117,7 @@ export function MascotGuideOverlay({
     }
     const spokenMessage = visualMessageForStep(
       step.id,
-      step.shortLabel ?? step.message,
+      guideMessageOverride ?? step.shortLabel ?? step.message,
     );
     Speech.stop();
     Speech.speak(spokenMessage, { rate: 0.82 });
@@ -113,6 +130,9 @@ export function MascotGuideOverlay({
     mapOpen,
     completed,
     currentIndex,
+    focusReturnPrompt,
+    guideMessageOverride,
+    undoPreviewActive,
     presentation.showVisualDemo,
     rewardReady,
     skipped,
@@ -139,16 +159,21 @@ export function MascotGuideOverlay({
   useEffect(() => {
     if (!overlaySize || skipped || completed || rewardReady) return;
     const step = steps[currentIndex];
-    const targetNode = step ? nodes[step.targetId] : null;
+    const targetId = undoPreviewActive
+      ? 'assemblyArea'
+      : focusReturnPrompt
+        ? 'focus'
+        : guideTargetOverride ?? step?.targetId;
+    const targetNode = targetId ? nodes[targetId] : null;
     const overlayNode = findNodeHandle(overlayRef.current);
-    if (!step || !overlayNode || !targetNode) return;
+    if (!step || !targetId || !overlayNode || !targetNode) return;
 
     // Filament adds native containers whose layout origin is not the visual origin of the overlay. Window coordinates are global, so subtracting the overlay's window origin gives a frame that the cutout and border share.
     const measureTarget = () => {
       UIManager.measureInWindow(overlayNode, (overlayX, overlayY) => {
         UIManager.measureInWindow(targetNode, (targetX, targetY, measuredWidth, measuredHeight) => {
           if (measuredWidth > 0 && measuredHeight > 0) {
-            setFrame(step.targetId, {
+            setFrame(targetId, {
               x: targetX - overlayX,
               y: targetY - overlayY,
               width: measuredWidth,
@@ -162,7 +187,7 @@ export function MascotGuideOverlay({
     measureTarget();
     const retry = setTimeout(measureTarget, 80);
     return () => clearTimeout(retry);
-  }, [completed, currentIndex, nodes, overlaySize, rewardReady, setFrame, skipped, steps]);
+  }, [completed, currentIndex, focusReturnPrompt, guideTargetOverride, nodes, overlaySize, rewardReady, setFrame, skipped, steps, undoPreviewActive]);
 
   // The pause button opens the same build-map modal used by a normal task.
   // Hide tutorial chrome while it is open so the shared modal remains the
@@ -252,26 +277,44 @@ export function MascotGuideOverlay({
 
   if (!overlaySize) return <View ref={overlayRef} style={styles.layer} pointerEvents="none" onLayout={handleLayout} />;
 
-  const rawFrame = frames[step.targetId];
+  const activeTargetId = undoPreviewActive
+    ? 'assemblyArea'
+    : focusReturnPrompt
+      ? 'focus'
+      : guideTargetOverride ?? step.targetId;
+  const rawFrame = frames[activeTargetId];
   // Targets can briefly unmount while the assembly advances (notably when the
   // Allen key step hands over to the leg step). Do not manufacture a fallback message for that gap: it flashes for a frame and competes with the next cue.
   if (!rawFrame) {
     return <View ref={overlayRef} style={styles.layer} pointerEvents="none" onLayout={handleLayout} />;
   }
-  const frame = expandFrame(rawFrame, width, height);
+  const frame = expandFrame(
+    undoPreviewActive
+      ? {
+          ...rawFrame,
+          // The normal assembly target begins beside the joystick. During the
+          // wide Undo preview, move only this spotlight farther into the scene
+          // so its border does not collide with the joystick control.
+          x: rawFrame.x + 48,
+        }
+      : rawFrame,
+    width,
+    height,
+  );
 
-  // The finishing beat already has its own swipe card. In Visual mode a second mascot bubble repeats the same instruction and obscures the furniture.
-  if (presentation.showVisualDemo && step.id === 'stand-table-upright') {
-    return <View ref={overlayRef} style={styles.layer} pointerEvents="none" onLayout={handleLayout} />;
-  }
-
-  const message = step.id === 'secure-with-tool'
+  const message = undoPreviewActive
+      ? 'Undo returns the most recent part without changing your earlier work.'
+      : focusReturnPrompt
+      ? 'Tap Focus again to return to the tutorial.'
+      : guideMessageOverride
+      ? guideMessageOverride
+      : step.id === 'secure-with-tool'
       ? messageForToolStep(activeToolKind)
       : presentation.reducedText
         ? visualMessageForStep(step.id, step.shortLabel ?? step.message)
         : step.message;
   const bubbleStyle = bubblePosition(
-    step.targetId,
+    activeTargetId,
     frame,
     width,
     height,
@@ -281,6 +324,14 @@ export function MascotGuideOverlay({
 
   return (
     <View ref={overlayRef} style={styles.layer} pointerEvents="box-none" onLayout={handleLayout}>
+      {undoPreviewActive && onDismissUndoPreview ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close the Undo preview and continue"
+          style={StyleSheet.absoluteFill}
+          onPress={onDismissUndoPreview}
+        />
+      ) : null}
       {frame ? (
         <>
           <View pointerEvents="none" style={[styles.scrim, { left: 0, top: 0, right: 0, height: frame.y }]} />
@@ -293,19 +344,24 @@ export function MascotGuideOverlay({
             pointerEvents="none"
             style={[styles.scrim, { left: 0, top: frame.y + frame.height, right: 0, bottom: 0 }]}
           />
-          <View
-            pointerEvents="none"
-            style={[
-              styles.highlight,
-              presentation.emphasizeTarget && styles.highlightEmphasized,
-              { left: frame.x, top: frame.y, width: frame.width, height: frame.height },
-            ]}
-          />
-          {presentation.showVisualDemo && step.id === 'long-press-part' ? (
+          {presentation.showVisualDemo && step.id === 'stand-table-upright' ? null : (
+            <View
+              pointerEvents="none"
+              style={[
+                styles.highlight,
+                presentation.emphasizeTarget && styles.highlightEmphasized,
+                { left: frame.x, top: frame.y, width: frame.width, height: frame.height },
+              ]}
+            />
+          )}
+          {!undoPreviewActive && presentation.showVisualDemo && step.id === 'long-press-part' ? (
             <VisualLongPressCue frame={frame} />
           ) : null}
-          {presentation.showVisualDemo && step.id === 'view-under-table' ? (
+          {!undoPreviewActive && presentation.showVisualDemo && step.id === 'view-under-table' ? (
             <VisualJoystickCue frame={frame} />
+          ) : null}
+          {!undoPreviewActive && presentation.showVisualDemo && step.id === 'stand-table-upright' ? (
+            <VisualSwipeCue frame={frame} />
           ) : null}
         </>
       ) : null}
@@ -321,13 +377,17 @@ export function MascotGuideOverlay({
         ) : null}
         <View style={styles.copy} pointerEvents="box-none">
           <Text style={styles.stepText}>
-            {phase === 'settings' || step.targetId === 'settings' ? 'SETTINGS · ' : ''}{currentIndex + 1}/{steps.length}
+            {undoPreviewActive
+              ? 'UNDO PREVIEW'
+              : focusReturnPrompt
+              ? 'FOCUS'
+              : `${phase === 'settings' || step.targetId === 'settings' ? 'SETTINGS · ' : ''}${currentIndex + 1}/${steps.length}`}
           </Text>
           <View style={styles.messageRow}>
             <Text style={[styles.message, presentation.showVisualDemo && styles.visualMessage]}>
               {message}
             </Text>
-            {presentation.showVisualDemo ? (
+            {presentation.showVisualDemo && !focusReturnPrompt && !undoPreviewActive ? (
               <VoiceButton
                 size="small"
                 playing={visualSpeechEnabled}
@@ -340,7 +400,7 @@ export function MascotGuideOverlay({
               />
             ) : null}
           </View>
-          {presentation.showVisualDemo && currentIndex === 0 ? (
+          {presentation.showVisualDemo && currentIndex === 0 && !focusReturnPrompt && !undoPreviewActive ? (
             <Text style={styles.audioTip}>
               {visualSpeechEnabled
                 ? 'Audio guidance is on. Tap the speaker to turn it off. Take your time.'
@@ -352,7 +412,11 @@ export function MascotGuideOverlay({
             pointerEvents={step.id === 'pinch-to-zoom' && onSimulatePinch ? 'auto' : 'none'}
           >
             <Text style={styles.actionHint}>
-              {presentation.reducedText
+              {undoPreviewActive
+                ? 'Tap anywhere to continue.'
+                : focusReturnPrompt
+                ? 'Tap the highlighted Focus button.'
+                : presentation.reducedText
                   ? step.id === 'long-press-part'
                     ? 'Press and hold.'
                     : step.id === 'view-under-table'
@@ -366,7 +430,7 @@ export function MascotGuideOverlay({
           </View>
         </View>
       </View>
-      {stepRewardReady && presentation.showMilestoneConfirmation ? (
+      {!focusReturnPrompt && !undoPreviewActive && stepRewardReady && presentation.showMilestoneConfirmation ? (
         <View style={styles.stepRewardToast} pointerEvents="none">
           <Text style={styles.stepRewardText}>
             Milestone complete · Step {lastCompletedStepLabel} · +{TUTORIAL_STEP_REWARD_TOKENS}
@@ -379,7 +443,7 @@ export function MascotGuideOverlay({
 
 function visualMessageForStep(stepId: string, fallback: string): string {
   const messages: Record<string, string> = {
-    'long-press-part': 'Hold the tabletop',
+    'long-press-part': 'Long-press to hold the tabletop',
     'drag-and-snap': 'Move it to the target',
     'view-under-table': 'Rotate to the underside',
     'place-connector': 'Match the bolt to the hole',
@@ -411,20 +475,22 @@ function bubblePosition(
   const left = Math.min(Math.max(edge, frame.x), Math.max(edge, screenW - bubbleW - edge));
   const targetCoversMostScreen = frame.width > screenW * 0.72 || frame.height > screenH * 0.6;
 
+  // The final stand-upright instruction uses the same placement in every
+  // profile. Keeping this outside the profile-specific branches prevents the
+  // Momentum bubble from drifting above the swipe card while Visual places it
+  // beside that same control.
+  if (targetId === 'beatControl') {
+    return {
+      right: Math.max(edge, screenW - frame.x + 18),
+      top: Math.max(edge, Math.min(frame.y, screenH - 220)),
+    };
+  }
+
   // Visual guidance belongs beside the real control it describes. These placements keep a fixed gap around the registered target so the bubble cannot intercept the action required to advance the tutorial.
   if (visualMode && targetId === 'partsTray') {
     return {
       right: Math.max(edge, screenW - frame.x + 18),
       top: Math.max(edge, Math.min(frame.y, screenH - 260)),
-    };
-  }
-  if (visualMode && targetId === 'toolbar') {
-    return {
-      left: Math.min(
-        Math.max(edge, frame.x + frame.width / 2 - bubbleW / 2),
-        screenW - bubbleW - edge,
-      ),
-      bottom: Math.max(edge, screenH - frame.y + 18),
     };
   }
   if (visualMode && targetId === 'tool') {

@@ -894,6 +894,36 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange, cei
     );
   }, [orbit]);
 
+  // Gesture Handler may deliver several pan updates before React has finished
+  // rendering the previous Zustand update. Moving across different cells means
+  // moveGhost's same-cell guard cannot coalesce those calls, and React can then
+  // report a nested "maximum update depth" loop. Keep only the latest finger
+  // position and commit at most one ghost move per animation frame.
+  const pendingGhostPoint = useRef<{ x: number; y: number } | null>(null);
+  const ghostMoveFrame = useRef<number | null>(null);
+  const scheduleGhostDrag = useCallback(
+    (px: number, py: number) => {
+      pendingGhostPoint.current = { x: px, y: py };
+      if (ghostMoveFrame.current !== null) return;
+      ghostMoveFrame.current = requestAnimationFrame(() => {
+        ghostMoveFrame.current = null;
+        const point = pendingGhostPoint.current;
+        pendingGhostPoint.current = null;
+        if (point) dragGhost(point.x, point.y);
+      });
+    },
+    [dragGhost],
+  );
+
+  useEffect(
+    () => () => {
+      if (ghostMoveFrame.current !== null) cancelAnimationFrame(ghostMoveFrame.current);
+      ghostMoveFrame.current = null;
+      pendingGhostPoint.current = null;
+    },
+    [],
+  );
+
   // Does this touch belong to the piece being placed, or to the camera? A placement no longer takes the whole screen: the finger owns the ghost only while it is over the surface that ghost can actually stand on (the floor grid, or a wall the camera can see), and everywhere else — the other surface, the cornice, the backdrop around the diorama — it orbits exactly as it does with nothing being placed. Before this there was no way to look behind a wall mid-placement without cancelling the edit. Read from the store rather than from the subscribed activeEdit so this callback survives every cell the ghost crosses; the rule itself is pointsAtSurface, unit-tested in ../input/picking.
   const ghostOwnsPoint = useCallback((px: number, py: number) => {
     const state = usePlacementStore.getState();
@@ -983,14 +1013,14 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange, cei
         .onStart((e) => {
           dragOwner.current = ghostOwnsPoint(e.x, e.y) ? "ghost" : "camera";
           if (dragOwner.current === "ghost") {
-            dragGhost(e.x, e.y);
+            scheduleGhostDrag(e.x, e.y);
             return;
           }
           dragStart.value = { theta: orbit.value.raw.theta, phi: orbit.value.raw.phi };
         })
         .onUpdate((e) => {
           if (dragOwner.current === "ghost") {
-            dragGhost(e.x, e.y);
+            scheduleGhostDrag(e.x, e.y);
             return;
           }
           const clamped = clampOrbit({
@@ -1006,7 +1036,7 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange, cei
           onRotationChange(controlsFromOrbit(orbit.value.raw).rotationY);
         })
         .runOnJS(true),
-    [dragGhost, dragStart, ghostOwnsPoint, onRotationChange, orbit, smallestSide],
+    [dragStart, ghostOwnsPoint, onRotationChange, orbit, scheduleGhostDrag, smallestSide],
   );
 
   const pinchStart = useSharedValue(ORBIT.homeRadius);

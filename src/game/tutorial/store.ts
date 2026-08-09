@@ -251,6 +251,7 @@ export const useTutorialStore = create<TutorialState>()((set, get) => ({
         } else {
           set({
             currentIndex: nextIndex,
+            acceptsEventsAfter: 0,
             pendingAdvanceStepId: null,
             ...(latchedEvents.length ? { latchedEvents: [] } : {}),
           });

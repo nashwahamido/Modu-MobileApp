@@ -263,6 +263,7 @@ function Ghost({
   pulse = false,
   dim = false,
   travel = false,
+  travelKey = 0,
 }: {
   model: FilamentModel;
   def: PartDef;
@@ -278,6 +279,8 @@ function Ghost({
    *  it at the seat. Shows the MOVE, not just the destination — which for a screw is the whole
    *  instruction, since where it goes is obvious and which way it drives is not. */
   travel?: boolean;
+  /** Changes whenever Spot is pressed, so the same target can replay its travel animation. */
+  travelKey?: number;
 }) {
   const { renderableManager, transformManager, scene } = useFilamentContext();
   const storeFitState = useGameStore((s) => s.fitState);
@@ -299,6 +302,7 @@ function Ghost({
     // The last quarter of each cycle rests at the seat, so the part is SEEN arriving rather than snapping straight back out for the next pass.
     const MOVING = 0.75;
     const t0 = Date.now();
+    setTravelT(1);
     const id = setInterval(() => {
       const e = Date.now() - t0;
       if (e >= CYCLE_MS * TRIPS) {
@@ -312,7 +316,7 @@ function Ghost({
       setTravelT(k * k);
     }, 33);
     return () => clearInterval(id);
-  }, [travel]);
+  }, [travel, travelKey]);
   const snapActionId = useMemo(() => {
     const f = useGameStore.getState().furniture;
     return (
@@ -458,6 +462,7 @@ function SocketHintGhost({
 }) {
   const matchedActionId = useGameStore((s) => s.matchedActionId);
   const hintPartId = useGameStore((s) => s.hintPartId);
+  const hintPulse = useGameStore((s) => s.hintPulse);
   const ghostStyle = useGameStore((s) => s.settings.ghostStyle);
   const firstDrop = useGameStore(selectFirstDrop);
   // Parked at its seat: the part is physically AT the socket and only the finishing gesture (screw / orientation twist / slide / press) is left. A ghost at the target pose now sits exactly where the real part already is and reads as a doubled, clashing leg — same reasoning as the tighten phase, which dropped its goal ghost for this exact reason.
@@ -470,7 +475,16 @@ function SocketHintGhost({
     !!actionId && (driveActionId === actionId || orientationActionId === actionId);
   // The ? spotlight, in GLOW_MARK orange — deliberately the dimmer of the two marker colours, so if the player then picks a part up the proximity-matched socket still reads as the brighter of the two. Ahead of the firstDrop guard: the first step is when a hint is most likely to be asked for, and that guard exists to keep ghosts off an empty plane, not to suppress an explicit ask. Spot's ghost. atLoosePose FALSE unconditionally — the cue marks the SEAT, never a park or rest pose, and passing the caller's flag through is what previously put a glowing copy of the part off to the side of the assembly. GLOW_MARK rather than FIT_GLOW.idle so that if the player then picks a part up, the proximity-matched socket still reads as the brighter of the two. Ahead of the firstDrop guard: the first step is when a hint is most likely to be asked for.
   if (hintPartId === def.partId && actionId && !parked) {
-    return <Ghost model={model} def={def} atLoosePose={false} glowOverride={GLOW_MARK} travel />;
+    return (
+      <Ghost
+        model={model}
+        def={def}
+        atLoosePose={false}
+        glowOverride={GLOW_MARK}
+        travel
+        travelKey={hintPulse}
+      />
+    );
   }
   if (firstDrop || !actionId || parked) return null;
   // "staticSockets": every open socket of the held group shows a dim pulsing marker; the proximity-matched one switches to the steady fitState-driven color (blue approaching → green seated). "movingGhost": only the matched socket gets a ghost, as before.

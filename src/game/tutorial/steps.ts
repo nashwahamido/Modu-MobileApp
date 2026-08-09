@@ -5,7 +5,7 @@ export type TutorialTargetId =
   | "partsTray"
   | "assemblyArea"
   | "tool"
-  | "toolbar"
+  | "beatControl"
   | "hint"
   | "undo"
   | "focus"
@@ -25,13 +25,10 @@ export type TutorialEvent =
   | "connector_tightened"
   | "assembly_reoriented"
   | "step_undone"
-  | "step_redone"
   | "release_behavior_changed"
   | "instruction_preferences_changed"
-  | "auto_view_toggled"
   | "spot_used"
   | "focus_mode_toggled"
-  | "toolbar_used"
   | "hint_requested"
   | "tool_used";
 
@@ -108,7 +105,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     id: "stand-table-upright",
-    targetId: "scene",
+    targetId: "beatControl",
     message:
       "All four legs are installed. Swipe down on the orange card to stand the table upright and finish.",
     shortLabel: "Stand the table upright",
