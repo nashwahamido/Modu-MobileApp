@@ -97,6 +97,7 @@ function TutorialScreen() {
   const {
     manipulator,
     stickActive,
+    panShared,
     onStickStart,
     onStickMove,
     onStickEnd,
@@ -594,6 +595,7 @@ function TutorialScreen() {
               carryShared={carryShared}
               stickShared={stickShared}
               stickActive={stickActive}
+            panShared={panShared}
             />
           </TutorialTarget>
         </View>

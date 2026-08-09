@@ -12,7 +12,7 @@ import type { ISharedValue } from "react-native-worklets-core";
 import { useGameStore } from "@/src/game/core/store";
 import type { PartId } from "@/src/game/core/type";
 import { CombineCarry, type CarryOffset } from "./CombineCarry";
-import { OrbitDrive, type StickDeflection } from "./OrbitDrive";
+import { OrbitDrive, type PanOffset, type StickDeflection } from "./OrbitDrive";
 import { stageOffsetMap } from "@/src/game/core/model/staging";
 import { FOCAL_LENGTH_MM } from "./cameraConfig";
 import { CEL_IBL_INTENSITY, getLightRig, IBL_INTENSITY } from "./lighting";
@@ -43,6 +43,8 @@ interface Props {
   stickShared: ISharedValue<StickDeflection>;
   /** Whether a stick grab session is open — gates OrbitDrive. */
   stickActive: ISharedValue<boolean>;
+  /** Two-finger pan, applied to the finished lookAt pair on the render thread. */
+  panShared: ISharedValue<PanOffset>;
   /** Fired when the shared GLB reports parsed ("loaded") — the play screen's loading overlay keys its last milestone off this. Re-fires on remounts (style switch, retry); the listener must be idempotent. */
   onModelReady?: () => void;
 }
@@ -59,6 +61,7 @@ export function AssemblyScene({
   carryShared,
   stickShared,
   stickActive,
+  panShared,
   onModelReady,
 }: Props) {
   const furniture = useGameStore((s) => s.furniture);
@@ -156,6 +159,7 @@ export function AssemblyScene({
         manipulator={cameraManipulator}
         stickShared={stickShared}
         active={stickActive}
+        panShared={panShared}
       />
       <ShaderAssetsProvider>
         {(Object.keys(furniture.parts) as PartId[]).map((id) => (

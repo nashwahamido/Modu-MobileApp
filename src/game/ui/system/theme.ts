@@ -29,6 +29,7 @@
 //   Three accents, three meanings, no overlap. Lavender = interactive (press this).
 //   Green = complete (you did this). Gold = earned (XP, score). If a fourth meaning shows up, it does NOT get a fourth colour — it gets a shape or a position.
 
+import { useWindowDimensions } from "react-native";
 import { useMemo } from "react";
 import type { TextStyle } from "react-native";
 import { ThemeId } from "@/src/game/core/type";
@@ -263,10 +264,43 @@ export function useTheme(): Theme {
  *  React Native has no cascade — no CSS variables, nothing inherits — so every StyleSheet
  *  has to reach for the tokens itself. This is the whole ceremony required to do that, and
  *  it memoises, so the sheet is rebuilt only when the theme actually changes. */
-export function useStyles<T extends object>(make: (theme: Theme) => T): T {
+export function useStyles<T extends object>(make: (theme: Theme) => T): T;
+export function useStyles<T extends object, A>(
+  make: (theme: Theme, arg: A) => T,
+  arg: A,
+): T;
+export function useStyles<T extends object, A>(
+  make: (theme: Theme, arg?: A) => T,
+  arg?: A,
+): T {
   const theme = useTheme();
-  return useMemo(() => make(theme), [make, theme]);
+  return useMemo(() => make(theme, arg), [make, theme, arg]);
 }
+
+/**
+ * How much to enlarge fixed pt dimensions on a bigger screen.
+ *
+ * Layouts here are authored in points against a phone in landscape — roughly 360dp on the short
+ * side. A tablet's short side is around 800dp, so the SAME numbers occupy less than half the
+ * relative space and every panel, avatar and label reads as shrunken and adrift in the middle of a
+ * large screen.
+ *
+ * Driven by the short side rather than the width, because that is what changes most between the two
+ * form factors in landscape and what governs how big something feels.
+ *
+ * Capped at 1.45. A true 2.2x would be honest arithmetic and a bad result: text sized for a phone
+ * held at arm's length does not want to double on a tablet held at the same distance, and a scaled
+ * layout would run out of width before it ran out of scale. The cap is the point where things read
+ * as comfortably sized rather than as a magnified phone.
+ */
+export function useUiScale(): number {
+  const { width, height } = useWindowDimensions();
+  const short = Math.min(width, height);
+  return Math.min(1.45, Math.max(1, short / PHONE_SHORT_DP));
+}
+
+/** The short side the layouts were authored against (phone, landscape). */
+const PHONE_SHORT_DP = 360;
 
 // ── shape ───────────────────────────────────────────────────────────────────
 // Three radii, not five. The mockup uses a soft, generous curve everywhere and never mixes: a control is 14, a panel is 20, a pill is a pill.

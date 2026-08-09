@@ -12,7 +12,7 @@ import { AVATAR_IMAGES } from "@/src/components/avatarAssets";
 import { useTutorialStore } from "@/src/game/tutorial/store";
 import { saveSelectedAvatarMode } from "@/src/services/onboarding";
 import { Button } from "@/src/game/ui/system/Button";
-import { ACCENT_LIGHT, RADIUS, SPACE, TYPE, useStyles, useTheme, FONT } from "@/src/game/ui/system/theme";
+import { ACCENT_LIGHT, FONT, RADIUS, SPACE, TYPE, useStyles, useTheme, useUiScale } from "@/src/game/ui/system/theme";
 import { CheckIcon, StarIcon } from "@/src/components/Icons";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import type { Theme } from "@/src/game/ui/system/theme";
@@ -193,7 +193,8 @@ const modes = avatarModes.map((mode) => ({
 }));
 
 export default function AvatarRecommendationScreen() {
-  const styles = useStyles(makeStyles);
+  const scale = useUiScale();
+  const styles = useStyles(makeStyles, scale);
   // The icons take their colour as a prop, so this screen needs the tokens as values, not just the sheet.
   const t = useTheme();
   // A slow breath on the Recommended tag. Small on purpose — it marks the default choice, it is not asking to be pressed, and anything stronger would compete with the Confirm button. The entrance plays ONCE, for the avatar being announced. After that the player is comparing four modes, and replaying the build-up on every switch read as a wait — the pills and lines are keyed on their own text, so they remount on each switch and ran their delays again from scratch. Once this is false they mount fully formed and a switch is instant.
@@ -514,54 +515,56 @@ export default function AvatarRecommendationScreen() {
   );
 }
 
-const makeStyles = (t: Theme) =>
+// k is the device UI scale (see useUiScale): these layouts are authored in phone points,
+// and a tablet needs the same proportions at a larger size, not the same numbers.
+const makeStyles = (t: Theme, k: number) =>
   StyleSheet.create({
     // The full-bleed layer. No padding here, ever: it is what the gradient measures against.
     screen: { flex: 1, backgroundColor: BG_FROM },
     root: {
       flex: 1,
-      paddingHorizontal: 38,
-      paddingVertical: 18,
+      paddingHorizontal: Math.round(38 * k),
+      paddingVertical: Math.round(18 * k),
     },
     header: {
       position: "absolute",
       zIndex: 10,
       flexDirection: "row",
-      gap: 18,
+      gap: Math.round(18 * k),
     },
     navButton: {
-      width: 56,
-      height: 44,
+      width: Math.round(56 * k),
+      height: Math.round(44 * k),
       alignItems: "center",
       justifyContent: "center",
     },
-    navArrow: { width: 26, height: 26 },
+    navArrow: { width: Math.round(26 * k), height: Math.round(26 * k) },
     recommendationLayout: {
       flex: 1,
       flexDirection: "row",
       alignItems: "center",
-      gap: 34,
-      paddingBottom: 82,
+      gap: Math.round(34 * k),
+      paddingBottom: Math.round(82 * k),
     },
     audioButton: { position: "absolute", zIndex: 5 },
     // A column, not a card: width comes from the circle, and nothing draws a box around it.
     sparkLayer: { ...StyleSheet.absoluteFillObject },
     // Narrower than the copy column: a full-width primary action read as a banner rather than a button, and the halo needs room to swell without touching the text above it.
-    confirmWrap: { alignSelf: "center", width: 260, marginTop: SPACE.lg, alignItems: "center" },
+    confirmWrap: { alignSelf: "center", width: Math.round(260 * k), marginTop: SPACE.lg, alignItems: "center" },
     // stretch + auto margin puts the title on the column's BASE, which is where the Confirm button sits in the column beside it — so the two land on the same line.
-    modeColumn: { width: 220, alignItems: "center", alignSelf: "stretch", paddingTop: 12 },
+    modeColumn: { width: Math.round(220 * k), alignItems: "center", alignSelf: "stretch", paddingTop: Math.round(12 * k) },
     avatarCircle: {
-      width: 210,
-      height: 210,
+      width: Math.round(210 * k),
+      height: Math.round(210 * k),
       alignItems: "center",
       justifyContent: "center",
-      borderRadius: 105,
+      borderRadius: Math.round(105 * k),
       overflow: "hidden",
     },
     avatarImage: {
-      width: 232,
-      height: 232,
-      borderRadius: 116,
+      width: Math.round(232 * k),
+      height: Math.round(232 * k),
+      borderRadius: Math.round(116 * k),
     },
     // Straddling the circle's top edge. alignSelf centre plus a negative top pulls it back over the rim, so it reads as pinned to the avatar rather than floating above it.
     recommendedBadge: {
@@ -575,19 +578,19 @@ const makeStyles = (t: Theme) =>
     },
     recommendedBadgeText: {
       color: t.onSuccess,
-      fontFamily: FONT, fontSize: 9,
+      fontFamily: FONT, fontSize: Math.round(9 * k),
       fontWeight: "900",
     },
     recommendationCopy: {
       flex: 1,
-      minWidth: 0,
-      gap: 7,
+      minWidth: Math.round(0 * k),
+      gap: Math.round(7 * k),
     },
     title: {
       color: t.text,
-      fontFamily: FONT, fontSize: 20,
+      fontFamily: FONT, fontSize: Math.round(20 * k),
       fontWeight: "900",
-      lineHeight: 24,
+      lineHeight: Math.round(24 * k),
     },
     // Space above the primary action, so it is not the next thing after the last tick — a gap is what makes it read as the conclusion rather than a fourth list item.
     confirmButton: { width: "100%" },
@@ -595,36 +598,36 @@ const makeStyles = (t: Theme) =>
     traitChip: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 5,
+      gap: Math.round(5 * k),
       paddingHorizontal: SPACE.sm,
-      paddingVertical: 3,
+      paddingVertical: Math.round(3 * k),
       borderRadius: RADIUS.pill,
       backgroundColor: t.surface,
     },
     traitText: {
       color: t.text,
       fontFamily: FONT,
-      fontSize: 13,
+      fontSize: Math.round(13 * k),
       fontWeight: "800",
     },
     bulletList: {
-      gap: 5,
+      gap: Math.round(5 * k),
     },
     bulletRow: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 9,
+      gap: Math.round(9 * k),
     },
     bulletText: {
       flex: 1,
       color: t.text,
-      fontFamily: FONT, fontSize: 13,
+      fontFamily: FONT, fontSize: Math.round(13 * k),
       fontWeight: "700",
     },
     // Offsets come from the CALL SITE, not from here: absolute children are not inset by the parent's padding, so a literal here can never account for a device's safe insets.
     modeTabs: {
       position: "absolute",
-      height: 56,
+      height: Math.round(56 * k),
       flexDirection: "row",
       gap: SPACE.sm,
     },
@@ -633,11 +636,11 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       justifyContent: "center",
       borderColor: t.border,
-      borderRadius: 8,
+      borderRadius: Math.round(8 * k),
       borderWidth: 2,
       backgroundColor: t.surface,
       paddingHorizontal: SPACE.sm,
-      paddingVertical: 5,
+      paddingVertical: Math.round(5 * k),
     },
     modeTabSelected: {
       borderColor: t.accent,
@@ -655,9 +658,9 @@ const makeStyles = (t: Theme) =>
     },
     modeTabRecommended: {
       color: t.success,
-      fontFamily: FONT, fontSize: 9,
+      fontFamily: FONT, fontSize: Math.round(9 * k),
       fontWeight: "900",
-      marginTop: 1,
+      marginTop: Math.round(1 * k),
     },
     saveErrorText: {
       ...TYPE.labelSm,
@@ -674,15 +677,15 @@ const makeStyles = (t: Theme) =>
       position: "absolute",
       right: 92,
       bottom: 58,
-      width: 620,
-      minHeight: 142,
+      width: Math.round(620 * k),
+      minHeight: Math.round(142 * k),
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "flex-end",
       // No rim. The shadow already lifts this off the dimmed screen behind it, and an outline on top of that was drawing a box around something already clearly separated.
-      borderRadius: 28,
+      borderRadius: Math.round(28 * k),
       shadowColor: "#000",
-      shadowOffset: { width: 0, height: 8 },
+      shadowOffset: { width: Math.round(0 * k), height: Math.round(8 * k) },
       shadowOpacity: 0.26,
       shadowRadius: 16,
     },
@@ -690,40 +693,40 @@ const makeStyles = (t: Theme) =>
       flex: 1,
       borderRadius: RADIUS.panel,
       backgroundColor: t.surface,
-      paddingHorizontal: 20,
+      paddingHorizontal: Math.round(20 * k),
       paddingVertical: SPACE.lg,
     },
     noteTitle: {
       color: t.text,
-      fontFamily: FONT, fontSize: 21,
+      fontFamily: FONT, fontSize: Math.round(21 * k),
       fontWeight: "900",
-      marginBottom: 5,
+      marginBottom: Math.round(5 * k),
     },
     noteText: {
       color: t.text,
-      fontFamily: FONT, fontSize: 14,
+      fontFamily: FONT, fontSize: Math.round(14 * k),
       fontWeight: "700",
-      lineHeight: 19,
+      lineHeight: Math.round(19 * k),
     },
     taskActions: {
       flexDirection: "row",
-      gap: 10,
+      gap: Math.round(10 * k),
       marginTop: SPACE.md,
     },
     smallMascotCircle: {
-      width: 88,
-      height: 88,
+      width: Math.round(88 * k),
+      height: Math.round(88 * k),
       alignItems: "center",
       justifyContent: "center",
       borderColor: t.accent,
-      borderRadius: 44,
+      borderRadius: Math.round(44 * k),
       borderWidth: 1,
       backgroundColor: t.surface,
       marginLeft: -8,
     },
     smallMascot: {
-      width: 62,
-      height: 62,
-      borderRadius: 18,
+      width: Math.round(62 * k),
+      height: Math.round(62 * k),
+      borderRadius: Math.round(18 * k),
     },
   });

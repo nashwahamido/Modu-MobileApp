@@ -10,7 +10,7 @@ import {
 } from "@/src/services/auth";
 
 import { Button } from "@/src/game/ui/system/Button";
-import { SPACE, TYPE, useStyles, useTheme } from "@/src/game/ui/system/theme";
+import { SPACE, TYPE, useStyles, useTheme, useUiScale } from "@/src/game/ui/system/theme";
 import { useSafeInsets } from "@/src/hooks/use-safe-insets";
 import type { Theme } from "@/src/game/ui/system/theme";
 
@@ -24,7 +24,8 @@ const authMethods = [
 ];
 
 export default function CreateAccountScreen() {
-  const styles = useStyles(makeStyles);
+  const scale = useUiScale();
+  const styles = useStyles(makeStyles, scale);
   const safe = useSafeInsets();
   const t = useTheme();
   const params = useLocalSearchParams<{ mode?: string }>();
@@ -149,35 +150,37 @@ export default function CreateAccountScreen() {
   );
 }
 
-const makeStyles = (t: Theme) =>
+// k is the device UI scale (see useUiScale): these layouts are authored in phone points,
+// and a tablet needs the same proportions at a larger size, not the same numbers.
+const makeStyles = (t: Theme, k: number) =>
   StyleSheet.create({
     root: {
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
       backgroundColor: t.bg,
-      paddingHorizontal: 42,
-      paddingVertical: 20,
+      paddingHorizontal: Math.round(42 * k),
+      paddingVertical: Math.round(20 * k),
     },
     panel: {
       width: "100%",
-      maxWidth: 980,
+      maxWidth: Math.round(980 * k),
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      gap: 36,
+      gap: Math.round(36 * k),
     },
     intro: {
       flex: 1,
-      maxWidth: 470,
+      maxWidth: Math.round(470 * k),
       flexDirection: "row",
       alignItems: "center",
-      gap: 18,
+      gap: Math.round(18 * k),
     },
     mascot: {
-      width: 92,
-      height: 92,
-      borderRadius: 22,
+      width: Math.round(92 * k),
+      height: Math.round(92 * k),
+      borderRadius: Math.round(22 * k),
     },
     copy: {
       flex: 1,
@@ -185,39 +188,39 @@ const makeStyles = (t: Theme) =>
     },
     brand: {
       color: t.gold,
-      fontSize: 32,
+      fontSize: Math.round(32 * k),
       fontWeight: "900",
       letterSpacing: 7,
     },
     title: {
       ...TYPE.title,
       color: t.text,
-      fontSize: 30,
+      fontSize: Math.round(30 * k),
       fontWeight: "900",
-      lineHeight: 35,
+      lineHeight: Math.round(35 * k),
     },
     subtitle: {
       ...TYPE.body,
       color: t.textDim,
-      fontSize: 15,
+      fontSize: Math.round(15 * k),
       fontWeight: "700",
-      lineHeight: 21,
+      lineHeight: Math.round(21 * k),
     },
     form: {
-      width: 340,
+      width: Math.round(340 * k),
       gap: SPACE.md,
     },
     segmented: {
       flexDirection: "row",
-      borderRadius: 24,
+      borderRadius: Math.round(24 * k),
       backgroundColor: t.surfaceInset,
       padding: SPACE.xs,
     },
     segment: {
       flex: 1,
       alignItems: "center",
-      borderRadius: 20,
-      paddingVertical: 9,
+      borderRadius: Math.round(20 * k),
+      paddingVertical: Math.round(9 * k),
     },
     activeSegment: {
       backgroundColor: t.surface,
@@ -225,21 +228,21 @@ const makeStyles = (t: Theme) =>
     segmentText: {
       ...TYPE.label,
       color: t.textDim,
-      fontSize: 15,
+      fontSize: Math.round(15 * k),
       fontWeight: "900",
     },
     activeSegmentText: {
       color: t.text,
     },
     emailGroup: {
-      gap: 10,
+      gap: Math.round(10 * k),
     },
     input: {
       borderColor: t.borderStrong,
-      borderRadius: 18,
+      borderRadius: Math.round(18 * k),
       borderWidth: 2,
       color: t.text,
-      fontSize: 16,
+      fontSize: Math.round(16 * k),
       fontWeight: "700",
       paddingHorizontal: SPACE.lg,
       paddingVertical: SPACE.md,
@@ -251,67 +254,67 @@ const makeStyles = (t: Theme) =>
       ...TYPE.labelSm,
       color: t.danger,
       fontWeight: "800",
-      lineHeight: 16,
+      lineHeight: Math.round(16 * k),
     },
     statusText: {
       ...TYPE.labelSm,
       color: t.success,
       fontWeight: "800",
-      lineHeight: 16,
+      lineHeight: Math.round(16 * k),
     },
     dividerRow: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 10,
+      gap: Math.round(10 * k),
     },
     divider: {
       flex: 1,
-      height: 1,
+      height: Math.round(1 * k),
       backgroundColor: t.border,
     },
     dividerText: {
       color: t.textDim,
-      fontSize: 13,
+      fontSize: Math.round(13 * k),
       fontWeight: "800",
     },
     methodList: {
-      gap: 9,
+      gap: Math.round(9 * k),
     },
     methodButton: {
-      minHeight: 46,
+      minHeight: Math.round(46 * k),
       flexDirection: "row",
       alignItems: "center",
       borderColor: t.borderStrong,
-      borderRadius: 23,
+      borderRadius: Math.round(23 * k),
       borderWidth: 2,
-      paddingHorizontal: 14,
+      paddingHorizontal: Math.round(14 * k),
       gap: SPACE.md,
     },
     methodMark: {
-      width: 26,
-      height: 26,
+      width: Math.round(26 * k),
+      height: Math.round(26 * k),
       alignItems: "center",
       justifyContent: "center",
-      borderRadius: 13,
+      borderRadius: Math.round(13 * k),
       backgroundColor: t.surfaceRaised,
     },
     methodMarkText: {
       ...TYPE.labelSm,
       color: t.text,
-      fontSize: 13,
+      fontSize: Math.round(13 * k),
       fontWeight: "900",
     },
     methodText: {
       ...TYPE.label,
       color: t.text,
-      fontSize: 15,
+      fontSize: Math.round(15 * k),
       fontWeight: "900",
     },
     prototypeNote: {
       ...TYPE.labelSm,
       color: t.textDim,
       fontWeight: "700",
-      lineHeight: 16,
+      lineHeight: Math.round(16 * k),
       textAlign: "center",
     },
   });

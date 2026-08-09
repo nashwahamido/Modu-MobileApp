@@ -16,7 +16,6 @@ interface Props {
 /** DEV-only: performs the next assembly action through the real store/scene pipeline (pickup → glide → snap, or tighten). Lets the whole game be stepped through on an emulator where touch-gesture injection is flaky; also doubles as a demo mode. Ported from the on-release engine; `snapPart` → game's `placePart`, and the done set is passed to game's targetPositionForAction. Parts that need a follow-up (screw park / slide-press drive) complete on the NEXT press, since their tighten/drive is a separate available action. */
 export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
   const styles = useStyles(makeStyles);
-  const heldActionId = useGameStore((s) => s.heldActionId);
   const step = () => {
     const store = useGameStore.getState();
     const furniture = store.furniture;
