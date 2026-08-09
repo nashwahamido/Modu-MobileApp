@@ -39,7 +39,11 @@ export function RoomExperience() {
   const s = useStyles(makeStyles);
   // open=inventory arrives from BuildComplete, sending the player to their new piece.
   // A search param rather than a global flag: the inventory is a popup INSIDE this screen now, so the only way to ask for it from outside is on the navigation that mounts the room.
-  const { welcome, open } = useLocalSearchParams<{ welcome?: string; open?: string }>();
+  const { welcome, open, firstPlacement } = useLocalSearchParams<{
+    welcome?: string;
+    open?: string;
+    firstPlacement?: string;
+  }>();
   const welcomeFromTutorial = welcome === 'tutorial';
   // Tear the 3D view down only when a heavy scene is on top, not on every blur. The room screen stays mounted throughout (its placement/zoom UI state survives); only the Filament view unmounts under play/visit and rebuilds on return.
   const rootNav = useRootNavigationState();
@@ -220,7 +224,10 @@ export function RoomExperience() {
       {/* All of the placement UI — swatches and buttons — lives in one component on the right edge; this screen only decides when it is up. See PlacementRail. */}
       {editing ? <PlacementRail /> : null}
 
-      <RoomFirstPlacementGuide onSessionChange={setFirstPlacementGuideSession} />
+      <RoomFirstPlacementGuide
+        requestedItemId={firstPlacement === 'lack-table' ? firstPlacement : null}
+        onSessionChange={setFirstPlacementGuideSession}
+      />
 
       {shopOpen ? <ShopOverlay onClose={() => setShopOpen(false)} /> : null}
 

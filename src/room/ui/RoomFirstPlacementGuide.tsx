@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { router } from "expo-router";
+import * as Speech from "expo-speech";
 import { Animated, Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { avatarForProfile } from "@/src/components/avatarAssets";
@@ -13,31 +14,37 @@ import { usePlacementStore } from "../core/placement";
 type GuideStage = "idle" | "choice" | "move" | "rotate" | "confirm" | "explore" | "complete";
 
 interface Props {
+  requestedItemId?: string | null;
   onSessionChange?: (active: boolean) => void;
 }
 
-const COPY: Record<ProfileId, { intro: string; complete: string }> = {
+const COPY: Record<ProfileId, { welcome: string; intro: string; complete: string }> = {
   visual: {
-    intro: "Drag to move",
-    complete: "LACK placed! Build more furniture to decorate your room.",
+    welcome: "Your assembled LACK table is already in your home!",
+    intro: "Long-press and drag it to adjust its position.",
+    complete: "LACK placed! Complete more assembly tasks to add more furniture.",
   },
   momentum: {
-    intro: "Let’s give your LACK table a home!",
-    complete: "Your first piece is home! Build more furniture to make your room even better.",
+    welcome: "Your assembled LACK table is already home!",
+    intro: "Long-press and drag it anywhere you like.",
+    complete: "Your first piece is home! Complete more assembly tasks to make your room even better.",
   },
   clearPath: {
-    intro: "Move the LACK table",
+    welcome: "Your assembled LACK table is already in your home.",
+    intro: "Long-press and drag it to adjust its position.",
     complete: "LACK table placed. Complete more tasks to add more furniture.",
   },
   control: {
-    intro: "Drag the LACK table to move it.",
+    welcome: "Your assembled LACK table is already in your home.",
+    intro: "Long-press and drag it to adjust its position.",
     complete: "Your first piece is home. Complete assembly tasks to add more furniture.",
   },
 };
 
-export function RoomFirstPlacementGuide({ onSessionChange }: Props) {
+export function RoomFirstPlacementGuide({ requestedItemId, onSessionChange }: Props) {
   const s = useStyles(makeStyles);
   const profile = useGameStore((state) => state.profile);
+  const audioEnabled = useGameStore((state) => state.settings.audio);
   const activeEdit = usePlacementStore((state) => state.activeEdit);
   const hydrated = usePlacementStore((state) => state.hydrated);
   const layout = usePlacementStore((state) => state.layout);
@@ -46,15 +53,32 @@ export function RoomFirstPlacementGuide({ onSessionChange }: Props) {
   const guideId = useRef<string | null>(null);
   const initialCell = useRef<{ x: number; y: number } | null>(null);
   const initialRotation = useRef(0);
+  const requestConsumed = useRef(false);
   const pulse = useRef(new Animated.Value(0.94)).current;
   const mode = profile ?? "control";
+
+  useEffect(() => {
+    if (!hydrated || !requestedItemId || activeEdit || requestConsumed.current || stage !== "idle") return;
+    requestConsumed.current = true;
+    const started = usePlacementStore.getState().startPlacing(requestedItemId, {
+      firstPlacementGuide: true,
+    });
+    if (!started) {
+      requestConsumed.current = false;
+      return;
+    }
+    onSessionChange?.(true);
+    setStage(mode === "control" ? "choice" : "move");
+  }, [activeEdit, hydrated, mode, onSessionChange, requestedItemId, stage]);
 
   useEffect(() => {
     if (!hydrated || !activeEdit?.firstPlacementGuide || guideId.current) return;
     guideId.current = activeEdit.placement.instanceId;
     initialCell.current = { ...activeEdit.placement.cell };
     initialRotation.current = activeEdit.placement.rotSteps;
-    setStage(mode === "control" ? "choice" : "move");
+    setStage((current) =>
+      current === "idle" ? (mode === "control" ? "choice" : "move") : current,
+    );
     onSessionChange?.(true);
   }, [activeEdit, hydrated, mode, onSessionChange]);
 
@@ -73,6 +97,19 @@ export function RoomFirstPlacementGuide({ onSessionChange }: Props) {
     animation.start();
     return () => animation.stop();
   }, [mode, pulse, stage]);
+
+  useEffect(() => {
+    if (!audioEnabled || stage === "idle") return;
+
+    const message = spokenMessageForStage(stage, mode);
+    if (!message) return;
+
+    Speech.stop();
+    Speech.speak(message, { rate: 0.82 });
+    return () => {
+      Speech.stop();
+    };
+  }, [audioEnabled, mode, stage]);
 
   useEffect(() => {
     if (!activeEdit || activeEdit.placement.instanceId !== guideId.current) return;
@@ -133,14 +170,15 @@ export function RoomFirstPlacementGuide({ onSessionChange }: Props) {
           <View style={s.completeCopy}>
             <Text style={s.completeTitle}>{mode === "momentum" ? "Great job!" : "Your furniture is home!"}</Text>
             <Text style={s.completeBody}>{COPY[mode].complete}</Text>
+            <Text style={s.moveAgain}>Long-press it anytime to move it again.</Text>
             <View style={s.actions}>
               <Button
-                label="Start an assembly task"
+                label="Build more furniture"
                 variant="primary"
                 small
                 onPress={() => {
                   finish();
-                  router.replace({ pathname: "/play", params: { id: "dalfred-stool" } });
+                  router.push("/catalogue");
                 }}
               />
               <Pressable onPress={finish} hitSlop={8}>
@@ -159,10 +197,23 @@ export function RoomFirstPlacementGuide({ onSessionChange }: Props) {
         <View style={s.guideCard}>
           <Image source={avatarForProfile(mode)} style={s.avatar} resizeMode="cover" />
           <View style={s.copy}>
-            <Text style={s.title}>Would you like help placing your LACK table?</Text>
+            <Text style={s.stepLabel}>YOUR ROOM</Text>
+            <Text style={s.title}>{COPY[mode].welcome} Would you like help adjusting its position?</Text>
             <View style={s.actions}>
-              <Button label="Guide me" variant="primary" small onPress={() => setStage("move")} />
-              <Pressable onPress={() => setStage("explore")} hitSlop={8}>
+              <Button
+                label="Guide me"
+                variant="primary"
+                small
+                onPress={() => {
+                  setStage("move");
+                }}
+              />
+              <Pressable
+                onPress={() => {
+                  setStage("explore");
+                }}
+                hitSlop={8}
+              >
                 <Text style={s.secondaryAction}>I’ll place it myself</Text>
               </Pressable>
             </View>
@@ -204,21 +255,39 @@ export function RoomFirstPlacementGuide({ onSessionChange }: Props) {
           <Text style={s.momentumText}>{momentumMessage}</Text>
         </View>
       ) : null}
-      <View style={[s.guideCard, mode === "clearPath" && s.clearCard]} pointerEvents="box-none">
+      <View
+        style={[
+          s.guideCard,
+          mode === "clearPath" && s.clearCard,
+          stage === "move" && s.placedCard,
+        ]}
+        pointerEvents="box-none"
+      >
         {mode === "control" ? null : (
           <Image source={avatarForProfile(mode)} style={s.avatar} resizeMode="cover" />
         )}
         <View style={s.copy}>
           {mode === "clearPath" ? (
-            <View style={s.checklist}>
-              <ChecklistRow label="Move the LACK table" state={stage === "move" ? "active" : "done"} />
-              <ChecklistRow label="Rotate if needed" state={stage === "rotate" ? "active" : stage === "confirm" ? "done" : "next"} />
-              <ChecklistRow label="Confirm its position" state={stage === "confirm" ? "active" : "next"} />
-            </View>
+            <>
+              {stage === "move" ? (
+                <>
+                  <Text style={s.stepLabel}>YOUR ROOM</Text>
+                  <Text style={s.title}>{COPY[mode].welcome}</Text>
+                  <Text style={s.sourceInstruction}>{COPY[mode].intro}</Text>
+                </>
+              ) : (
+                <View style={s.checklist}>
+                  <ChecklistRow label="Move the LACK table" state="done" />
+                  <ChecklistRow label="Rotate if needed" state={stage === "rotate" ? "active" : "done"} />
+                  <ChecklistRow label="Confirm its position" state={stage === "confirm" ? "active" : "next"} />
+                </View>
+              )}
+            </>
           ) : (
             <>
-              <Text style={s.stepLabel}>{stage === "move" ? "MOVE" : stage === "rotate" ? "ROTATE" : "PLACE"}</Text>
-              <Text style={s.title}>{instruction}</Text>
+              <Text style={s.stepLabel}>{stage === "move" ? "YOUR ROOM" : stage === "rotate" ? "ROTATE" : "PLACE"}</Text>
+              <Text style={s.title}>{stage === "move" ? COPY[mode].welcome : instruction}</Text>
+              {stage === "move" ? <Text style={s.sourceInstruction}>{COPY[mode].intro}</Text> : null}
               {mode === "visual" ? (
                 <Animated.Text style={[s.visualCue, { transform: [{ scale: pulse }] }]}>
                   {stage === "move" ? "☝  ↔" : stage === "rotate" ? "↶  ↷" : "✓"}
@@ -235,6 +304,27 @@ export function RoomFirstPlacementGuide({ onSessionChange }: Props) {
       </View>
     </View>
   );
+}
+
+function spokenMessageForStage(stage: GuideStage, mode: ProfileId): string | null {
+  switch (stage) {
+    case "choice":
+      return `${COPY[mode].welcome} Would you like help adjusting its position?`;
+    case "move":
+      return `${COPY[mode].welcome} ${COPY[mode].intro}`;
+    case "rotate":
+      return mode === "visual" ? "Rotate if needed." : "Rotate it if you would like.";
+    case "confirm":
+      return mode === "visual"
+        ? "Tap the check button to place it."
+        : "Tap the check button when you are happy with the position.";
+    case "explore":
+      return "You can open placement guidance at any time.";
+    case "complete":
+      return `${COPY[mode].complete} Long-press it any time to move it again.`;
+    default:
+      return null;
+  }
 }
 
 function ChecklistRow({ label, state }: { label: string; state: "done" | "active" | "next" }) {
@@ -265,11 +355,13 @@ const makeStyles = (t: Theme) =>
       ...ELEVATION.card,
     },
     clearCard: { width: 360 },
+    placedCard: { left: 88, bottom: "34%", maxWidth: 430 },
     avatar: { width: 72, height: 72, borderRadius: 18, backgroundColor: t.surfaceRaised },
     copy: { flex: 1 },
     stepLabel: { ...LEXEND.bold, fontSize: 10, letterSpacing: 1.2, color: t.accent },
     title: { ...LEXEND.black, marginTop: 2, fontSize: 16, lineHeight: 21, color: t.text },
     visualCue: { ...LEXEND.black, marginTop: 8, fontSize: 28, color: t.accent },
+    sourceInstruction: { ...LEXEND.bold, marginTop: 7, fontSize: 13, lineHeight: 18, color: t.textDim },
     actions: { marginTop: 12, flexDirection: "row", alignItems: "center", gap: 16 },
     secondaryAction: { ...LEXEND.bold, fontSize: 13, color: t.textDim },
     skipButton: { alignSelf: "flex-start", marginTop: 8 },
@@ -291,4 +383,5 @@ const makeStyles = (t: Theme) =>
     completeCopy: { flex: 1 },
     completeTitle: { ...LEXEND.black, fontSize: 22, color: t.text },
     completeBody: { ...LEXEND.bold, marginTop: 5, fontSize: 14, lineHeight: 20, color: t.textDim },
+    moveAgain: { ...LEXEND.bold, marginTop: 5, fontSize: 13, lineHeight: 18, color: t.text },
   });

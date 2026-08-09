@@ -334,25 +334,27 @@ export function MascotGuideOverlay({
       ) : null}
       {frame ? (
         <>
-          <View pointerEvents="none" style={[styles.scrim, { left: 0, top: 0, right: 0, height: frame.y }]} />
-          <View pointerEvents="none" style={[styles.scrim, { left: 0, top: frame.y, width: frame.x, height: frame.height }]} />
-          <View
-            pointerEvents="none"
-            style={[styles.scrim, { left: frame.x + frame.width, top: frame.y, right: 0, height: frame.height }]}
-          />
-          <View
-            pointerEvents="none"
-            style={[styles.scrim, { left: 0, top: frame.y + frame.height, right: 0, bottom: 0 }]}
-          />
-          {presentation.showVisualDemo && step.id === 'stand-table-upright' ? null : (
-            <View
-              pointerEvents="none"
-              style={[
-                styles.highlight,
-                presentation.emphasizeTarget && styles.highlightEmphasized,
-                { left: frame.x, top: frame.y, width: frame.width, height: frame.height },
-              ]}
-            />
+          {step.id === 'stand-table-upright' ? null : (
+            <>
+              <View pointerEvents="none" style={[styles.scrim, { left: 0, top: 0, right: 0, height: frame.y }]} />
+              <View pointerEvents="none" style={[styles.scrim, { left: 0, top: frame.y, width: frame.x, height: frame.height }]} />
+              <View
+                pointerEvents="none"
+                style={[styles.scrim, { left: frame.x + frame.width, top: frame.y, right: 0, height: frame.height }]}
+              />
+              <View
+                pointerEvents="none"
+                style={[styles.scrim, { left: 0, top: frame.y + frame.height, right: 0, bottom: 0 }]}
+              />
+              <View
+                pointerEvents="none"
+                style={[
+                  styles.highlight,
+                  presentation.emphasizeTarget && styles.highlightEmphasized,
+                  { left: frame.x, top: frame.y, width: frame.width, height: frame.height },
+                ]}
+              />
+            </>
           )}
           {!undoPreviewActive && presentation.showVisualDemo && step.id === 'long-press-part' ? (
             <VisualLongPressCue frame={frame} />

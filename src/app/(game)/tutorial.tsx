@@ -74,7 +74,6 @@ import { MomentumCompanion } from "@/src/game/tutorial/MomentumCompanion";
 import { MomentumAttentionOverlay } from "@/src/game/tutorial/MomentumAttentionOverlay";
 import { useTutorialStore } from "@/src/game/tutorial/store";
 import { useTutorialHaptics } from "@/src/game/tutorial/useTutorialHaptics";
-import { usePlacementStore } from "@/src/room/core/placement";
 import {
   TUTORIAL_STEP_REWARD_TOKENS,
   type ToolTutorialKind,
@@ -973,11 +972,9 @@ function TutorialScreen() {
           const finishedAssembly =
             requiredActions > 0 && game.completed.length >= requiredActions;
           if (!finishedAllSteps || !finishedAssembly) return;
-          const started = usePlacementStore.getState().startPlacing("lack-table", {
-            firstPlacementGuide: true,
-          });
-          if (!started) return;
-          router.replace("/room");
+          // The room guide owns the first placement. It presents a real draggable
+          // furniture card and only creates the placement ghost after that drag.
+          router.replace({ pathname: "/room", params: { firstPlacement: "lack-table" } });
         }}
       />
       <MomentumAttentionOverlay />
