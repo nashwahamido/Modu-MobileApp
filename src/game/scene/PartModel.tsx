@@ -94,12 +94,16 @@ function demoApproach(
   }
   // 3. Derived. A part comes in from the side away from whatever it would collide with — its joins if it records any, otherwise whatever is already standing. NEAREST, not the centroid: the centroid of a half-built chair sits low, which sent the seat plate down through the seat it mounts under. The nearest placed part is the thing actually in the way.
   const centre = visualCentre(def);
-  const joinIds = [
+  // STRUCTURAL joins first, and screw joins only if there are none. A screwJoin records what fastens
+  // a part, not the path it arrives along, and treating the two alike is what sent DALFRED's pole in
+  // from above: it joins the seatPlate ABOVE it (0.154 away) but is screwed to the supportPin BELOW
+  // it (0.075 away), so "nearest of all joins" picked the pin and reversed the approach.
+  const structural = [
     ...(def.directJoins ?? []),
     ...(def.slideJoins ?? []),
-    ...(def.screwJoins ?? []),
     ...(def.attached ?? []),
   ];
+  const joinIds = structural.length ? structural : [...(def.screwJoins ?? [])];
   const pool = joinIds.length
     ? joinIds.map((id) => parts[id]).filter(Boolean)
     : Object.values(parts).filter((p) => p.type !== "fastener" && placedIds.has(p.partId));

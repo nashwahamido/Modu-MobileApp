@@ -16,7 +16,6 @@ import { avatarForProfile } from '@/src/components/avatarAssets';
 import { ACCENT_LIGHT, ELEVATION, RADIUS, Theme, TYPE, useStyles } from '@/src/game/ui/system/theme';
 import { tutorialPresentationForProfile } from './presentation';
 import { VisualLongPressCue } from './VisualLongPressCue';
-import { VisualToolboxCue } from './VisualToolboxCue';
 import { VisualJoystickCue } from './VisualJoystickCue';
 import { VoiceButton } from '@/src/game/ui/hud/VoiceButton';
 const PADDING = 0;
@@ -24,6 +23,7 @@ const PADDING = 0;
 interface Props {
   activeToolKind: ToolTutorialKind | null;
   assemblyComplete: boolean;
+  earnedXp: number;
   onClaimReward: () => void;
   onContinueToAssembly?: () => void;
   onDeferAssembly?: () => void;
@@ -35,6 +35,7 @@ interface Props {
 export function MascotGuideOverlay({
   activeToolKind,
   assemblyComplete,
+  earnedXp,
   onClaimReward,
   onContinueToAssembly,
   onDeferAssembly,
@@ -51,6 +52,7 @@ export function MascotGuideOverlay({
   const height = overlaySize?.height ?? windowSize.height;
   const currentIndex = useTutorialStore((s) => s.currentIndex);
   const profile = useGameStore((s) => s.profile);
+  const mapOpen = useGameStore((s) => s.mapOpen);
   const mascotImage = avatarForProfile(profile);
   const presentation = tutorialPresentationForProfile(profile);
   const steps = useTutorialStore((s) => s.steps);
@@ -76,6 +78,7 @@ export function MascotGuideOverlay({
     audioEnabled &&
       !presentation.showVisualDemo &&
       !blocked &&
+      !mapOpen &&
       !attentionOverlayActive &&
       !skipped &&
       !completed &&
@@ -87,6 +90,7 @@ export function MascotGuideOverlay({
       !presentation.showVisualDemo ||
       !visualSpeechEnabled ||
       blocked ||
+      mapOpen ||
       attentionOverlayActive ||
       skipped ||
       completed ||
@@ -108,6 +112,7 @@ export function MascotGuideOverlay({
   }, [
     attentionOverlayActive,
     blocked,
+    mapOpen,
     completed,
     currentIndex,
     presentation.showVisualDemo,
@@ -161,7 +166,10 @@ export function MascotGuideOverlay({
     return () => clearTimeout(retry);
   }, [completed, currentIndex, nodes, overlaySize, rewardReady, setFrame, skipped, steps]);
 
-  if (skipped || blocked || attentionOverlayActive) return null;
+  // The pause button opens the same build-map modal used by a normal task.
+  // Hide tutorial chrome while it is open so the shared modal remains the
+  // only interactive layer and its close/resume behaviour stays unchanged.
+  if (skipped || blocked || mapOpen || attentionOverlayActive) return null;
 
   if (settingsReady) {
     return (
@@ -173,6 +181,14 @@ export function MascotGuideOverlay({
             <Text style={styles.rewardMessage}>
               Ready to enter your assembly task?
             </Text>
+            <View style={styles.rewardXpRow}>
+              <Image
+                source={require("@/src/assets/ui/icons/icon-xp.png")}
+                style={styles.rewardXpIcon}
+                resizeMode="contain"
+              />
+              <Text style={styles.rewardXpValue}>+{earnedXp} XP</Text>
+            </View>
             <View style={styles.settingsActions}>
               <Button
                 label="Enter assembly task"
@@ -272,6 +288,7 @@ export function MascotGuideOverlay({
     width,
     height,
     presentation.showVisualDemo,
+    presentation.showMomentumCompanion,
   );
 
   return (
@@ -299,9 +316,6 @@ export function MascotGuideOverlay({
           {presentation.showVisualDemo && step.id === 'long-press-part' ? (
             <VisualLongPressCue frame={frame} />
           ) : null}
-          {presentation.showVisualDemo && step.id === 'select-allen-key' ? (
-            <VisualToolboxCue frame={frame} />
-          ) : null}
           {presentation.showVisualDemo && step.id === 'view-under-table' ? (
             <VisualJoystickCue frame={frame} />
           ) : null}
@@ -319,7 +333,7 @@ export function MascotGuideOverlay({
         ) : null}
         <View style={styles.copy} pointerEvents="box-none">
           <Text style={styles.stepText}>
-            {phase === 'settings' ? 'SETTINGS · ' : ''}{currentIndex + 1}/{steps.length}
+            {phase === 'settings' || step.targetId === 'settings' ? 'SETTINGS · ' : ''}{currentIndex + 1}/{steps.length}
           </Text>
           <View style={styles.messageRow}>
             <Text style={[styles.message, presentation.showVisualDemo && styles.visualMessage]}>
@@ -353,11 +367,9 @@ export function MascotGuideOverlay({
               {presentation.reducedText
                   ? step.id === 'long-press-part'
                     ? 'Press and hold.'
-                    : step.id === 'select-allen-key'
-                      ? 'Tap the toolbox.'
-                      : step.id === 'view-under-table'
-                        ? 'Move the joystick.'
-                        : 'Follow the highlighted target.'
+                    : step.id === 'view-under-table'
+                      ? 'Move the joystick.'
+                      : 'Follow the highlighted target.'
                   : 'Complete the highlighted action to continue.'}
             </Text>
             {step.id === 'pinch-to-zoom' && onSimulatePinch ? (
@@ -383,7 +395,6 @@ function visualMessageForStep(stepId: string, fallback: string): string {
     'drag-and-snap': 'Move it to the target',
     'view-under-table': 'Rotate to the underside',
     'place-connector': 'Match the bolt to the hole',
-    'select-allen-key': 'Choose the Allen key',
     'tighten-connector': 'Turn clockwise',
     'install-four-legs': 'Match each leg to a bolt',
     'stand-table-upright': 'Turn the table upright',
@@ -405,6 +416,7 @@ function bubblePosition(
   screenW: number,
   screenH: number,
   visualMode = false,
+  momentumMode = false,
 ) {
   const bubbleW = 286;
   const edge = 16;
@@ -449,6 +461,24 @@ function bubblePosition(
     };
   }
 
+  // Momentum's tool is supplied automatically, so its instruction belongs
+  // beside the real turn control rather than in a remote corner of the HUD.
+  if (momentumMode && targetId === 'tool') {
+    const gap = 18;
+    const roomOnRight = screenW - frame.x - frame.width - edge;
+    const adjacentLeft =
+      roomOnRight >= bubbleW + gap
+        ? frame.x + frame.width + gap
+        : frame.x - bubbleW - gap;
+    return {
+      left: Math.max(edge, Math.min(adjacentLeft, screenW - bubbleW - edge)),
+      top: Math.max(
+        edge,
+        Math.min(frame.y + frame.height / 2 - 82, screenH - 190),
+      ),
+    };
+  }
+
   if (targetId === 'scene') {
     return { left: 72, top: Math.min(Math.max(88, screenH * 0.32), screenH - 176) };
   }
@@ -471,7 +501,19 @@ function bubblePosition(
     return { right: Math.max(edge, screenW - frame.x + 14), top: Math.max(84, frame.y) };
   }
   if (targetId === 'tool') {
-    return { left: edge, bottom: 26 };
+    const gap = 18;
+    const roomOnRight = screenW - frame.x - frame.width - edge;
+    const adjacentLeft =
+      roomOnRight >= bubbleW + gap
+        ? frame.x + frame.width + gap
+        : frame.x - bubbleW - gap;
+    return {
+      left: Math.max(edge, Math.min(adjacentLeft, screenW - bubbleW - edge)),
+      top: Math.max(
+        edge,
+        Math.min(frame.y + frame.height / 2 - 82, screenH - 190),
+      ),
+    };
   }
 
   const canPlaceBelow = frame.y + frame.height + 16 < screenH - 150;

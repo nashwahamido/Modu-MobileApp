@@ -1,6 +1,6 @@
 // In-game settings: a gear button that opens the shared SettingsControls in a cream modal card. Same controls as the homepage /settings screen — one source of truth, one look (adopted from the on-release engine).
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   Image,
@@ -14,7 +14,10 @@ import {
 } from "react-native";
 import { useSafeInsets } from "@/src/hooks/use-safe-insets";
 import { ELEVATION, RADIUS, Theme, useStyles, FONT } from "@/src/game/ui/system/theme";
-import { SettingsControls } from "@/src/game/ui/settings/SettingsControls";
+import {
+  SettingsControls,
+  type SettingsFocusTarget,
+} from "@/src/game/ui/settings/SettingsControls";
 import { GrainOverlay } from "@/src/game/ui/system/Button";
 
 const SETTINGS_ICON = require("@/src/assets/ui/icons/icon-settings.png");
@@ -25,6 +28,8 @@ interface GameSettingsProps {
   confirmLabel?: string;
   confirmDisabled?: boolean;
   onConfirm?: () => void;
+  tutorialTarget?: SettingsFocusTarget | null;
+  onTutorialTargetActivated?: () => void;
 }
 
 export function GameSettings({
@@ -33,22 +38,62 @@ export function GameSettings({
   confirmLabel = "Done",
   confirmDisabled = false,
   onConfirm,
+  tutorialTarget = null,
+  onTutorialTargetActivated,
 }: GameSettingsProps = {}) {
   const styles = useStyles(makeStyles);
   const [open, setOpen] = useState(false);
+  const [tutorialTargetY, setTutorialTargetY] = useState<number | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const tutorialWasOpen = useRef(false);
+  const tutorialSelectionMade = useRef(false);
   const { height: winH } = useWindowDimensions();
   // The FLOORED insets, not the raw ones: immersive mode reports 0 on both test devices, so reading them directly made this the full window height and the card ran off the top and bottom edges.
   const insets = useSafeInsets();
   const cardMaxHeight = winH - insets.top - insets.bottom;
 
-  const closeSettings = () => setOpen(false);
+  const closeSettings = () => {
+    const shouldAdvanceTutorial =
+      tutorialTarget !== null && tutorialSelectionMade.current;
+    tutorialSelectionMade.current = false;
+    setOpen(false);
+    if (shouldAdvanceTutorial) {
+      requestAnimationFrame(() => onTutorialTargetActivated?.());
+    }
+  };
+
+  useEffect(() => {
+    setTutorialTargetY(null);
+    tutorialSelectionMade.current = false;
+    if (!tutorialTarget && tutorialWasOpen.current) {
+      tutorialWasOpen.current = false;
+      setOpen(false);
+    }
+  }, [tutorialTarget]);
+
+  useEffect(() => {
+    if (!open || tutorialTargetY === null) return;
+    const frame = requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({
+        y: Math.max(0, tutorialTargetY - 12),
+        animated: true,
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [open, tutorialTargetY]);
 
   return (
     <>
       {/* Settings icon — rounded-square chip with a minimalist sliders glyph. subject to change*/}
       <Pressable
         style={({ pressed }) => [styles.gear, pressed && { opacity: 0.6 }]}
-        onPress={() => setOpen(true)}
+        onPress={() => {
+          if (tutorialTarget) {
+            tutorialWasOpen.current = true;
+            tutorialSelectionMade.current = false;
+          }
+          setOpen(true);
+        }}
         hitSlop={8}
         accessibilityLabel="Settings"
       >
@@ -85,11 +130,20 @@ export function GameSettings({
             <Text style={styles.title}>Settings</Text>
             {headerContent}
             <ScrollView
+              ref={scrollRef}
               style={styles.cardScrollView}
               contentContainerStyle={styles.cardScroll}
               showsVerticalScrollIndicator={false}
             >
-              {controls ?? <SettingsControls />}
+              {controls ?? (
+                <SettingsControls
+                  focusTarget={tutorialTarget}
+                  onFocusTargetLayout={setTutorialTargetY}
+                  onFocusTargetActivated={() => {
+                    tutorialSelectionMade.current = true;
+                  }}
+                />
+              )}
             </ScrollView>
             <View style={styles.footer}>
               <Pressable
@@ -114,6 +168,12 @@ export function GameSettings({
                 onPress={() => {
                   if (confirmDisabled) return;
                   onConfirm?.();
+                  // Viewing the highlighted setting is enough during the
+                  // walkthrough. Players may keep the current value and use
+                  // Done to return to the assembly before the next cue.
+                  if (tutorialTarget) {
+                    tutorialSelectionMade.current = true;
+                  }
                   closeSettings();
                 }}
                 hitSlop={8}

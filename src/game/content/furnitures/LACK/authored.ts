@@ -36,7 +36,10 @@ export const FASTENER_RULES: FastenerRule[] = [
   {
     group: asGroupId("bolt115980"),
     stage: 1,
-    tool: "allenkey",
+    // No tool override. The resolution chain is rule.tool -> HARDWARE[group].tool -> part.tool, and
+    // the hardware catalogue already calls this one "spun in by hand" — the override here was
+    // putting an allen key in the toolbox, in the scene, and in the tightening gesture for a bolt
+    // that is turned with fingers.
   },
 ];
 

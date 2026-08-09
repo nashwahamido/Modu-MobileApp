@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { Theme, useStyles } from "@/src/game/ui/system/theme";
@@ -10,13 +9,6 @@ export function MomentumStepHeader() {
   const currentIndex = useTutorialStore((state) => state.currentIndex);
   const steps = useTutorialStore((state) => state.steps);
   const stepRewardReady = useTutorialStore((state) => state.stepRewardReady);
-  const [showNextStep, setShowNextStep] = useState(true);
-
-  useEffect(() => {
-    setShowNextStep(true);
-    const timeout = setTimeout(() => setShowNextStep(false), 1800);
-    return () => clearTimeout(timeout);
-  }, [currentIndex]);
 
   const currentStep = steps[currentIndex];
   if (!currentStep) return null;
@@ -24,11 +16,7 @@ export function MomentumStepHeader() {
   return (
     <View style={styles.root}>
       <Text style={styles.eyebrow}>
-        {stepRewardReady
-          ? "SMALL WIN"
-          : showNextStep
-            ? "NEXT STEP"
-            : `STEP ${currentIndex + 1} OF ${steps.length}`}
+        {stepRewardReady ? "SMALL WIN" : "NEXT STEP"}
       </Text>
       <Text style={styles.action} numberOfLines={1}>
         {stepRewardReady

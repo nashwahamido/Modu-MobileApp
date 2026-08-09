@@ -16,6 +16,8 @@ import Svg, { Circle, G, Path } from "react-native-svg";
 
 import { CONTROL } from "@/src/game/ui/system/theme";
 
+import { useGameStore } from "@/src/game/core/store";
+import type { ProfileId } from "@/src/game/core/profile";
 const RING = 96; // outer diameter of the band
 const STROKE = 9; // the band's own width — thin, so it reads as a gauge and not a donut
 const INK = 1.5; // the dark outline, kept fine so it inks the shape without thickening it
@@ -145,9 +147,31 @@ export interface DialTurnOptions {
  * fires one haptic tick per `tickDeg` of accumulated travel. What the turn DOES is entirely the caller's:
  * `onTurn` applies it and hands back the running total.
  */
+/**
+ * Tightening degrees per degree of FINGER travel around the dial.
+ *
+ * At 1 the two were the same, which meant a 720° fastener needed two complete laps of the dial with
+ * one thumb — accurate to the real motion and exhausting to perform. The gain keeps the fastener
+ * turning its full two turns on screen while the hand does less work.
+ *
+ * 2.6 overshot: a leg finished in barely a quarter of a lap, which reads as the gesture doing the
+ * work rather than the player. 1.7 lands a 720° fastener at about 1.2 laps — still well under the
+ * original two, but far enough that a deliberate turn is still a turn.
+ *
+ * PER PROFILE, because effort is exactly the axis these profiles differ on. Momentum is built around
+ * low friction and frequent small wins — a two-lap grind is the opposite of that, and it is the
+ * profile most likely to be abandoned mid-turn. The others keep the deliberate weight.
+ */
+const TURN_GAIN_DEFAULT = 1.7;
+const TURN_GAIN: Partial<Record<ProfileId, number>> = {
+  momentum: 2.7,
+};
+
 export function useDialTurn({ resetKey, tickDeg, bidirectional, onTurn }: DialTurnOptions): PanGesture {
   const lastAngle = useRef<number | null>(null);
   const lastTick = useRef(0);
+  const profile = useGameStore((s) => s.profile);
+  const gain = TURN_GAIN[profile] ?? TURN_GAIN_DEFAULT;
 
   useEffect(() => {
     lastAngle.current = null;
@@ -163,10 +187,11 @@ export function useDialTurn({ resetKey, tickDeg, bidirectional, onTurn }: DialTu
         // Unwrap across the ±180 seam, or crossing it reads as a near-full turn backwards.
         if (d > 180) d -= 360;
         if (d < -180) d += 360;
-        const step = bidirectional ? Math.abs(d) : d;
-        // The upper bound drops a finger that jumped rather than dragged (a lift and re-press across the dial).
-        if (step > 0 && step < 120) {
-          const total = onTurn(step);
+        const raw = bidirectional ? Math.abs(d) : d;
+        // The bound is checked on RAW finger movement, before the gain: it exists to drop a finger
+        // that jumped rather than dragged, and that is a fact about the touch, not about the screw.
+        if (raw > 0 && raw < 120) {
+          const total = onTurn(raw * gain);
           const tick = Math.floor(total / tickDeg);
           if (tick > lastTick.current) {
             lastTick.current = tick;

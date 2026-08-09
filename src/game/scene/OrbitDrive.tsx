@@ -9,8 +9,11 @@ export interface StickDeflection {
   y: number;
 }
 
-// Matches the old JS-thread ORBIT_RATE * per-frame-seconds. The render callback runs per frame (~60fps) like the old 16ms interval, so the same rate constant gives the same feel.
-const ORBIT_RATE = 220;
+// Grab-units per second at FULL stick deflection. The joystick now shapes its own output — deadzone
+// plus a squared response — so this is the speed at the rim only, and everything below it is slower
+// than the old linear stick rather than the same. 220 with a linear stick made a small nudge move the
+// model as fast as a full push.
+const ORBIT_RATE = 165;
 const FRAME_DT = 0.016;
 
 /**

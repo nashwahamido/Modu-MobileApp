@@ -35,6 +35,7 @@ export function momentumFeedbackForStep(index: number): string {
 export function MomentumCompanion() {
   const styles = useStyles(makeStyles);
   const profile = useGameStore((state) => state.profile);
+  const mapOpen = useGameStore((state) => state.mapOpen);
   const presentation = tutorialPresentationForProfile(profile);
   const stepRewardReady = useTutorialStore((state) => state.stepRewardReady);
   const currentIndex = useTutorialStore((state) => state.currentIndex);
@@ -55,7 +56,7 @@ export function MomentumCompanion() {
     }).start();
   }, [celebration, stepRewardReady]);
 
-  if (!presentation.showMomentumCompanion || skipped || completed) return null;
+  if (!presentation.showMomentumCompanion || skipped || completed || mapOpen) return null;
 
   const avatarScale = celebration.interpolate({
     inputRange: [0, 0.32, 0.65, 1],
@@ -131,6 +132,8 @@ const makeStyles = (theme: Theme) =>
   StyleSheet.create({
     root: {
       position: "absolute",
+      // The top row begins with Pause. Keep Sparky one full chip-gap to its
+      // left so the avatar never covers the Pause hit target.
       left: -82,
       top: -2,
       width: 74,
@@ -167,13 +170,17 @@ const makeStyles = (theme: Theme) =>
     },
     feedback: {
       position: "absolute",
-      left: 58,
-      top: 46,
-      minWidth: 86,
+      // Keep the encouragement above Sparky: below/right was covered by the
+      // Pause button and progress card during the next-step transition.
+      left: -22,
+      bottom: 72,
+      width: 118,
       paddingHorizontal: 9,
       paddingVertical: 5,
       borderRadius: 12,
       backgroundColor: theme.surface,
+      alignItems: "center",
+      zIndex: 4,
       ...ELEVATION.card,
     },
     feedbackText: {

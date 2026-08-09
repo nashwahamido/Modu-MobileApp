@@ -1,7 +1,7 @@
 import * as Haptics from "expo-haptics";
 import { CONTROL } from "@/src/game/ui/system/theme";
 import { useEffect, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Animated, Easing, Image, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useGameStore } from "@/src/game/core/store";
 import { AssemblyAction, Vec3 } from "@/src/game/core/type";
@@ -30,6 +30,23 @@ export function SeatSlideControl({ action, offset, heldDriver, slideDriver }: Pr
     setProg(0);
     lastY.current = null;
   }, [action.actionId]);
+
+  // An arrow that runs the length of the track while it is still untouched. The thumb's "⇣" glyph
+  // was the only cue that this control slides, and a glyph inside a thumb reads as a label on a
+  // widget rather than as an instruction to move it. The motion IS the instruction.
+  const cue = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (prog > 0) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(cue, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.delay(220),
+        Animated.timing(cue, { toValue: 0, duration: 0, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [cue, prog]);
 
   const apply = (p: number) => {
     heldDriver.set([offset[0] * (1 - p), offset[1] * (1 - p), offset[2] * (1 - p)]);
@@ -77,9 +94,34 @@ export function SeatSlideControl({ action, offset, heldDriver, slideDriver }: Pr
           <View style={[styles.thumb, { top: (TRACK - 44) * prog }]}>
             <Text style={styles.thumbText}>⇣</Text>
           </View>
+          {/* Only while untouched: once the player has started, the thumb's own position is the
+              feedback and a second moving thing competes with it. */}
+          {prog === 0 ? (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.cue,
+                {
+                  opacity: cue.interpolate({ inputRange: [0, 0.15, 0.8, 1], outputRange: [0, 1, 1, 0] }),
+                  transform: [
+                    { translateY: cue.interpolate({ inputRange: [0, 1], outputRange: [0, TRACK - 86] }) },
+                  ],
+                },
+              ]}
+            >
+              <Image
+                source={require("@/src/assets/ui/icons/arrow-next.png")}
+                style={styles.cueArrow}
+                resizeMode="contain"
+              />
+            </Animated.View>
+          ) : null}
         </View>
       </GestureDetector>
-      <Text style={styles.hint}>Slide it in · {Math.round(prog * 100)}%</Text>
+      {/* pointerEvents none: this label is drawn over the HUD row below it, and a Text child of a
+          box-none wrapper still swallows touches — it was eating presses meant for the auto button
+          sitting underneath. Nothing here is interactive. */}
+      <Text style={styles.hint} pointerEvents="none">Slide it in · {Math.round(prog * 100)}%</Text>
     </View>
   );
 }
@@ -96,6 +138,9 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   fill: { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: CONTROL.fillSoft },
+  cue: { position: "absolute", top: 54, left: 0, right: 0, alignItems: "center" },
+  // The nav arrow head, turned a quarter turn to point down the track.
+  cueArrow: { width: 26, height: 26, transform: [{ rotate: "90deg" }] },
   thumb: {
     position: "absolute",
     left: 6,

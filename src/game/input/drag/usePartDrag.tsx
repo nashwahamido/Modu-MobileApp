@@ -32,14 +32,7 @@ import { computeFit, APPROACH_FACTOR } from "@/src/game/core/geometry/fit";
 import { isStaged } from "@/src/game/core/model/staging";
 import { isPickupType } from "@/src/game/core/ids";
 import { quatSlerp, screenPointOnPlane } from "@/src/game/core/geometry/math";
-import {
-  ActionId,
-  AssemblyAction,
-  Furniture,
-  PartId,
-  Quat,
-  Vec3,
-} from "@/src/game/core/type";
+import { ActionId, AssemblyAction, Furniture, PartDef, PartId, Quat, Vec3 } from "@/src/game/core/type";
 import { selectFirstDrop, useGameStore } from "@/src/game/core/store";
 import type { OrbitManipulator } from "../../scene/AssemblyScene";
 import { FOV_Y_DEG } from "../../scene/cameraConfig";
@@ -97,7 +90,10 @@ interface Params {
 interface DragSession {
   base: Float3;
   /** Interchangeable sockets the held part may snap to (same part group). */
-  candidates: GroupCandidate[];
+  /** matchVisual is where the fit is MEASURED — the park pose for a part that enters along an axis,
+   *  the seated visual centre for everything else. GroupCandidate's own position stays what the
+   *  release path places at. */
+  candidates: (GroupCandidate & { matchVisual: Vec3 })[];
   /** Live sockets outside the group, for wrong-target detection. */
   otherSockets: Vec3[];
   bakedPos: Vec3;
@@ -107,6 +103,16 @@ interface DragSession {
   grabOffset: Vec3;
   /** Height of the horizontal drag plane. DYNAMIC: eases toward the matched socket's height each frame (multi-height groups like DALFRED's screw105251), back to basePlaneY when nothing is matched. */
   planeY: number;
+  /**
+   * Set for parts that enter VERTICALLY, and null for everything else.
+   *
+   * A horizontal plane maps screen-Y to DEPTH — drag up and the part moves away from the camera.
+   * That is right for a part sliding across a surface, and wrong for one that drops in from above:
+   * no height of horizontal plane can express downward travel, and raising it only brings the part
+   * toward the lens. When set, the drag runs on a plane FACING the camera through this anchor, where
+   * screen-up is world-up and the part stays at the model's own depth.
+   */
+  uprightAnchor: Vec3 | null;
   /** The action's own target height — the drag plane's resting height. */
   basePlaneY: number;
   matchedActionId: ActionId | null;
@@ -196,6 +202,22 @@ export function usePartDrag({
     },
     [manipulator, winW, winH],
   );
+
+/**
+ * How far a part is held OFF its seat while being dragged.
+ *
+ * A part with an authored placeDir enters along that axis and PARKS before it is driven home. The
+ * work plane, the fit match and the release all have to agree on that parked pose: pinning the drag
+ * to the seated height means the part can never hover above its socket, so a match measured at the
+ * park pose is unreachable and the fit only turns green once the part is underneath — which is the
+ * opposite of how it goes in.
+ */
+function parkShiftFor(part: PartDef | undefined): Vec3 {
+  const dir = part?.placeDir;
+  const back = part?.parkBackoff ?? 0;
+  if (!dir || !back) return [0, 0, 0];
+  return [-dir[0] * back, -dir[1] * back, -dir[2] * back];
+}
 
   /** World point on the work plane under (just above) the finger, or null at the horizon. */
   const fingerOnPlane = useCallback(
@@ -385,17 +407,36 @@ export function usePartDrag({
           const furniture = store.furniture;
           if (!furniture) return;
           const part = furniture.parts[action.partId];
-          const focus = getFocusPoint();
           // Drag plane at the action's OWN target height (her model): on-screen overlap with a socket then means genuine 3D proximity — a finger on a 2D screen cannot steer depth.
           const doneSet0 = new Set(store.completed);
           const ownTarget = targetPositionForAction(action, furniture.parts, doneSet0);
           const grabOffset = part.visualCenterOffset ?? [0, 0, 0];
           // The plane pins the part's VISUAL CENTER (what the finger holds), so anchor it at the socket's visual-center height — origin height alone left tall parts (DALFRED legs: +0.27m center offset) vertically unreachable in level mode.
-          const planeY = ownTarget[1] + grabOffset[1];
-          const visualStart =
-            fingerOnPlane(e.absoluteX, e.absoluteY, planeY) ??
-            fingerOnCameraPlaneAt(e.absoluteX, e.absoluteY, focus) ??
-            focus;
+          // The plane sits at the PARK height for a part that enters along an axis, so the pin can
+          // actually hover over its hole instead of being held at the depth it ends up at.
+          const ownPark = parkShiftFor(part);
+          const planeY = ownTarget[1] + grabOffset[1] + ownPark[1];
+          // Vertical-entry parts get the upright plane. 0.7 on the Y component is "mostly straight
+          // up or down" — a shallow diagonal still reads better on the ground plane.
+          const uprightAnchor: Vec3 | null =
+            part.placeDir && Math.abs(part.placeDir[1]) > 0.7
+              ? [
+                  ownTarget[0] + grabOffset[0] + ownPark[0],
+                  planeY,
+                  ownTarget[2] + grabOffset[2] + ownPark[2],
+                ]
+              : null;
+          // The finger is on a TRAY CARD at pickup, which is low on the screen — with a near-level
+          // camera that ray never reaches a work plane set at the socket's height, and fingerOnPlane
+          // returns null. The old fallback was a plane FACING the camera through the focus point, so
+          // the part spawned close to the lens and then jumped to the model the first frame the ray
+          // finally hit the real plane. Falling back to the socket itself keeps the part in the
+          // model's own space from frame one; the first successful ray then MOVES it rather than
+          // teleporting it.
+          const socketStart: Float3 = [ownTarget[0], planeY, ownTarget[2]];
+          const visualStart = uprightAnchor
+            ? (fingerOnCameraPlaneAt(e.absoluteX, e.absoluteY, uprightAnchor) ?? socketStart)
+            : (fingerOnPlane(e.absoluteX, e.absoluteY, planeY) ?? socketStart);
           const base: Float3 = [
             visualStart[0] - grabOffset[0] - part.pose.position[0],
             visualStart[1] - grabOffset[1] - part.pose.position[1],
@@ -422,9 +463,34 @@ export function usePartDrag({
             furniture.parts,
             doneSet,
           );
-          const candidates = selectFirstDrop(nextStore)
+          const rawCandidates = selectFirstDrop(nextStore)
             ? allCandidates.filter((c) => c.action.actionId === action.actionId)
             : allCandidates;
+          // Match against the PARK pose, not the seated one, for any part that parks before it is
+          // driven home. A candidate's position is where the part ends up AFTER the drive — for
+          // DALFRED's support pin that is down inside circleUpp's hole, so the fit only went green
+          // once the pin was already through the socket, when the whole point is that it enters from
+          // above. Backing the match point off along the authored placeDir puts the green where the
+          // part is genuinely ready to be released: hovering, lined up, about to drop in.
+          const candidates = rawCandidates.map((c) => {
+            const cPart = furniture.parts[c.action.partId!];
+            const dir = cPart?.placeDir;
+            const back = cPart?.parkBackoff ?? 0;
+            // matchVisual only — position and visualPosition stay AS AUTHORED. The release path
+            // applies the park offset itself, so shifting the real position here parked the part
+            // twice: the pin jumped a further 12cm up on release and had to be slid all the way back
+            // down. Matching and placing are two different questions about the same socket.
+            if (!dir || !back) return { ...c, matchVisual: c.visualPosition };
+            const shift: Vec3 = [-dir[0] * back, -dir[1] * back, -dir[2] * back];
+            return {
+              ...c,
+              matchVisual: [
+                c.visualPosition[0] + shift[0],
+                c.visualPosition[1] + shift[1],
+                c.visualPosition[2] + shift[2],
+              ] as Vec3,
+            };
+          });
           const groupIds = new Set(candidates.map((c) => c.action.actionId));
           const otherSockets = avail
             .filter(
@@ -440,6 +506,7 @@ export function usePartDrag({
             grabOffset,
             planeY,
             basePlaneY: planeY,
+            uprightAnchor,
             matchedActionId: null,
             hoverLift: 0,
             startX: e.absoluteX,
@@ -457,9 +524,11 @@ export function usePartDrag({
           if (!s || !furniture || store.heldActionId !== action.actionId)
             return;
           // Exact per-frame projection onto the (dynamic) horizontal drag plane — absolute mapping, so the part cannot drift from the finger. Camera-plane delta math kept only as a horizon fallback.
-          const p =
-            fingerOnPlane(e.absoluteX, e.absoluteY, s.planeY) ??
-            fingerOnCameraPlane(e.absoluteX, e.absoluteY, s);
+          const p = s.uprightAnchor
+            ? (fingerOnCameraPlaneAt(e.absoluteX, e.absoluteY, s.uprightAnchor) ??
+              fingerOnCameraPlane(e.absoluteX, e.absoluteY, s))
+            : (fingerOnPlane(e.absoluteX, e.absoluteY, s.planeY) ??
+              fingerOnCameraPlane(e.absoluteX, e.absoluteY, s));
           let nearest = s.candidates[0];
           let bestD = Infinity;
           let target: GroupCandidate | null = null;
@@ -472,9 +541,9 @@ export function usePartDrag({
             const dragZ = p?.[2] ?? s.bakedPos[2] + offB[2] + s.grabOffset[2];
             for (const c of s.candidates) {
               const d = Math.hypot(
-                dragX - c.visualPosition[0],
-                dragY - c.visualPosition[1],
-                dragZ - c.visualPosition[2],
+                dragX - c.matchVisual[0],
+                dragY - c.matchVisual[1],
+                dragZ - c.matchVisual[2],
               );
               if (d < bestD) {
                 bestD = d;
@@ -486,8 +555,8 @@ export function usePartDrag({
           } else {
             // "adaptive" — candidate matching in SCREEN space: the finger's aim is 2D, so depth must never hide a socket. Distances are converted back to world meters at the candidate's depth so the approach/snap radii keep their meaning.
             const fingerPx = { x: e.absoluteX, y: e.absoluteY - FINGER_LIFT_DP };
-            const distPx = (c: GroupCandidate) => {
-              const sp = worldToScreen(c.visualPosition);
+            const distPx = (c: GroupCandidate & { matchVisual: Vec3 }) => {
+              const sp = worldToScreen(c.matchVisual);
               if (!sp) return { px: Infinity, mPerPx: 1 };
               return {
                 px: Math.hypot(fingerPx.x - sp.x, fingerPx.y - sp.y),
@@ -518,9 +587,13 @@ export function usePartDrag({
             s.matchedActionId = target?.action.actionId ?? null;
             // Ease the drag plane toward the matched socket's height (multi-height groups); slides the part ALONG the finger's view ray, so it is invisible on screen. Same visual-center anchoring as the session plane.
             const wantY = target
-              ? target.position[1] + s.grabOffset[1]
+              ? target.position[1] +
+                s.grabOffset[1] +
+                parkShiftFor(furniture.parts[target.action.partId!])[1]
               : s.basePlaneY;
-            s.planeY += (wantY - s.planeY) * 0.25;
+            // Only the horizontal plane has a height to ease. On the upright plane the finger owns
+            // world-Y directly, and moving the plane under it would fight the drag.
+            if (!s.uprightAnchor) s.planeY += (wantY - s.planeY) * 0.25;
           }
 
           // Per-profile acceptance radius; also the magnet's full-strength point so "looks seated" and "is accepted" stay the same distance.
