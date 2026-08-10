@@ -21,7 +21,13 @@ import type {
   PlacementGuideTarget,
 } from "./PlacementRail";
 
-type GuideStage = "idle" | "style" | "rotate" | "confirm" | "complete";
+type GuideStage =
+  | "idle"
+  | "style"
+  | "rotate"
+  | "reposition"
+  | "confirm"
+  | "complete";
 
 interface Props {
   requestedItemId?: string | null;
@@ -36,6 +42,12 @@ const STAGE_COPY = {
     title: "Your LACK table is already in your room.",
     body: "Choose a style you like.",
     speech: "Your LACK table is already in your room. Choose a style you like.",
+  },
+  reposition: {
+    label: "REPOSITION",
+    title: "Are you happy with the placement?",
+    body: "You can drag it to any spot.",
+    speech: "Are you happy with the placement? You can drag it to any spot.",
   },
   rotate: {
     label: "ROTATE",
@@ -56,7 +68,8 @@ const COMPLETE_COPY: Record<ProfileId, string> = {
   momentum:
     "Your first piece is home! Complete more assembly tasks to make your room even better.",
   clearPath: "LACK table placed. Complete more tasks to add more furniture.",
-  control: "Your first piece is home. Complete assembly tasks to add more furniture.",
+  control:
+    "Your first piece is home. Complete assembly tasks to add more furniture.",
 };
 
 export function RoomFirstPlacementGuide({
@@ -102,7 +115,8 @@ export function RoomFirstPlacementGuide({
   }, [activeEdit, hydrated, onSessionChange, requestedItemId, stage]);
 
   useEffect(() => {
-    if (!hydrated || !activeEdit?.firstPlacementGuide || guideId.current) return;
+    if (!hydrated || !activeEdit?.firstPlacementGuide || guideId.current)
+      return;
     guideId.current = activeEdit.placement.instanceId;
     setStage((current) => (current === "idle" ? "style" : current));
     onSessionChange?.(true);
@@ -110,7 +124,12 @@ export function RoomFirstPlacementGuide({
 
   useEffect(() => {
     const target =
-      stage === "style" || stage === "rotate" || stage === "confirm" ? stage : null;
+      stage === "style" ||
+      stage === "rotate" ||
+      stage === "confirm" ||
+      stage === "reposition"
+        ? stage
+        : null;
     onTargetChange?.(target);
   }, [onTargetChange, stage]);
 
@@ -131,6 +150,8 @@ export function RoomFirstPlacementGuide({
     handledInteractionSequence.current = interaction.sequence;
 
     if (stage === "style" && interaction.type === "style") {
+      setStage("reposition");
+    } else if (stage === "reposition" && interaction.type === "reposition") {
       setStage("rotate");
     } else if (stage === "rotate" && interaction.type === "rotate") {
       setStage("confirm");
@@ -178,7 +199,9 @@ export function RoomFirstPlacementGuide({
   if (stage === "complete") {
     return (
       <View style={s.fullLayer} pointerEvents="box-none">
-        {mode === "momentum" ? <ConfettiRain delay={0} count={18} size={0.75} /> : null}
+        {mode === "momentum" ? (
+          <ConfettiRain delay={0} count={18} size={0.75} />
+        ) : null}
         <View style={s.completeCard}>
           <Image
             source={avatarForProfile(mode)}
@@ -190,7 +213,9 @@ export function RoomFirstPlacementGuide({
               {mode === "momentum" ? "Great job!" : "Your furniture is home!"}
             </Text>
             <Text style={s.completeBody}>{COMPLETE_COPY[mode]}</Text>
-            <Text style={s.moveAgain}>Long-press it anytime to move it again.</Text>
+            <Text style={s.moveAgain}>
+              Long-press it anytime to move it again.
+            </Text>
             <View style={s.actions}>
               <Button
                 label="Build more furniture"
@@ -215,7 +240,11 @@ export function RoomFirstPlacementGuide({
   return (
     <View style={s.fullLayer} pointerEvents="box-none">
       <View style={s.guideCard} pointerEvents="none">
-        <Image source={avatarForProfile(mode)} style={s.avatar} resizeMode="cover" />
+        <Image
+          source={avatarForProfile(mode)}
+          style={s.avatar}
+          resizeMode="cover"
+        />
         <View style={s.copy}>
           <Text style={s.stepLabel}>{copy.label}</Text>
           <Text style={s.title}>{copy.title}</Text>
