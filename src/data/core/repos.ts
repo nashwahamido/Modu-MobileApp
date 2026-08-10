@@ -192,6 +192,68 @@ export function toPlaceableRoomRow(r: PlaceableRoomRowInput): PlaceableRoomRow {
   };
 }
 
+// One workshop_drafts row (status='testing'), as Postgrest hands it back for the dev-only merge into the room's placeable catalogue — see listPlaceables in adapters/supabase.ts, and workshopDraftsDevGateOpen (catalog/workshopDraftsGate.ts) for the gate that decides whether this merge runs at all. Deliberately NOT PlaceableRoomRowInput, even though the two tables share most column names verbatim (id/category_id/size_x.../footprint_mask/top_surface/mount/on_top/opens_wall — 011_workshop.sql, 019_workshop_kinds.sql, 022_workshop_placement.sql): the one real difference is `light`, which the portal writes as ONE jsonb object matching its own LightPayload form, where placeable_items' view has already flattened item_lights into ten separate light_* columns. workshopDraftToPlaceableRoomRow's whole job below is undoing that one difference before handing off to toPlaceableRoomRow, which already owns every other mapping rule (mount/onTop/opensWall fallbacks, footprint mask sanitising is the room's job not this one's, etc.) — re-deriving that logic here a second time is exactly the kind of drift toShopItem's own header comment warns about.
+export type WorkshopDraftRow = {
+  id: string;
+  category_id: string;
+  // NULL on a surface draft (floor/wall) — workshop_drafts_kind_shape (019_workshop_kinds.sql) guarantees all three are null together on a surface row and all three are present together on a model row. This is the fact workshopModelDraftsToPlaceableRoomRows filters on.
+  size_x: number | null;
+  size_y: number | null;
+  size_z: number | null;
+  base_offset_y: number;
+  footprint_mask: string | null;
+  top_surface: boolean | null;
+  mount: "floor" | "wall" | null;
+  on_top: boolean | null;
+  opens_wall: boolean | null;
+  light: {
+    type: "point" | "spot";
+    lumens: number;
+    kelvin: number;
+    reach_m: number;
+    cone_deg?: number | null;
+    bulb_x?: number | null;
+    bulb_y?: number | null;
+    bulb_z?: number | null;
+    aim_pitch_deg?: number | null;
+    aim_yaw_deg?: number | null;
+  } | null;
+};
+
+// A MODEL draft (size present) -> PlaceableRoomRow, source "workshop". Flattens the one jsonb `light` field into the ten light_* columns toPlaceableRoomRow already knows how to read, then delegates to it entirely — see the WorkshopDraftRow comment above for why that split exists rather than re-deriving toPlaceableRoomRow's own mapping rules here.
+export function workshopDraftToPlaceableRoomRow(r: WorkshopDraftRow): PlaceableRoomRow {
+  return toPlaceableRoomRow({
+    id: r.id,
+    source: "workshop",
+    category_id: r.category_id,
+    // Cast, not coalesced: callers are expected to have already filtered to model rows (workshopModelDraftsToPlaceableRoomRows does, below) where these three are guaranteed non-null together.
+    size_x: r.size_x as number,
+    size_y: r.size_y as number,
+    size_z: r.size_z as number,
+    base_offset_y: r.base_offset_y,
+    light_type: r.light?.type ?? null,
+    light_lumens: r.light?.lumens ?? null,
+    light_kelvin: r.light?.kelvin ?? null,
+    light_reach_m: r.light?.reach_m ?? null,
+    light_cone_deg: r.light?.cone_deg ?? null,
+    light_bulb_x: r.light?.bulb_x ?? null,
+    light_bulb_y: r.light?.bulb_y ?? null,
+    light_bulb_z: r.light?.bulb_z ?? null,
+    light_aim_pitch_deg: r.light?.aim_pitch_deg ?? null,
+    light_aim_yaw_deg: r.light?.aim_yaw_deg ?? null,
+    footprint_mask: r.footprint_mask,
+    top_surface: r.top_surface,
+    mount: r.mount,
+    on_top: r.on_top,
+    opens_wall: r.opens_wall,
+  });
+}
+
+// listPlaceables fetches every status='testing' workshop_drafts row in one query and hands the whole batch here, rather than filtering server-side by category_id — the model/surface split is a fact the DB GUARANTEES about the row's SHAPE (workshop_drafts_kind_shape: a surface draft's size is null, full stop), and re-deriving it from category_id membership in ('floor','wall') here would mean trusting a second, driftable copy of that list instead of the one thing the constraint actually promises. A surface draft is silently excluded, not warned about — it belongs in the shop catalogue (see workshopSurfaceDraftsToShopItems, shop/items.ts), not here, and that is its ordinary, expected shape.
+export function workshopModelDraftsToPlaceableRoomRows(rows: WorkshopDraftRow[]): PlaceableRoomRow[] {
+  return rows.filter((r) => r.size_x != null).map(workshopDraftToPlaceableRoomRow);
+}
+
 // One row of item_variants: an item's colour/finish axis. `variation` is the free-form per-item key that IS the storage path segment (white, oak, black, ...); null = the item has a single model, at the 'default' segment. Asset paths are derived from it, never stored — see catalogAssets.ts.
 export type ItemVariant = {
   itemId: CatalogId;

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { toPlaceableRoomRow, type PlaceableRoomRowInput } from "./repos";
+import { toPlaceableRoomRow, workshopDraftToPlaceableRoomRow, workshopModelDraftsToPlaceableRoomRows, type PlaceableRoomRowInput, type WorkshopDraftRow } from "./repos";
 
 // A full, valid row — every test below overrides only the field(s) it cares about, so a mapper that
 // silently drops a field shows up as a specific, narrow assertion failure rather than a crash.
@@ -127,4 +127,57 @@ test("a present-but-null mount is a tops-only item and is never coerced to floor
   const book = toPlaceableRoomRow({ ...baseRow, category_id: "deco", mount: null, on_top: true });
   assert.equal(book.mount, null);
   assert.equal(book.onTop, true);
+});
+
+// --- the dev-only workshop_drafts merge into the room's placeable catalogue --------------------
+
+const baseDraft: WorkshopDraftRow = {
+  id: "prototype-shelf",
+  category_id: "fur",
+  size_x: 0.42,
+  size_y: 0.6,
+  size_z: 0.3,
+  base_offset_y: 0.02,
+  footprint_mask: null,
+  top_surface: null,
+  mount: "floor",
+  on_top: false,
+  opens_wall: false,
+  light: null,
+};
+
+test("workshopDraftToPlaceableRoomRow maps a model draft to a workshop-source row with its measured size", () => {
+  const row = workshopDraftToPlaceableRoomRow(baseDraft);
+  assert.equal(row.id, "prototype-shelf");
+  assert.equal(row.source, "workshop");
+  assert.equal(row.category, "fur");
+  assert.deepEqual(row.size, { x: 0.42, y: 0.6, z: 0.3 });
+  assert.equal(row.baseOffsetY, 0.02);
+  assert.equal(row.mount, "floor");
+});
+
+test("workshopDraftToPlaceableRoomRow flattens the draft's single `light` jsonb object into a lamp's light, same as a live lit row", () => {
+  const lamp = workshopDraftToPlaceableRoomRow({
+    ...baseDraft,
+    id: "prototype-lamp",
+    category_id: "lit",
+    on_top: true,
+    light: { type: "point", lumens: 18000, kelvin: 2700, reach_m: 3.5, bulb_y: 0.5 },
+  });
+  assert.deepEqual(lamp.light, {
+    type: "point",
+    lumens: 18000,
+    kelvin: 2700,
+    reachMetres: 3.5,
+    coneDeg: undefined,
+    bulb: { x: 0, y: 0.5, z: 0 },
+    aim: undefined,
+  });
+});
+
+// The regression this pins: a surface draft (floor/wall) has NO room model at all — it tiles the shell, not the placement grid — and workshop_drafts_kind_shape (019_workshop_kinds.sql) guarantees its size columns are null. Placing it here would try to derive a footprint from a null size.
+test("workshopModelDraftsToPlaceableRoomRows excludes a surface draft (null size) from the room's placeable catalogue", () => {
+  const surfaceDraft: WorkshopDraftRow = { ...baseDraft, id: "prototype-wallpaper", category_id: "wall", size_x: null, size_y: null, size_z: null, mount: "wall" };
+  const rows = workshopModelDraftsToPlaceableRoomRows([baseDraft, surfaceDraft]);
+  assert.deepEqual(rows.map((r) => r.id), ["prototype-shelf"]);
 });

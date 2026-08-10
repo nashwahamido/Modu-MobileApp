@@ -85,7 +85,8 @@ export function InventoryOverlay({ onClose }: { onClose: () => void }) {
   const owned = useMemo<OwnedItem[]>(() => {
     const bought: OwnedItem[] = boughtCatalogue
       .filter((i) => ownedIds.has(i.id))
-      .map((i) => ({ id: i.id, name: i.name, category: i.category, price: i.price, source: "bought" as const }));
+      // source comes from the ITEM, not from the fact that this list is the bought half: a dev build merges workshop drafts here, and their assets live under room/workshop/. Absent still reads as "bought", which is every published row.
+      .map((i) => ({ id: i.id, name: i.name, category: i.category, price: i.price, source: i.source ?? ("bought" as const) }));
     // De-dupe by id: a shared id would render duplicate React keys. Built wins, being rarer
     const merged = new Map<string, OwnedItem>();
     for (const item of [...(built ?? []), ...bought]) {

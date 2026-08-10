@@ -1,12 +1,12 @@
 // Catalog asset paths are DERIVED from id + variation — so a rename is ONE place, never authored twice into the DB. Model and thumbnail are COLOCATED in one folder per item, distinguished by extension, so renaming an item id renames a SINGLE storage folder. Everything is in the public `models` bucket; resolve a URL with supabase.storage.from(CATALOG_BUCKET).getPublicUrl(path). These builders stay PURE (no supabase import) so fixtures/tests can use them too.
 //
-// Layout — folder = id; NO light/dark theme (one image per variation, any UI mode). The subtree segment is the source tag verbatim, and thumbs are JPEG — both VERIFIED against the bucket, which is the authority here (an earlier guess of `buy/` + `.png` matched nothing): room/<built|bought>/<id>/<variation|'default'>.glb   room placement model room/<built|bought>/<id>/<variation|'default'>.jpg   its thumbnail (tile picture + picker swatch) room/<built|bought>/<id>/tile.jpg                    item tile — surfaces; model-items reuse the default variation image assembly/<id>/...                                    assembly build model (built items; separate tree)
+// Layout — folder = id; NO light/dark theme (one image per variation, any UI mode). The subtree segment is the source tag verbatim, and thumbs are JPEG — both VERIFIED against the bucket, which is the authority here (an earlier guess of `buy/` + `.png` matched nothing): room/<built|bought|workshop>/<id>/<variation|'default'>.glb   room placement model room/<built|bought|workshop>/<id>/<variation|'default'>.jpg   its thumbnail (tile picture + picker swatch) room/<built|bought|workshop>/<id>/tile.jpg                    item tile — surfaces; model-items reuse the default variation image assembly/<id>/...                                    assembly build model (built items; separate tree). "workshop" is a testing-status draft, dev builds only — see the ItemSource comment below.
 import type { CatalogId } from "../core/types";
 
 export const CATALOG_BUCKET = "models";
 
-// Which item table an item comes from — and, verbatim, the room/<built|bought>/ subtree it lives in. Matches placeable_items.source.
-export type ItemSource = "built" | "bought";
+// Which item table an item comes from — and, verbatim, the room/<built|bought|workshop>/ subtree it lives in. Matches placeable_items.source, plus "workshop" for a testing-status workshop_drafts row merged in client-side (dev builds only — see listPlaceables/getShopItems in adapters/supabase.ts): a draft's assets sit under room/workshop/<id>/, mirroring the built/bought layout exactly, so no path builder below needed to change to add it.
+export type ItemSource = "built" | "bought" | "workshop";
 
 // One extension for every catalog image, in ONE place: the uploads are JPEG (photographic renders, and far smaller than PNG at this size). Change it here if that ever changes.
 const IMAGE_EXT = ".jpg";
@@ -70,3 +70,12 @@ export const assemblyClusterThumbPath = (id: CatalogId, cluster: string): string
 
 // Draft staging prefix for the phase-2b portal lane — declared here so the app and the portal derive the SAME path from day one (the storage RLS policies key on this prefix).
 export const workshopAssemblyDir = (id: CatalogId): string => `room/workshop-assembly/${id}`;
+
+// Every ItemSource this codebase can resolve a path for. "workshop" only ever belongs in here when workshopDraftsDevGateOpen() is open for THIS build — see the cache-read note below.
+const ALL_ITEM_SOURCES: readonly ItemSource[] = ["built", "bought", "workshop"];
+
+// placeableStore.ts's cache-read filter: a dev build can persist a "workshop" row (a testing-status draft merged into the catalogue client-side) into the SAME AsyncStorage cache key a later showcase or release build will replay before any session exists (hydratePlaceables runs cache-then-network, with no gate check of its own on the read). That build never fetches workshop_drafts, so replaying the row would place an item whose model path (room/workshop/<id>/...) nothing in that build's pipeline was ever meant to serve. Dropping any row whose source is not one this build currently understands turns that into "the item is simply missing" — the same degraded-but-safe outcome an ordinary cache miss produces — rather than a dead storage path or a crash. Generic over the row shape (PlaceableRoomRow in practice) so this stays a plain data-in data-out function, matching every other pure helper in this file.
+export function filterKnownSourceRows<T extends { source: string }>(rows: T[], workshopDraftsEnabled: boolean): T[] {
+  const known: readonly string[] = workshopDraftsEnabled ? ALL_ITEM_SOURCES : ALL_ITEM_SOURCES.filter((s) => s !== "workshop");
+  return rows.filter((r) => known.includes(r.source));
+}

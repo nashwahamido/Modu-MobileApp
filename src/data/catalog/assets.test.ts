@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { surfaceMapPath, thumbPath, tilePath, assemblyModelPath, assemblyRecipePath, assemblyThumbnailPath, assemblyThumbPath, assemblyClusterThumbPath, workshopAssemblyDir } from "./assets";
+import { surfaceMapPath, thumbPath, tilePath, assemblyModelPath, assemblyRecipePath, assemblyThumbnailPath, assemblyThumbPath, assemblyClusterThumbPath, workshopAssemblyDir, filterKnownSourceRows } from "./assets";
 
 test("a surface's catalogue picture is its own tile image, not a per-variation render it does not have", () => {
   assert.equal(tilePath("bought", "linen-wallpaper"), "room/bought/linen-wallpaper/tile.jpg");
@@ -49,4 +49,20 @@ test("assembly thumbs are per-group and per-cluster PNGs (transparent renders)",
 
 test("workshop assembly drafts stage under the workshop prefix, published assets under assembly/", () => {
   assert.equal(workshopAssemblyDir("draft-1"), "room/workshop-assembly/draft-1");
+});
+
+// The regression filterKnownSourceRows exists to prevent: a dev build persists a "workshop"-sourced row into placeableStore's AsyncStorage cache, then a showcase or release build — which never fetches workshop_drafts and so has no idea the row exists beyond the cache — replays it before any session exists and tries to resolve a room/workshop/<id>/... path nothing in that build's pipeline serves.
+test("filterKnownSourceRows drops a workshop-sourced row when this build's gate is closed", () => {
+  const rows = [{ source: "built" }, { source: "bought" }, { source: "workshop" }];
+  assert.deepEqual(filterKnownSourceRows(rows, false), [{ source: "built" }, { source: "bought" }]);
+});
+
+test("filterKnownSourceRows keeps a workshop-sourced row when this build's gate is open", () => {
+  const rows = [{ source: "built" }, { source: "workshop" }];
+  assert.deepEqual(filterKnownSourceRows(rows, true), rows);
+});
+
+test("filterKnownSourceRows drops a row from a source this file has never heard of, gate open or not — a bad cache degrades to 'missing', never to a crash", () => {
+  const rows = [{ source: "built" }, { source: "some-future-source" }];
+  assert.deepEqual(filterKnownSourceRows(rows, true), [{ source: "built" }]);
 });
