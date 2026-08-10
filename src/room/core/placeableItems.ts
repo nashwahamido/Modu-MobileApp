@@ -113,17 +113,19 @@ export function registerPlaceables(rows: PlaceableRoomRow[]): void {
   useRoomCatalogStore.setState({ items: { ...toItems(BUNDLED_ROWS), ...toItems(rows) } });
 }
 
-// Model assets resolve LAZILY, inside a function: a top-level require() of a .glb only works under Metro, and this module must stay importable by node:test, which pins the numbers above.
-const MODEL_SOURCES: Record<string, () => AssetSrc> = {
-  /* eslint-disable @typescript-eslint/no-require-imports */
-  "dalfred-stool": () => require("../../assets/models/furnitures/DALFRED/DALFRED.glb"),
-  "lack-table": () => require("../../assets/models/furnitures/LACK/LACK.glb"),
-  "eket-cabinet": () => require("../../assets/models/furnitures/EKET/EKET.glb"),
-  "bekvam-stool": () => require("../../assets/models/furnitures/BEKVAM/BEKVAM.glb"),
-  /* eslint-enable @typescript-eslint/no-require-imports */
-};
+// The BUILT set, as ids rather than as model assets. This used to BE the model map — "the bundle IS the built set" — which quietly coupled two unrelated questions, so removing the models below would have silently reclassified every built item as bought and sent it looking down the wrong storage subtree.
+const BUILT_ITEM_IDS = new Set(["dalfred-stool", "lack-table", "eket-cabinet", "bekvam-stool"]);
 
-// The BUNDLED model — one look per item, no colour axis. Only BUILT furniture ships one; a bought item resolves null, and its callers must wait for the storage variant instead of falling back.
+// DELIBERATELY EMPTY, and it is a fix rather than an omission.
+//
+// This map used to point each built item at its ASSEMBLY GLB — the model the construction minigame uses, with every panel, screw and fastener as its own mesh. As a room decoration none of that geometry is ever visible (a built cabinet is closed), but all of it was parsed: EKET is 66.9 MB and BEKVAM 40.8 MB, against storage variants of 0.29 MB and 0.14 MB for the same pieces. A 230x cost to draw the same object.
+//
+// It was not merely a slow first frame either. variantModel drops to this bundle whenever a colour's URL is unprobed OR its probe fails, so an item whose default variant is missing from storage sits on the assembly model FOREVER — which is exactly what eket-cabinet does today, its default being 'black' while only white.glb exists in the bucket.
+//
+// The guarantee being given up is "a built piece is NEVER invisible", which was cheap when a bundled model was the same object at the same size and stopped being cheap when the assembly models grew. Bought items already accept it (variantModel returns null and the caller renders nothing), so built items now behave the same way. If it needs to come back, the answer is a SMALL room-sized GLB per item, never the assembly one — the shape of this map is preserved for exactly that.
+const MODEL_SOURCES: Record<string, () => AssetSrc> = {};
+
+// The BUNDLED model — one look per item, no colour axis. Nothing ships one at present (see above), so this resolves null for everything and callers wait for the storage variant, rendering nothing until it arrives.
 export function getRoomItemModelSource(itemId: string): AssetSrc | null {
   return MODEL_SOURCES[itemId]?.() ?? null;
 }
@@ -133,7 +135,7 @@ export function getRoomItemModelSource(itemId: string): AssetSrc | null {
 export function roomItemSource(itemId: string): ItemSource {
   const item = useRoomCatalogStore.getState().items[itemId];
   if (item) return item.source;
-  return itemId in MODEL_SOURCES ? "built" : "bought";
+  return BUILT_ITEM_IDS.has(itemId) ? "built" : "bought";
 }
 
 // The storage path of the model to load (room/<built|bought>/<id>/<variation|'default'>.glb). Null when the caller should use the bundled model instead: unknown items always, and BUILT items with no colour picked (their bundle is the default look, no round trip needed). A BOUGHT item has no bundle, so even with no colour axis it resolves to its 'default' segment in storage. Pure (a path, not a URL), so node:test can pin the routing without a Supabase client.
