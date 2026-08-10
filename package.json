@@ -3,13 +3,16 @@
   "version": "0.1.0",
   "main": "expo-router/entry",
   "scripts": {
+    "postinstall": "patch-package",
     "start": "npx expo start",
     "android": "npx expo run:android",
     "ios": "npx expo run:ios",
     "test": "tsx --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "fix:ios-paths": "node scripts/fix-ios-space-paths.mjs",
-    "compress:room": "node scripts/compress-room-glb.mjs"
+    "compress:room": "node scripts/compress-room-glb.mjs",
+    "build:room": "node scripts/compress-room-glb.mjs src/assets/models/room/room_empty.glb src/assets/models/room/_pass1.glb && node scripts/set-shell-blend-modes.mjs src/assets/models/room/_pass1.glb src/assets/models/room/_pass2.glb && node scripts/set-ao-strength.mjs src/assets/models/room/_pass2.glb src/assets/models/room/_pass3.glb 0.6 && node scripts/declare-shell-map-slots.mjs src/assets/models/room/_pass3.glb src/assets/models/room/virtualroom_empty.glb && node -e \"for (const f of ['_pass1','_pass2','_pass3']) require('fs').rmSync(`src/assets/models/room/${f}.glb`, {force: true})\" && node scripts/extract-shell-defaults.mjs && tsx scripts/verify-room-glb.mts",
+    "verify:room": "tsx scripts/verify-room-glb.mts"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -54,6 +57,7 @@
     "@types/react": "~19.1.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
+    "patch-package": "^8.0.1",
     "sharp": "^0.34.5",
     "tsx": "^4.22.4",
     "typescript": "~5.9.2"

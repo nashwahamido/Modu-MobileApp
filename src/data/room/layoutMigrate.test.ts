@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { migrateRoomPlacements } from "./layoutMigrate";
+import { migrateRoomPlacements, readRoomFinishes } from "./layoutMigrate";
 import type { PlacedFurniture, PlacementSurface } from "../core/types";
 
 test("v1 floor placements: cell coordinates double", () => {
@@ -264,4 +264,47 @@ test("two instances of one lamp carry independent switches", () => {
   const result = migrateRoomPlacements(envelope);
   assert.equal(result[0]!.lightOn, false);
   assert.equal(result[1]!.lightOn, true);
+});
+
+test("finishes: both slots read back", () => {
+  assert.deepEqual(readRoomFinishes({ version: 2, placements: [], finishes: { floor: "oak-plank", wall: "linen-cream" } }), {
+    floor: "oak-plank",
+    wall: "linen-cream",
+  });
+});
+
+test("finishes: absent field is an empty object, not undefined", () => {
+  assert.deepEqual(readRoomFinishes({ version: 2, placements: [] }), {});
+});
+
+test("finishes: a non-string slot drops THAT slot only", () => {
+  assert.deepEqual(readRoomFinishes({ version: 2, placements: [], finishes: { floor: 7, wall: "linen-cream" } }), {
+    wall: "linen-cream",
+  });
+});
+
+test("finishes: an empty-string slot is dropped", () => {
+  assert.deepEqual(readRoomFinishes({ version: 2, placements: [], finishes: { floor: "", wall: "linen-cream" } }), {
+    wall: "linen-cream",
+  });
+});
+
+test("finishes: unknown slot keys are ignored", () => {
+  assert.deepEqual(readRoomFinishes({ version: 2, placements: [], finishes: { floor: "oak-plank", trim: "walnut" } }), {
+    floor: "oak-plank",
+  });
+});
+
+test("finishes: malformed envelope yields the authored look", () => {
+  assert.deepEqual(readRoomFinishes(null), {});
+  assert.deepEqual(readRoomFinishes("nonsense"), {});
+  assert.deepEqual(readRoomFinishes([]), {});
+  assert.deepEqual(readRoomFinishes({ version: 2, placements: [], finishes: "nonsense" }), {});
+  assert.deepEqual(readRoomFinishes({ version: 2, placements: [], finishes: [] }), {});
+});
+
+test("finishes: a v1 envelope still reads its finishes", () => {
+  assert.deepEqual(readRoomFinishes({ version: 1, placements: [], finishes: { wall: "linen-cream" } }), {
+    wall: "linen-cream",
+  });
 });

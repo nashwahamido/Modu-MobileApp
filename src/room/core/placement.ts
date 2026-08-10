@@ -6,6 +6,7 @@ import { create } from "zustand";
 import { getRepos } from "../../data";
 import type { PlacedFurniture, RoomLayout, UserId } from "../../data/core/types";
 import { defaultVariationOf } from "../../data/catalog/variantStore";
+import { readRoomFinishes, type RoomFinishes } from "../../data/room/layoutMigrate";
 import {
   anchorForCentre,
   canPlace,
@@ -68,19 +69,23 @@ export interface ActiveEdit {
 interface PlacementState {
   ownerId: UserId | null;
   layout: GridPlacement[];
+  // The room's chosen surface items. Separate from `layout` because they are not placements — nothing occupies a cell — but persisted in the SAME row, so they ride the same save.
+  finishes: RoomFinishes;
   activeEdit: ActiveEdit | null;
   // Bumped on each fresh start so the scene can recentre its ghost focus.
   startNonce: number;
   hydrated: boolean;
-  // The room being VISITED, or null when the player is in their own. Holds a friend's layout ALONGSIDE `layout`, never instead of it: ownerId stays the player's, so persist() has no reachable path to a friend's room, and coming home costs no refetch.
-  viewing: { ownerId: UserId; layout: GridPlacement[] } | null;
+  // The room being VISITED, or null when the player is in their own. Holds a friend's layout and finishes ALONGSIDE `layout`/`finishes`, never instead of them: ownerId stays the player's, so persist() has no reachable path to a friend's room, and coming home costs no refetch.
+  viewing: { ownerId: UserId; layout: GridPlacement[]; finishes: RoomFinishes } | null;
 
   // Load the owner's saved layout. Also the account-switch reset: a new ownerId replaces everything.
   hydrate: (ownerId: UserId) => Promise<void>;
   // Enter / leave a friend's room. Both synchronous: the player's own layout is never discarded, so returning shows no empty frame the way a re-hydrate would.
-  startViewing: (ownerId: UserId, layout: GridPlacement[]) => void;
+  startViewing: (ownerId: UserId, layout: GridPlacement[], finishes: RoomFinishes) => void;
   stopViewing: () => void;
   startPlacing: (itemId: string, opts?: { firstPlacementGuide?: boolean; variation?: string | null }) => boolean;
+  // null clears the slot back to the shell as authored, which is a real choice and not an absence: "Default" is the first swatch in the picker.
+  setFinish: (slot: "floor" | "wall", itemId: string | null) => void;
   // Recolour the ghost mid-placement. Variation is a pure LOOK: same footprint, same validity, so nothing is re-validated — only the model the scene loads changes.
   setGhostVariation: (variation: string | null) => void;
   // Re-edit a committed piece (long-press / tap on it).
@@ -115,12 +120,13 @@ const validate = (placement: GridPlacement, layout: GridPlacement[]): PlacementC
 
 // Saves are queued so two quick commits cannot land out of order (the later snapshot must win server-side). A lost write still self-heals on the next commit.
 let saveQueue: Promise<void> = Promise.resolve();
-const persist = (ownerId: UserId | null, layout: GridPlacement[]) => {
+const persist = (ownerId: UserId | null, layout: GridPlacement[], finishes: RoomFinishes) => {
   if (!ownerId) return;
   const snapshot: RoomLayout = {
     ownerId,
     version: ROOM_LAYOUT_VERSION,
     placements: layout.map(fromGrid),
+    finishes,
     updatedAt: new Date().toISOString(),
   };
   saveQueue = saveQueue
@@ -131,6 +137,7 @@ const persist = (ownerId: UserId | null, layout: GridPlacement[]) => {
 export const usePlacementStore = create<PlacementState>()((set, get) => ({
   ownerId: null,
   layout: [],
+  finishes: {},
   activeEdit: null,
   startNonce: 0,
   hydrated: false,
@@ -140,7 +147,7 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
     if (get().ownerId === ownerId && get().hydrated) return;
     // A ghost started before the first hydrate (BuildComplete's "place it now") belongs to the incoming owner — keep it. Only an actual account SWITCH throws the edit away.
     const keepEdit = get().ownerId === null || get().ownerId === ownerId;
-    set((s) => ({ ownerId, layout: [], activeEdit: keepEdit ? s.activeEdit : null, hydrated: false }));
+    set((s) => ({ ownerId, layout: [], finishes: {}, activeEdit: keepEdit ? s.activeEdit : null, hydrated: false }));
     try {
       const saved = await getRepos().rooms.get(ownerId);
       // An account switch mid-fetch must not land the old owner's rows in the new owner's room.
@@ -148,6 +155,8 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
       set((s) => {
         // Saved rows are re-validated against TODAY'S rules, not the rules they were placed under — see sanitizeLayout for what that defends against and why an unknown def is kept.
         const layout = sanitizeLayout(saved.placements.map(toGrid));
+        // Shape-validated only; the ids are checked against the catalogue at RENDER time, because the item set is remote and one can stop existing between saving and loading.
+        const finishes = readRoomFinishes(saved);
         let activeEdit = s.activeEdit;
         // A pre-hydration ghost was keyed and validated against an empty room; redo both against the real layout so it cannot collide with a saved piece or reuse its instanceId.
         if (activeEdit && activeEdit.previous === null) {
@@ -157,7 +166,7 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
           };
           activeEdit = { ...activeEdit, placement, check: validate(placement, layout) };
         }
-        return { layout, activeEdit, hydrated: true };
+        return { layout, finishes, activeEdit, hydrated: true };
       });
     } catch (err) {
       // Leave hydrated=false: the room renders empty but commits stay blocked (see confirm/remove), so a failed load can never cause a save that wipes the real layout.
@@ -165,12 +174,12 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
     }
   },
 
-  startViewing(ownerId, layout) {
+  startViewing(ownerId, layout, finishes) {
     set((s) => ({
       // A ghost in flight belongs to the player's OWN room, and the bottom bar stays live during placement — so entering a visit puts the edited piece back exactly as cancel() would rather than carrying it into someone else's room. A never-committed ghost evaporates, which is also cancel's behaviour.
       layout: s.activeEdit?.previous ? [...s.layout, s.activeEdit.previous] : s.layout,
       activeEdit: null,
-      viewing: { ownerId, layout },
+      viewing: { ownerId, layout, finishes },
     }));
   },
 
@@ -329,7 +338,7 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
     if (!s.activeEdit || !s.activeEdit.check.ok) return;
     const layout = [...s.layout, s.activeEdit.placement];
     set({ layout, activeEdit: null });
-    persist(s.ownerId, layout);
+    persist(s.ownerId, layout, s.finishes);
   },
 
   cancel() {
@@ -353,8 +362,19 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
     const ejectedChildren = layout.length !== s.layout.length;
     set({ activeEdit: null, layout });
     // A never-committed ghost with nothing on it changed nothing — only a real deletion is worth a save.
-    if (wasCommitted || ejectedChildren) persist(s.ownerId, layout);
+    if (wasCommitted || ejectedChildren) persist(s.ownerId, layout, s.finishes);
   },
 
-  reset: () => set({ ownerId: null, layout: [], activeEdit: null, hydrated: false, viewing: null }),
+  setFinish(slot, itemId) {
+    const s = get();
+    // Never save before the room has hydrated: persisting against a not-yet-loaded layout would overwrite the whole saved room with an empty one, which is exactly the guard commitEdit already carries.
+    if (!s.hydrated) return;
+    const finishes = { ...s.finishes };
+    if (itemId === null) delete finishes[slot];
+    else finishes[slot] = itemId;
+    set({ finishes });
+    persist(s.ownerId, s.layout, finishes);
+  },
+
+  reset: () => set({ ownerId: null, layout: [], finishes: {}, activeEdit: null, hydrated: false, viewing: null }),
 }));

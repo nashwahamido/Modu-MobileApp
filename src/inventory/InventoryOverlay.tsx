@@ -9,7 +9,7 @@ import { useSlideUpPresentation } from "@/src/game/ui/system/slideUp";
 import type { Theme } from "@/src/game/ui/system/theme";
 import { useCatalogStore } from "@/src/data/catalog/buildStore";
 import { useShopStore } from "@/src/data/shop/store";
-import { useCurrentUserId, useRepos, viewCatalogue } from "@/src/data";
+import { isSurfaceCategory, useCurrentUserId, useRepos, viewCatalogue } from "@/src/data";
 import type { ShopCategory } from "@/src/data";
 import { useScreenInsets } from '@/src/hooks/use-safe-insets';
 import { useRoomCatalogStore } from "@/src/room/core/placeableItems";
@@ -102,6 +102,11 @@ export function InventoryOverlay({ onClose }: { onClose: () => void }) {
     requestClose();
   };
 
+  // A surface item covers the room rather than standing in it, so there is no ghost to reveal and no placement to start — the room simply repaints. The sheet stays OPEN, unlike place(): trying finishes is a browsing activity, and closing after every tap would make comparing two wallpapers mean reopening the inventory between them.
+  const applySurface = (item: { id: string; category: ShopCategory }) => {
+    usePlacementStore.getState().setFinish(item.category === "floor" ? "floor" : "wall", item.id);
+  };
+
   const padTop = 18 + safe.top;
   // safe.side, not left or right: the panel is centred, so both edges take the LARGER inset or it sits off-centre
   const padSide = 62 + safe.side;
@@ -147,11 +152,14 @@ export function InventoryOverlay({ onClose }: { onClose: () => void }) {
               ? visible.map((item) => (
                   <InventoryItemTile
                     key={item.id}
+                    itemId={item.id}
+                    source={item.source}
                     name={item.name}
                     width={tileWidth}
+                    surface={isSurfaceCategory(item.category)}
                     ikea={catalogRows[item.id]?.brand === "IKEA"}
-                    placeable={roomItems[item.id] !== undefined}
-                    onPress={() => place(item.id)}
+                    placeable={isSurfaceCategory(item.category) || roomItems[item.id] !== undefined}
+                    onPress={() => (isSurfaceCategory(item.category) ? applySurface(item) : place(item.id))}
                   />
                 ))
               : null}

@@ -5,6 +5,9 @@ node_modules/
 .expo/
 dist/
 web-build/
+
+# Converted surface-item textures from scripts/build-surface-item.mjs — an upload staging area, not source. The .ktx2 files belong in the models bucket and the surface.json contents in item_buy.surface.
+build/
 expo-env.d.ts
 
 # Native builds
@@ -56,6 +59,21 @@ docs/
 
 # processGLB tool
 tools/processGLB/work/
+
+# scripts/fix-catalog-webp.mjs staging — converted catalogue GLBs and their pre-upload backups.
+# Regenerable from storage at any time, and these belong in the bucket, not the repo.
+webp-fix/
+
+# Raw authored room shells. The shell ships through a two-step pipeline — compress-room-glb.mjs then
+# set-shell-blend-modes.mjs — and only the OUTPUT belongs in the bundle: the authored export is ~9 MB
+# of 4K texture payload, and a shell committed without the blend-mode pass ships walls that never fade.
+# An allowlist rather than a per-file rule, so a re-export under any name stays out by default.
+src/assets/models/room/*.glb
+!src/assets/models/room/virtualroom_empty.glb
+# The authoring source now lives beside its output (room.blend, ~132 MB, plus the .blend1 Blender writes on every save) and the AO bake drops room_ao.png next to whatever .blend is open. None of it belongs in git: the .blend is the size of the whole repo several times over, and room_ao.png is already packed inside the .blend AND baked into the shipped GLB, so committing it stores a third copy that nothing reads.
+src/assets/models/room/*.blend
+src/assets/models/room/*.blend[0-9]
+src/assets/models/room/room_ao.png
 
 # database
 # *.sql

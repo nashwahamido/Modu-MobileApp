@@ -6,11 +6,13 @@ import type { BuildProgressRepo, CatalogRepo, FriendRequestsRepo, FriendsRepo, I
 import type { BuildSave, FriendRequest, Profile, ProfilePatch, RoomLayout } from "../core/types";
 import { ROOM_LAYOUT_VERSION } from "../core/types";
 import type { ShopCategory, ShopItem } from "../shop/items";
+import { isSurfaceCategory, toShopItem, type ShopItemRow } from "../shop/items";
+import { parseSurfaceSpec } from "../shop/surfaceSpec";
 import type { AvatarRef } from "../player/avatars";
 import { idForMode, modeForId } from "../player/avatars";
 import type { LevelRow } from "../player/levels";
 import { levelSpan, titleForLevel } from "../player/levels";
-import { migrateRoomPlacements } from "../room/layoutMigrate";
+import { migrateRoomPlacements, readRoomFinishes } from "../room/layoutMigrate";
 
 // Throw on any Postgrest error so callers get a real failure instead of a silent null.
 function check(error: PostgrestError | null): void {
@@ -140,7 +142,7 @@ const catalogRepo: CatalogRepo = {
     // furniture_types is embedded rather than joined client-side: the type's DISPLAY NAME is the thing shown, and one round trip keeps the boot path short.
     const { data, error } = await supabase
       .from("item_build")
-      .select("id, name, brand_id, link, duration_min, furniture_types(name)");
+      .select("id, name, brand_id, link, duration_min, assembly_model, xp_per_step, xp_bonus, furniture_types(name)");
     check(error);
     type Embedded = { name: string };
     type Row = {
@@ -149,6 +151,9 @@ const catalogRepo: CatalogRepo = {
       brand_id: string | null;
       link: string | null;
       duration_min: number | null;
+      assembly_model: string | null;
+      xp_per_step: number | null;
+      xp_bonus: number | null;
       furniture_types: Embedded | Embedded[] | null;
     };
     return ((data ?? []) as unknown as Row[]).map((r) => {
@@ -160,6 +165,9 @@ const catalogRepo: CatalogRepo = {
         brand: (r.brand_id === "IKEA" ? "IKEA" : "Others") as BrandId,
         type: type?.name ?? null,
         durationMin: r.duration_min ?? 0,
+        assemblyModel: r.assembly_model,
+        xpPerStep: r.xp_per_step ?? 0,
+        xpBonusOnComplete: r.xp_bonus ?? 0,
         ...(r.link ? { link: r.link } : {}),
       };
     });
@@ -210,7 +218,7 @@ const catalogRepo: CatalogRepo = {
 // --- rooms ------------------------------------------------------------------
 
 // The jsonb column carries a versioned envelope: { version, placements }. Legacy rows hold a bare array from the pre-grid model — those coordinates are meaningless on the grid, so any shape other than the current envelope reads as an empty room rather than a mis-placed one. The version history spans 1 (half-metre cells) and 2 (quarter-metre).
-type RoomEnvelope = { version: number; placements: RoomLayout["placements"] };
+type RoomEnvelope = { version: number; placements: RoomLayout["placements"]; finishes?: RoomLayout["finishes"] };
 type RoomRow = { owner_id: string; placements: RoomEnvelope | unknown[]; updated_at: string };
 
 const roomRepo: RoomLayoutRepo = {
@@ -219,13 +227,18 @@ const roomRepo: RoomLayoutRepo = {
     check(error);
     if (!data) return { ownerId, version: ROOM_LAYOUT_VERSION, placements: [], updatedAt: new Date().toISOString() };
     const row = data as RoomRow;
-    // migrateRoomPlacements owns the whole envelope policy: v1 floor anchors double onto the quarter grid, v2 verbatim, anything else (legacy bare arrays, malformed rows, unknown versions) an empty room.
-    return { ownerId: row.owner_id, version: ROOM_LAYOUT_VERSION, placements: migrateRoomPlacements(row.placements), updatedAt: row.updated_at };
+    // migrateRoomPlacements and readRoomFinishes together own the whole envelope policy: migrateRoomPlacements handles placements (v1 floor anchors double onto the quarter grid, v2 verbatim, anything else — legacy bare arrays, malformed rows, unknown versions — an empty room), while readRoomFinishes reads the sibling `finishes` field off the same unvalidated jsonb, shape-checked only, degrading to the authored look on anything malformed or absent.
+    return { ownerId: row.owner_id, version: ROOM_LAYOUT_VERSION, placements: migrateRoomPlacements(row.placements), finishes: readRoomFinishes(row.placements), updatedAt: row.updated_at };
   },
   async save(ownerId, layout) {
     const { error } = await supabase.from("user_room").upsert({
       owner_id: ownerId,
-      placements: { version: ROOM_LAYOUT_VERSION, placements: layout.placements } satisfies RoomEnvelope,
+      // finishes is omitted entirely (not written as {}) when there are none, so a room that never touches the feature serialises exactly as it did before this field existed.
+      placements: {
+        version: ROOM_LAYOUT_VERSION,
+        placements: layout.placements,
+        ...(layout.finishes && Object.keys(layout.finishes).length > 0 ? { finishes: layout.finishes } : {}),
+      } satisfies RoomEnvelope,
       updated_at: new Date().toISOString(),
     });
     check(error);
@@ -448,27 +461,30 @@ const likesRepo: RoomLikesRepo = {
 
 // --- shop / inventory -------------------------------------------------------
 
-// The purchasable catalog is item_buy — small and unchanging, so fetch it once per session. category_id maps to the app's ShopCategory (fur/deco/wall/floor).
+// The purchasable catalog is item_buy — small and unchanging, so fetch it once per session. category_id maps to the app's ShopCategory (fur/deco/wall/floor/win/lit).
+// item_surfaces is EMBEDDED rather than fetched separately: it is a satellite table keyed by item_id (migration 017), and one round trip that returns a null for every non-surface row beats a second query plus a client-side join over a catalogue this small. Postgrest returns an embedded to-one relation as an object or null, and older rows written before 017 simply arrive as null — which parseSurfaceSpec already reads as "this item has no surface data" rather than as a failure.
 const getShopItems = cachedOnce(async (): Promise<ShopItem[]> => {
-  const { data, error } = await supabase.from("item_buy").select("id, name, category_id, price, min_level");
+  // `*` for item_buy's own columns, NOT an explicit list — naming a column the live schema does not have yet fails the WHOLE fetch with a Postgrest 42703, so the shop and the inventory both go dead until the migration lands. That is a hard ordering dependency between a code deploy and a schema change, and it bit twice during this feature (once on `surface`, once on `granted`) before earning this comment. With `*`, a column that has not arrived is simply absent from the row, every reader below already treats absent as "not set", and the app degrades instead of breaking. item_buy is small and fetched once per session, so the few unused columns cost nothing.
+  // The EMBED still has to name its columns — that is a different table, and it is the one place a rename must fail loudly rather than silently return nulls that read as "this item has no surface data".
+  const { data, error } = await supabase
+    .from("item_buy")
+    .select("*, item_surfaces(scale_x, scale_y, offset_x, offset_y, has_normal, has_rough, edge_r, edge_g, edge_b, has_trim, has_trim_normal, has_trim_rough, trim_scale_x, trim_scale_y, trim_offset_x, trim_offset_y)");
   check(error);
-  return (data as { id: string; name: string; category_id: string; price: number; min_level: number }[]).map((r) => ({
-    id: r.id,
-    name: r.name,
-    category: r.category_id as ShopItem["category"],
-    price: r.price,
-    minLevel: r.min_level,
-  }));
+  return (data as ShopItemRow[]).map(toShopItem);
 });
 
 const storeRepo: StoreRepo = {
   listItems() {
     return getShopItems();
   },
+  // Owned = purchased UNION granted. `granted` marks items every player has without a user_buy row (migration 018: the two default surfaces, which are what "revert the room to how it was designed" applies). Unioning here rather than materialising a row per player per granted item keeps ownership a property of the ITEM — N x M rows to express a constant would go stale the first time a signup path forgot to write them, and would need a backfill for everyone who already exists.
+  // The granted list comes off the already-cached catalogue, so this costs no extra request.
   async listOwned(userId) {
     const { data, error } = await supabase.from("user_buy").select("item_id").eq("owner_id", userId);
     check(error);
-    return (data as { item_id: string }[]).map((r) => r.item_id);
+    const purchased = (data as { item_id: string }[]).map((r) => r.item_id);
+    const granted = (await getShopItems()).filter((i) => i.granted).map((i) => i.id);
+    return [...new Set([...purchased, ...granted])];
   },
   async purchase(_userId, itemId) {
     // Atomic in the DB: purchase_item checks balance + ownership + level, deducts coins and grants the item as the authenticated caller (auth.uid()), so _userId is implied — never trusted from the client.

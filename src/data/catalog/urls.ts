@@ -1,7 +1,7 @@
 // Turns the DERIVED catalog paths (catalogAssets.ts) into fetchable URLs in the public `models` bucket. Split from catalogAssets so THAT module stays pure — fixtures and node:test import the path builders without ever constructing a Supabase client.
 //
 // Public bucket, so a plain public URL: no signing, no expiry, cacheable by the image/GLB loaders. The client is resolved LAZILY and defensively: src/config/supabase.ts throws when the env vars are missing, and a missing thumbnail must degrade to "no picture", never take a screen down with it.
-import { CATALOG_BUCKET, modelPath, thumbPath, tilePath, type ItemSource } from "./assets";
+import { CATALOG_BUCKET, modelPath, surfaceMapPath, thumbPath, tilePath, type ItemSource, type SurfaceMap } from "./assets";
 import type { CatalogId } from "../core/types";
 
 let resolver: ((path: string) => string) | null = null;
@@ -33,4 +33,14 @@ export function variantModelUrl(source: ItemSource, id: CatalogId, variation?: s
 // The per-variation thumbnail — the picker swatch, and the tile picture for a model-item.
 export function variantThumbUrl(source: ItemSource, id: CatalogId, variation?: string | null): string | null {
   return catalogUrl(thumbPath(source, id, variation));
+}
+
+// A surface item's own catalogue picture — the grid tile for a wallpaper or a floor, which has no variation render to stand in for it.
+export function tileUrl(source: ItemSource, id: CatalogId): string | null {
+  return catalogUrl(tilePath(source, id));
+}
+
+// One texture map of a surface item, or null when storage is unreachable — in which case the caller keeps the shell as authored rather than rendering a blank wall.
+export function surfaceMapUrl(source: ItemSource, id: CatalogId, map: SurfaceMap): string | null {
+  return catalogUrl(surfaceMapPath(source, id, map));
 }
