@@ -1,5 +1,25 @@
 // The shop VIEW-MODEL: what a purchasable item is, and how the two catalogue surfaces (Shop and Inventory) filter and sort one. No data lives here — the rows come from item_buy through the repo seam, and the in-memory stand-in is seedShopItems() in adapters/seed.ts with every other fixture. Mirrors item_categories in the DB — adding one here without the matching migration row will fail the category_id foreign key on insert.
+import type { SurfaceMap } from "../catalog/assets";
+import { parseSurfaceSpec } from "./surfaceSpec";
+
 export type ShopCategory = "fur" | "wall" | "floor" | "deco" | "win" | "lit";
+
+// A surface item covers the room rather than standing in it: no model, no placement grid, no variations. The two categories were already here for the shop's tabs; this is the predicate that lets the Inventory tell a tap that starts a placement from a tap that repaints the room.
+export function isSurfaceCategory(category: ShopCategory): category is "floor" | "wall" {
+  return category === "floor" || category === "wall";
+}
+
+// What a surface item needs beyond its texture files. Authored in Modu-Portal at upload time and carried on the item row, because none of it can be derived from the images: tiling is the map's PHYSICAL scale ("this plank map is 2 m wide"), and edgeColor is a design choice about the plinth even when a sensible default is the base colour's average.
+export interface SurfaceItemSpec {
+  // Applied as baseColorUvMatrix on the slab or the walls.
+  tiling: { scale: [number, number]; offset: [number, number] };
+  // The FloorEdge tint. Floor items only, and the ONLY baseColorFactor a surface item ever writes — the plinth never fades, so nothing else owns its factor, which is exactly why the cornice takes a texture instead.
+  edgeColor?: [number, number, number];
+  // The cornice's own scale, which is not the wall's: a cornice is separate geometry with its own UV mapping, and reusing the wall's tiling on it reads as an extruded strip of wallpaper. Wall items only — the cornice sits at the wall/ceiling junction and follows the wallpaper, not the floor.
+  trimTiling?: { scale: [number, number]; offset: [number, number] };
+  // Exactly the maps the portal PUBLISHED. It omits a normal or roughness map whose variance is below threshold — a smooth plaster wall's roughness map is near-uniform and costs a download and 1.4 MB of VRAM to say nothing. Listing them here is what stops the loader chasing a 404 for every absent map.
+  maps: SurfaceMap[];
+}
 
 export type ShopItemId = string;
 
@@ -11,6 +31,10 @@ export interface ShopItem {
   price: number;
   // Minimum user level required to purchase. 1 = no restriction. Below it, the store shows the item locked.
   minLevel: number;
+  // Owned by every player without an ownership row (migration 018), which is how the two "room as designed" surface items reach the inventory. Ownership is a property of the ITEM here rather than a row per player: storing it per player would be N x M rows expressing a constant, and would go stale the first time a signup path forgot to write them. listOwned unions these in. Absent means false.
+  granted?: boolean;
+  // Present exactly when isSurfaceCategory(category) — tiling/edge/trim/map manifest for a floor or wall item. Undefined for every other category, and for a surface row whose portal-authored data has not landed yet.
+  surface?: SurfaceItemSpec;
 }
 
 // The tab order shown in the store — "all" first, then the categories from the mock.
@@ -67,3 +91,32 @@ export function viewCatalogue<T extends { category: ShopCategory; name: string; 
   );
 }
 
+
+// One item_buy row, as Postgrest hands it back. Loose on purpose: the query selects `*`, so a column the live schema does not have yet is simply absent rather than fatal.
+export interface ShopItemRow {
+  id: string;
+  name: string;
+  category_id: string;
+  price: number;
+  min_level: number;
+  granted?: boolean;
+  item_surfaces?: unknown;
+}
+
+// Row -> ShopItem. Extracted out of the Supabase adapter and made pure so it can be tested at all: this mapper silently dropped `granted` for the whole life of migration 018, which made listOwned's `.filter((i) => i.granted)` match nothing and left every granted item un-owned, invisible in the inventory and impossible to apply. Nothing failed loudly because the column WAS selected and the type DID declare the field — only the mapper omitted it — and the in-memory adapter implements granted correctly, so every test kept passing. A bug that only exists on one side of an adapter boundary needs a test on that side.
+export function toShopItem(r: ShopItemRow): ShopItem {
+  const category = r.category_id as ShopCategory;
+  // Postgrest hands back a to-one embed as an object, but returns an ARRAY when it cannot prove the relation is to-one. Both shapes are accepted so a schema-cache quirk degrades to the authored look rather than to a silently surface-less catalogue.
+  const row = Array.isArray(r.item_surfaces) ? r.item_surfaces[0] : r.item_surfaces;
+  const surface = isSurfaceCategory(category) ? parseSurfaceSpec(row) : undefined;
+  return {
+    id: r.id,
+    name: r.name,
+    category,
+    price: r.price,
+    minLevel: r.min_level,
+    // Absent reads as false, matching the column's own default and the type's documented "Absent means false".
+    granted: r.granted === true,
+    ...(surface ? { surface } : {}),
+  };
+}

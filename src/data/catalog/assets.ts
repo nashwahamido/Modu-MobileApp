@@ -27,9 +27,24 @@ export function thumbPath(source: ItemSource, id: CatalogId, variation?: string 
   return `${itemDir(source, id)}/${seg(variation)}${IMAGE_EXT}`;
 }
 
-// The catalogue tile. Model-items reuse the DEFAULT variation's thumb (pass it in); a surface (no variation) falls back to a dedicated tile image in its folder.
-export function tilePath(source: ItemSource, id: CatalogId, defaultVariation?: string | null): string {
-  return defaultVariation != null ? thumbPath(source, id, defaultVariation) : `${itemDir(source, id)}/tile${IMAGE_EXT}`;
+// The dedicated catalogue picture a SURFACE item ships. A wallpaper or a floor has no variation axis and so no per-variation render to reuse, which is the whole reason this file exists separately from the thumbs.
+//
+// Every model-item takes thumbPath at its DEFAULT variation instead — including one-look items like the windows, whose variation is legitimately null and whose picture is default.jpg. A null variation therefore does NOT mean "surface", and a caller must decide between the two on the item's category rather than on the nullness of its variation.
+export function tilePath(source: ItemSource, id: CatalogId): string {
+  return `${itemDir(source, id)}/tile${IMAGE_EXT}`;
+}
+
+// The texture files a SURFACE item ships — a wallpaper or a floor, as opposed to a model-item's GLB. Colocated in the same one-folder-per-item layout as the model and the thumbs, so renaming an item id still renames a single storage folder.
+//
+// Trim maps are SEPARATE files rather than the slab's reused, because a cornice is separate geometry with its own UV mapping at its own physical scale: reusing the slab's map on it reads as an extruded strip of floor rather than as moulding. Only floor items carry them, and only when the author supplied them — an absent trim map leaves the cornice as authored.
+//
+// KTX2 rather than JPEG: Filament transcodes Basis-supercompressed textures straight to the device's native GPU format, which is the difference between ~38 MB and ~7 MB of VRAM for a full re-skin. The wire size is roughly a wash.
+// The array is the source of truth (also consumed at runtime by surfaceSpec.ts to validate portal-authored jsonb) — SurfaceMap is derived from it so the two can never drift apart.
+export const SURFACE_MAPS = ["texture", "normal", "rough", "trim_texture", "trim_normal", "trim_rough"] as const;
+export type SurfaceMap = (typeof SURFACE_MAPS)[number];
+
+export function surfaceMapPath(source: ItemSource, id: CatalogId, map: SurfaceMap): string {
+  return `${itemDir(source, id)}/${map}.ktx2`;
 }
 
 
@@ -43,3 +58,15 @@ export interface VariantRef {
 export function defaultVariation(variants: VariantRef[]): string | null {
   return (variants.find((v) => v.isDefault) ?? variants[0])?.variation ?? null;
 }
+
+// Assembly-task assets — the separate assembly/<id>/ tree 003_catalog.sql reserved (item_build.assembly_model). Same derived-path discipline as the room tree: rename an id, rename ONE folder. Thumbs are PNG not JPEG because part/cluster thumbs are transparent-film renders (the bundled thumbnail pipeline's output); the room tree's JPEG rule is about photographic tiles and does not apply here.
+const assemblyDir = (id: CatalogId): string => `assembly/${id}`;
+
+export const assemblyModelPath = (id: CatalogId): string => `${assemblyDir(id)}/model.glb`;
+export const assemblyRecipePath = (id: CatalogId): string => `${assemblyDir(id)}/recipe.json`;
+export const assemblyThumbnailPath = (id: CatalogId): string => `${assemblyDir(id)}/thumb.png`;
+export const assemblyThumbPath = (id: CatalogId, group: string): string => `${assemblyDir(id)}/thumbs/${group}.png`;
+export const assemblyClusterThumbPath = (id: CatalogId, cluster: string): string => `${assemblyDir(id)}/clusters/${cluster}.png`;
+
+// Draft staging prefix for the phase-2b portal lane — declared here so the app and the portal derive the SAME path from day one (the storage RLS policies key on this prefix).
+export const workshopAssemblyDir = (id: CatalogId): string => `room/workshop-assembly/${id}`;

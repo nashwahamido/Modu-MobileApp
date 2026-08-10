@@ -3,7 +3,7 @@ import { router } from "expo-router";
 import { OrientationLock } from "expo-screen-orientation";
 import { View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { HUD_SIDE_MARGIN, useHudInsets } from '@/src/hooks/use-safe-insets';
+import { useHudInsets } from '@/src/hooks/use-safe-insets';
 
 import { FilamentScene } from "react-native-filament";
 
@@ -24,6 +24,8 @@ import { ToolBar } from "@/src/game/ui/hud/ToolBar";
 import { ObjectiveBar } from "@/src/game/ui/hud/ObjectiveBar";
 import {
   HintButton,
+  HUD_ICON,
+  IconButtonBare,
   RecenterButton,
   hudControlStyles as hudControls,
   tutorialChrome as styles,
@@ -48,9 +50,17 @@ import { CenterDropRing } from "@/src/game/ui/feedback/CenterDropRing";
 import { FitChip } from "@/src/game/ui/feedback/FitChip";
 import { PartsTray } from "@/src/game/ui/hud/PartsTray";
 import { ClusterTray } from "@/src/game/ui/hud/ClusterTray";
-import { UndoButton } from "@/src/game/ui/hud/UndoButton";
+import { RedoButton, UndoButton } from "@/src/game/ui/hud/UndoButton";
 import { GameSettings } from "@/src/game/ui/settings/GameSettings";
-import { ClusterFocusControl } from "@/src/game/ui/hud/ClusterFocusControl";
+import type { SettingsFocusTarget } from "@/src/game/ui/settings/SettingsControls";
+import {
+  BuildMap,
+  ClusterFocusControl,
+} from "@/src/game/ui/hud/ClusterFocusControl";
+import {
+  SpotButton,
+  FocusToggleButton,
+} from "@/src/game/ui/hud/ToggleChips";
 import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
 import { backdropSource } from "@/src/game/ui/backdrop/backdrops";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
@@ -60,13 +70,10 @@ import {
 import { availableInMode } from "@/src/game/core/evaluation/availability";
 import { TutorialTarget } from "@/src/game/tutorial/TutorialTarget";
 import { MascotGuideOverlay } from "@/src/game/tutorial/MascotGuideOverlay";
-import { TutorialStepRail } from "@/src/game/tutorial/TutorialStepRail";
 import { MomentumCompanion } from "@/src/game/tutorial/MomentumCompanion";
-import { MomentumStepHeader } from "@/src/game/tutorial/MomentumStepHeader";
 import { MomentumAttentionOverlay } from "@/src/game/tutorial/MomentumAttentionOverlay";
 import { useTutorialStore } from "@/src/game/tutorial/store";
 import { furnitureForProfile } from "@/src/game/core/profile";
-import { tutorialPresentationForProfile } from "@/src/game/tutorial/presentation";
 import {
   TUTORIAL_STEP_REWARD_TOKENS,
   type ToolTutorialKind,
@@ -118,7 +125,7 @@ function TutorialScreen() {
       const startedAt = joystickTutorialStartedAt.current;
       if (
         startedAt &&
-        Date.now() - startedAt > 800 &&
+        Date.now() - startedAt > 250 &&
         Math.hypot(x, y) > 0.15
       ) {
         useTutorialStore.getState().completeEvent("joystick_moved");
@@ -161,6 +168,8 @@ function TutorialScreen() {
     () =>
       useGameStore.subscribe((state, previous) => {
         const tutorial = useTutorialStore.getState();
+        const settingsTutorialActive =
+          tutorial.steps[tutorial.currentIndex]?.targetId === "settings";
         if (!previous.heldActionId && state.heldActionId) {
           const currentStepId =
             tutorial.steps[tutorial.currentIndex]?.id;
@@ -203,30 +212,35 @@ function TutorialScreen() {
           }
         }
         if (
+          !settingsTutorialActive &&
           state.settings.autoView !== previous.settings.autoView
         ) {
           tutorial.completeEvent("auto_view_toggled");
         }
+        // Spot writes hintPartId; a rising edge on it IS a press, and it needs no new plumbing.
+        if (!previous.hintPartId && state.hintPartId) {
+          tutorial.completeEvent("spot_used");
+        }
         if (
+          !settingsTutorialActive &&
           state.settings.focusMode !== previous.settings.focusMode
         ) {
           tutorial.completeEvent("focus_mode_toggled");
         }
         if (
+          !settingsTutorialActive &&
           state.settings.releaseBehavior !==
           previous.settings.releaseBehavior
         ) {
           tutorial.completeEvent("release_behavior_changed");
         }
         if (
-          state.settings.textLevel !== previous.settings.textLevel ||
-          state.settings.showInstructions !==
-            previous.settings.showInstructions
+          !settingsTutorialActive &&
+          (state.settings.textLevel !== previous.settings.textLevel ||
+            state.settings.showInstructions !==
+              previous.settings.showInstructions)
         ) {
           tutorial.completeEvent("instruction_preferences_changed");
-        }
-        if (!previous.selectedTool && state.selectedTool) {
-          tutorial.completeEvent("toolbar_used");
         }
       }),
     [],
@@ -242,6 +256,19 @@ function TutorialScreen() {
   const tutorialStepId = useTutorialStore(
     (s) => s.steps[s.currentIndex]?.id,
   );
+  const tutorialStep = useTutorialStore(
+    (s) => s.steps[s.currentIndex],
+  );
+  const settingsTutorialTarget: SettingsFocusTarget | null =
+    tutorialStep?.id === "release-behavior-settings"
+      ? "releaseBehavior"
+      : tutorialStep?.id === "guided-instructions-settings"
+      ? "instructions"
+      : tutorialStep?.id === "focus-mode-settings"
+      ? "focusMode"
+      : tutorialStep?.id === "auto-view-settings"
+      ? "autoView"
+      : null;
   const tutorialAdvancing = useTutorialStore(
     (s) => s.pendingAdvanceStepId !== null,
   );
@@ -249,7 +276,6 @@ function TutorialScreen() {
   const mode = useGameStore((s) => s.mode);
   const settings = useGameStore((s) => s.settings);
   const profile = useGameStore((s) => s.profile);
-  const tutorialPresentation = tutorialPresentationForProfile(profile);
   const heldActionId = useGameStore((s) => s.heldActionId);
   const renderStyle = useGameStore((s) => s.renderStyle);
   const backdrop = useGameStore((s) => s.backdrop);
@@ -294,27 +320,43 @@ function TutorialScreen() {
       (tutorialStepId === "install-four-legs" ||
         tutorialStepId === "view-under-table" ||
         tutorialStepId === "place-connector" ||
-        tutorialStepId === "select-allen-key" ||
         tutorialStepId === "tighten-connector")
     ) {
       return [];
     }
     if (tutorialStepId === "install-four-legs") {
-      // After the first taught bolt → tool → leg cycle, expose the normal legal sequence so the remaining three cycles can alternate correctly.
-      return sceneState.trayItems;
+      // Keep the repeated assembly cycle on the authored legal order even if
+      // Focus mode is on. A started cluster makes later parts (such as a Leg)
+      // draggable in free mode, but the tutorial must still expose Bolt →
+      // tighten → Leg in sequence. Tighten has no tray card, so the tray is
+      // intentionally empty during that action.
+      const nextItem = sceneState.allTrayItems.find(
+        (item) => item.action?.actionId === firstAvailable,
+      );
+      return nextItem ? [nextItem] : [];
     }
     if (tutorialStepId === "view-under-table") return [];
     if (tutorialStepId === "place-connector") {
-      return sceneState.trayItems.filter(
+      // The settings tutorial may leave Focus mode enabled. In that mode the
+      // visible tray is reduced to one actionable group, which is not
+      // guaranteed to be the bolt when this guide step starts. Select the
+      // required fastener from the complete tray so the tutorial cannot ask
+      // for a bolt while rendering an empty tray.
+      return sceneState.allTrayItems.filter(
         (item) =>
           item.action?.type === "placeFastener" ||
           item.action?.type === "insertFastener",
       );
     }
-    if (tutorialStepId === "select-allen-key") return [];
     if (tutorialStepId === "tighten-connector") return [];
     return sceneState.trayItems;
-  }, [sceneState.trayItems, tutorialAdvancing, tutorialStepId]);
+  }, [
+    sceneState.allTrayItems,
+    sceneState.trayItems,
+    firstAvailable,
+    tutorialAdvancing,
+    tutorialStepId,
+  ]);
 
   useEffect(() => {
     setGuideCollapsed(false);
@@ -427,7 +469,8 @@ function TutorialScreen() {
   // Hand-driven fasteners have no toolbar entry; LACK explicitly uses the
   // Allen key, so manual-tools mode waits until it is selected.
   const neededTool = rawTool !== "hand" ? rawTool : null;
-  const toolReady = !neededTool || selectedTool === neededTool;
+  const toolReady =
+    profile !== "control" || !neededTool || selectedTool === neededTool;
   const activeToolKind: ToolTutorialKind | null =
     driveKind === "press"
       ? "press"
@@ -574,49 +617,74 @@ function TutorialScreen() {
         pointerEvents="box-none"
       >
         {/* Instructions hidden → only the progress bar stays (slim pill). Shared with play.tsx, so the tutorial HUD can never drift from the real one. */}
-        <View style={styles.objectiveWrap} pointerEvents="box-none">
+        <View
+          style={
+            profile === "momentum" ? styles.topRow : styles.objectiveWrap
+          }
+          pointerEvents="box-none"
+        >
           <MomentumCompanion />
+          {profile === "momentum" ? (
+            <IconButtonBare
+              source={require("@/src/assets/ui/icons/icon-pause.png")}
+              size={HUD_ICON}
+              onPress={() => useGameStore.getState().setMapOpen(true)}
+              accessibilityLabel="Pause and show the build map"
+            />
+          ) : null}
           <ObjectiveBar
             line={
-              tutorialPresentation.showChecklist ||
-              tutorialPresentation.showMomentumCompanion
+              profile === "control"
                 ? null
                 : settings.showInstructions
                 ? collapsedLegGuide
                   ? `Install all four legs · ${installedLegCount}/4`
                   : guideCompleted
                   ? `Finish the LACK table · ${displayedCompletedCount}/${displayedTotalCount}`
-                  : `${objective} · ${completedCount}/${totalCount}`
+                  : tutorialStep?.shortLabel ?? objective
                 : null
             }
             fontSize={objectiveFontSize}
             value={displayedCompletedCount}
             total={displayedTotalCount}
             xp={completedCount * furniture.xpPerStep}
-            header={
-              tutorialPresentation.showChecklist ? (
-                <TutorialStepRail />
-              ) : tutorialPresentation.showMomentumCompanion ? (
-                <MomentumStepHeader />
-              ) : undefined
-            }
           />
         </View>
         <CenterDropRing />
         <FitChip />
         <HintToast />
         <UndoButton />
+        <RedoButton />
         <TutorialTarget
           id="undo"
           style={styles.undoTarget}
           pointerEvents="none"
         />
-        <GameSettings />
+        <GameSettings
+          tutorialTarget={settingsTutorialTarget}
+          onTutorialTargetActivated={() => {
+            if (tutorialStep?.targetId === "settings") {
+              useTutorialStore
+                .getState()
+                .completeEvent(tutorialStep.event);
+            }
+          }}
+        />
         <TutorialTarget
           id="settings"
           style={styles.settingsTarget}
           pointerEvents="none"
         />
+        {profile === "control" || profile === "momentum" ? (
+          <View style={styles.togglesRow}>
+            <TutorialTarget id="focus" pointerEvents="auto">
+              <FocusToggleButton />
+            </TutorialTarget>
+            <TutorialTarget id="autoView" pointerEvents="auto">
+              <SpotButton />
+            </TutorialTarget>
+          </View>
+        ) : null}
         {mode !== "strict" ? <ClusterFocusControl /> : null}
         <PartsTray
           items={tutorialTrayItems}
@@ -634,7 +702,9 @@ function TutorialScreen() {
           style={styles.partsTrayTarget}
           pointerEvents="none"
         />
-        <ToolBar neededTool={neededTool} forceVisible />
+        {profile === "control" ? (
+          <ToolBar neededTool={neededTool} forceVisible />
+        ) : null}
         <TutorialTarget
           id="toolbar"
           style={styles.toolbarTarget}
@@ -739,6 +809,9 @@ function TutorialScreen() {
           />
         ) : null}
       </View>
+      {/* Same project/pause card as a task, but tutorial has no selectable
+          sub-assembly stages: it presents the LACK furniture as one project. */}
+      {profile === "momentum" ? <BuildMap overviewOnly /> : null}
       {ringOverlay}
       <GreenFlash trigger={completedCount} />
       <MascotGuideOverlay
@@ -746,6 +819,7 @@ function TutorialScreen() {
         assemblyComplete={totalCount > 0 && completedCount >= totalCount}
         audioEnabled={settings.audio}
         blocked={collapsedActionGuide}
+        earnedXp={completedCount * furniture.xpPerStep}
         onClaimReward={() => {}}
         onSimulatePinch={() => {
           if (!manipulator) return;

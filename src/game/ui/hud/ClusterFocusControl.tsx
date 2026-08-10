@@ -71,7 +71,12 @@ function PulseRing({ style }: { style: StyleProp<ViewStyle> }) {
   );
 }
 
-export function BuildMap() {
+interface BuildMapProps {
+  /** Tutorial pause uses the project card without exposing task-stage selection. */
+  overviewOnly?: boolean;
+}
+
+export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
   const styles = useStyles(makeStyles);
   const t = useTheme();
   const router = useRouter();
@@ -110,7 +115,9 @@ export function BuildMap() {
   //   mustChoose — several sub-assemblies, none picked. There is nothing to resume to, so the only exit is back to the catalogue. intro      — a single-cluster build (LACK) showing what lies ahead, ONCE. Its exit starts the build; it must not behave like a chooser, because there is nothing to choose and the player would be stuck. paused     — opened deliberately mid-build; exit resumes. combineReady guard: once every cluster is built, a cleared focus means the COMBINE stage (cluster cards in the tray), not an unanswered "which section" question — forcing the chooser there would block the combine.
   const mustChoose = requiresClusterFocus(furniture) && !activeCluster && !combineReady(furniture, done);
   const intro = clusters.length === 0 && !mapSeen;
-  const showMap = mustChoose || intro || mapOpen;
+  // Tutorial overview is pause-only. It must never inherit the task's
+  // one-time LACK intro behaviour and open before the player taps Pause.
+  const showMap = overviewOnly ? mapOpen : mustChoose || intro || mapOpen;
 
   const selectCluster = (clusterId: ClusterId) => {
     useGameStore.getState().setActiveCluster(clusterId);
@@ -191,7 +198,13 @@ export function BuildMap() {
     const totalSteps = furniture.actions.length;
     const pct = totalSteps ? Math.round((done.size / totalSteps) * 100) : 0;
     // Both come straight from the DB row — zero until the lookup lands, or if it failed.
-    const { coins, xp: totalXp } = reward;
+    const { coins } = reward;
+    // A tutorial awards XP per completed assembly action. Its pause overview
+    // must use the same source as the tutorial HUD (14 × 10 = 140 for LACK),
+    // rather than the catalogue build reward used by a normal task.
+    const totalXp = overviewOnly
+      ? furniture.actions.length * furniture.xpPerStep
+      : reward.xp;
 
     return (
       <View style={styles.scrim}>
@@ -227,6 +240,17 @@ export function BuildMap() {
             <Text style={styles.title}>{catalogRow?.name ?? ""}</Text>
           </View>
 
+          {overviewOnly ? (
+            <View style={styles.overviewHero} pointerEvents="none">
+              <View style={styles.overviewHalo}>
+                <Image
+                  source={furniture.meta.thumbnail.light}
+                  style={styles.overviewImage}
+                  resizeMode="contain"
+                />
+              </View>
+            </View>
+          ) : (
           <View style={styles.nodeRow}>
             {/* Every connector is drawn FIRST, in one absolutely-positioned layer, so all of
                 them sit under all of the circles. Interleaving them with the nodes could only
@@ -363,6 +387,7 @@ export function BuildMap() {
               </Fragment>
             ))}
           </View>
+          )}
 
           <View style={styles.progressRow}>
             <View style={styles.progressTrack}>
@@ -578,6 +603,29 @@ const makeStyles = (t: Theme) =>
       marginBottom: 10,
     },
     title: { fontFamily: FONT, fontSize: 18, fontWeight: "800", color: t.text },
+
+    // Tutorial pause is an overview, not a stage chooser. Keep the task card's
+    // visual language but give the finished furniture the whole centre area.
+    overviewHero: {
+      height: 150,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 8,
+    },
+    overviewHalo: {
+      width: 190,
+      height: 142,
+      borderRadius: 71,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "#EEE8DD",
+      shadowColor: "#000",
+      shadowOpacity: 0.14,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 4,
+    },
+    overviewImage: { width: 154, height: 126 },
 
     // ── the nodes ─────────────────────────────────────────────────────────
     nodeRow: {

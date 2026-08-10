@@ -5,7 +5,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { OrientationLock } from "expo-screen-orientation";
 import { View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { HUD_SIDE_MARGIN, useHudInsets } from '@/src/hooks/use-safe-insets';
+import { useHudInsets } from '@/src/hooks/use-safe-insets';
 import { FilamentScene } from "react-native-filament";
 
 import { AssemblyScene } from "@/src/game/scene/AssemblyScene";
@@ -31,6 +31,7 @@ import { SeatSlideControl } from "@/src/game/input/slide/SeatSlideControl";
 import { PushTestControl } from "@/src/game/input/slide/PushTestControl";
 import { clusterSink } from "@/src/game/scene/combineDriver";
 import { ToolBar } from "@/src/game/ui/hud/ToolBar";
+import { ToolboxCoach } from "@/src/game/ui/hud/ToolboxCoach";
 import { useStepObjective } from "@/src/game/core/presentation/useStepObjective";
 import {
   pressParkInfo,
@@ -51,6 +52,7 @@ import { BuildComplete } from "@/src/game/ui/celebration/BuildComplete";
 import { FinishBuildButton } from "@/src/game/ui/hud/FinishBuildButton";
 import { GreenFlash } from "@/src/game/ui/feedback/GreenFlash";
 import { HintToast } from "@/src/game/ui/feedback/HintToast";
+import { SpotOrbitCue } from "@/src/game/ui/feedback/SpotOrbitCue";
 import { CenterDropRing } from "@/src/game/ui/feedback/CenterDropRing";
 import { FitChip } from "@/src/game/ui/feedback/FitChip";
 import { PartsTray } from "@/src/game/ui/hud/PartsTray";
@@ -410,6 +412,8 @@ function GameScreen() {
         <CenterDropRing />
         <FitChip />
         <HintToast />
+        {/* Only speaks when Spot is running and its target is somewhere the player cannot see. */}
+        <SpotOrbitCue manipulator={manipulator} />
         {/* Focus mode clears the workbench: everything below is chrome the task doesn't
             need. What survives is the shortlist — joystick, the next part (PartsTray), the
             progress bar, and Settings — plus the Focus toggle itself, since hiding it would
@@ -440,6 +444,9 @@ function GameScreen() {
           }
         />
         <ToolBar neededTool={neededTool} />
+        {/* First build that actually asks for a tool. LACK is hand-tightened, so the tutorial never
+            covers this and EKET is where a player meets it cold. */}
+        <ToolboxCoach neededTool={neededTool} />
         {mode === "free" && !focus ? (
           <HintButton
             style={hudControls.hintButton}

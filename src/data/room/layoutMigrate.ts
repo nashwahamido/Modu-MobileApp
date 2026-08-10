@@ -54,3 +54,25 @@ export function migrateRoomPlacements(envelope: unknown): PlacedFurniture[] {
   // Unknown version: empty room.
   return [];
 }
+
+// The room's chosen surface items, read from the SAME jsonb envelope as placements. Deliberately a separate function rather than a wider return from migrateRoomPlacements: that one returns PlacedFurniture[] and drops the rest of the envelope by design, and widening it would touch every caller for a field most of them do not want.
+//
+// NOT VERSIONED, and that is what makes the field free to add. migrateRoomPlacements reads only env.placements and ignores everything else, so an OLDER app build reading a row written by a newer one renders the authored look rather than failing — forward-compatible by construction, no ROOM_LAYOUT_VERSION bump, no migration.
+//
+// Validation against the CATALOGUE happens at the call site, not here: this module is dependency-free by design (it runs ahead of any catalog wiring being ready, on whatever jsonb Supabase handed back) and the item set is remote and mutable, so an id valid when saved can stop being valid. Here we only guarantee the SHAPE.
+export type RoomFinishes = { floor?: string; wall?: string };
+
+export function readRoomFinishes(envelope: unknown): RoomFinishes {
+  if (!envelope || typeof envelope !== "object" || Array.isArray(envelope)) return {};
+  const raw = (envelope as Record<string, unknown>).finishes;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+
+  const source = raw as Record<string, unknown>;
+  const finishes: RoomFinishes = {};
+  // Per-slot, so one corrupt slot never costs the other. An empty string is dropped as hard as a number: it is not an id, and passing it on would send the loader after a texture at a path with a hole in it.
+  for (const slot of ["floor", "wall"] as const) {
+    const value = source[slot];
+    if (typeof value === "string" && value.length > 0) finishes[slot] = value;
+  }
+  return finishes;
+}
