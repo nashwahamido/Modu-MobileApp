@@ -4,8 +4,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { registerPlaceables } from "@/src/room/core/placeableItems";
 import type { PlaceableRoomRow, Repos } from "../core/repos";
 
-// Versioned like the other catalog caches: a shape change must not read rows written by an older build.
-const CACHE_KEY = "modu.catalog.placeables.v1";
+// Versioned like the other catalog caches: a shape change must not read rows written by an older build. Bumped to v2 for migration 021 (mount/onTop/opensWall replace category-derived placement) — a v1 cached row has neither field, which would read as "no mount, not onTop" and place the cached item nowhere until the next successful refresh.
+const CACHE_KEY = "modu.catalog.placeables.v2";
 
 // True once a live fetch landed — the cache must never clobber it (hydrate/refresh can race).
 let live = false;

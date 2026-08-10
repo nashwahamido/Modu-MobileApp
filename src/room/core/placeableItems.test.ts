@@ -10,15 +10,15 @@ import {
   roomItemDefs,
   roomItemSource,
 } from "./placeableItems";
-import { ROOM_SHELL } from "./roomShell";
+import { ROOM_SHELL, TOP_CELL_SIZE } from "./roomShell";
 
 const CELL = ROOM_SHELL.cellSize;
 
-// The registry is module state; every test starts from the same catalog — the bundled built set plus bought rows shaped like the DB seed: a floor item (malm-chest) and a wall item (a window).
+// The registry is module state; every test starts from the same catalog — the bundled built set plus bought rows shaped like the DB seed: a floor item (malm-chest) and a wall item (a window). mount/opensWall (migration 021) are what route placement now, not category — category rides along only for emitsLight.
 beforeEach(() => {
   registerPlaceables([
-    { id: "malm-chest", source: "bought", category: "fur", size: { x: 0.804, y: 1.004, z: 0.483 }, baseOffsetY: 0 },
-    { id: "window-sash", source: "bought", category: "win", size: { x: 1.061, y: 1.262, z: 0.218 }, baseOffsetY: 0 },
+    { id: "malm-chest", source: "bought", category: "fur", size: { x: 0.804, y: 1.004, z: 0.483 }, baseOffsetY: 0, mount: "floor" },
+    { id: "window-sash", source: "bought", category: "win", size: { x: 1.061, y: 1.262, z: 0.218 }, baseOffsetY: 0, mount: "wall", opensWall: true },
   ]);
 });
 
@@ -45,6 +45,25 @@ test("floor footprints are the ceil of the scaled size — claimed cells always 
     // And the rendered piece fits inside them.
     assert.ok(scaledX <= def.footprint.w * CELL + 1e-9);
     assert.ok(scaledZ <= def.footprint.d * CELL + 1e-9);
+  }
+});
+
+test("topFootprint is derived from the measured SIZE at TOP_CELL_SIZE, never by scaling the floor footprint", () => {
+  // 0.26 m: ceil(0.26 / 0.25) = 2 floor cells (footprint). Scaling that by the ×2 pitch ratio would give 4 top cells (0.5 m) — an over-claim. Deriving straight from size instead gives ceil(0.26 / 0.125) = 3 (0.375 m), the tight answer, and 3 is what this test pins down. This is the exact case the task spec calls out as easy to get wrong.
+  registerPlaceables([
+    { id: "postcard", source: "bought", category: "fur", size: { x: 0.26, y: 0.02, z: 0.26 }, baseOffsetY: 0, mount: "floor" },
+  ]);
+  const def = roomItemDefs().get("postcard")!;
+  assert.deepEqual(def.footprint, { w: 2, d: 2 });
+  assert.deepEqual(def.topFootprint, { w: 3, d: 3 });
+  // Scaling the floor footprint would have given 4 — pinned so nobody "simplifies" topFootprint back into footprint × (CELL / TOP_CELL_SIZE).
+  assert.notDeepEqual(def.topFootprint, { w: def.footprint.w * (CELL / TOP_CELL_SIZE), d: def.footprint.d * (CELL / TOP_CELL_SIZE) });
+});
+
+test("every def carries a topFootprint, window rows included, even though a window's is never read", () => {
+  for (const [, def] of roomItemDefs()) {
+    assert.ok(def.topFootprint, `${def.itemId} is missing topFootprint`);
+    assert.ok(def.topFootprint.w > 0 && def.topFootprint.d > 0, `${def.itemId} has a degenerate topFootprint`);
   }
 });
 
@@ -99,13 +118,43 @@ test("built items need a colour for a storage path — no colour means the bundl
 
 test("a top_surface row exposes its top; unflagged and window rows do not", () => {
   registerPlaceables([
-    { id: "side-table", source: "bought", category: "fur", size: { x: 0.5, y: 0.5, z: 0.5 }, baseOffsetY: 0, topSurface: true },
-    { id: "plain-chest", source: "bought", category: "fur", size: { x: 0.5, y: 0.5, z: 0.5 }, baseOffsetY: 0 },
-    { id: "flagged-window", source: "bought", category: "win", size: { x: 1.0, y: 1.25, z: 0.2 }, baseOffsetY: 0, topSurface: true },
+    { id: "side-table", source: "bought", category: "fur", size: { x: 0.5, y: 0.5, z: 0.5 }, baseOffsetY: 0, mount: "floor", topSurface: true },
+    { id: "plain-chest", source: "bought", category: "fur", size: { x: 0.5, y: 0.5, z: 0.5 }, baseOffsetY: 0, mount: "floor" },
+    { id: "flagged-window", source: "bought", category: "win", size: { x: 1.0, y: 1.25, z: 0.2 }, baseOffsetY: 0, mount: "wall", opensWall: true, topSurface: true },
   ]);
   assert.equal(roomItemDefs().get("side-table")?.hostsTop, true);
   assert.equal(roomItemDefs().get("plain-chest")?.hostsTop, undefined);
   assert.equal(roomItemDefs().get("flagged-window")?.hostsTop, undefined);
+});
+
+test("onTop puts \"furniture\" in allowedSurfaces, independently of mount — a lamp stands on a host's top whether it also stands on the floor or hangs on the wall", () => {
+  registerPlaceables([
+    { id: "astid-table-lamp", source: "bought", category: "lit", size: { x: 0.2222, y: 0.5405, z: 0.3322 }, baseOffsetY: 0, mount: "floor", onTop: true },
+    { id: "sconce", source: "bought", category: "deco", size: { x: 0.2, y: 0.3, z: 0.1 }, baseOffsetY: 0, mount: "wall", onTop: true },
+    { id: "unflagged-lamp", source: "bought", category: "lit", size: { x: 0.2, y: 0.5, z: 0.3 }, baseOffsetY: 0, mount: "floor" },
+  ]);
+  assert.deepEqual(roomItemDefs().get("astid-table-lamp")?.allowedSurfaces, ["floor", "furniture"]);
+  assert.deepEqual(roomItemDefs().get("sconce")?.allowedSurfaces, ["wall", "furniture"]);
+  assert.deepEqual(roomItemDefs().get("unflagged-lamp")?.allowedSurfaces, ["floor"]);
+});
+
+test("a non-opening wall item still derives its footprint by the wall's nearest-cell rule, not the floor's ceil — wallCells now applies to any mount 'wall' row, not only windows", () => {
+  registerPlaceables([
+    // A frame: hangs on the wall (mount 'wall') but does not cut a hole (opensWall absent). 1.061 x 1.262, same measurements as window-sash, so the expected 4x5 footprint pins the SAME rounding rule applying to a non-window row.
+    { id: "wall-frame", source: "bought", category: "deco", size: { x: 1.061, y: 1.262, z: 0.05 }, baseOffsetY: 0, mount: "wall" },
+  ]);
+  const def = roomItemDefs().get("wall-frame")!;
+  assert.deepEqual(def.allowedSurfaces, ["wall"]);
+  assert.deepEqual(def.footprint, { w: 4, d: 1 });
+  assert.equal(def.wallHeightCells, 5);
+  assert.equal(def.opensWall, false);
+});
+
+test("a mount:null, onTop:true row (tops only) is placeable nowhere but a host's top", () => {
+  registerPlaceables([
+    { id: "book", source: "bought", category: "deco", size: { x: 0.15, y: 0.03, z: 0.2 }, baseOffsetY: 0, mount: null, onTop: true },
+  ]);
+  assert.deepEqual(roomItemDefs().get("book")?.allowedSurfaces, ["furniture"]);
 });
 
 test("bought items always resolve to storage — the 'default' segment when no colour is picked", () => {
@@ -116,7 +165,7 @@ test("bought items always resolve to storage — the 'default' segment when no c
 
 test("a row's footprint mask reaches the def when it matches the derived footprint", () => {
   registerPlaceables([
-    { id: "l-couch", source: "bought", category: "fur", size: { x: CELL * 2, y: 0.5, z: CELL * 2 }, baseOffsetY: 0, footprintMask: "XX/X." },
+    { id: "l-couch", source: "bought", category: "fur", size: { x: CELL * 2, y: 0.5, z: CELL * 2 }, baseOffsetY: 0, mount: "floor", footprintMask: "XX/X." },
   ]);
   assert.deepEqual(roomItemDefs().get("l-couch")?.mask, ["XX", "X."]);
 });
@@ -124,9 +173,9 @@ test("a row's footprint mask reaches the def when it matches the derived footpri
 test("a mask that disagrees with the footprint is dropped for the solid rect, not trusted", () => {
   registerPlaceables([
     // 2x2 footprint but a 3-wide mask: a seeding mistake — collision must fall back to the rect.
-    { id: "bad-mask", source: "bought", category: "fur", size: { x: CELL * 2, y: 0.5, z: CELL * 2 }, baseOffsetY: 0, footprintMask: "XXX/X.." },
+    { id: "bad-mask", source: "bought", category: "fur", size: { x: CELL * 2, y: 0.5, z: CELL * 2 }, baseOffsetY: 0, mount: "floor", footprintMask: "XXX/X.." },
     // An empty border column lies about the bbox: also dropped.
-    { id: "hollow-border", source: "bought", category: "fur", size: { x: CELL * 2, y: 0.5, z: CELL * 2 }, baseOffsetY: 0, footprintMask: ".X/.X" },
+    { id: "hollow-border", source: "bought", category: "fur", size: { x: CELL * 2, y: 0.5, z: CELL * 2 }, baseOffsetY: 0, mount: "floor", footprintMask: ".X/.X" },
   ]);
   assert.equal(roomItemDefs().get("bad-mask")?.mask, undefined);
   assert.equal(roomItemDefs().get("hollow-border")?.mask, undefined);
@@ -134,7 +183,7 @@ test("a mask that disagrees with the footprint is dropped for the solid rect, no
 
 test("window rows never carry a mask — their footprint is already the exact hole", () => {
   registerPlaceables([
-    { id: "masked-window", source: "bought", category: "win", size: { x: 1.0, y: 1.25, z: 0.2 }, baseOffsetY: 0, footprintMask: "XXXX" },
+    { id: "masked-window", source: "bought", category: "win", size: { x: 1.0, y: 1.25, z: 0.2 }, baseOffsetY: 0, mount: "wall", opensWall: true, footprintMask: "XXXX" },
   ]);
   assert.equal(roomItemDefs().get("masked-window")?.mask, undefined);
 });

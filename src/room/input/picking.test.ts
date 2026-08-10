@@ -59,7 +59,7 @@ test("pointing at the sky picks nothing", () => {
 });
 
 // A stool-sized 1 x 1 piece: 0.5 m of floor, 0.79 m tall (dalfred-stool's measured size).
-const STOOL: PlaceableItemDef = { itemId: "stool", footprint: { w: 1, d: 1 }, allowedSurfaces: ["floor"] };
+const STOOL: PlaceableItemDef = { itemId: "stool", footprint: { w: 1, d: 1 }, topFootprint: { w: 1, d: 1 }, allowedSurfaces: ["floor"] };
 const STOOL_HEIGHT = 0.79;
 const standing = (cell: { x: number; y: number }): GridPlacement => ({
   instanceId: `at-${cell.x}-${cell.y}`,
@@ -273,7 +273,7 @@ test("a wall ghost owns neither the floor nor the sky above the cornice", () => 
   }
 });
 
-const stackDesk: PlaceableItemDef = { itemId: "desk", footprint: { w: 4, d: 2 }, allowedSurfaces: ["floor"], hostsTop: true };
+const stackDesk: PlaceableItemDef = { itemId: "desk", footprint: { w: 4, d: 2 }, topFootprint: { w: 8, d: 4 }, allowedSurfaces: ["floor"], hostsTop: true };
 
 test("a top-plane pick round-trips through the screen at each host rotation", () => {
   for (const rotSteps of [0, 1, 2, 3] as const) {

@@ -12,9 +12,9 @@ import {
   canPlace,
   buildOccupancy,
   clampToSurface,
+  hostTopExtent,
   occupiedFootprint,
   resolveHost,
-  rotatedFootprint,
   surfaceKey,
   type GridPlacement,
   type PlacementCheck,
@@ -270,16 +270,15 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
       if (!s.activeEdit) return s;
       const def = getRoomItemDef(s.activeEdit.placement.itemId);
       if (!def) return s;
-      // A surface handoff may only move a piece between surfaces of a KIND it allows — the drag layer decides WHEN to hop (corner crossing, tabletop entry); this only refuses nonsense. A furniture top takes anything that lives on the FLOOR, mirroring canPlace's rule.
-      const hopKind = surface ? (surface.kind === "furniture" ? "floor" : surface.kind) : null;
+      // A surface handoff may only move a piece between surfaces of a KIND it allows — the drag layer decides WHEN to hop (corner crossing, tabletop entry); this only refuses nonsense. Checked against the def's allowedSurfaces directly (a def lists "furniture" explicitly since migration 021's onTop), mirroring canPlace's own rule in grid.ts.
       const nextSurface =
-        surface && hopKind && def.allowedSurfaces.includes(hopKind) ? surface : s.activeEdit.placement.surface;
-      // occupiedFootprint, not rotatedFootprint: on a wall the second axis is wallHeightCells, and clamping with the raw depth (1 for a window) would let a tall piece slide up past the top.
+        surface && def.allowedSurfaces.includes(surface.kind) ? surface : s.activeEdit.placement.surface;
+      // occupiedFootprint, not rotatedFootprint: on a wall the second axis is wallHeightCells, and clamping with the raw depth (1 for a window) would let a tall piece slide up past the top; on furniture it picks topFootprint over footprint.
       const footprint = occupiedFootprint({ ...s.activeEdit.placement, surface: nextSurface }, def);
-      const hostFootprint =
-        nextSurface.kind === "furniture"
-          ? resolveHost(nextSurface.hostInstanceId, s.layout, roomItemDefs())?.def.footprint
-          : undefined;
+      // clampToSurface wants the host's TOP EXTENT for a furniture surface, not its floor footprint — see hostTopExtent.
+      const nextHost =
+        nextSurface.kind === "furniture" ? resolveHost(nextSurface.hostInstanceId, s.layout, roomItemDefs()) : null;
+      const hostFootprint = nextHost ? hostTopExtent(nextHost.def) : undefined;
       const clamped = clampToSurface(cell, nextSurface, footprint, hostFootprint);
       // Cells are a quarter metre — most drag events stay inside the current one. Bail with the SAME state object so zustand notifies nobody: this runs per pan event, and re-rendering the whole room per event (instead of per cell crossing) is what blew React's update depth.
       const current = s.activeEdit.placement;
@@ -303,17 +302,17 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
       const def = getRoomItemDef(s.activeEdit.placement.itemId);
       if (!def) return s;
       const rotSteps = ((((s.activeEdit.placement.rotSteps + direction) % 4) + 4) % 4) as RotSteps;
+      const surface = s.activeEdit.placement.surface;
+      const host = surface.kind === "furniture" ? resolveHost(surface.hostInstanceId, s.layout, roomItemDefs()) : null;
       const placement = {
         ...s.activeEdit.placement,
         rotSteps,
-        // Re-clamp: the swapped footprint may spill past an edge the old one touched — against the HOST's grid when the ghost stands on furniture.
+        // Re-clamp: the swapped footprint may spill past an edge the old one touched — against the HOST's TOP EXTENT (hostTopExtent) when the ghost stands on furniture. occupiedFootprint, not a raw rotatedFootprint(def.footprint, ...), so a furniture-surface ghost re-clamps against its topFootprint rather than its floor footprint.
         cell: clampToSurface(
           s.activeEdit.placement.cell,
-          s.activeEdit.placement.surface,
-          rotatedFootprint(def.footprint, rotSteps),
-          s.activeEdit.placement.surface.kind === "furniture"
-            ? resolveHost(s.activeEdit.placement.surface.hostInstanceId, s.layout, roomItemDefs())?.def.footprint
-            : undefined,
+          surface,
+          occupiedFootprint({ ...s.activeEdit.placement, rotSteps }, def),
+          host ? hostTopExtent(host.def) : undefined,
         ),
       };
       return { activeEdit: { ...s.activeEdit, placement, check: validate(placement, s.layout) } };

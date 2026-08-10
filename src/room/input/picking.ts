@@ -1,6 +1,6 @@
 // Screen point → floor cell, by analytic ray-vs-plane intersection — no physics raycaster. The camera is fully known (orbit state + the 68 mm lens + viewport), so a finger position maps to a grid cell with plain algebra. Pure math: testable by projecting a known cell centre to the screen and picking it back.
 import { eyeFor, ORBIT, type OrbitAngles } from "./orbit";
-import { roomPointToFloorCell, roomPointToTopCell, roomPointToWallCell, surfaceExtent, type Cell, type HostContext, type SurfaceId } from "../core/grid";
+import { hostTopExtent, roomPointToFloorCell, roomPointToTopCell, roomPointToWallCell, surfaceExtent, type Cell, type HostContext, type SurfaceId } from "../core/grid";
 import { ROOM_SHELL, ROOM_TARGET, roomToScene, sceneToRoom, type Vec3, type WallId,
   isXWall,
 } from "../core/roomShell";
@@ -122,7 +122,7 @@ export function pointsAtSurface(
   if (surface.kind === "furniture") {
     if (!topTarget) return false;
     const cell = screenPointToTopCell(px, py, viewport, angles, topTarget);
-    const { w, d } = topTarget.host.def.footprint;
+    const { w, d } = hostTopExtent(topTarget.host.def);
     return cell !== null && cell.x >= 0 && cell.x < w && cell.y >= 0 && cell.y < d;
   }
   for (const wall of [surface.wall, ...visibleWalls(angles.theta)]) {
@@ -188,7 +188,7 @@ export function dragTopTarget(
   for (const target of ordered) {
     const cell = screenPointToTopCell(px, py, viewport, angles, target);
     if (!cell) continue;
-    const { w, d } = target.host.def.footprint;
+    const { w, d } = hostTopExtent(target.host.def);
     if (cell.x >= 0 && cell.x < w && cell.y >= 0 && cell.y < d) {
       return { hostInstanceId: target.host.placement.instanceId, cell };
     }

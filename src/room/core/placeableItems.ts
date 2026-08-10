@@ -10,7 +10,7 @@ import { catalogUrl } from "../../data/catalog/urls";
 import type { PlaceableRoomRow, RoomItemLight } from "../../data/core/repos";
 import type { AssetSrc } from "../../game/core/type";
 import type { Footprint, PlaceableItemDef } from "./grid";
-import { ROOM_SHELL, WALL_CELL_SIZE } from "./roomShell";
+import { ROOM_SHELL, TOP_CELL_SIZE, WALL_CELL_SIZE } from "./roomShell";
 
 export type RoomItemModel = {
   def: PlaceableItemDef;
@@ -31,10 +31,13 @@ export const FURNITURE_WORLD_SCALE = 1;
 // footprint = ceil(size × FURNITURE_WORLD_SCALE / cellSize) per axis — the cells a piece claims at its rendered size. ceil, so collision may over-claim a sliver but never lets two pieces touch. The epsilon keeps an exact multiple (0.75 × 1.6 / 0.5 = 2.4 → 3, but 0.5 × 1.6 / 0.5 = 1.6 → 2) from gaining a phantom cell to float error.
 const cells = (meters: number): number => Math.ceil((meters * FURNITURE_WORLD_SCALE) / CELL - 1e-9);
 
-// Wall footprints round to the NEAREST fine cell, unlike the floor's ceil: a window's footprint IS its hole, and a hole smaller than the glazing shows wall through the glass — while one slightly larger than the frame just reads as a plaster reveal. Same rule as scripts/fix_window_anchors.py.
+// topFootprint = ceil(size × FURNITURE_WORLD_SCALE / TOP_CELL_SIZE) per axis — the SAME rule as `cells` above, just at the finer top pitch, and deliberately computed from the measured SIZE again rather than by scaling `footprint`. Scaling would compound `cells`' own ceil: a 0.26 m item is ceil(0.26/0.25) = 2 floor cells, and scaling that by the ×2 subdivision gives 4 fine cells (0.5 m) — a real over-claim, since deriving straight from size gives ceil(0.26/0.125) = 3 (0.375 m), the tight answer. Every item gets one, wall items included (see PlaceableItemDef.topFootprint), even though a window's is never read.
+const topCells = (meters: number): number => Math.ceil((meters * FURNITURE_WORLD_SCALE) / TOP_CELL_SIZE - 1e-9);
+
+// Wall footprints round to the NEAREST fine cell, unlike the floor's ceil: for a window this footprint IS its hole, and a hole smaller than the glazing shows wall through the glass while one slightly larger than the frame just reads as a plaster reveal — and a non-opening wall item (a frame) gets the same tight rounding for consistency, since every mount:'wall' row shares one footprint rule now (migration 021), not just the ones that cut holes. Same rule as scripts/fix_window_anchors.py.
 const wallCells = (meters: number): number => Math.max(1, Math.round(meters / WALL_CELL_SIZE));
 
-// category routes the SURFACE: 'window' rows hang on walls with a hole-sized footprint; everything else (including rows cached before category existed) stands on the floor. It also routes whether a piece EMITS light: a lamp is ordinary floor furniture that happens to carry a bulb, so 'lit' keeps the floor surface and only turns emitsLight on — exactly the shape 'win' has for walls.
+// mount/onTop/opensWall (placeable_items columns, migration 021) route placement now, not category — floor and wall are mutually exclusive so mount is one nullable choice, onTop is orthogonal (a book stands on a host's top whether that host is on the floor or the wall), and opensWall is meaningful only when mount is 'wall'. category is left with exactly one job: routing whether a piece EMITS light. A lamp is ordinary furniture (mount 'floor', maybe onTop) that happens to carry a bulb, so 'lit' does not touch allowedSurfaces at all and only turns emitsLight on.
 //
 // The light's NUMBERS do not come from the category, they come from row.light (item_lights, joined in by the placeable_items view — migration 012). A 'lit' row with no light row is a seeding mistake, and it degrades quietly: emitsLight is true but there is nothing to build a light from, so the piece places as ordinary furniture. That is the failure the audit query in 012 exists to catch. A mask that disagrees with its footprint is a seeding mistake; warn and fall back to the solid rect, which can only over-claim, never let pieces intersect. The border rule: every edge row/column must hold an 'X', or the bbox (which bounds checks and clamping still use) lies about the piece's extent.
 function sanitizedMask(joined: string | undefined, footprint: Footprint): readonly string[] | undefined {
@@ -55,14 +58,19 @@ function sanitizedMask(joined: string | undefined, footprint: Footprint): readon
 }
 
 function toModel(row: PlaceableRoomRow): RoomItemModel {
+  // Every def carries topFootprint (see PlaceableItemDef) even a wall item's, which allowedSurfaces guarantees is never read for one that has no "furniture" entry: occupiedFootprint only consults topFootprint for a "furniture" surface.
+  const topFootprint: Footprint = { w: topCells(row.size.x), d: topCells(row.size.z) };
+  // Floor and wall are mutually exclusive (one nullable `mount`); standing on a host's top (`onTop`) is orthogonal to both, so it is appended independently of which mount — or no mount at all — the row has. A row with neither is placeable nowhere, which the DB's `mount is not null or on_top` constraint (migration 021) exists to prevent from ever being seeded.
+  const allowedSurfaces = [...(row.mount ? [row.mount] : []), ...(row.onTop ? (["furniture"] as const) : [])];
   const def: PlaceableItemDef =
-    row.category === "win"
+    row.mount === "wall"
       ? {
           itemId: row.id,
           footprint: { w: wallCells(row.size.x), d: 1 },
+          topFootprint,
           wallHeightCells: wallCells(row.size.y),
-          allowedSurfaces: ["wall"],
-          opensWall: true,
+          allowedSurfaces,
+          opensWall: row.opensWall === true,
         }
       : (() => {
           const footprint = { w: cells(row.size.x), d: cells(row.size.z) };
@@ -70,9 +78,10 @@ function toModel(row: PlaceableRoomRow): RoomItemModel {
           return {
             itemId: row.id,
             footprint,
+            topFootprint,
             ...(mask ? { mask } : {}),
             ...(row.topSurface ? { hostsTop: true } : {}),
-            allowedSurfaces: ["floor" as const],
+            allowedSurfaces,
             emitsLight: row.category === "lit" && row.light != null,
           };
         })();
@@ -81,10 +90,10 @@ function toModel(row: PlaceableRoomRow): RoomItemModel {
 
 // The baked-in BUILT set: sizes mirror the DB seed (003_catalog.sql) the same way seed.ts does, so offline placement matches what the catalog will say once it loads.
 const BUNDLED_ROWS: PlaceableRoomRow[] = [
-  { id: "dalfred-stool", source: "built", category: "fur", size: { x: 0.5, y: 0.79, z: 0.5 }, baseOffsetY: 0.007 },
-  { id: "lack-table", source: "built", category: "fur", size: { x: 0.55, y: 0.45, z: 0.55 }, baseOffsetY: 0 },
-  { id: "eket-cabinet", source: "built", category: "fur", size: { x: 0.37, y: 0.35, z: 0.75 }, baseOffsetY: 0.175 },
-  { id: "bekvam-stool", source: "built", category: "fur", size: { x: 0.39, y: 0.5, z: 0.43 }, baseOffsetY: 0 },
+  { id: "dalfred-stool", source: "built", category: "fur", size: { x: 0.5, y: 0.79, z: 0.5 }, baseOffsetY: 0.007, mount: "floor" },
+  { id: "lack-table", source: "built", category: "fur", size: { x: 0.55, y: 0.45, z: 0.55 }, baseOffsetY: 0, mount: "floor" },
+  { id: "eket-cabinet", source: "built", category: "fur", size: { x: 0.37, y: 0.35, z: 0.75 }, baseOffsetY: 0.175, mount: "floor" },
+  { id: "bekvam-stool", source: "built", category: "fur", size: { x: 0.39, y: 0.5, z: 0.43 }, baseOffsetY: 0, mount: "floor" },
 ];
 
 const toItems = (rows: PlaceableRoomRow[]): Record<string, RoomItemModel> =>

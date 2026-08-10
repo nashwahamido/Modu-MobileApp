@@ -2,7 +2,8 @@
 import type { PostgrestError } from "@supabase/supabase-js";
 import { supabase } from "@/src/config/supabase";
 import type { AssemblyMode, BrandId, FurnitureId } from "@/src/game/core/type";
-import type { BuildProgressRepo, CatalogRepo, FriendRequestsRepo, FriendsRepo, ItemVariant, PlaceableRoomRow, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo, VariantsRepo } from "../core/repos";
+import type { BuildProgressRepo, CatalogRepo, FriendRequestsRepo, FriendsRepo, ItemVariant, PlaceableRoomRowInput, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo, VariantsRepo } from "../core/repos";
+import { toPlaceableRoomRow } from "../core/repos";
 import type { BuildSave, FriendRequest, Profile, ProfilePatch, RoomLayout } from "../core/types";
 import { ROOM_LAYOUT_VERSION } from "../core/types";
 import type { ShopCategory, ShopItem } from "../shop/items";
@@ -174,44 +175,16 @@ const catalogRepo: CatalogRepo = {
   },
 
   async listPlaceables() {
-    // The union view spans both item tables; a null size means "no room model authored", so those rows are filtered server-side — the room never sees an item it could not place. category_id rides along because it routes the placement surface (window -> wall).
+    // The union view spans both item tables; a null size means "no room model authored", so those rows are filtered server-side — the room never sees an item it could not place. category_id still rides along (toPlaceableRoomRow reads it for emitsLight), but mount/on_top/opens_wall — not category — now route placement (migration 021).
+    //
+    // `*`, NOT an explicit column list, for exactly the reason getShopItems documents below and paid for twice: naming a column the live schema does not have yet fails the WHOLE fetch with a Postgrest 42703, and this query IS the room's catalogue — so the room goes completely empty rather than merely missing a feature. That made every schema-adding change a hard ordering dependency where the code could not ship before the migration, and this query kept the trap after the shop query escaped it: it named mount/on_top/opens_wall the moment they were written, which broke the app against a live database that had not run 021 yet. With `*`, a column that has not arrived is simply absent from the row and toPlaceableRoomRow already reads absent as unset, so code and schema become deployable in either order. The view is fetched once per session, so the few unused columns cost nothing.
     const { data, error } = await supabase
       .from("placeable_items")
-      .select("id, source, category_id, size_x, size_y, size_z, base_offset_y, light_type, light_lumens, light_kelvin, light_reach_m, light_cone_deg, light_bulb_x, light_bulb_y, light_bulb_z, light_aim_pitch_deg, light_aim_yaw_deg, footprint_mask, top_surface")
+      .select("*")
       .not("size_x", "is", null);
     check(error);
-    type Row = { id: string; source: "built" | "bought"; category_id: string; size_x: number; size_y: number; size_z: number; base_offset_y: number;
-      light_type: "point" | "spot" | null; light_lumens: number | null; light_kelvin: number | null; light_reach_m: number | null; light_cone_deg: number | null;
-      light_bulb_x: number | null; light_bulb_y: number | null; light_bulb_z: number | null;
-      light_aim_pitch_deg: number | null; light_aim_yaw_deg: number | null; footprint_mask: string | null; top_surface: boolean | null };
-    return ((data ?? []) as Row[]).map(
-      (r): PlaceableRoomRow => ({
-        id: r.id,
-        source: r.source,
-        category: r.category_id as PlaceableRoomRow["category"],
-        size: { x: r.size_x, y: r.size_y, z: r.size_z },
-        baseOffsetY: r.base_offset_y,
-        // Null for everything but a lamp — the view LEFT JOINs item_lights. The required columns are NOT NULL in that table, so light_type carrying a value means the rest do too. bulb_* are NOT NULL with a 0 default, hence the ?? 0: a row written before migration 014 reads as a bulb at the piece's own origin, which is wrong but harmless, rather than as NaN.
-        light:
-          r.light_type != null
-            ? {
-                type: r.light_type,
-                lumens: r.light_lumens as number,
-                kelvin: r.light_kelvin as number,
-                reachMetres: r.light_reach_m as number,
-                coneDeg: r.light_cone_deg ?? undefined,
-                bulb: { x: r.light_bulb_x ?? 0, y: r.light_bulb_y ?? 0, z: r.light_bulb_z ?? 0 },
-                // Both angles or neither — item_lights constrains them together, so a half-set pair means a hand-edited row and is treated as no aim rather than as half an aim.
-                aim:
-                  r.light_aim_pitch_deg != null && r.light_aim_yaw_deg != null
-                    ? { pitchDeg: r.light_aim_pitch_deg, yawDeg: r.light_aim_yaw_deg }
-                    : undefined,
-              }
-            : undefined,
-        ...(r.footprint_mask ? { footprintMask: r.footprint_mask } : {}),
-        ...(r.top_surface ? { topSurface: true } : {}),
-      }),
-    );
+    // The mapping itself lives in toPlaceableRoomRow (core/repos.ts), pure and unit-tested — see repos.test.ts for exactly the regression this split guards against (mount/onTop/opensWall silently dropped from a hand-written object literal, the same failure mode toShopItem's own header comment documents for `granted`).
+    return ((data ?? []) as (PlaceableRoomRowInput & { source: "built" | "bought" })[]).map(toPlaceableRoomRow);
   },
 };
 

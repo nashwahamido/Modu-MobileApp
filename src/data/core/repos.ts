@@ -83,6 +83,11 @@ export type BuildCatalogRow = {
   // Estimated build minutes — hand-authored curation, never derived, so the client only ever reads it.
   durationMin: number;
   link?: string;
+  // The separate assembly/<id>/ tree (item_build.assembly_model); null = this furniture has no cloud build payload, only a bundled one (or none at all). See src/data/catalog/assets.ts's assembly*Path family.
+  assemblyModel: string | null;
+  // The reward rates behind xp_reward = step_count * xp_per_step + xp_bonus (item_build, migration 003). DB-authored so tuning a reward never needs an app build; the bundled furniture's own constants are the offline fallback for a row that hasn't loaded yet.
+  xpPerStep: number;
+  xpBonusOnComplete: number;
 };
 
 export interface CatalogRepo {
@@ -92,7 +97,7 @@ export interface CatalogRepo {
   listPlaceables(): Promise<PlaceableRoomRow[]>;
 }
 
-// One placeable_items row's room-placement metadata: the item's measured world-AABB size in authored meters (x = width, z = depth at rotSteps 0) and the lift from its origin to its base. The room derives footprint and scale from these — the DB stores only what a tool measures. category routes the SURFACE: 'window' rows place on walls (hole footprint derived from size on the fine wall grid); everything else stands on the floor. Rows cached before this field existed may lack it — consumers treat a missing category as a floor item.
+// One placeable_items row's room-placement metadata: the item's measured world-AABB size in authored meters (x = width, z = depth at rotSteps 0) and the lift from its origin to its base. The room derives footprint and scale from these — the DB stores only what a tool measures. category no longer routes placement (see mount/onTop/opensWall below, migration 021) — it now only routes whether a piece EMITS light (category 'lit'). Rows cached before category existed may lack it entirely; that is unrelated to placement and only affects the emitsLight check.
 export type PlaceableRoomRow = {
   id: CatalogId;
   source: ItemSource;
@@ -105,6 +110,12 @@ export type PlaceableRoomRow = {
   topSurface?: boolean;
   /** Present only for category 'lit' (Lighting) — one item_lights row, joined in by the placeable_items view. Absent means the item emits nothing, which is every item but a lamp. A 'lit' row without this is a seeding mistake (see the audit query in migration 012), and the room degrades to placing it as ordinary furniture. */
   light?: RoomItemLight;
+  /** Where this item mounts — floor and wall are MUTUALLY EXCLUSIVE, so this is one nullable choice rather than two flags (placeable_items.mount, migration 021). Null/undefined means this item has no mount of its own at all (placeable only via onTop, e.g. a book that only ever stands on a host's top) — the DB's `mount is not null or on_top` constraint guarantees every row is reachable one way or the other. */
+  mount?: "floor" | "wall" | null;
+  /** May stand on a hosting item's TOP, independent of mount — a lamp sits on a desk whether that desk stands on the floor or hangs on the wall, because either way it is placed on the desk's OWN top grid, not on this item's own mount (placeable_items.on_top, migration 021). Absent/false = nothing stands on it there. */
+  onTop?: boolean;
+  /** Cuts a hole in the wall it mounts to — meaningful only when mount is 'wall'; the DB enforces that pairing with `not opens_wall or mount = 'wall'` (placeable_items.opens_wall, migration 021). Absent/false = hangs on the wall surface and leaves it intact (a frame), or is not wall-mounted at all. */
+  opensWall?: boolean;
 };
 
 // A lamp's light, as authored in item_lights. `lumens` is calibrated by eye, NOT physical — Filament scales by camera exposure and react-native-filament does not bridge setExposure, so no derived value predicts on-screen brightness. `reachMetres` is in authored metres; the renderer scales it into scene units. `coneDeg` is set for 'spot' and absent for 'point'.
@@ -119,6 +130,67 @@ export type RoomItemLight = {
   /** Aim, for a spot. Absent for a point, which has no direction at all. Degrees, in the piece's own space at rotSteps 0 — see src/room/core/lightAim.ts and the convention block in migration 014, which is the contract with the workshop portal. */
   aim?: { pitchDeg: number; yawDeg: number };
 };
+
+// One placeable_items row exactly as Postgrest hands it back — the snake_case shape the view's select() names. Loose on purpose (mirrors ShopItemRow in shop/items.ts): a column the live schema does not have yet is simply absent rather than fatal.
+export type PlaceableRoomRowInput = {
+  id: string;
+  source: ItemSource;
+  category_id: string;
+  size_x: number;
+  size_y: number;
+  size_z: number;
+  base_offset_y: number;
+  light_type: "point" | "spot" | null;
+  light_lumens: number | null;
+  light_kelvin: number | null;
+  light_reach_m: number | null;
+  light_cone_deg: number | null;
+  light_bulb_x: number | null;
+  light_bulb_y: number | null;
+  light_bulb_z: number | null;
+  light_aim_pitch_deg: number | null;
+  light_aim_yaw_deg: number | null;
+  footprint_mask: string | null;
+  top_surface: boolean | null;
+  // OPTIONAL on purpose, and the `?` is load-bearing rather than defensive typing: listPlaceables selects `*`, so a database that has not applied migration 021 simply returns rows without these keys. Declaring them required would let the mapper narrow the absent case to `never` and silently drop the fallback that keeps such a database working — which is the whole reason the select is `*` in the first place.
+  mount?: "floor" | "wall" | null;
+  on_top?: boolean | null;
+  opens_wall?: boolean | null;
+};
+
+// Row -> PlaceableRoomRow. Extracted out of the Supabase adapter and made pure so it can be tested without a live client — the same reason toShopItem (shop/items.ts) exists as a free function rather than living inline inside listItems(). That mapper once silently dropped `granted` for the whole life of migration 018 because the column was selected and the type declared the field, yet nothing carried it through by hand; the in-memory adapter got it right, so the whole suite stayed green while the Supabase path was broken. mount/onTop/opensWall are exactly that same shape of risk — three columns a hand-written object literal can drop with no type error, since every one of them is optional on PlaceableRoomRow — so this mapper gets the same treatment: pulled out, and pinned by a test on this side of the adapter boundary.
+export function toPlaceableRoomRow(r: PlaceableRoomRowInput): PlaceableRoomRow {
+  return {
+    id: r.id,
+    source: r.source,
+    category: r.category_id as PlaceableRoomRow["category"],
+    size: { x: r.size_x, y: r.size_y, z: r.size_z },
+    baseOffsetY: r.base_offset_y,
+    // Null for everything but a lamp — the view LEFT JOINs item_lights. The required columns are NOT NULL in that table, so light_type carrying a value means the rest do too. bulb_* are NOT NULL with a 0 default, hence the ?? 0: a row written before migration 014 reads as a bulb at the piece's own origin, which is wrong but harmless, rather than as NaN.
+    light:
+      r.light_type != null
+        ? {
+            type: r.light_type,
+            lumens: r.light_lumens as number,
+            kelvin: r.light_kelvin as number,
+            reachMetres: r.light_reach_m as number,
+            coneDeg: r.light_cone_deg ?? undefined,
+            bulb: { x: r.light_bulb_x ?? 0, y: r.light_bulb_y ?? 0, z: r.light_bulb_z ?? 0 },
+            // Both angles or neither — item_lights constrains them together, so a half-set pair means a hand-edited row and is treated as no aim rather than as half an aim.
+            aim:
+              r.light_aim_pitch_deg != null && r.light_aim_yaw_deg != null
+                ? { pitchDeg: r.light_aim_pitch_deg, yawDeg: r.light_aim_yaw_deg }
+                : undefined,
+          }
+        : undefined,
+    ...(r.footprint_mask ? { footprintMask: r.footprint_mask } : {}),
+    ...(r.top_surface ? { topSurface: true } : {}),
+    // NULL and ABSENT mean opposite things here, and conflating them empties the room. A present-but-null `mount` is a deliberate statement — this item stands only on other items' tops, like a book — and must stay null. An ABSENT one means the query ran against a database that has not applied migration 021, since listPlaceables selects `*` precisely so a missing column degrades instead of failing the whole fetch; treating that as null would make every item in the catalogue placeable nowhere, which is exactly as broken as the 42703 the `*` was meant to avoid. So absent falls back to the pre-021 rule the category used to carry, and the two states are told apart by `in`, not by a truthiness check that would collapse them.
+    mount: "mount" in r ? r.mount : r.category_id === "win" ? "wall" : "floor",
+    onTop: r.on_top === true,
+    opensWall: "opens_wall" in r ? r.opens_wall === true : r.category_id === "win",
+  };
+}
 
 // One row of item_variants: an item's colour/finish axis. `variation` is the free-form per-item key that IS the storage path segment (white, oak, black, ...); null = the item has a single model, at the 'default' segment. Asset paths are derived from it, never stored — see catalogAssets.ts.
 export type ItemVariant = {
