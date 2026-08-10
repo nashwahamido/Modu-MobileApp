@@ -4,7 +4,7 @@ import { StyleSheet, Image, Text, View } from "react-native";
 
 import { Button } from "@/src/game/ui/system/Button";
 import { AccountPicker } from "@/src/dev/AccountPicker";
-import { FONT, SPACE, useStyles, useUiScale } from "@/src/game/ui/system/theme";
+import { SPACE, useStyles, FONT } from "@/src/game/ui/system/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import type { Theme } from "@/src/game/ui/system/theme";
 
@@ -21,8 +21,7 @@ const createAccountRoute = "/create-account" as Href;
 const loginRoute = "/create-account?mode=login" as Href;
 
 export default function AuthScreen() {
-  const scale = useUiScale();
-  const styles = useStyles(makeStyles, scale);
+  const styles = useStyles(makeStyles);
   const safe = useSafeInsets();
   return (
     <View
@@ -60,9 +59,7 @@ export default function AuthScreen() {
   );
 }
 
-// k is the device UI scale (see useUiScale): these layouts are authored in phone points,
-// and a tablet needs the same proportions at a larger size, not the same numbers.
-const makeStyles = (t: Theme, k: number) =>
+const makeStyles = (t: Theme) =>
   StyleSheet.create({
     root: {
       flex: 1,
@@ -72,41 +69,60 @@ const makeStyles = (t: Theme, k: number) =>
     },
     content: {
       width: "100%",
-      maxWidth: Math.round(980 * k),
+      maxWidth: 980,
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      gap: Math.round(36 * k),
+      gap: 36,
     },
     intro: {
       flex: 1,
-      maxWidth: Math.round(560 * k),
-      gap: Math.round(18 * k),
+      maxWidth: 560,
+      gap: 18,
       alignItems: "center",
     },
     header: {
       flexDirection: "row",
       alignItems: "center",
-      gap: Math.round(18 * k),
+      justifyContent: "center",
+      // The row may be narrower than its natural size, so it needs to be allowed to shrink and its
+      // children need somewhere to shrink TO.
+      alignSelf: "stretch",
+      minWidth: 0,
+      gap: 18,
     },
     mascot: {
-      width: Math.round(82 * k),
-      height: Math.round(82 * k),
-      borderRadius: Math.round(20 * k),
+      width: 82,
+      height: 82,
+      borderRadius: 20,
+      // The mascot holds its size; the wordmark is the one that gives way.
+      flexShrink: 0,
     },
     // Height derived from the art's 4.51 aspect, so the wordmark can never be stretched.
-    wordmark: { width: Math.round(230 * k), height: Math.round(230 * k) / 4.51 },
+    // flexShrink, not a fixed width. The brand row is mascot 82 + gap 18 + this, and the column it
+    // sits in is only what is left after the 300pt action stack — about 332pt on a phone. At a rigid
+    // 230 the row totals 330 with nothing to give, so the images were squeezed to nothing rather
+    // than the wordmark simply coming in a little narrower. maxWidth keeps it from growing past its
+    // drawn size on a screen that has room.
+    wordmark: {
+      flexShrink: 1,
+      width: "100%",
+      maxWidth: 230,
+      // The art is 600x133, and aspectRatio keeps the height following whatever width survives the
+      // shrink — a fixed height here would letterbox it the moment the width gave way.
+      aspectRatio: 600 / 133,
+    },
     // One line under the wordmark, so the brand block reads as logo + promise and nothing else. Fixed ink, not t.text: the backdrop is a fixed blue, so a theme-driven colour would turn this bone in dark mode and land at 1.78:1 on it.
     slogan: {
       color: SLOGAN_INK,
       fontFamily: FONT,
-      fontSize: Math.round(30 * k),
+      fontSize: 30,
       fontWeight: "900",
       letterSpacing: 0.2,
       textAlign: "center",
     },
     actions: {
-      width: Math.round(300 * k),
+      width: 300,
       gap: SPACE.md,
     },
   });

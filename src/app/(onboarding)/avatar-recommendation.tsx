@@ -194,7 +194,7 @@ const modes = avatarModes.map((mode) => ({
 
 export default function AvatarRecommendationScreen() {
   const scale = useUiScale();
-  const styles = useStyles(makeStyles, scale);
+  const styles = useStyles(makeStyles);
   // The icons take their colour as a prop, so this screen needs the tokens as values, not just the sheet.
   const t = useTheme();
   // A slow breath on the Recommended tag. Small on purpose — it marks the default choice, it is not asking to be pressed, and anything stronger would compete with the Confirm button. The entrance plays ONCE, for the avatar being announced. After that the player is comparing four modes, and replaying the build-up on every switch read as a wait — the pills and lines are keyed on their own text, so they remount on each switch and ran their delays again from scratch. Once this is false they mount fully formed and a switch is instant.
@@ -517,7 +517,7 @@ export default function AvatarRecommendationScreen() {
 
 // k is the device UI scale (see useUiScale): these layouts are authored in phone points,
 // and a tablet needs the same proportions at a larger size, not the same numbers.
-const makeStyles = (t: Theme, k: number) =>
+const makeStyles = (t: Theme, k = 1) =>
   StyleSheet.create({
     // The full-bleed layer. No padding here, ever: it is what the gradient measures against.
     screen: { flex: 1, backgroundColor: BG_FROM },

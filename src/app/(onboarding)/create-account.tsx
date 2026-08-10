@@ -25,7 +25,7 @@ const authMethods = [
 
 export default function CreateAccountScreen() {
   const scale = useUiScale();
-  const styles = useStyles(makeStyles, scale);
+  const styles = useStyles(makeStyles);
   const safe = useSafeInsets();
   const t = useTheme();
   const params = useLocalSearchParams<{ mode?: string }>();
@@ -152,7 +152,7 @@ export default function CreateAccountScreen() {
 
 // k is the device UI scale (see useUiScale): these layouts are authored in phone points,
 // and a tablet needs the same proportions at a larger size, not the same numbers.
-const makeStyles = (t: Theme, k: number) =>
+const makeStyles = (t: Theme, k = 1) =>
   StyleSheet.create({
     root: {
       flex: 1,

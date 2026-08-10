@@ -2,7 +2,15 @@ import { router } from "expo-router";
 import type { Href } from "expo-router";
 import * as Speech from "@/src/onboarding/speech";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, Animated, Image, Pressable, Text, View } from "react-native";
+import {
+  Animated,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import {
   getRecommendedModes,
@@ -39,7 +47,14 @@ const BG_SOLID = "#A9BFD9";
 const BUBBLE_RIM = ACCENT_LIGHT;
 /** One source for the bubble's width: the reveal animates a clip to exactly this, and the card
  *  inside is pinned to it so nothing squeezes as the clip opens. */
+/** The bubble's width ON A PHONE. Anything wider computes it from the screen instead — see bubbleW
+ *  at the call site. A fixed width plus a UI scale overflows a tablet, because the scale grows
+ *  faster than the extra screen it is there to fill: 640pt of row at 1.75 is 1120pt against 1280pt
+ *  of tablet, before padding. */
 const BUBBLE_W = 470;
+/** What the mascot and its gap take beside the bubble, in phone points. */
+const MASCOT_W = 150;
+const ROW_GAP = 20;
 
 /** The intro entrance, as one block: the mascot arrives, then its speech bubble, then what it says,
  *  then the thing you press. Every value is the moment that element starts. */
@@ -220,8 +235,20 @@ const questionOptionImages = [
 ];
 
 export default function QuestionnaireScreen() {
-  const scale = useUiScale();
-  const styles = useStyles(makeStyles, scale);
+  const styles = useStyles(makeStyles);
+  // The bubble fills whatever is left after the mascot, up to a readable maximum. Fixed on a phone
+  // (the window is smaller than the cap), proportional on a tablet — so the row can never be wider
+  // than the screen it sits in, at any scale.
+  const win = useWindowDimensions();
+  const uiScale = useUiScale();
+  const bubbleW = Math.round(
+    Math.min(
+      // A line of text past ~62 characters is hard to track back to the next line, so the bubble
+      // stops growing well before the screen does.
+      BUBBLE_W * uiScale,
+      win.width - (MASCOT_W + ROW_GAP) * uiScale - 140 * uiScale,
+    ),
+  );
   const safe = useSafeInsets();
   const [introComplete, setIntroComplete] = useState(false);
   const [handedness, setHandedness] = useState<Handedness | null>(null);
@@ -482,7 +509,11 @@ export default function QuestionnaireScreen() {
           {/* The button is a SIBLING of the reveal, not a child of it: the wipe needs overflow
               hidden, and anything hanging over the bubble's edge gets clipped by that same rule. */}
           <View style={styles.bubbleWrap}>
-            <BubbleReveal delay={INTRO_STAGE.bubble} width={BUBBLE_W} style={styles.speechBubble}>
+            <BubbleReveal
+              delay={INTRO_STAGE.bubble}
+              width={bubbleW}
+              style={[styles.speechBubble, { width: bubbleW }]}
+            >
             <SlideInDown delay={INTRO_STAGE.text}>
               <Text style={styles.introText}>{questionnaireIntroText}</Text>
             </SlideInDown>
@@ -793,9 +824,7 @@ export default function QuestionnaireScreen() {
   );
 }
 
-// k is the device UI scale (see useUiScale): these layouts are authored in phone points,
-// and a tablet needs the same proportions at a larger size, not the same numbers.
-const makeStyles = (t: Theme, k: number) =>
+const makeStyles = (t: Theme) =>
   StyleSheet.create({
     root: {
       flex: 1,
@@ -807,18 +836,18 @@ const makeStyles = (t: Theme, k: number) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      gap: Math.round(20 * k),
+      gap: 20,
       // Room at the foot for the Next button and its halo, so the bubble clears it — but modest: too much and the row is pushed into the top margin instead.
-      paddingBottom: Math.round(58 * k),
+      paddingBottom: 58,
     },
     mascotCircle: {
-      width: Math.round(150 * k),
-      height: Math.round(150 * k),
+      width: 150,
+      height: 150,
       alignItems: "center",
       justifyContent: "center",
       overflow: "hidden",
       borderColor: t.border,
-      borderRadius: Math.round(95 * k),
+      borderRadius: 95,
       borderWidth: 2,
       backgroundColor: t.surface,
     },
@@ -831,28 +860,28 @@ const makeStyles = (t: Theme, k: number) =>
       ...StyleSheet.absoluteFillObject,
     },
     speechBubble: {
-      width: BUBBLE_W,
-      minHeight: Math.round(190 * k),
-      borderRadius: Math.round(36 * k),
+      // Width is set at the call site: it depends on the window, which a static sheet cannot see.
+      minHeight: 190,
+      borderRadius: 36,
       backgroundColor: t.surface,
       borderWidth: 3,
       borderColor: BUBBLE_RIM,
-      paddingHorizontal: Math.round(32 * k),
-      paddingVertical: Math.round(24 * k),
-      gap: Math.round(14 * k),
+      paddingHorizontal: 32,
+      paddingVertical: 24,
+      gap: 14,
     },
     // Straddling the top-left corner of the rim. Absolute, so it contributes no height — in the flow it was pushing every line of the message down by its own 44pt.
     bubbleWrap: { position: "relative" },
     bubbleVoice: { position: "absolute", top: -20, left: 22, zIndex: 3 },
     introText: {
       color: t.text,
-      fontFamily: FONT, fontSize: Math.round(17 * k),
+      fontFamily: FONT, fontSize: 17,
       fontWeight: "600",
-      lineHeight: Math.round(24 * k),
+      lineHeight: 24,
     },
     introPrompt: {
       color: t.text,
-      fontFamily: FONT, fontSize: Math.round(18 * k),
+      fontFamily: FONT, fontSize: 18,
       fontStyle: "italic",
       fontWeight: "800",
       textAlign: "center",
@@ -860,15 +889,15 @@ const makeStyles = (t: Theme, k: number) =>
     handOptions: {
       flexDirection: "row",
       justifyContent: "center",
-      gap: Math.round(28 * k),
+      gap: 28,
     },
     handButton: {
-      width: Math.round(70 * k),
-      height: Math.round(74 * k),
+      width: 70,
+      height: 74,
       alignItems: "center",
       justifyContent: "center",
       borderColor: t.border,
-      borderRadius: Math.round(18 * k),
+      borderRadius: 18,
       borderWidth: 2,
       backgroundColor: t.surface,
     },
@@ -878,7 +907,7 @@ const makeStyles = (t: Theme, k: number) =>
     },
     handIcon: {
       color: t.text,
-      fontFamily: FONT, fontSize: Math.round(28 * k),
+      fontFamily: FONT, fontSize: 28,
       fontWeight: "900",
     },
     handText: {
@@ -889,22 +918,22 @@ const makeStyles = (t: Theme, k: number) =>
     // Layout only — the fill, radius, and padding now come from the shared Button.
     // Outside the bubble entirely: it is what you do NEXT, not part of what Modu is saying. Offsets are set at the call site from the safe insets: an absolute child is not inset by the parent's padding, so a literal here could never account for the device.
     introNextWrap: { position: "absolute" },
-    introNextButton: { minWidth: Math.round(116 * k) },
+    introNextButton: { minWidth: 116 },
     questionHeader: {
       flexDirection: "row",
       alignItems: "center",
-      gap: Math.round(18 * k),
+      gap: 18,
     },
     stepText: {
-      width: Math.round(52 * k),
+      width: 52,
       color: t.text,
-      fontFamily: FONT, fontSize: Math.round(18 * k),
+      fontFamily: FONT, fontSize: 18,
       fontWeight: "900",
       textAlign: "right",
     },
     progressTrack: {
       flex: 1,
-      height: Math.round(10 * k),
+      height: 10,
       overflow: "hidden",
       borderRadius: SPACE.sm,
       backgroundColor: t.surfaceInset,
@@ -916,15 +945,15 @@ const makeStyles = (t: Theme, k: number) =>
     },
     // Green is reserved for DONE in this palette, so the bar only earns it on the last question.
     progressFillComplete: { backgroundColor: PROGRESS_FILL },
-    navArrow: { width: Math.round(26 * k), height: Math.round(26 * k) },
+    navArrow: { width: 26, height: 26 },
     navArrowDisabled: { opacity: 0.3 },
     navButtons: {
-      width: Math.round(150 * k),
+      width: 150,
       flexDirection: "row",
       justifyContent: "flex-end",
       gap: SPACE.lg,
-      borderRadius: Math.round(24 * k),
-      paddingHorizontal: Math.round(6 * k),
+      borderRadius: 24,
+      paddingHorizontal: 6,
     },
     highlightedNavButtons: {
       borderColor: t.accent,
@@ -932,8 +961,8 @@ const makeStyles = (t: Theme, k: number) =>
       backgroundColor: t.surfaceRaised,
     },
     navButton: {
-      width: Math.round(54 * k),
-      height: Math.round(42 * k),
+      width: 54,
+      height: 42,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -942,90 +971,90 @@ const makeStyles = (t: Theme, k: number) =>
     },
     navText: {
       color: t.text,
-      fontFamily: FONT, fontSize: Math.round(42 * k),
+      fontFamily: FONT, fontSize: 42,
       fontWeight: "900",
-      lineHeight: Math.round(42 * k),
+      lineHeight: 42,
     },
     guidedOverlay: {
       ...StyleSheet.absoluteFillObject,
       zIndex: 20,
       alignItems: "flex-end",
       backgroundColor: t.scrim,
-      paddingRight: Math.round(52 * k),
-      paddingTop: Math.round(68 * k),
+      paddingRight: 52,
+      paddingTop: 68,
     },
     // Both bubbles hold two short lines and one glyph. The old padding was sized for a card and left more empty space than message.
     navHintCard: {
-      width: Math.round(300 * k),
+      width: 300,
       borderColor: t.accent,
-      borderRadius: Math.round(20 * k),
+      borderRadius: 20,
       borderWidth: 3,
       backgroundColor: t.surface,
-      paddingHorizontal: Math.round(16 * k),
-      paddingVertical: Math.round(12 * k),
-      gap: Math.round(4 * k),
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      gap: 4,
       ...ELEVATION.card,
     },
     voiceHintCard: {
-      width: Math.round(300 * k),
+      width: 300,
       borderColor: t.accent,
-      borderRadius: Math.round(20 * k),
+      borderRadius: 20,
       borderWidth: 3,
       backgroundColor: t.surface,
-      paddingHorizontal: Math.round(16 * k),
-      paddingVertical: Math.round(12 * k),
-      gap: Math.round(4 * k),
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      gap: 4,
       ...ELEVATION.card,
     },
     // No second ring: VoiceButton draws its own, and the wrapper's was a circle around a circle.
-    voiceHintIconWrap: { alignSelf: "flex-start", marginBottom: Math.round(4 * k) },
+    voiceHintIconWrap: { alignSelf: "flex-start", marginBottom: 4 },
     // Bare arrows. The frame around them read as a control you could press — it is a picture of the buttons up in the header, not a copy of them.
     navHintArrowDemo: {
       alignSelf: "flex-end",
       flexDirection: "row",
-      gap: Math.round(12 * k),
-      marginBottom: Math.round(2 * k),
+      gap: 12,
+      marginBottom: 2,
     },
     navHint: {
       position: "absolute",
       right: 54,
       top: 74,
       zIndex: 10,
-      width: Math.round(300 * k),
+      width: 300,
       borderColor: t.accent,
-      borderRadius: Math.round(20 * k),
+      borderRadius: 20,
       borderWidth: 2,
       backgroundColor: t.surface,
-      paddingHorizontal: Math.round(18 * k),
-      paddingVertical: Math.round(14 * k),
+      paddingHorizontal: 18,
+      paddingVertical: 14,
     },
     navHintTitle: {
       color: t.accent,
-      fontFamily: FONT, fontSize: Math.round(15 * k),
+      fontFamily: FONT, fontSize: 15,
       fontWeight: "900",
       marginBottom: SPACE.xs,
     },
     navHintText: {
       color: t.text,
-      fontFamily: FONT, fontSize: Math.round(14 * k),
+      fontFamily: FONT, fontSize: 14,
       fontWeight: "700",
-      lineHeight: Math.round(19 * k),
+      lineHeight: 19,
     },
     promptRow: {
-      minHeight: Math.round(44 * k),
+      minHeight: 44,
       flexDirection: "row",
       alignItems: "center",
-      gap: Math.round(14 * k),
-      paddingTop: Math.round(0 * k),
+      gap: 14,
+      paddingTop: 0,
       // The audio buttons now hang over the cards' top rim, so the gap has to clear the BUTTON, not the card — at 4 they were colliding with the question line.
-      marginBottom: Math.round(26 * k),
+      marginBottom: 26,
     },
     prompt: {
       flex: 1,
       color: t.text,
-      fontFamily: FONT, fontSize: Math.round(15 * k),
+      fontFamily: FONT, fontSize: 15,
       fontWeight: "900",
-      lineHeight: Math.round(19 * k),
+      lineHeight: 19,
     },
     saveErrorText: {
       ...TYPE.labelSm,
@@ -1040,38 +1069,38 @@ const makeStyles = (t: Theme, k: number) =>
       fontWeight: "800",
     },
     // No container: the instruction art IS the panel. A card around a picture that already has its own white field was two boxes deep for one thing to look at. Narrower than before so the three answer cards get the width back — on this question the captions are the longest in the set and were wrapping to four lines in a tall thin box.
-    referencePanel: { width: Math.round(178 * k), alignItems: "center", gap: Math.round(8 * k) },
+    referencePanel: { width: 178, alignItems: "center", gap: 8 },
     // The rounding lives on a CLIPPING wrapper, not on the Image: borderRadius on an Image with resizeMode contain leaves the letterboxed field square on Android.
-    referenceImageClip: { width: "100%", borderRadius: Math.round(18 * k), overflow: "hidden" },
+    referenceImageClip: { width: "100%", borderRadius: 18, overflow: "hidden" },
     referencePanelImage: {
       width: "100%",
-      height: Math.round(172 * k),
+      height: 172,
     },
     referenceZoomPill: {
-      minWidth: Math.round(116 * k),
+      minWidth: 116,
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      gap: Math.round(5 * k),
+      gap: 5,
       borderColor: t.border,
-      borderRadius: Math.round(14 * k),
+      borderRadius: 14,
       borderWidth: 1,
       backgroundColor: t.surface,
-      paddingHorizontal: Math.round(10 * k),
+      paddingHorizontal: 10,
       paddingVertical: SPACE.xs,
-      marginTop: Math.round(6 * k),
+      marginTop: 6,
     },
     referenceZoomIcon: {
       color: t.accent,
-      fontFamily: FONT, fontSize: Math.round(14 * k),
+      fontFamily: FONT, fontSize: 14,
       fontWeight: "900",
-      lineHeight: Math.round(14 * k),
+      lineHeight: 14,
     },
     referencePanelText: {
       color: t.accent,
-      fontFamily: FONT, fontSize: Math.round(10 * k),
+      fontFamily: FONT, fontSize: 10,
       fontWeight: "900",
-      lineHeight: Math.round(12 * k),
+      lineHeight: 12,
       textAlign: "center",
     },
     optionsRow: {
@@ -1079,65 +1108,65 @@ const makeStyles = (t: Theme, k: number) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      gap: Math.round(20 * k),
-      paddingTop: Math.round(0 * k),
+      gap: 20,
+      paddingTop: 0,
     },
     manualOptionsRow: {
       alignItems: "center",
-      gap: Math.round(22 * k),
+      gap: 22,
     },
     optionCard: {
       // width, NOT flex. The card now sits inside ScaleOnSelect's wrapper, which is a column — so `flex: 1` there meant "fill the available HEIGHT" and quietly beat the height below. The wrapper carries the row's flex; the card just fills it.
       width: "100%",
       // 152 is what the contents actually need at full size: 14 padding + 66 circle + 10 gap + three 16pt lines + 14 padding. The old 176 was that plus a 44pt gutter for an audio button that now hangs on the rim, so the card loses the gutter and keeps everything else.
-      height: Math.round(152 * k),
+      height: 152,
       alignItems: "center",
       // The card is art then words, with the space shared between them rather than pooled at the bottom — "flex-start" left the picture stranded at the top and the caption on the floor.
       justifyContent: "center",
       borderColor: t.border,
-      borderRadius: Math.round(24 * k),
+      borderRadius: 24,
       borderWidth: 2,
       backgroundColor: t.surface,
-      paddingHorizontal: Math.round(16 * k),
+      paddingHorizontal: 16,
       // No top gutter for the audio button any more: it hangs on the rim, so the card is sized by its contents and the caption gets the room the gutter used to take.
-      paddingTop: Math.round(14 * k),
-      paddingBottom: Math.round(14 * k),
-      gap: Math.round(10 * k),
+      paddingTop: 14,
+      paddingBottom: 14,
+      gap: 10,
     },
     compactOptionCard: {
-      height: Math.round(196 * k),
+      height: 196,
       justifyContent: "center",
-      paddingHorizontal: Math.round(14 * k),
-      paddingTop: Math.round(14 * k),
-      paddingBottom: Math.round(14 * k),
+      paddingHorizontal: 14,
+      paddingTop: 14,
+      paddingBottom: 14,
     },
     selectedOptionCard: {
       borderColor: t.accent,
       backgroundColor: t.surfaceRaised,
     },
     expressionCircle: {
-      width: Math.round(66 * k),
-      height: Math.round(66 * k),
+      width: 66,
+      height: 66,
       alignItems: "center",
       justifyContent: "center",
       overflow: "hidden",
       borderColor: t.gold,
-      borderRadius: Math.round(33 * k),
+      borderRadius: 33,
       borderWidth: 1,
       backgroundColor: t.surface,
     },
     expressionSlot: {
-      height: Math.round(66 * k),
+      height: 66,
       alignItems: "center",
       justifyContent: "center",
     },
     compactExpressionSlot: {
-      height: Math.round(76 * k),
+      height: 76,
     },
     compactExpressionCircle: {
-      width: Math.round(74 * k),
-      height: Math.round(74 * k),
-      borderRadius: Math.round(37 * k),
+      width: 74,
+      height: 74,
+      borderRadius: 37,
     },
     selectedExpressionCircle: {
       borderColor: t.accent,
@@ -1155,16 +1184,16 @@ const makeStyles = (t: Theme, k: number) =>
     optionText: {
       width: "100%",
       color: t.textDim,
-      fontFamily: FONT, fontSize: Math.round(12 * k),
+      fontFamily: FONT, fontSize: 12,
       fontWeight: "700",
-      lineHeight: Math.round(16 * k),
+      lineHeight: 16,
       textAlign: "left",
     },
     compactOptionText: {
-      fontFamily: FONT, fontSize: Math.round(13 * k),
-      lineHeight: Math.round(17 * k),
-      marginTop: Math.round(6 * k),
-      paddingHorizontal: Math.round(2 * k),
+      fontFamily: FONT, fontSize: 13,
+      lineHeight: 17,
+      marginTop: 6,
+      paddingHorizontal: 2,
     },
     // Straddling the card's top-left corner, matching the speech bubble's button.
     optionAudioButton: {
@@ -1181,7 +1210,7 @@ const makeStyles = (t: Theme, k: number) =>
       zIndex: 30,
       alignItems: "center",
       justifyContent: "center",
-      paddingHorizontal: Math.round(38 * k),
+      paddingHorizontal: 38,
       paddingVertical: SPACE.xl,
     },
     referenceOverlayBackdrop: {
@@ -1193,7 +1222,7 @@ const makeStyles = (t: Theme, k: number) =>
       width: "84%",
       height: "88%",
       overflow: "hidden",
-      borderRadius: Math.round(24 * k),
+      borderRadius: 24,
     },
     referenceExpandedImage: {
       width: "100%",
@@ -1209,11 +1238,11 @@ const makeStyles = (t: Theme, k: number) =>
     referenceExpandedHintText: {
       ...TYPE.labelSm,
       overflow: "hidden",
-      borderRadius: Math.round(14 * k),
+      borderRadius: 14,
       backgroundColor: t.scrim,
       color: t.onAccent,
       fontWeight: "800",
       paddingHorizontal: SPACE.md,
-      paddingVertical: Math.round(6 * k),
+      paddingVertical: 6,
     },
   });
