@@ -4,7 +4,7 @@ import { StyleSheet, Image, Text, View } from "react-native";
 
 import { Button } from "@/src/game/ui/system/Button";
 import { AccountPicker } from "@/src/dev/AccountPicker";
-import { SPACE, useStyles, FONT } from "@/src/game/ui/system/theme";
+import { FONT, SPACE, useRoomyStyles } from "@/src/game/ui/system/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import type { Theme } from "@/src/game/ui/system/theme";
 
@@ -21,7 +21,7 @@ const createAccountRoute = "/create-account" as Href;
 const loginRoute = "/create-account?mode=login" as Href;
 
 export default function AuthScreen() {
-  const styles = useStyles(makeStyles);
+  const styles = useRoomyStyles(makeStyles);
   const safe = useSafeInsets();
   return (
     <View
@@ -84,10 +84,8 @@ const makeStyles = (t: Theme) =>
     header: {
       flexDirection: "row",
       alignItems: "center",
-      justifyContent: "center",
-      // The row may be narrower than its natural size, so it needs to be allowed to shrink and its
-      // children need somewhere to shrink TO.
-      alignSelf: "stretch",
+      // No alignSelf: stretch. The row hugs its contents as it always did; minWidth 0 is all that is
+      // needed to let the wordmark give way when the column is too tight for it.
       minWidth: 0,
       gap: 18,
     },
@@ -105,9 +103,11 @@ const makeStyles = (t: Theme) =>
     // than the wordmark simply coming in a little narrower. maxWidth keeps it from growing past its
     // drawn size on a screen that has room.
     wordmark: {
+      // flexShrink alone. width:"100%" made the mark claim the whole column and the row read as
+      // stretched on a phone — shrinking is about what it gives up when space is short, not about
+      // what it takes when space is free.
       flexShrink: 1,
-      width: "100%",
-      maxWidth: 230,
+      width: 230,
       // The art is 600x133, and aspectRatio keeps the height following whatever width survives the
       // shrink — a fixed height here would letterbox it the moment the width gave way.
       aspectRatio: 600 / 133,
