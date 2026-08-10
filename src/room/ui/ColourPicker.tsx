@@ -10,7 +10,12 @@ import { roomItemSource } from "../core/placeableItems";
 import { usePlacementStore } from "../core/placement";
 import type { Theme } from "@/src/game/ui/system/theme";
 
-export function ColourPicker() {
+interface ColourPickerProps {
+  highlighted?: boolean;
+  onSelect?: () => void;
+}
+
+export function ColourPicker({ highlighted = false, onSelect }: ColourPickerProps) {
   const s = useStyles(makeStyles);
   // Primitive selectors, like the rest of this screen's placement reads: the ghost's object identity changes on every cell it crosses, and the swatch row must not re-render with it.
   const itemId = usePlacementStore((p) => p.activeEdit?.placement.itemId ?? null);
@@ -21,7 +26,7 @@ export function ColourPicker() {
   if (!itemId || variants.length < 2) return null;
 
   return (
-    <View style={s.bar}>
+    <View style={[s.bar, highlighted && s.guideTarget]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.column}>
         {variants.map((variant) => {
           const active = variant.variation === selected;
@@ -31,7 +36,10 @@ export function ColourPicker() {
               accessibilityLabel={`Colour ${variant.variation ?? "default"}`}
               accessibilityState={{ selected: active }}
               style={({ pressed }) => [s.swatch, active && s.swatchActive, pressed && s.swatchPressed]}
-              onPress={() => setGhostVariation(variant.variation)}
+              onPress={() => {
+                setGhostVariation(variant.variation);
+                onSelect?.();
+              }}
             >
               <CatalogThumb
                 source={roomItemSource(itemId)}
@@ -79,4 +87,11 @@ const makeStyles = (t: Theme) =>
     swatchPressed: { transform: [{ scale: 0.94 }] },
     label: { ...TYPE.labelSm, fontSize: 9.5, color: t.textFaint },
     labelActive: { color: t.text },
+    guideTarget: {
+      borderWidth: 3,
+      borderColor: t.accent,
+      shadowColor: t.accent,
+      shadowOpacity: 0.45,
+      shadowRadius: 8,
+    },
   });

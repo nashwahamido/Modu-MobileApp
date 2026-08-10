@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { router, useLocalSearchParams, useRootNavigationState } from 'expo-router';
 import type { Href } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -19,7 +19,11 @@ import { RoomBottomBar } from './RoomBottomBar';
 import { RoomLightControls } from './RoomLightControls';
 import { RoomLoadingOverlay } from './RoomLoadingOverlay';
 import { RoomFirstPlacementGuide } from './RoomFirstPlacementGuide';
-import { PlacementRail } from './PlacementRail';
+import {
+  PlacementRail,
+  type PlacementGuideInteraction,
+  type PlacementGuideTarget,
+} from './PlacementRail';
 import { RoomTopStats } from './RoomTopStats';
 import { ShopOverlay } from '../../shop/ShopOverlay';
 import { InventoryOverlay } from '../../inventory/InventoryOverlay';
@@ -88,6 +92,18 @@ export function RoomExperience() {
   const [showRoomEditGuide, setShowRoomEditGuide] = useState(false);
   const [showRoomWelcomeGuide, setShowRoomWelcomeGuide] = useState(false);
   const [firstPlacementGuideSession, setFirstPlacementGuideSession] = useState(false);
+  const [placementGuideTarget, setPlacementGuideTarget] =
+    useState<PlacementGuideTarget | null>(null);
+  const [placementGuideInteraction, setPlacementGuideInteraction] =
+    useState<PlacementGuideInteraction | null>(null);
+  const placementGuideSequence = useRef(0);
+  const handlePlacementGuideAction = useCallback((type: PlacementGuideTarget) => {
+    placementGuideSequence.current += 1;
+    setPlacementGuideInteraction({
+      type,
+      sequence: placementGuideSequence.current,
+    });
+  }, []);
   const [roomRotation, setRoomRotation] = useState(0);
   const [roomZoom, setRoomZoom] = useState(1);
   const roomRotationRef = useRef(roomRotation);
@@ -222,10 +238,17 @@ export function RoomExperience() {
       />
 
       {/* All of the placement UI — swatches and buttons — lives in one component on the right edge; this screen only decides when it is up. See PlacementRail. */}
-      {editing ? <PlacementRail /> : null}
+      {editing ? (
+        <PlacementRail
+          guideTarget={placementGuideTarget}
+          onGuideAction={handlePlacementGuideAction}
+        />
+      ) : null}
 
       <RoomFirstPlacementGuide
         requestedItemId={firstPlacement === 'lack-table' ? firstPlacement : null}
+        interaction={placementGuideInteraction}
+        onTargetChange={setPlacementGuideTarget}
         onSessionChange={setFirstPlacementGuideSession}
       />
 
