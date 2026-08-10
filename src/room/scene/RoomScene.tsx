@@ -73,7 +73,7 @@ import {
   wallMountYaw,
   wallOutward,
   WALL_CELLS,
-  WALL_THICKNESS,
+  wallDepthOffset,
   roomToScene,
   windowCellEntityName,
   type ShellWallId,
@@ -425,7 +425,8 @@ const RoomLit = memo(function RoomLit({ placement, item }: { placement: GridPlac
   // emitsLight is only true when the row carried a light, so this is present — but the catalog is a network fetch and a stale cache could disagree, and a lamp that renders nothing beats a crash. A stacked lamp whose host has vanished goes dark the same graceful way.
   const light = hostId !== null && (!hostPlacement || !hostDef || !hostItem) ? undefined : item.light;
 
-  const footprint = rotatedFootprint(item.def.footprint, placement.rotSteps);
+  // occupiedFootprint, not a raw rotatedFootprint(item.def.footprint, ...): a stacked lamp's footprint is topFootprint, at TOP_CELL_SIZE, not the floor footprint scaled.
+  const footprint = occupiedFootprint(placement, item.def);
   const centre =
     hostId !== null && hostPlacement && hostDef
       ? topCellToRoom({ placement: hostPlacement, def: hostDef }, placement.cell, footprint, topHeight)
@@ -569,13 +570,17 @@ const LoadedItem = memo(function LoadedItem({
     const unitScale = 2 / Math.max(item.size.x, item.size.y, item.size.z);
 
     if (placement.surface.kind === "wall") {
-      // A wall item mounts by its ANCHOR — hole centre on the wall's inner face — while the unit-cube base re-centres the model on its AABB centre. Authored origins CANNOT express depth (the unit-cube erases them), so seating is a renderer POLICY over the measured size: the INTERIOR is what must look right — the window's front sits flush with the interior wall face and its body extends backward. A model deeper than the wall pokes out of the EXTERIOR by the excess, which is accepted by design (the diorama is viewed from inside; the outside face is scenery). A model shallower than the wall keeps its back on the outer skin instead (recessed front), which is how the approved shallow windows already sat. Width and height need no correction — the anchor scripts centre them exactly.
+      // A wall item mounts by its ANCHOR on the wall's inner face, while the unit-cube base re-centres the model on its AABB centre. Authored origins CANNOT express depth (the unit-cube erases them), so seating is a renderer POLICY over the measured size — and there are TWO policies, because there are two kinds of wall item and applying one rule to both buries the other.
+      //
+      // A HOLE-CUTTING item (opensWall — a window) OCCUPIES the wall: its front sits flush with the interior face and its body extends backward through the opening it knocked out. A model deeper than the wall pokes out of the EXTERIOR by the excess, accepted by design (the diorama is viewed from inside; the outside face is scenery), and a model shallower than the wall keeps its back on the outer skin instead (recessed front), which is how the approved shallow windows already sat.
+      //
+      // Everything else SITS ON the wall the way furniture sits on the floor: its BACK rests on the interior face and its whole body extends into the room. baseOffsetY is the exact analogue one axis over — a floor item's base meets the floor plane, a wall item's back meets the wall plane. Applying the window rule to a painting is not a near miss but a total one: a 3.6 cm canvas has protrusion -0.084, so the old formula pushed it 0.102 OUTWARD and left it flush against the outer skin, entirely inside the wall and invisible from the room it hangs in.
       const wall = placement.surface.wall;
       const anchor = roomToScene(wallCellToRoom(wall, placement.cell, occupiedFootprint(placement, item.def)));
       // Models are authored facing the room with the wall at −z behind them, which is exactly the z-max pose; the x-min wall looks along +x, a quarter turn the other way.
       const yaw = wallMountYaw(wall);
-      const protrusion = Math.min(item.size.z - WALL_THICKNESS, 0);
-      const depthOffset = (item.size.z / 2 - protrusion) * scale;
+      // Positive is OUTWARD (see the translate below), so a hole-cutter moves out to put its front on the anchor and a mounted piece moves IN by half its depth to put its back there. The arithmetic is wallDepthOffset in roomShell, where it is unit-tested — it was silently wrong for every non-window wall item until 2026-08-10.
+      const depthOffset = wallDepthOffset(item.size.z, item.def.opensWall === true) * scale;
       const transform = unit
         .scaling([scale / unitScale, scale / unitScale, scale / unitScale])
         .rotate(yaw, [0, 1, 0])
@@ -596,7 +601,8 @@ const LoadedItem = memo(function LoadedItem({
       if (!hostPlacement || !hostDef || !hostItem) return;
       const host = { placement: hostPlacement, def: hostDef };
       const topHeight = hostItem.size.y * fitScale(hostItem);
-      const childFootprint = rotatedFootprint(item.def.footprint, placement.rotSteps);
+      // occupiedFootprint, not rotatedFootprint(item.def.footprint, ...): a stacked child's footprint on the host's top is topFootprint, at TOP_CELL_SIZE, never the floor footprint scaled — see PlaceableItemDef.topFootprint.
+      const childFootprint = occupiedFootprint(placement, item.def);
       const centre = roomToScene(topCellToRoom(host, placement.cell, childFootprint, topHeight));
       const transform = unit
         .scaling([scale / unitScale, scale / unitScale, scale / unitScale])
@@ -1216,7 +1222,8 @@ export function RoomScene({ rotationY, zoom, onRotationChange, onZoomChange, cei
           ghostQuads={(() => {
             const p = activeEdit.placement;
             const def =
-              getRoomItemDef(p.itemId) ?? { itemId: p.itemId, footprint: { w: 1, d: 1 }, allowedSurfaces: ["floor" as const] };
+              getRoomItemDef(p.itemId) ??
+              { itemId: p.itemId, footprint: { w: 1, d: 1 }, topFootprint: { w: 1, d: 1 }, allowedSurfaces: ["floor" as const] };
             const cells = cellsFor(p, def);
             const CORNERS = [[0, 0], [1, 0], [1, 1], [0, 1]] as const;
             if (p.surface.kind === "furniture") {
