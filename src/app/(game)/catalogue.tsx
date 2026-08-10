@@ -34,7 +34,7 @@ import { ChevronIcon, ClockIcon, StagesIcon } from "@/src/components/Icons";
 import { ConfettiRain } from "@/src/game/ui/celebration/Confetti";
 
 // styling
-import { ACCENT_LIGHT, RADIUS, SPACE, TYPE, ELEVATION, useStyles, FONT } from "@/src/game/ui/system/theme";
+import { ACCENT_LIGHT, RADIUS, SPACE, TYPE, ELEVATION, useFixedStyles, FONT } from "@/src/game/ui/system/theme";
 import { Button, GrainOverlay } from "@/src/game/ui/system/Button";
 import { LoadingScreen } from "@/src/game/ui/loading/LoadingScreen";
 import type { Theme } from "@/src/game/ui/system/theme";
@@ -43,7 +43,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 // The catalogue's copy is DB-authored.
 // needs loading screen
 function CatalogueLoading({ onBack }: { onBack: () => void }) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const status = useCatalogStore((s) => s.status);
   // 0.35 from the first frame: the fetch is already in flight, so the bar opens in creep rather than a stall.
   const milestone: Milestone = status === "empty" ? 0.35 : 1;
@@ -61,7 +61,7 @@ function CatalogueLoading({ onBack }: { onBack: () => void }) {
 }
 
 export default function CatalogueScreen() {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const router = useRouter();
   const safe = useSafeInsets();
   // The catalogue rows carry the display copy; the bundle only knows ids and counts. Reading the whole map here (not per-card) is what lets the category filter exist at all.
@@ -311,7 +311,7 @@ function FurnitureCard({
   onSelect: () => void;
   onStart: (variation: string | null) => void;
 }) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   // The finish list comes from item_variants (default first, already sorted by the store) but is narrowed to the finishes this build ships art for — so a variation authored in the DB ahead of its artwork simply doesn't appear, rather than rendering a missing image.
   const variants = useVariantStore((v) => v.byItem[meta.id]);
   const finishes = useMemo(() => {

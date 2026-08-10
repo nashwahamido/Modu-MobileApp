@@ -12,7 +12,7 @@ import { AVATAR_IMAGES } from "@/src/components/avatarAssets";
 import { useTutorialStore } from "@/src/game/tutorial/store";
 import { saveSelectedAvatarMode } from "@/src/services/onboarding";
 import { Button } from "@/src/game/ui/system/Button";
-import { ACCENT_LIGHT, FONT, RADIUS, SPACE, TYPE, useRoomyStyles, useStyles, useTheme, useUiScale } from "@/src/game/ui/system/theme";
+import { ACCENT_LIGHT, FONT, RADIUS, SPACE, TYPE, useStyles, useTheme, useUiScale } from "@/src/game/ui/system/theme";
 import { CheckIcon, StarIcon } from "@/src/components/Icons";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import type { Theme } from "@/src/game/ui/system/theme";
@@ -194,7 +194,7 @@ const modes = avatarModes.map((mode) => ({
 
 export default function AvatarRecommendationScreen() {
   const scale = useUiScale();
-  const styles = useRoomyStyles(makeStyles);
+  const styles = useStyles(makeStyles);
   // The icons take their colour as a prop, so this screen needs the tokens as values, not just the sheet.
   const t = useTheme();
   // A slow breath on the Recommended tag. Small on purpose — it marks the default choice, it is not asking to be pressed, and anything stronger would compete with the Confirm button. The entrance plays ONCE, for the avatar being announced. After that the player is comparing four modes, and replaying the build-up on every switch read as a wait — the pills and lines are keyed on their own text, so they remount on each switch and ran their delays again from scratch. Once this is false they mount fully formed and a switch is instant.

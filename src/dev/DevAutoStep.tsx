@@ -1,4 +1,4 @@
-import { ELEVATION, FONT, RADIUS, SIZE, SPACE, useStyles } from "@/src/game/ui/system/theme";
+import { ELEVATION, FONT, RADIUS, SIZE, SPACE, useFixedStyles } from "@/src/game/ui/system/theme";
 import { StyleSheet, Pressable, Text } from "react-native";
 import { actionCluster } from "@/src/game/core/evaluation/clusters";
 import { engageAxis } from "@/src/game/core/evaluation/engagement";
@@ -15,7 +15,7 @@ interface Props {
 
 /** DEV-only: performs the next assembly action through the real store/scene pipeline (pickup → glide → snap, or tighten). Lets the whole game be stepped through on an emulator where touch-gesture injection is flaky; also doubles as a demo mode. Ported from the on-release engine; `snapPart` → game's `placePart`, and the done set is passed to game's targetPositionForAction. Parts that need a follow-up (screw park / slide-press drive) complete on the NEXT press, since their tighten/drive is a separate available action. */
 export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const step = () => {
     const store = useGameStore.getState();
     const furniture = store.furniture;

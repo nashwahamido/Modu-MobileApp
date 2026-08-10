@@ -3,7 +3,7 @@
 // Visual language adopted from the on-release engine: a compact arrow Stepper (‹ Value ›) for multi-choice settings, Switch rows for booleans.
 import { StyleSheet, Alert, Pressable, Switch, Text, View, type LayoutChangeEvent } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
-import { useStyles, useTheme, FONT } from "@/src/game/ui/system/theme";
+import { useFixedStyles, useTheme, FONT } from "@/src/game/ui/system/theme";
 import type {
   DragPlane,
   GhostStyle,
@@ -90,7 +90,7 @@ function Stepper<T extends string>({
   options: { value: T; label: string }[];
   onChange: (v: T) => void;
 }) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const idx = Math.max(0, options.findIndex((o) => o.value === value));
   const go = (dir: number) =>
     onChange(options[(idx + dir + options.length) % options.length].value);
@@ -129,7 +129,7 @@ function Segmented<T extends string>({
   options: { value: T; label: string }[];
   onChange: (v: T) => void;
 }) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   return (
     <View style={styles.segBlock}>
       <Text style={styles.rowLabel}>{label}</Text>
@@ -180,7 +180,7 @@ function Row({
   value: boolean;
   onValueChange: (v: boolean) => void;
 }) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const t = useTheme();
   return (
     <View style={styles.switchRow}>
@@ -200,7 +200,7 @@ function Row({
 }
 
 function SectionHeader({ children }: { children: string }) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   return <Text style={styles.section}>{children}</Text>;
 }
 
@@ -222,7 +222,7 @@ export function SettingsControls({
   onFocusTargetLayout,
   onFocusTargetActivated,
 }: SettingsControlsProps = {}) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const settings = useGameStore((s) => s.settings);
   const profile = useGameStore((s) => s.profile);
   const applyProfile = useGameStore((s) => s.applyProfile);

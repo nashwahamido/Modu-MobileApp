@@ -6,7 +6,7 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { BulbIcon, MoonIcon, SunIcon } from '../../components/Icons';
 import { TIME_OF_DAY, TIME_OF_DAY_IDS, sunPreset, type TimeOfDayId } from '../core/timeOfDay';
-import { ELEVATION, useStyles, LEXEND } from '@/src/game/ui/system/theme';
+import { ELEVATION, useFixedStyles, LEXEND } from '@/src/game/ui/system/theme';
 import type { Theme } from '@/src/game/ui/system/theme';
 
 // Matched to the settings button above it, so the column reads as one run of controls down the left edge rather than as two unrelated widgets.
@@ -37,7 +37,7 @@ export function RoomLightControls({
   onToggleLight: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
-  const s = useStyles(makeStyles);
+  const s = useFixedStyles(makeStyles);
   // The slider is collapsed by default: a permanent scrubber is a lot of chrome over a diorama the player wants to look at, and the hour is a rare choice. The BULB is never collapsed, because flipping a light is the thing you actually do and one tap is the whole budget for it.
   const [hoursOpen, setHoursOpen] = useState(false);
   // Through sunPreset, not TIME_OF_DAY[hour], so an id this component does not recognise falls back to a real preset instead of throwing on `.label` — the guarantee that module advertises and its tests pin.

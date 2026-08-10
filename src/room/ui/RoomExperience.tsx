@@ -11,7 +11,7 @@ import { roomBackdropView } from './roomBackdrops';
 import { ceilingLightOn, sunPreset, type CeilingLightOverride } from '../core/timeOfDay';
 import { useGameStore } from '../../game/core/store';
 import { avatarForProfile } from '@/src/components/avatarAssets';
-import { CREAM, useStyles, LEXEND } from "@/src/game/ui/system/theme";
+import { CREAM, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
 import { useCurrentUserId } from '../../data';
 import { RoomScene } from '../scene/RoomScene';
 import { FriendPickerOverlay } from './FriendPickerOverlay';
@@ -35,7 +35,7 @@ const ROOM_WELCOME_GUIDE_KEY = 'modu.room-welcome-guide-seen.v1';
 const HEAVY_ROUTES = new Set(['play', 'tutorial', 'visit']);
 
 export function RoomExperience() {
-  const s = useStyles(makeStyles);
+  const s = useFixedStyles(makeStyles);
   // open=inventory arrives from BuildComplete, sending the player to their new piece.
   // A search param rather than a global flag: the inventory is a popup INSIDE this screen now, so the only way to ask for it from outside is on the navigation that mounts the room.
   const { welcome, open } = useLocalSearchParams<{ welcome?: string; open?: string }>();

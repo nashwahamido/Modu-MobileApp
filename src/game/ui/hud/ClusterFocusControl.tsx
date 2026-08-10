@@ -26,7 +26,7 @@ import { useGameStore } from "@/src/game/core/store";
 import Svg, { Circle as SvgCircle, Defs, RadialGradient, Stop } from "react-native-svg";
 import { StarBadge } from "@/src/game/ui/system/Icons";
 import { CoinMedalIcon } from "@/src/components/Icons";
-import { Theme, useStyles, useTheme, FONT } from "@/src/game/ui/system/theme";
+import { Theme, useFixedStyles, useTheme, FONT } from "@/src/game/ui/system/theme";
 import { useRepos } from "@/src/data";
 import { useCatalogRow } from "@/src/data/catalog/buildStore";
 import { HUD_SIDE_MARGIN, HUD_VERTICAL_MARGIN } from "@/src/hooks/use-safe-insets";
@@ -77,7 +77,7 @@ interface BuildMapProps {
 }
 
 export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const t = useTheme();
   const router = useRouter();
   const furniture = useGameStore((s) => s.furniture);
@@ -456,7 +456,7 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
  * are positioned AGAINST those insets, so they have to stay inside it.
  */
 export function ClusterFocusControl() {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const furniture = useGameStore((s) => s.furniture);
   const completed = useGameStore((s) => s.completed);
   const activeCluster = useGameStore((s) => s.activeCluster);

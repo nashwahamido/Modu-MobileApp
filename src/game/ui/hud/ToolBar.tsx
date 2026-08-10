@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
-import { ELEVATION, RADIUS, Theme, useStyles } from "@/src/game/ui/system/theme";
+import { ELEVATION, RADIUS, Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 import { GrainOverlay } from "@/src/game/ui/system/Button";
 import { toolList } from "@/src/game/content/tools";
 import { pickThumb } from "@/src/game/core/presentation/labels";
@@ -15,7 +15,7 @@ export function ToolBar({
   neededTool: ToolId | null;
   forceVisible?: boolean;
 }) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const [open, setOpen] = useState(false);
   const furniture = useGameStore((s) => s.furniture);
   const manualTools = useGameStore((s) => s.settings.manualTools);

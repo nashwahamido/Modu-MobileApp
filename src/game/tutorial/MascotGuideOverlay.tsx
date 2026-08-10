@@ -13,7 +13,7 @@ import { useTutorialAudio } from './useTutorialAudio';
 import { Button } from '@/src/game/ui/system/Button';
 import { useGameStore } from '@/src/game/core/store';
 import { avatarForProfile } from '@/src/components/avatarAssets';
-import { ACCENT_LIGHT, ELEVATION, RADIUS, Theme, TYPE, useStyles } from '@/src/game/ui/system/theme';
+import { ACCENT_LIGHT, ELEVATION, RADIUS, Theme, TYPE, useFixedStyles } from '@/src/game/ui/system/theme';
 import { tutorialPresentationForProfile } from './presentation';
 import { VisualLongPressCue } from './VisualLongPressCue';
 import { VisualJoystickCue } from './VisualJoystickCue';
@@ -43,7 +43,7 @@ export function MascotGuideOverlay({
   blocked = false,
   audioEnabled = false,
 }: Props) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const overlayRef = useRef<View>(null);
   const windowSize = useWindowDimensions();
   const [overlaySize, setOverlaySize] = useState<{ width: number; height: number } | null>(null);

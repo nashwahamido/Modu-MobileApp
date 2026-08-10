@@ -1,4 +1,4 @@
-import { Theme, useStyles } from "@/src/game/ui/system/theme";
+import { Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 import { GrainOverlay } from "@/src/game/ui/system/Button";
 import { useEffect, useRef, type ReactNode } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
@@ -34,7 +34,7 @@ interface Props {
 
 /** Inventory column (right edge): everything the current stage uses, grouped with remaining counts. Long-press an enabled card to take one in hand and drag it into the scene; locked cards are waiting on other steps. */
 export function PartsTray({ items, gestureFor, header, thumbs, highlightGroup, highlightPulse }: Props) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const theme = useColorScheme() === "dark" ? "dark" : "light";
   const scrollRef = useRef<ScrollView>(null);
   // Card positions within the list content, the current scroll offset, and the viewport height — enough to know when a card is clipped.

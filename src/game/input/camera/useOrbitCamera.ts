@@ -18,6 +18,17 @@ function useStableOrbitManipulator(
   const { engine } = useFilamentContext();
   const [manipulator, setManipulator] =
     useState<ReturnType<typeof useCameraManipulator>>();
+  /**
+   * Every manipulator this hook has ever made, released together when the screen goes away.
+   *
+   * The old approach released each one shortly after its replacement was committed, on a timer. That
+   * is a race against the RENDER thread, which holds its own reference through Camera's callback:
+   * entering a build updates the pivot several times as the furniture loads, so manipulators are
+   * created and freed in quick succession and the callback ends up calling lookAtCameraManipulator
+   * on a pointer that has just been released. Holding them costs a handful of small native objects
+   * for the length of one build; releasing them early costs a crash.
+   */
+  const retired = useRef<ReturnType<typeof useCameraManipulator>[]>([]);
   const [eyeX, eyeY, eyeZ] = eye;
   const [targetX, targetY, targetZ] = target;
   useEffect(() => {
@@ -28,12 +39,33 @@ function useStableOrbitManipulator(
     });
     setManipulator(next);
     return () => {
-      // The successor effect runs right after this cleanup and commits the replacement; by the time this fires the render thread is off the old pointer. runAfterInteractions also keeps the release out of an active gesture, matching the library's own withCleanupScope timing.
-      InteractionManager.runAfterInteractions(() => {
-        setTimeout(() => next.release(), 100);
-      });
+      // NOT released here — see `retired`. The successor is committed immediately after this
+      // cleanup, but the render thread may still be one frame behind on the old pointer, and one
+      // frame is all it takes.
+      retired.current.push(next);
     };
   }, [engine, eyeX, eyeY, eyeZ, targetX, targetY, targetZ]);
+
+  // The whole set goes when the screen does. By then no render callback is left to hold one.
+  useEffect(
+    () => () => {
+      const all = retired.current;
+      retired.current = [];
+      InteractionManager.runAfterInteractions(() => {
+        setTimeout(() => {
+          for (const m of all) {
+            try {
+              // The hook's return type includes undefined, so the array can hold one.
+              m?.release();
+            } catch {
+              // Already gone: releasing twice is not worth a crash on the way out of a screen.
+            }
+          }
+        }, 200);
+      });
+    },
+    [],
+  );
   return manipulator;
 }
 

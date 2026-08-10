@@ -7,7 +7,7 @@ import { BulbIcon, CheckIcon, RotateLeftIcon, RotateRightIcon, TrashIcon } from 
 import { getRoomItemDef } from "../core/placeableItems";
 import { usePlacementStore } from "../core/placement";
 import { ColourPicker } from "./ColourPicker";
-import { CREAM, useStyles, useTheme, FONT, LEXEND } from "@/src/game/ui/system/theme";
+import { CREAM, useFixedStyles, useTheme, FONT, LEXEND } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "../../hooks/use-safe-insets";
 
@@ -28,7 +28,7 @@ function blockedHint(reason: string | null): string {
 }
 
 export function PlacementRail() {
-  const s = useStyles(makeStyles);
+  const s = useFixedStyles(makeStyles);
   const t = useTheme();
   // The HUD is absolutely positioned, so each corner nudges itself in by the insets
   const safe = useSafeInsets();

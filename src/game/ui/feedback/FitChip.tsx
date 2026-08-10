@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { FitState } from "@/src/game/core/geometry/fit";
 import { screwSpinInfo } from "@/src/game/core/evaluation/engagement";
 import { useGameStore } from "@/src/game/core/store";
-import { Theme, useStyles, useTheme } from "@/src/game/ui/system/theme";
+import { Theme, useFixedStyles, useTheme } from "@/src/game/ui/system/theme";
 
 /** Fit feedback speaks in the palette's own three signals, and adds no fourth colour:
  *    accent  = in progress, keep going
@@ -26,7 +26,7 @@ const lookFor = (t: Theme): Record<FitState, { color: string; label: string } | 
 
 /** Color+text fit feedback near the objective bar (in-scene glow comes in M4). */
 export function FitChip() {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const t = useTheme();
   const fitState = useGameStore((s) => s.fitState);
   const orientationActionId = useGameStore((s) => s.orientationActionId);

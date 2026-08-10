@@ -5,13 +5,13 @@ import { StyleSheet, Pressable, ScrollView, Text, View } from "react-native";
 
 import { CatalogThumb } from "../../components/CatalogThumb";
 import { useItemVariants } from "../../data/catalog/variantStore";
-import { RADIUS, SPACE, TYPE, useStyles } from "@/src/game/ui/system/theme";
+import { RADIUS, SPACE, TYPE, useFixedStyles } from "@/src/game/ui/system/theme";
 import { roomItemSource } from "../core/placeableItems";
 import { usePlacementStore } from "../core/placement";
 import type { Theme } from "@/src/game/ui/system/theme";
 
 export function ColourPicker() {
-  const s = useStyles(makeStyles);
+  const s = useFixedStyles(makeStyles);
   // Primitive selectors, like the rest of this screen's placement reads: the ghost's object identity changes on every cell it crosses, and the swatch row must not re-render with it.
   const itemId = usePlacementStore((p) => p.activeEdit?.placement.itemId ?? null);
   const selected = usePlacementStore((p) => p.activeEdit?.placement.variation ?? null);

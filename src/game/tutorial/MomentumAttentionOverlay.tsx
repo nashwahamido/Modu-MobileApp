@@ -9,12 +9,12 @@ import {
 } from "react-native";
 
 import { useGameStore } from "@/src/game/core/store";
-import { ACCENT_LIGHT, ELEVATION, Theme, useStyles } from "@/src/game/ui/system/theme";
+import { ACCENT_LIGHT, ELEVATION, Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 import { tutorialPresentationForProfile } from "./presentation";
 import { useTutorialStore } from "./store";
 
 export function MomentumAttentionOverlay() {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const profile = useGameStore((state) => state.profile);
   const presentation = tutorialPresentationForProfile(profile);
   const currentIndex = useTutorialStore((state) => state.currentIndex);

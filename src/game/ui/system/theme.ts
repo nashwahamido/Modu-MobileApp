@@ -286,6 +286,23 @@ export function useStyles<T extends object>(make: (theme: Theme) => T): T {
 }
 
 /**
+ * Theme-driven styles with NO device scaling. The opt-OUT, chosen PER SCREEN.
+ *
+ * Scaling is not a global property of the app — it is a decision about one screen. These surfaces
+ * are laid out to the point and their controls have no slack: the room, the catalogue, the assembly
+ * HUD, the project map, the completion screen, the shop and the inventory. Growing a 13pt label
+ * inside a fixed 36pt chip puts labels through their borders and icons over each other long before
+ * it makes anything more readable, so they are left exactly as authored on every device.
+ *
+ * The onboarding flow and the avatar recommendation keep useStyles and do scale: big panels,
+ * generous padding, one thing on screen at a time, and room to grow into.
+ */
+export function useFixedStyles<T extends object>(make: (theme: Theme) => T): T {
+  const theme = useTheme();
+  return useMemo(() => make(theme), [make, theme]);
+}
+
+/**
  * How much to enlarge fixed point dimensions on a bigger screen.
  *
  * Driven by the SHORT side: that is what differs most between a phone and a tablet in landscape, and

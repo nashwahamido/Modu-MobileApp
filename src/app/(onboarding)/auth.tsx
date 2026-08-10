@@ -4,7 +4,7 @@ import { StyleSheet, Image, Text, View } from "react-native";
 
 import { Button } from "@/src/game/ui/system/Button";
 import { AccountPicker } from "@/src/dev/AccountPicker";
-import { FONT, SPACE, useRoomyStyles } from "@/src/game/ui/system/theme";
+import { FONT, SPACE, useStyles } from "@/src/game/ui/system/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import type { Theme } from "@/src/game/ui/system/theme";
 
@@ -21,7 +21,7 @@ const createAccountRoute = "/create-account" as Href;
 const loginRoute = "/create-account?mode=login" as Href;
 
 export default function AuthScreen() {
-  const styles = useRoomyStyles(makeStyles);
+  const styles = useStyles(makeStyles);
   const safe = useSafeInsets();
   return (
     <View

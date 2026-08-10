@@ -7,7 +7,7 @@ import { useScreenInsets } from '@/src/hooks/use-safe-insets';
 import { Button } from "@/src/game/ui/system/Button";
 import { SettingsIcon, StarIcon } from "@/src/components/Icons";
 import { avatarForProfile } from "@/src/components/avatarAssets";
-import { RADIUS, TYPE, ELEVATION, SPACE, useStyles, useTheme, SIZE } from "@/src/game/ui/system/theme";
+import { RADIUS, TYPE, ELEVATION, SPACE, useFixedStyles, useTheme, SIZE } from "@/src/game/ui/system/theme";
 import { FURNITURE_METAS } from "@/src/game/content/furnitures/furnitures";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import type { FriendRequest, Profile } from "@/src/data";
@@ -19,7 +19,7 @@ const TOTAL_BUILDS = FURNITURE_METAS.length;
 type FriendsTab = "friends" | "requests";
 
 export default function ProfileScreen() {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const t = useTheme();
   const safe = useScreenInsets();
   const repos = useRepos();

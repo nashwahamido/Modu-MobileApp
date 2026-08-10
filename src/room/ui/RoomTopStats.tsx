@@ -2,7 +2,7 @@
 import { router } from 'expo-router';
 import type { Href } from 'expo-router';
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
-import { CREAM, useStyles, LEXEND } from "@/src/game/ui/system/theme";
+import { CREAM, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 import { COIN_ICON, STAR_ICON } from '../../components/iconAssets';
 import { levelProgressFraction } from '../../data/player/levels';
@@ -15,7 +15,7 @@ const BAR_TUCK = 30;
 const LEVEL_ICON_NUDGE_Y = -3;
 
 export function RoomTopStats() {
-  const s = useStyles(makeStyles);
+  const s = useFixedStyles(makeStyles);
   // Immersive mode reports 0 insets, so these floors sit UNDER the design's own offsets
   const safe = useScreenInsets();
   const padTop = 12 + safe.top;

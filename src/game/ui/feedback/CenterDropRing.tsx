@@ -1,4 +1,4 @@
-import { Theme, useStyles } from "@/src/game/ui/system/theme";
+import { Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 import { StyleSheet, View } from "react-native";
 import { selectFirstDrop, useGameStore } from "@/src/game/core/store";
 
@@ -6,7 +6,7 @@ import { selectFirstDrop, useGameStore } from "@/src/game/core/store";
 const SIZE = 92;
 
 export function CenterDropRing() {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const firstDrop = useGameStore(selectFirstDrop);
   const fitState = useGameStore((s) => s.fitState);
   if (!firstDrop) return null;

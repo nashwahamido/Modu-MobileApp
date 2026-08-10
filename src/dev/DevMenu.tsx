@@ -2,14 +2,14 @@ import { useState } from "react";
 import { StyleSheet, Pressable, Text, View } from "react-native";
 import { actionCluster } from "@/src/game/core/evaluation/clusters";
 import { useGameStore } from "@/src/game/core/store";
-import { useStyles } from "@/src/game/ui/system/theme";
+import { useFixedStyles } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 
 /** DEV-only round drawer button: tap to fan out developer shortcuts. First occupant: finish the focused cluster in one click (drives the REAL store action-by-action, so gates/cascades/celebration all fire — only the gestures are skipped). More tools land here later; the whole thing is stripped from release builds by the __DEV__ guard.
  *
  *  ASSEMBLY ONLY — every shortcut here reads store.furniture, so it is dead weight anywhere but play.tsx. Cross-screen dev navigation lives in GmTestPanel, which _layout.tsx mounts globally. */
 export function DevMenu() {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const [open, setOpen] = useState(false);
   const activeCluster = useGameStore((s) => s.activeCluster);
 
