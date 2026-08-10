@@ -213,9 +213,9 @@ export function RoomFirstPlacementGuide({
               {mode === "momentum" ? "Great job!" : "Your furniture is home!"}
             </Text>
             <Text style={s.completeBody}>{COMPLETE_COPY[mode]}</Text>
-            <Text style={s.moveAgain}>
+            {/* <Text style={s.moveAgain}>
               Long-press it anytime to move it again.
-            </Text>
+            </Text> */}
             <View style={s.actions}>
               <Button
                 label="Build more furniture"
