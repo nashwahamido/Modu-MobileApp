@@ -126,36 +126,36 @@ export function toShopItem(r: ShopItemRow): ShopItem {
 }
 
 // One workshop_drafts row (status='testing'), as Postgrest hands it back for the dev-only merge into the shop/inventory catalogue — see getShopItems in adapters/supabase.ts, and workshopDraftsDevGateOpen (catalog/workshopDraftsGate.ts) for the gate that decides whether this merge runs at all. Loose like ShopItemRow, for the same reason: the query selects `*`.
-export interface WorkshopSurfaceDraftRow {
+export interface WorkshopDraftShopRow {
   id: string;
   name: string;
   category_id: string;
   price: number;
   min_level: number;
   granted?: boolean | null;
-  // NULL on a MODEL draft — workshop_drafts_kind_shape (019_workshop_kinds.sql) guarantees this is null exactly when size_x is present. This is the fact workshopSurfaceDraftsToShopItems filters on.
+  // NULL on a SURFACE draft and present on a MODEL one — workshop_drafts_kind_shape (019_workshop_kinds.sql) guarantees exactly that pairing, which is what lets the surface payload below be attached on the null branch without consulting category_id.
   size_x: number | null;
   // Shaped exactly like item_surfaces' own columns (scale_x, scale_y, ..., trim_offset_y — see 019_workshop_kinds.sql's publish_workshop_draft), which is why parseSurfaceSpec can read it unmodified.
   surface?: unknown;
 }
 
-// Model and surface drafts share one workshop_drafts table; only a surface draft belongs in the SHOP — a model draft has no ShopItem at all, it is placed straight from the room's own catalogue (see workshopDraftToPlaceableRoomRow, core/repos.ts). Filtered on size_x rather than on category_id membership in ('floor','wall'), for the same reason workshopModelDraftsToPlaceableRoomRows filters the other table's rows on size instead of category: the DB constraint guarantees the size/kind pairing, where a hand-maintained category list here would just be a second copy of that fact that could drift from it.
-export function workshopSurfaceDraftsToShopItems(rows: WorkshopSurfaceDraftRow[]): ShopItem[] {
-  return rows
-    .filter((r) => r.size_x == null)
-    .map((r) => {
-      const category = r.category_id as ShopCategory;
-      const surface = parseSurfaceSpec(r.surface);
-      return {
-        id: r.id,
-        name: r.name,
-        category,
-        price: r.price,
-        minLevel: r.min_level,
-        granted: r.granted === true,
-        // A draft's assets sit under room/workshop/, not room/bought/ — this is the field that keeps a consumer from building a URL into the published subtree for something that has not been published.
-        source: "workshop" as const,
-        ...(surface ? { surface } : {}),
-      };
-    });
+// EVERY testing draft becomes a ShopItem, model and surface alike. An earlier version mapped only surface drafts, on the reasoning that a model draft is "placed straight from the room's own catalogue" — which was wrong in a way that made model uploads invisible: listPlaceables registers a model draft's SIZE and FOOTPRINT, but the room has no picker of its own. The Inventory is the only way to select something to place, the Inventory lists what listOwned returns, and listOwned works off ShopItems — so a draft that never became one was registered and unreachable at the same time. Registering an item and offering it are two different jobs, and only one of them was being done.
+//
+// The surface payload is attached on the size_x == null branch rather than by testing category_id in ('floor','wall'), for the reason the placeable mapper filters on size too: the DB constraint already guarantees the size/kind pairing, and a hand-maintained category list here would be a second copy of that fact, free to drift from it.
+export function workshopDraftsToShopItems(rows: WorkshopDraftShopRow[]): ShopItem[] {
+  return rows.map((r) => {
+    const category = r.category_id as ShopCategory;
+    const surface = r.size_x == null ? parseSurfaceSpec(r.surface) : undefined;
+    return {
+      id: r.id,
+      name: r.name,
+      category,
+      price: r.price,
+      minLevel: r.min_level,
+      granted: r.granted === true,
+      // A draft's assets sit under room/workshop/, not room/bought/ — this is the field that keeps a consumer from building a URL into the published subtree for something that has not been published.
+      source: "workshop" as const,
+      ...(surface ? { surface } : {}),
+    };
+  });
 }

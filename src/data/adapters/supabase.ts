@@ -2,18 +2,22 @@
 import type { PostgrestError } from "@supabase/supabase-js";
 import { supabase } from "@/src/config/supabase";
 import type { AssemblyMode, BrandId, FurnitureId } from "@/src/game/core/type";
-import type { BuildProgressRepo, CatalogRepo, FriendRequestsRepo, FriendsRepo, ItemVariant, PlaceableRoomRowInput, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo, VariantsRepo } from "../core/repos";
-import { toPlaceableRoomRow } from "../core/repos";
+import type { BuildProgressRepo, CatalogRepo, FriendRequestsRepo, FriendsRepo, ItemVariant, PlaceableRoomRowInput, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo, VariantsRepo, WorkshopDraftRow } from "../core/repos";
+import { toPlaceableRoomRow, workshopModelDraftsToPlaceableRoomRows } from "../core/repos";
 import type { BuildSave, FriendRequest, Profile, ProfilePatch, RoomLayout } from "../core/types";
 import { ROOM_LAYOUT_VERSION } from "../core/types";
-import type { ShopCategory, ShopItem } from "../shop/items";
-import { isSurfaceCategory, toShopItem, type ShopItemRow } from "../shop/items";
+import type { ShopCategory, ShopItem, WorkshopDraftShopRow } from "../shop/items";
+import { isSurfaceCategory, toShopItem, workshopDraftsToShopItems, type ShopItemRow } from "../shop/items";
 import { parseSurfaceSpec } from "../shop/surfaceSpec";
+import { workshopDraftsDevGateOpen } from "../catalog/workshopDraftsGate";
 import type { AvatarRef } from "../player/avatars";
 import { idForMode, modeForId } from "../player/avatars";
 import type { LevelRow } from "../player/levels";
 import { levelSpan, titleForLevel } from "../player/levels";
 import { migrateRoomPlacements, readRoomFinishes } from "../room/layoutMigrate";
+
+// Whether THIS build may merge workshop_drafts (status='testing') into the live catalogue/shop — see workshopDraftsGate.ts for why this is a plain expression rather than an import of devAccounts.ts's own DEV_ACCOUNTS_ENABLED (the same condition, verbatim). Evaluated once at module load, same as every other __DEV__ read in this codebase — a build's dev-ness cannot change at runtime.
+const WORKSHOP_DRAFTS_MERGE_ENABLED = workshopDraftsDevGateOpen(__DEV__, process.env.EXPO_PUBLIC_DATA_BACKEND, process.env.EXPO_PUBLIC_SHOWCASE);
 
 // Throw on any Postgrest error so callers get a real failure instead of a silent null.
 function check(error: PostgrestError | null): void {
@@ -184,7 +188,20 @@ const catalogRepo: CatalogRepo = {
       .not("size_x", "is", null);
     check(error);
     // The mapping itself lives in toPlaceableRoomRow (core/repos.ts), pure and unit-tested — see repos.test.ts for exactly the regression this split guards against (mount/onTop/opensWall silently dropped from a hand-written object literal, the same failure mode toShopItem's own header comment documents for `granted`).
-    return ((data ?? []) as (PlaceableRoomRowInput & { source: "built" | "bought" })[]).map(toPlaceableRoomRow);
+    const live = ((data ?? []) as PlaceableRoomRowInput[]).map(toPlaceableRoomRow);
+
+    // DEV BUILDS ONLY: a testing-status workshop_drafts row is an upload the portal has not published yet — the whole point of this merge is letting it be looked at in the room BEFORE publishing, which is the irreversible step. Appended AFTER the live rows so a draft never shadows a published item sharing its id (the collision publish_workshop_draft itself refuses at publish time). Release and showcase builds return exactly `live`, computed by exactly the query above — this merge never runs for them, not even as a query that comes back empty, so the release path is byte-for-byte what it was before this merge existed.
+    if (!WORKSHOP_DRAFTS_MERGE_ENABLED) return live;
+    try {
+      // `*` for the same reason as the query above: a workshop_drafts column this code does not know about yet must not fail the whole fetch. Every status='testing' row is fetched in one query — model AND surface — and workshopModelDraftsToPlaceableRoomRows (core/repos.ts) is what filters down to model drafts, on the DB-guaranteed fact that a surface draft's size is null, rather than trusting category_id here.
+      const { data: draftRows, error: draftError } = await supabase.from("workshop_drafts").select("*").eq("status", "testing");
+      if (draftError) throw draftError;
+      return [...live, ...workshopModelDraftsToPlaceableRoomRows((draftRows ?? []) as WorkshopDraftRow[])];
+    } catch (err) {
+      // A dev convenience is never worth an empty room — warn and hand back the live rows exactly as a build with the gate closed would.
+      console.warn("[catalog] workshop_drafts merge failed; the room will not show testing uploads this session", err);
+      return live;
+    }
   },
 };
 
@@ -443,21 +460,38 @@ const getShopItems = cachedOnce(async (): Promise<ShopItem[]> => {
     .from("item_buy")
     .select("*, item_surfaces(scale_x, scale_y, offset_x, offset_y, has_normal, has_rough, edge_r, edge_g, edge_b, has_trim, has_trim_normal, has_trim_rough, trim_scale_x, trim_scale_y, trim_offset_x, trim_offset_y)");
   check(error);
-  return (data as ShopItemRow[]).map(toShopItem);
+  const live = (data as ShopItemRow[]).map(toShopItem);
+  return [...live, ...(await getWorkshopDrafts())];
+});
+
+// DEV BUILDS ONLY: every testing-status workshop_draft, model and surface alike, as ShopItems. Model drafts are here because the Inventory is the only picker the room has, and it lists what listOwned returns — registering a model draft in listPlaceables gives the room its size and footprint but no way to CHOOSE it, which left uploads visible in the drafts table and absent from the app. Cached once per session, same as getShopItems, which is the only caller. Release and showcase builds skip the query entirely and resolve to [] synchronously — no network cost, no behaviour change from before this merge existed.
+const getWorkshopDrafts = cachedOnce(async (): Promise<ShopItem[]> => {
+  if (!WORKSHOP_DRAFTS_MERGE_ENABLED) return [];
+  try {
+    // `*` for the same reason getShopItems' own query is `*`: an unknown column must not fail the fetch.
+    const { data, error } = await supabase.from("workshop_drafts").select("*").eq("status", "testing");
+    if (error) throw error;
+    return workshopDraftsToShopItems((data ?? []) as WorkshopDraftShopRow[]);
+  } catch (err) {
+    // A dev convenience is never worth taking the shop down — warn and merge nothing.
+    console.warn("[shop] workshop_drafts merge failed; testing uploads will not appear this session", err);
+    return [];
+  }
 });
 
 const storeRepo: StoreRepo = {
   listItems() {
     return getShopItems();
   },
-  // Owned = purchased UNION granted. `granted` marks items every player has without a user_buy row (migration 018: the two default surfaces, which are what "revert the room to how it was designed" applies). Unioning here rather than materialising a row per player per granted item keeps ownership a property of the ITEM — N x M rows to express a constant would go stale the first time a signup path forgot to write them, and would need a backfill for everyone who already exists.
-  // The granted list comes off the already-cached catalogue, so this costs no extra request.
+  // Owned = purchased UNION granted UNION testing workshop drafts. `granted` marks items every player has without a user_buy row (migration 018: the two default surfaces, which are what "revert the room to how it was designed" applies); the workshop half (dev builds only) marks a testing draft owned regardless of its own `granted` column, so it reaches the inventory and can be applied without needing a real purchase — the whole point of trying it before publish. Unioning here rather than materialising a row per player per item keeps ownership a property of the ITEM — N x M rows to express a constant would go stale the first time a signup path forgot to write them, and would need a backfill for everyone who already exists.
+  // The granted and draft lists both come off already-cached fetches, so this costs no extra request.
   async listOwned(userId) {
     const { data, error } = await supabase.from("user_buy").select("item_id").eq("owner_id", userId);
     check(error);
     const purchased = (data as { item_id: string }[]).map((r) => r.item_id);
     const granted = (await getShopItems()).filter((i) => i.granted).map((i) => i.id);
-    return [...new Set([...purchased, ...granted])];
+    const drafts = (await getWorkshopDrafts()).map((i) => i.id);
+    return [...new Set([...purchased, ...granted, ...drafts])];
   },
   async purchase(_userId, itemId) {
     // Atomic in the DB: purchase_item checks balance + ownership + level, deducts coins and grants the item as the authenticated caller (auth.uid()), so _userId is implied — never trusted from the client.
