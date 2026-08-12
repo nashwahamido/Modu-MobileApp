@@ -5,6 +5,7 @@
     "scheme": "modu",
     "version": "1.0.0",
     "orientation": "landscape",
+    "assetBundlePatterns": ["**/*"],
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "icon": "./src/assets/ui/icons/Modu_Icon.png",
