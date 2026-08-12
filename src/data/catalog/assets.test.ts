@@ -4,12 +4,12 @@ import test from "node:test";
 import { surfaceMapPath, thumbPath, tilePath, assemblyModelPath, assemblyRecipePath, assemblyThumbnailPath, assemblyThumbPath, assemblyClusterThumbPath, workshopAssemblyDir, filterKnownSourceRows } from "./assets";
 
 test("a surface's catalogue picture is its own tile image, not a per-variation render it does not have", () => {
-  assert.equal(tilePath("bought", "linen-wallpaper"), "room/bought/linen-wallpaper/tile.jpg");
+  assert.equal(tilePath("bought", "linen-wallpaper"), "room/bought/linen-wallpaper/tile.png");
 });
 
-// The bug this pins: a one-look model-item resolves to a NULL default variation exactly as a surface does, so anything that routes on nullness sends the windows to a tile.jpg that was never uploaded.
+// The bug this pins: a one-look model-item resolves to a NULL default variation exactly as a surface does, so anything that routes on nullness sends the windows to a tile.png that was never uploaded.
 test("a one-look model-item still shows its default render, so nullness alone cannot pick the path", () => {
-  assert.equal(thumbPath("bought", "window-wood-classic", null), "room/bought/window-wood-classic/default.jpg");
+  assert.equal(thumbPath("bought", "window-wood-classic", null), "room/bought/window-wood-classic/default.png");
   assert.notEqual(thumbPath("bought", "window-wood-classic", null), tilePath("bought", "window-wood-classic"));
 });
 

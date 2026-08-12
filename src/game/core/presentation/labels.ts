@@ -1,4 +1,5 @@
 import {
+  AssetSrc,
   GroupId,
   LabelMap,
   RenderStyle,
@@ -25,7 +26,7 @@ export function labelFor(
 export type ThumbTheme = ThemeId;
 
 /** One thumbnail for the active theme, falling back to light. */
-export function pickThumb(set: ThumbSet, theme: ThemeId = "light"): number {
+export function pickThumb(set: ThumbSet, theme: ThemeId = "light"): AssetSrc {
   return set[theme] ?? set.light;
 }
 
@@ -34,7 +35,7 @@ export function thumbFor(
   thumbs: ThumbMap,
   group: GroupId,
   theme: ThemeId = "light",
-): number | undefined {
+): AssetSrc | undefined {
   const set = thumbs[group];
   return set ? pickThumb(set, theme) : undefined;
 }

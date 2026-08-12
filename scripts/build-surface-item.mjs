@@ -184,4 +184,4 @@ console.log(`\n  surface.sql    item_surfaces: scale ${scaleX}x${scaleY}${edge ?
 console.log(`\n-- ${itemDir}`);
 console.log(`   1. upload the .ktx2 files to models/room/bought/${itemId}/`);
 console.log(`   2. run surface.sql (after the item_buy row for '${itemId}' exists)`);
-console.log(`   3. still needed: a tile.jpg in the same folder for the shop and inventory tile\n`);
+console.log(`   3. still needed: a tile.png (square, transparent) in the same folder for the shop and inventory tile\n`);
