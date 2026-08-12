@@ -56,6 +56,7 @@ export type StructureOverlay = Record<
       | "toolAnchor"
       | "fastenerKind"
       | "engageDir"
+      | "stageOffset"
     >
   >
 >;
