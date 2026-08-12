@@ -193,10 +193,12 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
     const def = getRoomItemDef(itemId);
     // No room model for this item: refuse to enter placement rather than drag an invisible ghost.
     if (!def) return false;
+
     set((s) => {
       // Starting over an in-progress EDIT must not discard the edited piece: put it back first, exactly as cancel() would (a new ghost just evaporates).
       const layout = s.activeEdit?.previous ? [...s.layout, s.activeEdit.previous] : s.layout;
-      // The def routes the surface: wall-only items (windows, later frames) ghost onto a wall the camera can SEE, everything else onto the floor. This used to be hard-coded to z-max, which was fine while the camera was clamped to a 90-degree arc facing it — with a free 360 orbit it drops the ghost onto whichever wall happens to be behind the player, and the placement reads as having silently failed.
+      // The def routes the surface, and the question is genuinely two-way: migration 024 made mount REQUIRED, so every item is floor- or wall-mounted and `on_top` only ever ADDS a surface rather than replacing one. A tops-only item (mount null) briefly existed under 021 and fell through this branch onto a wall it could never be confirmed on — see 024 for why that capability was withdrawn rather than given a third branch.
+      // Wall-only items (windows, frames) ghost onto a wall the camera can SEE, everything else onto the floor. This used to be hard-coded to z-max, which was fine while the camera was clamped to a 90-degree arc facing it — with a free 360 orbit it drops the ghost onto whichever wall happens to be behind the player, and the placement reads as having silently failed.
       const surface: SurfaceId = def.allowedSurfaces.includes("floor")
         ? { kind: "floor" }
         : { kind: "wall", wall: visibleWalls(cameraAzimuth)[0] ?? "z-max" };

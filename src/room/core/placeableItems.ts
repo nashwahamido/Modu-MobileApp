@@ -59,9 +59,12 @@ function sanitizedMask(joined: string | undefined, footprint: Footprint): readon
 
 function toModel(row: PlaceableRoomRow): RoomItemModel {
   // Every def carries topFootprint (see PlaceableItemDef) even a wall item's, which allowedSurfaces guarantees is never read for one that has no "furniture" entry: occupiedFootprint only consults topFootprint for a "furniture" surface.
-  const topFootprint: Footprint = { w: topCells(row.size.x), d: topCells(row.size.z) };
-  // Floor and wall are mutually exclusive (one nullable `mount`); standing on a host's top (`onTop`) is orthogonal to both, so it is appended independently of which mount — or no mount at all — the row has. A row with neither is placeable nowhere, which the DB's `mount is not null or on_top` constraint (migration 021) exists to prevent from ever being seeded.
-  const allowedSurfaces = [...(row.mount ? [row.mount] : []), ...(row.onTop ? (["furniture"] as const) : [])];
+  //
+  // Measured off contactSize when the row has one (migration 023), not off `size`. topFootprint is a plain rectangle taken from the model's full bounding box, so anything wider above the surface than on it — an open laptop, a lamp with a shade, a plant with a canopy — claims top cells it never touches; the laptop holds a 3x3 block of a desk for a base that fits in 2x3. contactSize is the piece's own base extent, so this is still "measured from a size" and still lands on whole top cells the same way. It changes NOTHING else: `footprint` below stays on `size` because a floor item's collision really is its widest extent (a shade overhanging a neighbour clips), and the piece still renders at `size` — fitScale reads that, not this.
+  const topSize = row.contactSize ?? { x: row.size.x, z: row.size.z };
+  const topFootprint: Footprint = { w: topCells(topSize.x), d: topCells(topSize.z) };
+  // Floor and wall are mutually exclusive (one `mount`, required since migration 024); standing on a host's top (`onTop`) is orthogonal and is APPENDED to that mount, never a replacement for it. Every item therefore has at least one surface, which is what lets startPlacing answer "where does this ghost open" with a complete two-way branch instead of searching the room for a host and refusing when there is none.
+  const allowedSurfaces = [row.mount, ...(row.onTop ? (["furniture"] as const) : [])];
   const def: PlaceableItemDef =
     row.mount === "wall"
       ? {

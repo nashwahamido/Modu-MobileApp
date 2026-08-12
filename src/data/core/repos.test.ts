@@ -44,11 +44,14 @@ test("toPlaceableRoomRow carries mount, onTop and opensWall through", () => {
   assert.equal(row.opensWall, true);
 });
 
-test("toPlaceableRoomRow reads a null mount through as null, not floor by default", () => {
-  // A row with no mount of its own (placeable only via onTop) must stay null — silently defaulting it to 'floor' here would put a tops-only item on the floor too, which is exactly the bug this column exists to prevent.
+// This test used to assert the OPPOSITE — that a null mount survived as null, because a "tops only" item
+// was a real thing under migration 021. Migration 024 withdrew that: mount is NOT NULL, so a null can now
+// only mean the row came from a database that has not caught up, exactly like an absent column, and both
+// take the same pre-021 category fallback. onTop is unaffected — it still ADDS the furniture surface.
+test("toPlaceableRoomRow falls back to floor for a null mount, since null now means 'not migrated'", () => {
   const row = toPlaceableRoomRow({ ...baseRow, mount: null, on_top: true });
-  assert.equal(row.mount, null);
-  assert.equal(row.onTop, true);
+  assert.equal(row.mount, "floor");
+  assert.equal(row.onTop, true, "on_top rides alongside the mount and is untouched by the fallback");
 });
 
 test("toPlaceableRoomRow reads absent on_top/opens_wall as false, not undefined", () => {
@@ -122,11 +125,13 @@ test("a pre-021 row (columns absent) falls back to the category rule rather than
   assert.equal(window.opensWall, true, "a window must still cut its hole against a database without 021");
 });
 
-// The distinction the fallback turns on, and the one that would be lost by a `?? "floor"`: a row that HAS the column and says null is a deliberate statement — this item only ever stands on other items' tops, like a book — and must survive as null.
-test("a present-but-null mount is a tops-only item and is never coerced to floor", () => {
-  const book = toPlaceableRoomRow({ ...baseRow, category_id: "deco", mount: null, on_top: true });
-  assert.equal(book.mount, null);
-  assert.equal(book.onTop, true);
+// The window half of that same fallback, which migration 024 did NOT change: an unmigrated row still infers
+// its mount from the category, and 'win' is the one category that infers 'wall' rather than 'floor'. This is
+// what keeps a pre-021 database from putting every window on the floor.
+test("an unmigrated window row still infers a wall mount, not floor", () => {
+  const win = toPlaceableRoomRow({ ...baseRow, category_id: "win", mount: null });
+  assert.equal(win.mount, "wall");
+  assert.equal(toPlaceableRoomRow({ ...baseRow, category_id: "deco", mount: null }).mount, "floor");
 });
 
 // --- the dev-only workshop_drafts merge into the room's placeable catalogue --------------------
@@ -180,4 +185,34 @@ test("workshopModelDraftsToPlaceableRoomRows excludes a surface draft (null size
   const surfaceDraft: WorkshopDraftRow = { ...baseDraft, id: "prototype-wallpaper", category_id: "wall", size_x: null, size_y: null, size_z: null, mount: "wall" };
   const rows = workshopModelDraftsToPlaceableRoomRows([baseDraft, surfaceDraft]);
   assert.deepEqual(rows.map((r) => r.id), ["prototype-shelf"]);
+});
+
+// --- contact_size_x/z (migration 023) --------------------------------------------------------------------
+//
+// Same class of risk as `granted` and mount/onTop/opensWall before it: two optional columns a hand-written
+// object literal can drop with no type error, on the one side of the adapter boundary the in-memory adapter
+// does not exercise. A dropped pair is invisible — every item simply keeps claiming its full top footprint,
+// which is exactly what it did before the column existed.
+
+test("toPlaceableRoomRow carries a contact size through as a pair", () => {
+  const row = toPlaceableRoomRow({ ...baseRow, id: "laptop", contact_size_x: 0.236, contact_size_z: 0.356 });
+  assert.deepEqual(row.contactSize, { x: 0.236, z: 0.356 });
+});
+
+test("toPlaceableRoomRow leaves contactSize absent when the columns are null — the common case", () => {
+  const row = toPlaceableRoomRow({ ...baseRow, contact_size_x: null, contact_size_z: null });
+  assert.equal(row.contactSize, undefined);
+});
+
+// Pre-023 the columns do not exist at all, and listPlaceables selects `*` so they arrive absent rather than
+// failing the fetch. Absent must read the same as null: fall back to `size`, exactly as the app always did.
+test("toPlaceableRoomRow treats absent contact columns as no contact size, not as zero", () => {
+  assert.equal(toPlaceableRoomRow({ ...baseRow }).contactSize, undefined);
+});
+
+// A half-set pair means a hand-edited row (the DB's contact_pair constraint forbids it). Taking the one
+// present axis and defaulting the other would produce a zero-width footprint — an item occupying nothing.
+test("toPlaceableRoomRow rejects a half-set contact pair rather than inventing the missing axis", () => {
+  assert.equal(toPlaceableRoomRow({ ...baseRow, contact_size_x: 0.236 }).contactSize, undefined);
+  assert.equal(toPlaceableRoomRow({ ...baseRow, contact_size_z: 0.356 }).contactSize, undefined);
 });

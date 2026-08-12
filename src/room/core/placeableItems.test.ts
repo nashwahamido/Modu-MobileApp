@@ -150,11 +150,25 @@ test("a non-opening wall item still derives its footprint by the wall's nearest-
   assert.equal(def.opensWall, false);
 });
 
-test("a mount:null, onTop:true row (tops only) is placeable nowhere but a host's top", () => {
+// onTop ADDS a surface to the item's mount, never replaces it — the rule migration 024 restored by making
+// mount required. This test previously asserted the opposite: that a mount:null row was "placeable nowhere
+// but a host's top". That combination was expressible under 021 and used by exactly one row ever, a
+// desk-lamp draft, which is how it came out that the room could not place such a thing at all — startPlacing
+// chose a surface with a two-way floor/wall branch, so an item allowed on neither fell through onto a wall
+// it could never be confirmed on. Withdrawing the capability was cheaper than a third placement path.
+test("onTop adds the furniture surface alongside the item's own mount, rather than replacing it", () => {
   registerPlaceables([
-    { id: "book", source: "bought", category: "deco", size: { x: 0.15, y: 0.03, z: 0.2 }, baseOffsetY: 0, mount: null, onTop: true },
+    { id: "book", source: "bought", category: "deco", size: { x: 0.15, y: 0.03, z: 0.2 }, baseOffsetY: 0, mount: "floor", onTop: true },
   ]);
-  assert.deepEqual(roomItemDefs().get("book")?.allowedSurfaces, ["furniture"]);
+  assert.deepEqual(roomItemDefs().get("book")?.allowedSurfaces, ["floor", "furniture"]);
+});
+
+// The plain case, for the contrast: no onTop means no furniture surface, and the mount stands alone.
+test("without onTop an item is placeable only on its own mount", () => {
+  registerPlaceables([
+    { id: "rug", source: "bought", category: "deco", size: { x: 1.2, y: 0.02, z: 0.8 }, baseOffsetY: 0, mount: "floor" },
+  ]);
+  assert.deepEqual(roomItemDefs().get("rug")?.allowedSurfaces, ["floor"]);
 });
 
 test("bought items always resolve to storage — the 'default' segment when no colour is picked", () => {
