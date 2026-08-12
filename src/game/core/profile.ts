@@ -21,7 +21,6 @@ export const DEFAULT_SETTINGS: AccessibilitySettings = {
   fontScale: 1,
 
   // dev-setting
-  snapStyle: "magnetic",
   ghostStyle: "movingGhost",
   releaseBehavior: "autoReturn",
   lightingPreset: "auto",
@@ -46,7 +45,6 @@ export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>>
     softHints: true,
     manualTools: true,
     // dev-setting
-    snapStyle: "magnetic",
     ghostStyle: "movingGhost",
     releaseBehavior: "autoReturn",
   },
@@ -59,7 +57,6 @@ export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>>
     softHints: false,
     // dev-setting
     ghostStyle: "staticSockets",
-    snapStyle: "magnetic",
     releaseBehavior: "autoReturn",
   },
 
@@ -69,7 +66,6 @@ export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>>
     autoView: false,
     softHints: true,
     // dev-setting
-    snapStyle: "onRelease",
     ghostStyle: "staticSockets",
     releaseBehavior: "float",
     snapDistance: 0.18,
@@ -84,7 +80,6 @@ export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>>
     softHints: true,
     manualTools: false,
     // dev-setting
-    snapStyle: "onRelease",
     ghostStyle: "staticSockets",
     releaseBehavior: "autoReturn",
   },

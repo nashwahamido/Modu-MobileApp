@@ -9,7 +9,6 @@ import type {
   GhostStyle,
   LightingPreset,
   ReleaseBehavior,
-  SnapStyle,
 } from "@/src/game/core/accessibility";
 import type {
   AssemblyMode,
@@ -29,10 +28,6 @@ const PROFILES: { value: ProfileId; label: string }[] = [
 ];
 
 // ── option tables ────────────────────────────────────────────────────────────
-const SNAP: { value: SnapStyle; label: string }[] = [
-  { value: "magnetic", label: "Magnetic" },
-  { value: "onRelease", label: "On release" },
-];
 const GHOST: { value: GhostStyle; label: string }[] = [
   { value: "movingGhost", label: "Matched" },
   { value: "staticSockets", label: "All sockets" },
@@ -285,13 +280,6 @@ export function SettingsControls({
 
       {/* Dev / interaction experiments. */}
       <SectionHeader>Interaction (dev)</SectionHeader>
-      <Choice
-        label="Snap"
-        desc="Magnetic pulls the part in; On release keeps it under the finger"
-        value={settings.snapStyle}
-        options={SNAP}
-        onChange={(v) => setSettings({ snapStyle: v })}
-      />
       <Choice
         label="Socket ghosts"
         desc="Ghost only the matched socket, or every open one"

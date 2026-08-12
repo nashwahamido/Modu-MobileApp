@@ -1,7 +1,6 @@
-// TODO: settle down the part marked as dev-setting: 
-// 1. magnetic vs onRelease
-// 2. moving Ghost vs static ghost
-// 3. float vs auto return
+// TODO: settle down the part marked as dev-setting:
+// 1. moving Ghost vs static ghost
+// 2. float vs auto return
 
 // The accessibility settings — types only. Default values and the profiles that override them live in profile.ts.
 
@@ -10,8 +9,6 @@ import { TextLevel } from "@/src/game/core/type";
 // =============  Interaction axes ================
 
 // dev-setting
-/** How a held part snaps to a socket: "magnetic" eases it in during the drag; "onRelease" keeps it under the finger and animates it home on release. */
-export type SnapStyle = "magnetic" | "onRelease";
 /** Socket preview: "movingGhost" previews the fit on the held part as it approaches; "staticSockets" shows a fixed ghost at every open socket that recolors as the nearest one. */
 export type GhostStyle = "movingGhost" | "staticSockets";
 /** A part released away from a socket: "autoReturn" sends it back to the tray; "float" leaves it where you set it down (Put-back returns it later). */
@@ -42,7 +39,6 @@ export interface AccessibilitySettings {
   fontScale: number;
   
   // dev-setting
-  snapStyle: SnapStyle;
   ghostStyle: GhostStyle;
   releaseBehavior: ReleaseBehavior;
   /** Lighting rig mood; "auto" follows the render style. */

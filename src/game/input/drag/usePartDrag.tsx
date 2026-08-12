@@ -608,10 +608,8 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
               p[2] - s.grabOffset[2],
             ];
 
-            // ======= dev - setting; "onRelease" snap style: no magnetic pull — the part stays pinned under the finger (t = 0) and only animates into the socket on release. "magnetic" eases it toward the matched socket as it approaches. Fit feedback (color states) works the same in both.
-
-            const magnetic =
-              !!target && store.settings.snapStyle === "magnetic";
+            // Magnetic snap: once a socket is matched, the part eases toward it as it approaches (no match = it stays pinned under the finger, t = 0). Fit feedback (color states) is independent of the pull.
+            const magnetic = !!target;
             // Rotation factor: eases over the whole approach band (the gradual turn toward the socket's orientation).
             const rotT = magnetic
               ? Math.max(
