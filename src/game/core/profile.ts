@@ -47,6 +47,7 @@ export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>>
     // dev-setting
     ghostStyle: "movingGhost",
     releaseBehavior: "autoReturn",
+    snapDistance: 0.14, // baseline: the magnet reaches no further than the default — this profile asks for the most precision.
   },
   // Visual, low-text, spatial, multimodal guidance.
   visual: {
@@ -58,6 +59,7 @@ export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>>
     // dev-setting
     ghostStyle: "staticSockets",
     releaseBehavior: "autoReturn",
+    snapDistance: 0.18, // wider than baseline: aiming is done by feel here, so the magnet takes over sooner.
   },
 
   // Motivation (adhd), short tasks, quick feedback, progress recovery.
@@ -68,7 +70,7 @@ export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>>
     // dev-setting
     ghostStyle: "staticSockets",
     releaseBehavior: "float",
-    snapDistance: 0.18,
+    snapDistance: 0.18, // wider than baseline: quick, low-effort placement — a near-miss should still seat.
     dragPlane: "level", // her engine: drag on a horizontal plane at the target's height
   },
 
@@ -82,6 +84,7 @@ export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>>
     // dev-setting
     ghostStyle: "staticSockets",
     releaseBehavior: "autoReturn",
+    snapDistance: 0.2, // the most forgiving fit, at the geometry-safe cap (SNAP_DIST_MAX) — one step at a time, so a socket is rarely contested.
   },
 };
 
