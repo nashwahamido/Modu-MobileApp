@@ -309,14 +309,16 @@ function RoomModel({ onReady, orbit }: { onReady: () => void; orbit: ReturnType<
     [catalogue, finishes.wall],
   );
 
-  const floorTextures = useSurfaceTextures(floorItem, "bought", renderableManager);
-  const wallTextures = useSurfaceTextures(wallItem, "bought", renderableManager);
+  // Each finish carries its own source: a testing workshop draft applied in a dev build reads from room/workshop/, and hardcoding "bought" here would 404 every one of its maps while the data layer served the row perfectly.
+  const floorTextures = useSurfaceTextures(floorItem, floorItem?.source ?? "bought", renderableManager);
+  const wallTextures = useSurfaceTextures(wallItem, wallItem?.source ?? "bought", renderableManager);
 
   // The cornice is the WALL's joinery — it sits at the wall/ceiling junction and follows the wallpaper, not the floor — but most wall items will not ship maps for it, and a slot nobody writes keeps whatever the LAST item left there, so applying wall A then wall B would leave B's walls under A's moulding. The room-as-designed item always carries a full cornice set, so it is the honest thing to fall back to: a wall item that says nothing about the cornice gets the room's original one rather than its predecessor's.
   // Resolved from the catalogue like any other item and loaded only when it is actually needed — useSurfaceTextures returns null for a null item, so a wall that ships its own trim costs nothing here.
   const shellWall = useMemo(() => catalogue.find((i) => i.id === SHELL_ORIGINAL.wall) ?? null, [catalogue]);
   const needsTrimFallback = wallItem != null && wallItem.id !== SHELL_ORIGINAL.wall && !wallItem.surface?.maps.includes("trim_texture");
-  const fallbackTrim = useSurfaceTextures(needsTrimFallback ? shellWall : null, "bought", renderableManager);
+  // The fallback is always the shipped shell wallpaper, which is a published item by construction — but read its source anyway rather than assert one, so this line cannot be the odd one out if the shell items ever move.
+  const fallbackTrim = useSurfaceTextures(needsTrimFallback ? shellWall : null, shellWall?.source ?? "bought", renderableManager);
 
   // Keyed on the ASSET, so a re-render cannot re-apply through instances belonging to a released load. Surface items apply only AFTER the asset has loaded and the name cache above is populated — the cache is built in an effect on the same `asset`, declared ABOVE this one, and React runs a commit's creates in declaration order, so this one always sees it filled. The emptiness check is the belt to that braces: an empty cache means the walk has not run, and painting through nothing would silently do nothing while marking the slot applied.
   useEffect(() => {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isSurfaceCategory, toShopItem } from "./items";
+import { isSurfaceCategory, toShopItem, workshopDraftsToShopItems, type WorkshopDraftShopRow } from "./items";
 
 test("floor and wall are surface categories", () => {
   assert.equal(isSurfaceCategory("floor"), true);
@@ -39,4 +39,55 @@ test("toShopItem accepts an item_surfaces embed in either the object or the arra
   const asArray = toShopItem({ id: "a", name: "A", category_id: "wall", price: 0, min_level: 1, item_surfaces: [spec] });
   assert.deepEqual(asObject.surface, asArray.surface);
   assert.ok(asObject.surface, "a wall item with an embed must resolve a surface spec");
+});
+
+// --- the dev-only workshop_drafts merge into the shop catalogue ---------------------------------
+
+test("workshopDraftsToShopItems maps a testing surface draft to a ShopItem with its surface spec", () => {
+  const draft: WorkshopDraftShopRow = {
+    id: "prototype-wallpaper",
+    name: "Prototype Wallpaper",
+    category_id: "wall",
+    price: 40,
+    min_level: 1,
+    size_x: null,
+    surface: { scale_x: 2, scale_y: 2, offset_x: 0, offset_y: 0, has_normal: true, has_rough: false },
+  };
+  const [item] = workshopDraftsToShopItems([draft]);
+  assert.equal(item.id, "prototype-wallpaper");
+  assert.equal(item.category, "wall");
+  assert.ok(item.surface, "a surface draft with a tiling payload must resolve a surface spec");
+  assert.deepEqual(item.surface?.tiling, { scale: [2, 2], offset: [0, 0] });
+});
+
+// This test previously asserted the OPPOSITE — that a model draft is excluded, on the reasoning that it "is placed straight from the room's own catalogue". That reasoning was wrong and the test enshrined it: listPlaceables registers a model draft's size and footprint, but the room has no picker of its own. The Inventory is the only way to choose something to place, it lists what listOwned returns, and listOwned works off ShopItems — so excluding model drafts here left every furniture upload registered and unreachable. A `fur` draft sitting in the drafts table and appearing nowhere in the app is exactly what this produced.
+test("workshopDraftsToShopItems includes a model draft, so it can be reached from the Inventory", () => {
+  const modelDraft: WorkshopDraftShopRow = {
+    id: "prototype-shelf",
+    name: "Prototype Shelf",
+    category_id: "fur",
+    price: 0,
+    min_level: 1,
+    size_x: 0.42,
+  };
+  const [item] = workshopDraftsToShopItems([modelDraft]);
+  assert.equal(item.id, "prototype-shelf");
+  assert.equal(item.category, "fur");
+  assert.equal(item.source, "workshop");
+  // No surface spec on a model draft: `surface` is the tiling manifest a floor or wall item applies, and attaching one here would offer a chair as something to repaint the room with.
+  assert.equal(item.surface, undefined);
+});
+
+// The same failure mode as the `granted` bug above, one field over: a consumer reads this to build a storage URL, so a mapper that omits it sends every workshop draft's textures to room/bought/ and 404s them. The data layer would look perfectly correct while the item rendered blank.
+test("toShopItem tags item_buy rows as bought", () => {
+  assert.equal(toShopItem({ id: "malm-chest", name: "MALM", category_id: "fur", price: 50, min_level: 1 }).source, "bought");
+});
+
+test("a workshop surface draft is tagged workshop, not bought", () => {
+  const [item] = workshopDraftsToShopItems([
+    { id: "wip-paper", name: "WIP Paper", category_id: "wall", price: 0, min_level: 1, size_x: null,
+      surface: { scale_x: 4, scale_y: 2, offset_x: 0, offset_y: 0, has_normal: false, has_rough: false } },
+  ]);
+  assert.equal(item.source, "workshop", "a draft's assets live under room/workshop/, and this field is the only thing that says so");
+  assert.equal(item.category, "wall");
 });

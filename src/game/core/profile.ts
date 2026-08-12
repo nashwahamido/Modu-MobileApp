@@ -6,6 +6,7 @@
 
 import { AccessibilitySettings } from "@/src/game/core/accessibility";
 import { AssemblyMode, FurnitureId } from "@/src/game/core/type";
+import { asFurnitureId } from "@/src/game/core/ids";
 
 export const DEFAULT_SETTINGS: AccessibilitySettings = {
   textLevel: "standard",
@@ -33,7 +34,7 @@ export type ProfileId = "visual" | "momentum" | "clearPath" | "control";
 /** Default onboarding task for each support profile. Catalogue choices still override this. */
 // idk if we should keep this - Ge
 export function furnitureForProfile(profile: ProfileId): FurnitureId {
-  return "dalfred-stool";
+  return asFurnitureId("dalfred-stool");
 }
 
 export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>> = {

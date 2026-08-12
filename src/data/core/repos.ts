@@ -110,12 +110,14 @@ export type PlaceableRoomRow = {
   topSurface?: boolean;
   /** Present only for category 'lit' (Lighting) — one item_lights row, joined in by the placeable_items view. Absent means the item emits nothing, which is every item but a lamp. A 'lit' row without this is a seeding mistake (see the audit query in migration 012), and the room degrades to placing it as ordinary furniture. */
   light?: RoomItemLight;
-  /** Where this item mounts — floor and wall are MUTUALLY EXCLUSIVE, so this is one nullable choice rather than two flags (placeable_items.mount, migration 021). Null/undefined means this item has no mount of its own at all (placeable only via onTop, e.g. a book that only ever stands on a host's top) — the DB's `mount is not null or on_top` constraint guarantees every row is reachable one way or the other. */
-  mount?: "floor" | "wall" | null;
+  /** Where this item mounts — floor and wall are MUTUALLY EXCLUSIVE, so this is one choice rather than two flags (placeable_items.mount). REQUIRED since migration 024: it was briefly nullable under 021 to allow a "tops only" item, and withdrawing that is what keeps the room's surface choice a complete two-way question. `onTop` below only ever ADDS a surface to this one, never replaces it. */
+  mount: "floor" | "wall";
   /** May stand on a hosting item's TOP, independent of mount — a lamp sits on a desk whether that desk stands on the floor or hangs on the wall, because either way it is placed on the desk's OWN top grid, not on this item's own mount (placeable_items.on_top, migration 021). Absent/false = nothing stands on it there. */
   onTop?: boolean;
   /** Cuts a hole in the wall it mounts to — meaningful only when mount is 'wall'; the DB enforces that pairing with `not opens_wall or mount = 'wall'` (placeable_items.opens_wall, migration 021). Absent/false = hangs on the wall surface and leaves it intact (a frame), or is not wall-mounted at all. */
   opensWall?: boolean;
+  /** What this item actually RESTS on, in authored metres, when it is narrower at the base than at its widest point (placeable_items.contact_size_x/z, migration 023). Overrides `size` when deriving topFootprint and nothing else — the item still draws at `size`, and its floor footprint is unaffected. Absent = the base is as wide as the item, which is true of most things; the portal only writes a value when the narrower extent actually costs fewer top cells. Both axes or neither, guaranteed by the DB's contact_pair constraint. */
+  contactSize?: { x: number; z: number };
 };
 
 // A lamp's light, as authored in item_lights. `lumens` is calibrated by eye, NOT physical — Filament scales by camera exposure and react-native-filament does not bridge setExposure, so no derived value predicts on-screen brightness. `reachMetres` is in authored metres; the renderer scales it into scene units. `coneDeg` is set for 'spot' and absent for 'point'.
@@ -156,6 +158,8 @@ export type PlaceableRoomRowInput = {
   mount?: "floor" | "wall" | null;
   on_top?: boolean | null;
   opens_wall?: boolean | null;
+  contact_size_x?: number | null;
+  contact_size_z?: number | null;
 };
 
 // Row -> PlaceableRoomRow. Extracted out of the Supabase adapter and made pure so it can be tested without a live client — the same reason toShopItem (shop/items.ts) exists as a free function rather than living inline inside listItems(). That mapper once silently dropped `granted` for the whole life of migration 018 because the column was selected and the type declared the field, yet nothing carried it through by hand; the in-memory adapter got it right, so the whole suite stayed green while the Supabase path was broken. mount/onTop/opensWall are exactly that same shape of risk — three columns a hand-written object literal can drop with no type error, since every one of them is optional on PlaceableRoomRow — so this mapper gets the same treatment: pulled out, and pinned by a test on this side of the adapter boundary.
@@ -185,11 +189,77 @@ export function toPlaceableRoomRow(r: PlaceableRoomRowInput): PlaceableRoomRow {
         : undefined,
     ...(r.footprint_mask ? { footprintMask: r.footprint_mask } : {}),
     ...(r.top_surface ? { topSurface: true } : {}),
-    // NULL and ABSENT mean opposite things here, and conflating them empties the room. A present-but-null `mount` is a deliberate statement — this item stands only on other items' tops, like a book — and must stay null. An ABSENT one means the query ran against a database that has not applied migration 021, since listPlaceables selects `*` precisely so a missing column degrades instead of failing the whole fetch; treating that as null would make every item in the catalogue placeable nowhere, which is exactly as broken as the 42703 the `*` was meant to avoid. So absent falls back to the pre-021 rule the category used to carry, and the two states are told apart by `in`, not by a truthiness check that would collapse them.
-    mount: "mount" in r ? r.mount : r.category_id === "win" ? "wall" : "floor",
+    // Null and absent now mean the SAME thing — "this row predates a migration" — and both fall back to the pre-021 rule the category used to carry. Under 021 they were opposite (a deliberate null meant tops-only) and had to be told apart with `in` rather than `??`; migration 024 made the column NOT NULL, so a null can only come from a database that has not caught up, exactly like an absent column from the `*` select. Collapsing them is what that migration earns.
+    mount: r.mount ?? (r.category_id === "win" ? "wall" : "floor"),
     onTop: r.on_top === true,
     opensWall: "opens_wall" in r ? r.opens_wall === true : r.category_id === "win",
+    // Both axes or neither — the DB's contact_pair constraint guarantees it, and this reads BOTH before accepting either so a hand-edited half-pair degrades to "no contact size" rather than to a zero-width footprint. Absent columns (pre-023) read as undefined and take the same branch, which is the correct pre-023 behaviour: topFootprint falls back to `size`, exactly as it always did.
+    ...(r.contact_size_x != null && r.contact_size_z != null
+      ? { contactSize: { x: r.contact_size_x, z: r.contact_size_z } }
+      : {}),
   };
+}
+
+// One workshop_drafts row (status='testing'), as Postgrest hands it back for the dev-only merge into the room's placeable catalogue — see listPlaceables in adapters/supabase.ts, and workshopDraftsDevGateOpen (catalog/workshopDraftsGate.ts) for the gate that decides whether this merge runs at all. Deliberately NOT PlaceableRoomRowInput, even though the two tables share most column names verbatim (id/category_id/size_x.../footprint_mask/top_surface/mount/on_top/opens_wall — 011_workshop.sql, 019_workshop_kinds.sql, 022_workshop_placement.sql): the one real difference is `light`, which the portal writes as ONE jsonb object matching its own LightPayload form, where placeable_items' view has already flattened item_lights into ten separate light_* columns. workshopDraftToPlaceableRoomRow's whole job below is undoing that one difference before handing off to toPlaceableRoomRow, which already owns every other mapping rule (mount/onTop/opensWall fallbacks, footprint mask sanitising is the room's job not this one's, etc.) — re-deriving that logic here a second time is exactly the kind of drift toShopItem's own header comment warns about.
+export type WorkshopDraftRow = {
+  id: string;
+  category_id: string;
+  // NULL on a surface draft (floor/wall) — workshop_drafts_kind_shape (019_workshop_kinds.sql) guarantees all three are null together on a surface row and all three are present together on a model row. This is the fact workshopModelDraftsToPlaceableRoomRows filters on.
+  size_x: number | null;
+  size_y: number | null;
+  size_z: number | null;
+  base_offset_y: number;
+  footprint_mask: string | null;
+  top_surface: boolean | null;
+  mount: "floor" | "wall" | null;
+  on_top: boolean | null;
+  opens_wall: boolean | null;
+  light: {
+    type: "point" | "spot";
+    lumens: number;
+    kelvin: number;
+    reach_m: number;
+    cone_deg?: number | null;
+    bulb_x?: number | null;
+    bulb_y?: number | null;
+    bulb_z?: number | null;
+    aim_pitch_deg?: number | null;
+    aim_yaw_deg?: number | null;
+  } | null;
+};
+
+// A MODEL draft (size present) -> PlaceableRoomRow, source "workshop". Flattens the one jsonb `light` field into the ten light_* columns toPlaceableRoomRow already knows how to read, then delegates to it entirely — see the WorkshopDraftRow comment above for why that split exists rather than re-deriving toPlaceableRoomRow's own mapping rules here.
+export function workshopDraftToPlaceableRoomRow(r: WorkshopDraftRow): PlaceableRoomRow {
+  return toPlaceableRoomRow({
+    id: r.id,
+    source: "workshop",
+    category_id: r.category_id,
+    // Cast, not coalesced: callers are expected to have already filtered to model rows (workshopModelDraftsToPlaceableRoomRows does, below) where these three are guaranteed non-null together.
+    size_x: r.size_x as number,
+    size_y: r.size_y as number,
+    size_z: r.size_z as number,
+    base_offset_y: r.base_offset_y,
+    light_type: r.light?.type ?? null,
+    light_lumens: r.light?.lumens ?? null,
+    light_kelvin: r.light?.kelvin ?? null,
+    light_reach_m: r.light?.reach_m ?? null,
+    light_cone_deg: r.light?.cone_deg ?? null,
+    light_bulb_x: r.light?.bulb_x ?? null,
+    light_bulb_y: r.light?.bulb_y ?? null,
+    light_bulb_z: r.light?.bulb_z ?? null,
+    light_aim_pitch_deg: r.light?.aim_pitch_deg ?? null,
+    light_aim_yaw_deg: r.light?.aim_yaw_deg ?? null,
+    footprint_mask: r.footprint_mask,
+    top_surface: r.top_surface,
+    mount: r.mount,
+    on_top: r.on_top,
+    opens_wall: r.opens_wall,
+  });
+}
+
+// listPlaceables fetches every status='testing' workshop_drafts row in one query and hands the whole batch here, rather than filtering server-side by category_id — the model/surface split is a fact the DB GUARANTEES about the row's SHAPE (workshop_drafts_kind_shape: a surface draft's size is null, full stop), and re-deriving it from category_id membership in ('floor','wall') here would mean trusting a second, driftable copy of that list instead of the one thing the constraint actually promises. A surface draft is silently excluded, not warned about — it belongs in the shop catalogue (see workshopSurfaceDraftsToShopItems, shop/items.ts), not here, and that is its ordinary, expected shape.
+export function workshopModelDraftsToPlaceableRoomRows(rows: WorkshopDraftRow[]): PlaceableRoomRow[] {
+  return rows.filter((r) => r.size_x != null).map(workshopDraftToPlaceableRoomRow);
 }
 
 // One row of item_variants: an item's colour/finish axis. `variation` is the free-form per-item key that IS the storage path segment (white, oak, black, ...); null = the item has a single model, at the 'default' segment. Asset paths are derived from it, never stored — see catalogAssets.ts.

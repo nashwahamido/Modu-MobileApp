@@ -1,0 +1,46 @@
+{
+  "//": "THE CROSS-REPO GRID CONTRACT. This file is checked into BOTH repos at the same content — Modu-Portal packages/glb/footprintContract.json and Modu-MobileApp src/room/core/footprintContract.json — and each side has a test that reproduces every case using ITS OWN constant and its own code path. That duplication is the point: it is a tripwire, not a shared library. The portal DERIVES masks (packages/glb/footprintMask.mjs) and the app CONSUMES them (src/room/core/placeableItems.ts); they never import each other, so the only thing that can keep them agreeing is a fixture that fails loudly on whichever side drifts.",
+  "//why": "0.25 was duplicated in five places across the two repos and it has already broken once: src/review/footprint.ts carried 0.5 and drew every footprint overlay at half the cell count the room actually claimed — the portal's only validation step, silently disagreeing with the thing it was validating against. Nothing caught it because each copy was self-consistent.",
+  "//onChange": "Changing `cell` is a MIGRATION, never an edit. It invalidates every stored footprint_mask, every saved room layout (placements are cell coordinates), and every size->cells mapping. src/data/core/types.ts in the app repo carries the room-layout version that must be bumped with it — v2 was exactly this, the 0.5 -> 0.25 quartering, with a read-time migration for v1 anchors.",
+
+  "cell": 0.25,
+
+  "//epsilon": "Both sides compute ceil(metres / cell - 1e-9). The epsilon is INERT today and that is fine: 0.25 is a power of two, so the quotient is exact for any representable input and ceil never gains a phantom cell. It is insurance for the two ways that stops being true — a cell size that is not a power of two, or the app's FURNITURE_WORLD_SCALE (currently 1) becoming a non-exact factor again, which is the drift the placeableItems.ts comment describes from when the scale was 1.6. Neither side may drop it unilaterally.",
+  "epsilon": 1e-9,
+
+  "//cells": "metres -> the cell count a piece of that size claims on one axis. The portal reproduces these with footprintCells() from packages/glb/footprintMask.mjs; the app reproduces them through registerPlaceables -> the resulting def.footprint. Both must agree on every row.",
+  "cells": [
+    { "meters": 0.125, "cells": 1, "why": "a sub-cell item still claims a whole cell — ceil never returns 0" },
+    { "meters": 0.25, "cells": 1, "why": "the exact-multiple boundary: ceil must NOT round a flush fit up to 2" },
+    { "meters": 0.26, "cells": 2, "why": "one centimetre past the boundary takes the whole next cell" },
+    { "meters": 0.55, "cells": 3, "why": "the real LACK table (fixtures/LACK.glb, AABB 0.55 x 0.55)" },
+    { "meters": 1.0, "cells": 4, "why": "the size every synthetic fixture in footprintMask.test.mjs uses" },
+    { "meters": 1.495, "cells": 6, "why": "the real wooden-bed row's size_x" },
+    { "meters": 2.18, "cells": 9, "why": "the real wooden-bed row's size_z" }
+  ],
+
+  "//topCell": "The furniture-TOP grid's pitch, half the floor pitch — what an item placed ON another item's surface is measured against. Mirrored as TOP_CELL in packages/glb/footprintMask.mjs and TOP_CELL_SIZE in the app's roomShell.ts, and it needs a tripwire for exactly the same reason `cell` does. It is deliberately a clean integer division of `cell` so a host's top extent always lands on a whole number of top cells; a pitch that is not a divisor would leave a remainder to round away.",
+  "topCell": 0.125,
+
+  "//topCells": "metres -> top cells claimed on one axis, at topCell pitch. The portal reproduces these with topFootprintCells(); the app reproduces them through the same registerPlaceables seam, reading def.topFootprint.",
+  "topCells": [
+    { "meters": 0.125, "cells": 1, "why": "the exact-multiple boundary at the finer pitch" },
+    { "meters": 0.126, "cells": 2, "why": "one millimetre past it" },
+    { "meters": 0.222, "cells": 2, "why": "the real astid-table-lamp's size_x" },
+    { "meters": 0.332, "cells": 3, "why": "the real astid-table-lamp's size_z" },
+    { "meters": 0.275, "cells": 3, "why": "the real laptop's size_x — 3 cells at full width" },
+    { "meters": 0.236, "cells": 2, "why": "the real laptop's CONTACT width: the same item drops to 2 cells once measured at its base, which is what contact_size_x buys" }
+  ],
+
+  "//contact": "contact_size_x/z (migration 023) is the XZ extent of a model's bottom CONTACT_BAND of height, in authored metres, and it overrides size_x/size_z when deriving topFootprint. It exists because an open laptop, a lamp with a shade or a plant with a canopy is wider above the surface than on it, and topFootprint is a plain rectangle derived from the full AABB — so each claims top cells it never touches. Null means 'same as size', and the portal only stores a value when it actually costs the item fewer top cells: astid-table-lamp's base is 68% x 89% of its widest point and still rounds to 2x3, so it stores null.",
+  "contactBand": 0.2,
+
+  "//mask": "A real production row, pinned end to end: this exact mask string was derived by the portal for the wooden-bed GLB and written to item_buy.footprint_mask. The app side asserts its own sanitizedMask ACCEPTS it at the grid its own cells() derives from the same size — which is the whole contract in one case, since sanitizedMask rejects any mask whose dimensions disagree with the footprint and falls back to a solid rect.",
+  "mask": {
+    "id": "wooden-bed",
+    "sizeX": 1.495,
+    "sizeZ": 2.18,
+    "grid": [6, 9],
+    "mask": "XXXXX./XXXXX./XXXXX./XXXXXX/XXXXXX/XXXXX./XXXXXX/XXXXXX/XXXXXX"
+  }
+}

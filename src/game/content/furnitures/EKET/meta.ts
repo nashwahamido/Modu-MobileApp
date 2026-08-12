@@ -1,6 +1,7 @@
 import { composeFurnitureActions } from "@/src/game/core/composition/composeActions";
 import { applyStructure } from "@/src/game/core/model/liaisons";
 import { metaCounts } from "@/src/game/core/composition/metaCounts";
+import { asFurnitureId } from "@/src/game/core/ids";
 import { FurnitureMeta } from "@/src/game/core/type";
 import { AUTHORED_ACTIONS, CLUSTERS, FASTENER_RULES, STRUCTURE } from "./authored";
 import { HARDWARE } from "@/src/game/content/hardware";
@@ -17,7 +18,7 @@ export const ACTIONS = composeFurnitureActions(
 );
 
 export const EKET_META: FurnitureMeta = {
-  id: "eket-cabinet",
+  id: asFurnitureId("eket-cabinet"),
   thumbnail,
   ...metaCounts(ALL_PART_IDS, ACTIONS, CLUSTERS),
 };
