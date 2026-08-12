@@ -5,21 +5,36 @@ import { StyleSheet, ActivityIndicator, Image, Pressable, ScrollView, Text, Text
 import { useScreenInsets } from '@/src/hooks/use-safe-insets';
 
 import { Button } from "@/src/game/ui/system/Button";
-import { SettingsIcon, StarIcon } from "@/src/components/Icons";
+import { StarIcon } from "@/src/components/Icons";
 import { avatarForProfile } from "@/src/components/avatarAssets";
-import { RADIUS, TYPE, ELEVATION, SPACE, useFixedStyles, useTheme, SIZE } from "@/src/game/ui/system/theme";
+import { RADIUS, TYPE, ELEVATION, SPACE, useStyles, useTheme, useUiScale, SIZE } from "@/src/game/ui/system/theme";
 import { FURNITURE_METAS } from "@/src/game/content/furnitures/furnitures";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import type { FriendRequest, Profile } from "@/src/data";
 import type { Theme } from "@/src/game/ui/system/theme";
 
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 // The "/N" denominator for items assembled: the same buildable set the catalogue counts.
 const TOTAL_BUILDS = FURNITURE_METAS.length;
 
 type FriendsTab = "friends" | "requests";
 
+/** "an ambitious newbie" -> "An Ambitious Newbie". The titles are authored lowercase, and a rank
+ *  reads as a rank when it is capitalised like one. */
+function titleCase(s: string): string {
+  return s.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** The avatar recommendation's backdrop, so the two "who you are" screens share a look. */
+const BG_FROM = "#E8D48C";
+const BG_TO = "#A9BFD9";
+
+/** The screen's own margins, before any device inset is added on top. */
+const GUTTER_H = 28;
+const GUTTER_V = 4;
+
 export default function ProfileScreen() {
-  const styles = useFixedStyles(makeStyles);
+  const styles = useStyles(makeStyles);
   const t = useTheme();
   const safe = useScreenInsets();
   const repos = useRepos();
@@ -31,6 +46,12 @@ export default function ProfileScreen() {
   const [loadError, setLoadError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [tab, setTab] = useState<FriendsTab>("friends");
+  // The avatar is the one thing here worth more pixels on a tablet — it is the player's own face on
+  // their own page. The card follows so the name and stats keep their proportions; nothing else
+  // on the screen scales.
+  const uiScale = useUiScale();
+  const avatarSize = Math.round(150 * uiScale);
+  const cardWidth = Math.round(250 * uiScale);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [outgoing, setOutgoing] = useState<string[]>([]);
@@ -171,7 +192,10 @@ export default function ProfileScreen() {
       <View style={[styles.root, styles.center]}>
         <Text style={styles.errorText}>Couldn&apos;t load your profile. Check your connection.</Text>
         <Button label="Try again" variant="primary" onPress={() => setReloadKey((k) => k + 1)} />
-        <Button label="Home" onPress={() => router.dismissTo("/room")} />
+        <Button
+          label="Home"
+          onPress={() => router.dismissTo("/room")}
+        />
       </View>
     );
   }
@@ -185,24 +209,72 @@ export default function ProfileScreen() {
   }
 
   return (
-    <View style={[styles.root, { paddingTop: SPACE.sm + safe.top, paddingLeft: SPACE.xl + safe.left, paddingRight: SPACE.xl + safe.right }]}>
+    // The gradient owns an UNPADDED layer of its own. Absolute children are inset by their parent's
+    // padding, so drawing it inside the padded root leaves a border of flat colour all round — which
+    // reads as a frame rather than as the background.
+    <View style={styles.screen}>
+      {/* Diagonal, so neither end of the ramp sits flat behind a whole column of content. */}
+      <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+        <Defs>
+          <LinearGradient id="profileBg" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor={BG_FROM} />
+            <Stop offset="1" stopColor={BG_TO} />
+          </LinearGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100%" height="100%" fill="url(#profileBg)" />
+      </Svg>
+      <View
+      style={[
+        styles.root,
+        {
+          // A gutter of its own on every edge, with the device inset ADDED to it. The bottom edge had
+          // none at all, so the friends list ran under the gesture bar; the sides were a spacing
+          // token that read as nothing once the card and the panel filled the row.
+          // No safe.top here. This screen is presented MODALLY, so it already begins below the
+          // system bars — adding the inset again was clearing the same obstacle twice. In landscape
+          // a cutout sits on the SIDES, which the left and right insets below still handle.
+          paddingTop: GUTTER_V,
+          paddingBottom: GUTTER_V + safe.bottom,
+          paddingLeft: GUTTER_H + safe.left,
+          paddingRight: GUTTER_H + safe.right,
+        },
+      ]}
+    >
       <View style={styles.header}>
-        <Pressable style={styles.settingsLink} onPress={() => router.push("/settings")} hitSlop={8}>
-          <SettingsIcon size={24} color={t.textDim} />
-          <Text style={styles.settingsText}>Account & App settings</Text>
-          <Text style={styles.caret}>›</Text>
+        {/* One control, and no label on it: an icon that IS a house does not need the word under it.
+            dismissTo, not replace: pops back to the room already under the modal so it never
+            remounts. */}
+        <Pressable
+          style={styles.homeButton}
+          onPress={() => router.dismissTo("/room")}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Home"
+        >
+          <Image
+            source={require("@/src/assets/ui/icons/icon-home.png")}
+            style={styles.homeIcon}
+            resizeMode="contain"
+          />
         </Pressable>
-        {/* dismissTo, not replace: pops back to the room already under the modal so it never remounts. */}
-        <Button label="Home" onPress={() => router.dismissTo("/room")} />
       </View>
 
       <View style={styles.body}>
-        <View style={styles.profileCard}>
-          <View style={styles.avatarWrap}>
-            <Image source={avatarForProfile(profile.avatarMode)} style={styles.avatar} />
+        <View style={[styles.profileCard, { width: cardWidth }]}>
+          <View style={[styles.avatarWrap, { width: avatarSize, height: avatarSize }]}>
+            <Image
+              source={avatarForProfile(profile.avatarMode)}
+              style={[styles.avatar, { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }]}
+            />
             <View style={styles.levelBadge}>
               <StarIcon size={40} color={t.accent} />
               <Text style={styles.levelText}>{profile.level}</Text>
+            </View>
+            {/* Straddling the avatar's lower edge, so the rank reads as belonging TO the face above
+                it rather than as the first line of a list below it. */}
+            <View style={styles.titleBadge}>
+              <StarIcon size={13} color={t.accent} />
+              <Text style={styles.titleBadgeText}>{titleCase(profile.title ?? "newcomer")}</Text>
             </View>
           </View>
 
@@ -239,17 +311,20 @@ export default function ProfileScreen() {
           )}
 
           <View style={styles.statRow}>
-            <Text style={styles.statGlyph}>✁</Text>
+            <Image
+              source={require("@/src/assets/ui/icons/Assemble-icon.png")}
+              style={styles.statIcon}
+              resizeMode="contain"
+            />
             <View style={styles.statBody}>
-              <Text style={styles.statTitle}>{profile.title ?? "newcomer"}</Text>
-              <Text style={styles.statSub}>
+              <Text style={styles.statTitle}>
                 {profile.itemsAssembled}/{TOTAL_BUILDS} items assembled
               </Text>
             </View>
           </View>
 
           <View style={styles.statRow}>
-            <Text style={styles.statGlyph}>♡</Text>
+            <Text style={[styles.statGlyph, styles.heartGlyph]}>♥</Text>
             <View style={styles.statBody}>
               <Text style={styles.statTitle}>{profile.likes} liked</Text>
               <Text style={styles.statSub}>your cozy home!</Text>
@@ -357,6 +432,7 @@ export default function ProfileScreen() {
             </ScrollView>
           )}
         </View>
+        </View>
       </View>
     </View>
   );
@@ -364,31 +440,45 @@ export default function ProfileScreen() {
 
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
-    root: {
-      flex: 1,
-      backgroundColor: t.bg,
-      paddingBottom: SPACE.md,
-    },
+    // Full bleed, never padded: this is what the gradient measures against, and its colour is the
+    // gradient's first stop so the frame before the SVG paints is a settling rather than a flash.
+    screen: { flex: 1, backgroundColor: BG_FROM },
+    root: { flex: 1 },
     center: { alignItems: "center", justifyContent: "center", gap: SPACE.md },
     errorText: { ...TYPE.body, color: t.textFaint, textAlign: "center", padding: SPACE.lg },
+    // OUT OF THE FLOW. As a row it cost 44pt of button plus a 12pt margin before the card could
+    // start — 56pt of empty band across the top for one small icon. Absolute, it sits in the corner
+    // it always sat in and the content begins at the top of the screen.
     header: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      marginBottom: SPACE.md,
+      position: "absolute",
+      top: 0,
+      left: 0,
+      zIndex: 5,
     },
-    settingsLink: { flexDirection: "row", alignItems: "center", gap: SPACE.sm },
-    settingsText: { ...TYPE.label, color: t.textDim },
-    caret: { color: t.textDim, fontSize: 20, fontWeight: "800" },
+    // The bare icon, no chip. On a gradient a bordered cream pill reads as a button parked on the
+    // artwork; the house alone is unmistakable and lets the background run behind it. hitSlop keeps
+    // the touch target at size even though the paint no longer shows it.
+    homeButton: {
+      width: SIZE.controlHeight,
+      height: SIZE.controlHeight,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    homeIcon: { width: 22, height: 22 },
 
-    body: { flex: 1, flexDirection: "row", gap: SPACE.xl },
+    // Tighter gap and a narrower card, so the friends list starts further left. SPACE.xl between two
+    // columns on a phone is a corridor; the panel is better off with the width.
+    body: { flex: 1, flexDirection: "row", gap: SPACE.md, minWidth: 0 },
 
     profileCard: {
-      width: 300,
       alignItems: "center",
-      paddingTop: SPACE.sm,
+      // The one column that wanted to come DOWN: the face and its details read better with a little
+      // air above them, where the list beside it reads better starting high.
+      paddingTop: SPACE.lg,
     },
-    avatarWrap: { width: 150, height: 150, marginBottom: SPACE.md },
+    // The badge hangs off the bottom edge, so the wrap must not clip and needs room beneath it for
+    // the overhang before the name starts.
+    avatarWrap: { width: 150, height: 150, marginBottom: SPACE.lg },
     avatar: {
       width: 150,
       height: 150,
@@ -405,7 +495,10 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       justifyContent: "center",
       gap: SPACE.sm,
-      alignSelf: "stretch",
+      // Hugs the name rather than spanning the card: stretched, a five-letter nickname sat in a
+      // 300pt pill and read as an empty input field waiting to be filled.
+      alignSelf: "center",
+      maxWidth: "100%",
       height: SIZE.controlHeight,
       paddingHorizontal: SPACE.md,
       borderRadius: RADIUS.pill,
@@ -416,23 +509,46 @@ const makeStyles = (t: Theme) =>
       ...ELEVATION.card,
     },
     nameText: { ...TYPE.title, color: t.text, flexShrink: 1 },
-    nameInput: { ...TYPE.title, color: t.text, flex: 1, padding: 0, textAlign: "center" },
+    // The INPUT keeps a working width — a field that shrank to its text would be unusable to type in.
+    nameInput: { ...TYPE.title, color: t.text, minWidth: 140, padding: 0, textAlign: "center" },
     pencil: { color: t.textDim, fontSize: 16 },
     saveText: { ...TYPE.label, color: t.accent },
 
     statRow: { flexDirection: "row", alignItems: "center", gap: SPACE.md, alignSelf: "stretch", marginBottom: SPACE.md },
+    statIcon: { width: 26, height: 26 },
     statGlyph: { fontSize: 20, color: t.textDim, width: 26, textAlign: "center" },
     statBody: { flexShrink: 1 },
     statTitle: { ...TYPE.label, color: t.text },
+    titleBadge: {
+      position: "absolute",
+      bottom: -12,
+      alignSelf: "center",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: SPACE.md,
+      paddingVertical: 3,
+      borderRadius: RADIUS.pill,
+      backgroundColor: t.surface,
+    },
+    titleBadgeText: { ...TYPE.labelSm, color: t.text, letterSpacing: 0.3 },
+    // Filled, and red: an outline heart reads as "not yet liked", the opposite of a count received.
+    heartGlyph: { color: "#C2544B" },
     statSub: { ...TYPE.labelSm, color: t.textFaint, marginTop: 1 },
 
-    friendsPanel: { flex: 1 },
-    searchRow: { flexDirection: "row", alignItems: "center", gap: SPACE.sm, marginBottom: SPACE.md },
+    // minWidth 0 is what lets a flex child shrink BELOW its content. Without it the panel refuses to
+    // go narrower than its widest row, the body row grows past the screen, and the padding around it
+    // is pushed off the edges — which reads as no margins at all rather than as an overflow.
+    friendsPanel: { flex: 1, minWidth: 0 },
+    searchRow: { flexDirection: "row", alignItems: "center", gap: SPACE.sm, marginBottom: SPACE.sm },
     searchInput: {
-      ...TYPE.label,
+      ...TYPE.labelSm,
       color: t.text,
       flex: 1,
-      height: SIZE.controlHeight,
+      // controlHeightSm, not controlHeight. This column is a list of names with a filter above it —
+      // none of it is a primary action, and at 44pt each row and control was claiming the space the
+      // list itself wants. Still clears the touch minimum.
+      height: SIZE.controlHeightSm,
       paddingHorizontal: SPACE.md,
       borderRadius: RADIUS.pill,
       borderWidth: 1,
@@ -440,10 +556,10 @@ const makeStyles = (t: Theme) =>
       backgroundColor: t.surface,
     },
     searchNote: { ...TYPE.labelSm, color: t.textFaint, paddingHorizontal: SPACE.sm },
-    tabs: { flexDirection: "row", gap: SPACE.md, marginBottom: SPACE.md },
+    tabs: { flexDirection: "row", gap: SPACE.sm, marginBottom: SPACE.sm },
     tab: {
       flex: 1,
-      height: SIZE.controlHeight,
+      height: SIZE.controlHeightSm,
       alignItems: "center",
       justifyContent: "center",
       borderRadius: RADIUS.pill,
@@ -467,18 +583,21 @@ const makeStyles = (t: Theme) =>
       flexDirection: "row",
       alignItems: "center",
       gap: SPACE.md,
-      paddingVertical: SPACE.sm,
+      minWidth: 0,
+      // A roll call, not a set of cards: at SPACE.sm each name took ~50pt for one line of text, and
+      // more names visible without scrolling is the only thing this list is for.
+      paddingVertical: 4,
       paddingHorizontal: SPACE.sm,
     },
     friendAvatar: {
-      width: 44,
-      height: SIZE.controlHeight,
+      width: 34,
+      height: 34,
       borderRadius: RADIUS.pill,
       backgroundColor: t.surfaceRaised,
       borderWidth: 1,
       borderColor: t.border,
     },
-    friendName: { ...TYPE.label, color: t.text, flex: 1 },
+    friendName: { ...TYPE.label, color: t.text, flex: 1, minWidth: 0 },
     removeBtn: {
       paddingHorizontal: SPACE.md,
       height: 32,

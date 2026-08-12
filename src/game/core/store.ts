@@ -213,7 +213,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
   profile: "control",
   mode: "free",
   renderStyle: "realistic",
-  backdrop: "studio",
+  backdrop: "grid",
   // Afternoon: the longest warm pool of the day, and the look the room was tuned against.
   roomTimeOfDay: "afternoon",
   // Light by default. The palette (ui/theme.ts) was designed against the dark reference, but light is the safer default for a study: it survives a bright room, a projector, and a participant's own phone brightness, none of which we control. Dark and high-contrast are the SAME product in different light — same three accent hues, same meanings — so switching costs nothing but the setting.

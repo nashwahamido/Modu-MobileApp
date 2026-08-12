@@ -59,10 +59,13 @@ const STYLES: { value: RenderStyleId; label: string }[] = [
   { value: "illustrated", label: "Illustrated" },
 ];
 const BACKDROPS: { value: BackdropId; label: string }[] = [
-  { value: "studio", label: "Studio" },
+  // Grid first: it is the default and the neutral one, so it heads the list rather than sitting
+  // among the scenery.
+  { value: "grid", label: "Grid" },
   { value: "clear", label: "Clear" },
-  { value: "cozy", label: "Cozy" },
-  { value: "cartoon", label: "Cartoon" },
+  { value: "calm", label: "Calm" },
+  { value: "craft", label: "Craft" },
+  { value: "garden", label: "Garden" },
 ];
 const LIGHTING: { value: LightingPreset; label: string }[] = [
   { value: "auto", label: "Auto" },

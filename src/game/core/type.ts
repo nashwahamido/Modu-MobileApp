@@ -33,7 +33,7 @@ export type RenderStyleId =
   | "cartoon"
   | "toon"
   | "illustrated";
-export type BackdropId = "studio" | "clear" | "cozy" | "cartoon";
+export type BackdropId = "grid" | "clear" | "calm" | "craft" | "garden";
 
 export type AssemblyMode = "free" | "guide" | "strict";
 export type TextLevel = "standard" | "simple";

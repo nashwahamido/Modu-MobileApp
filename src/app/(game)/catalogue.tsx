@@ -80,7 +80,13 @@ export default function CatalogueScreen() {
   const repos = useRepos();
   const status = useCatalogStore((s) => s.status);
   // Every entry in the catalog
-  const items = FURNITURE_METAS;
+  // Fewest stages first: the catalogue is a difficulty ladder, and a player choosing their first
+  // build should meet the shortest one at the top rather than hunting for it. Ties keep their
+  // authored order, so the list is stable between renders.
+  const items = useMemo(
+    () => [...FURNITURE_METAS].sort((a, b) => a.clusterCount - b.clusterCount),
+    [],
+  );
   const me = useCurrentUserId();
   // Which furniture this player has already finished. Read once per mount rather than per card: the grid renders every meta, so a per-card fetch would be one round trip per tile.
   const [completedIds, setCompletedIds] = useState<ReadonlySet<string>>(new Set());
@@ -263,6 +269,20 @@ const CELEBRATE_MS = 4200;
 const BG_FROM = ACCENT_LIGHT;
 const BG_TO = "#A9BFD9";
 
+/**
+ * The stage count as a difficulty band.
+ *
+ * One stage is a sitting: sage, the app's "complete" green, because it can be finished in one.
+ * Two or three is the sand from the avatar screen. Four or more is the clay — a warning about
+ * LENGTH, not a wall, so it stays the muted terracotta rather than a true red, which in this
+ * palette would read as an error.
+ */
+function stageBadgeColor(stages: number): string {
+  if (stages <= 1) return "#8FA876";
+  if (stages <= 3) return "#E8D48C";
+  return "#C98B76";
+}
+
 /** The single text colour for this screen (wireframe ink). */
 const INK = "#231F20";
 
@@ -424,12 +444,16 @@ function FurnitureCard({
               <Image source={brand.logo} style={styles.brandLogo} resizeMode="contain" />
             ) : null}
           </View>
-          {/* Stages and time only — part count is build detail the player does not choose on. */}
+          {/* Stages and time only — part count is build detail the player does not choose on.
+              The stage count is the closest thing this app has to a difficulty rating, so it is
+              coloured like one: the number is the fact, and the colour is what it MEANS. */}
           <View style={styles.statRow}>
             <StagesIcon size={22} color={INK} />
-            <Text style={styles.statText}>
-              {meta.clusterCount} {meta.clusterCount === 1 ? "stage" : "stages"}
-            </Text>
+            <View style={[styles.stageBadge, { backgroundColor: stageBadgeColor(meta.clusterCount) }]}>
+              <Text style={styles.stageBadgeText}>
+                {meta.clusterCount} {meta.clusterCount === 1 ? "stage" : "stages"}
+              </Text>
+            </View>
           </View>
           {row && row.durationMin > 0 ? (
             <View style={styles.statRow}>
@@ -580,6 +604,14 @@ const makeStyles = (t: Theme) =>
     thumbTrack: { position: "absolute", left: 0, top: 0, bottom: 0, flexDirection: "row" },
     thumbCell: { width: THUMB_CELL, alignItems: "center", justifyContent: "center" },
     thumb: { width: "82%", height: "82%" },
+    stageBadge: {
+      paddingHorizontal: SPACE.sm,
+      paddingVertical: 2,
+      borderRadius: RADIUS.pill,
+    },
+    // INK on every band: all three colours are light enough to carry it (7.5:1 or better), and one
+    // text colour keeps the badges reading as one set rather than three separate marks.
+    stageBadgeText: { ...TYPE.labelSm, color: INK },
     // Matches StagesIcon/ClockIcon so the three stat rows share one optical size.
     xpIcon: { width: 22, height: 22 },
     cardCopy: { flex: 1, gap: SPACE.xs },
