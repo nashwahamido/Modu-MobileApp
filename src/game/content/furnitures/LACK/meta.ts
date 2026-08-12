@@ -1,6 +1,7 @@
 import { composeFurnitureActions } from "@/src/game/core/composition/composeActions";
 import { applyStructure } from "@/src/game/core/model/liaisons";
 import { metaCounts } from "@/src/game/core/composition/metaCounts";
+import { asFurnitureId } from "@/src/game/core/ids";
 import { FurnitureMeta, ThumbSet } from "@/src/game/core/type";
 import { AUTHORED_ACTIONS, CLUSTERS, FASTENER_RULES, STRUCTURE } from "./authored";
 import { HARDWARE } from "@/src/game/content/hardware";
@@ -23,7 +24,7 @@ const CATALOGUE_THUMBS: Record<string, ThumbSet> = {
 };
 
 export const LACK_META: FurnitureMeta = {
-  id: "lack-table",
+  id: asFurnitureId("lack-table"),
   thumbnail: CATALOGUE_THUMBS.wooden,
   variantThumbnails: CATALOGUE_THUMBS,
   ...metaCounts(ALL_PART_IDS, ACTIONS, CLUSTERS),

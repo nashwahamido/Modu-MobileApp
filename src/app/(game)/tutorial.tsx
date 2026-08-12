@@ -35,6 +35,7 @@ import { useStepObjective } from "@/src/game/core/presentation/useStepObjective"
 
 import { useGameStore } from "@/src/game/core/store";
 import { useCurrentUserId, useRepos } from "@/src/data";
+import { asFurnitureId } from "@/src/game/core/ids";
 import {
   pressParkInfo,
   screwParkOffset,
@@ -79,7 +80,7 @@ import {
   type ToolTutorialKind,
 } from "@/src/game/tutorial/steps";
 
-const TUTORIAL_FURNITURE_ID = "lack-table";
+const TUTORIAL_FURNITURE_ID = asFurnitureId("lack-table");
 
 function TutorialScreen() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
