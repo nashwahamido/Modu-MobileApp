@@ -680,7 +680,9 @@ const LoadedItem = memo(function LoadedItem({
     }
     const wall = placement.surface.wall;
     let drawn = true;
-    let written = 1;
+    // Seeded from a real write, never from the ASSUMPTION that the materials already hold authored colour × 1. That assumption holds on a fresh mount and is false on the one transition that matters: committing a wall ghost re-runs this effect with tint gone, and the materials are still carrying the ghost's green multiplier, which the branch above only clears for non-wall pieces. wallAlpha returns EXACTLY 1 for any wall the camera is inside of — i.e. the wall you just placed the piece on — so seeding written = 1 made the guard below true on every frame and the untinted repaint never happened. The piece stayed green until an orbit wide enough to start fading its wall finally moved alpha off 1.
+    let written = wallAlpha(wall, orbit.value.smoothed.theta);
+    paint(written);
     const setDrawn = (draw: boolean) => {
       drawn = draw;
       for (const entity of asset.getRenderableEntities()) {
