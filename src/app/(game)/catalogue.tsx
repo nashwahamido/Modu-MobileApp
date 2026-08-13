@@ -34,11 +34,12 @@ import { useCurrentUserId, useRepos } from "@/src/data";
 import { useCatalogRow, useCatalogStore } from "@/src/data/catalog/buildStore";
 import { useVariantStore } from "@/src/data/catalog/variantStore";
 import { brandFor } from "@/src/game/content/brands";
+import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
 import { ChevronIcon, ClockIcon } from "@/src/components/Icons";
 import { ConfettiRain } from "@/src/game/ui/celebration/Confetti";
 
 // styling
-import { ACCENT_LIGHT, RADIUS, SPACE, TYPE, ELEVATION, useFixedStyles, FONT } from "@/src/game/ui/system/theme";
+import { ACCENT_LIGHT, RADIUS, SPACE, TYPE, useFixedStyles, FONT } from "@/src/game/ui/system/theme";
 import { Button, GrainOverlay } from "@/src/game/ui/system/Button";
 import { LoadingScreen } from "@/src/game/ui/loading/LoadingScreen";
 import type { Theme } from "@/src/game/ui/system/theme";
@@ -170,7 +171,14 @@ export default function CatalogueScreen() {
   }
 
   return (
-    <View style={styles.root}>
+    // Rendered through SceneBackdrop — the SAME component the assembly screens use. The artwork is
+    // the screen ROOT (an ImageBackground), not a sibling <Image absoluteFill> layered behind it.
+    // That distinction is exactly what made the tutorial's backdrop read as zoomed-in; see the note
+    // at the top of SceneBackdrop.tsx.
+    <SceneBackdrop
+      source={require("@/src/assets/ui/catalogue-backdrop.jpg")}
+      style={styles.root}
+    >
       <Animated.ScrollView
         onScroll={scrollHandler}
         scrollEventThrottle={16}
@@ -279,7 +287,7 @@ export default function CatalogueScreen() {
           accessibilityLabel="Furniture Catalogue"
         />
       </Animated.View>
-    </View>
+    </SceneBackdrop>
   );
 }
 
@@ -313,6 +321,36 @@ function stageTrendArrow(stages: number) {
   if (stages <= 2) return require("@/src/assets/ui/icons/icon-trend-yellow.png");
   return require("@/src/assets/ui/icons/icon-trend-red.png");
 }
+
+/** This screen's shadow, held locally rather than retuning the global ELEVATION scale (which every
+ *  other screen shares). Tighter and darker than ELEVATION.card: a smaller radius keeps the edge
+ *  legible instead of a soft haze, and the higher opacity holds up over the watercolour backdrop.
+ *  SHADOW = chrome (pills, cards); SHADOW_SM = the small action buttons that sit ON a card. */
+// RN 0.81 + new architecture supports `boxShadow`, which renders on ANDROID with a real colour and
+// alpha — unlike `elevation`, which ignores shadowColor/shadowOpacity and only draws its own soft
+// grey ramp. That is why the earlier opacity bumps changed nothing on device. Format is
+// "offsetX offsetY blur spread color".
+//
+// SHADOW = chrome (pills, cards). SHADOW_SM = the small action buttons that sit ON a card.
+// Darker: raise the alpha in rgba(). Sharper: lower the blur (the 3rd length).
+const SHADOW = {
+  boxShadow: "0px 5px 4px rgba(0,0,0,0.40)",
+  // iOS fallback for the old architecture; harmless where boxShadow is supported.
+  shadowColor: "#000",
+  shadowOpacity: 0.8,
+  shadowRadius: 2,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 6,
+} as const;
+
+const SHADOW_SM = {
+  boxShadow: "0px 3px 3px rgba(0,0,0,0.40)",
+  shadowColor: "#000",
+  shadowOpacity: 0.8,
+  shadowRadius: 1.5,
+  shadowOffset: { width: 0, height: 2 },
+  elevation: 4,
+} as const;
 
 /** The single text colour for this screen (wireframe ink). */
 const INK = "#231F20";
@@ -559,7 +597,7 @@ const makeStyles = (t: Theme) =>
       backgroundColor: "#FBF8F3",
       borderWidth: 1,
       borderColor: t.border,
-      ...ELEVATION.card,
+      ...SHADOW,
     },
     homeIcon: { width: 26, height: 26 },
     homeLabel: { ...TYPE.label, fontWeight: "600", color: INK },
@@ -594,7 +632,7 @@ const makeStyles = (t: Theme) =>
       backgroundColor: "#FBF8F3",
       borderWidth: 1,
       borderColor: t.border,
-      ...ELEVATION.card,
+      ...SHADOW,
     },
     pickerText: { ...TYPE.label, color: INK },
     pickerMenu: {
@@ -607,7 +645,7 @@ const makeStyles = (t: Theme) =>
       backgroundColor: "#FBF8F3",
       borderWidth: 1,
       borderColor: t.border,
-      ...ELEVATION.card,
+      ...SHADOW,
     },
     pickerItem: { paddingVertical: SPACE.sm, paddingHorizontal: SPACE.lg },
     // The current filter, marked on the row rather than by the label alone — weight is easy to miss at this size.
@@ -637,7 +675,7 @@ const makeStyles = (t: Theme) =>
       padding: SPACE.lg,
       borderWidth: StyleSheet.hairlineWidth * 2,
       borderColor: t.border,
-      ...ELEVATION.card,
+      ...SHADOW,
     },
     cardPressed: { backgroundColor: t.surfaceRaised },
     burstClip: { ...StyleSheet.absoluteFillObject, borderRadius: RADIUS.panel, overflow: "hidden" },
@@ -683,6 +721,7 @@ const makeStyles = (t: Theme) =>
       height: 36,
       justifyContent: "center",
       borderRadius: RADIUS.pill,
+      ...SHADOW_SM,
     },
     // A dim rather than a colour: the resting fill is per state, so one pressed tint can't serve all three.
     startBtnPressed: { opacity: 0.78 },
