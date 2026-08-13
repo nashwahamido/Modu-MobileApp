@@ -10,9 +10,12 @@ export type TutorialTargetId =
   | "undo"
   | "focus"
   | "autoView"
-  | "settings";
+  | "settings"
+  /** The whole screen, for the grip step: what it teaches is the DEVICE, not a control on it. */
+  | "device";
 
 export type TutorialEvent =
+  | "grip_acknowledged"
   | "joystick_moved"
   | "camera_recentered"
   | "pinch_zoomed"
@@ -60,6 +63,16 @@ export const TUTORIAL_STEP_REWARD_TOKENS = 10;
 
 /** The short, first-run core loop. Preference education stays contextual. */
 export const TUTORIAL_STEPS: TutorialStep[] = [
+  {
+    // FIRST, before anything on screen. Every control after this assumes two thumbs on the edges —
+    // the joystick is bottom-left, the tray bottom-right — and a player holding the phone one-handed
+    // to read finds the first drag awkward for a reason the tutorial never mentions.
+    id: "hold-like-controller",
+    targetId: "device",
+    message: "Hold your device with both hands, like a game controller.",
+    shortLabel: "Get comfortable",
+    event: "grip_acknowledged",
+  },
   {
     id: "long-press-part",
     targetId: "partsTray",

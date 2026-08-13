@@ -70,6 +70,11 @@ import {
 import { availableInMode } from "@/src/game/core/evaluation/availability";
 import { TutorialTarget } from "@/src/game/tutorial/TutorialTarget";
 import { MascotGuideOverlay } from "@/src/game/tutorial/MascotGuideOverlay";
+import { GripCoach } from "@/src/game/tutorial/GripCoach";
+import {
+  SkipTutorialButton,
+  SkipTutorialConfirm,
+} from "@/src/game/tutorial/SkipTutorial";
 import { MomentumCompanion } from "@/src/game/tutorial/MomentumCompanion";
 import { MomentumAttentionOverlay } from "@/src/game/tutorial/MomentumAttentionOverlay";
 import { useTutorialStore } from "@/src/game/tutorial/store";
@@ -295,6 +300,27 @@ function TutorialScreen() {
     [furniture, completedSet, mode, activeCluster],
   );
   const completedCount = useGameStore((s) => s.completed.length);
+  const [skipAsked, setSkipAsked] = useState(false);
+  const gripStepActive = useTutorialStore(
+    (s) => s.steps[s.currentIndex]?.id === "hold-like-controller",
+  );
+  /**
+   * Past the grip step — meaning the player has pressed "Got it".
+   *
+   * Not `currentIndex > at` alone. completeCurrentStep does NOT advance the index straight away: it
+   * sets pendingAdvanceStepId and moves the index on a timer, after the step's reward animation. So
+   * for that whole window the index still points AT the grip step even though its event has fired.
+   * pendingAdvanceStepId is the immediate signal, and the index covers everything after it.
+   *
+   * `completed` here is a single boolean for the whole tutorial, not a list of finished ids.
+   * A grip step that is absent (index -1) counts as past, so a profile without it still shows the
+   * exit.
+   */
+  const gripAcknowledged = useTutorialStore((s) => {
+    const at = s.steps.findIndex((step) => step.id === "hold-like-controller");
+    if (at < 0) return true;
+    return s.currentIndex > at || s.pendingAdvanceStepId === "hold-like-controller";
+  });
   const guideCompleted = useTutorialStore((s) => s.completed);
   const guideStepCount = useTutorialStore((s) => s.steps.length);
   const orientationActionId = useGameStore((s) => s.orientationActionId);
@@ -816,6 +842,35 @@ function TutorialScreen() {
       {profile === "momentum" ? <BuildMap overviewOnly /> : null}
       {ringOverlay}
       <GreenFlash trigger={completedCount} />
+      {/* Above everything, and only on its own step: how to HOLD the device comes before any control
+          on it, and every control after this assumes the grip it teaches. */}
+      {gripStepActive ? (
+        <GripCoach
+          onAcknowledge={() =>
+            useTutorialStore.getState().completeEvent("grip_acknowledged")
+          }
+        />
+      ) : null}
+      {/* Only AFTER the grip step is acknowledged. That step owns the screen while it is up, and
+          offering a way out of the tutorial before the player has seen a single thing it teaches
+          invites them out of it for no reason. */}
+      {gripAcknowledged ? (
+        <SkipTutorialButton onPress={() => setSkipAsked(true)} />
+      ) : null}
+      {skipAsked ? (
+        <SkipTutorialConfirm
+          onCancel={() => setSkipAsked(false)}
+          onConfirm={() => {
+            setSkipAsked(false);
+            // The same exit the guide already uses for "I'll finish this later": the room, with the
+            // welcome banner. The build is not discarded — it stays in the catalogue.
+            router.replace({
+              pathname: "/room",
+              params: { welcome: "tutorial" },
+            });
+          }}
+        />
+      ) : null}
       <MascotGuideOverlay
         activeToolKind={activeToolKind}
         assemblyComplete={totalCount > 0 && completedCount >= totalCount}

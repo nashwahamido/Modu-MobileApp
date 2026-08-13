@@ -23,7 +23,7 @@ import {
 } from "@/src/onboarding/questionnaire";
 import { VoiceButton } from "@/src/game/ui/hud/VoiceButton";
 import { Button } from "@/src/game/ui/system/Button";
-import { ACCENT_LIGHT, ELEVATION, FONT, SPACE, TYPE, useStyles, useUiScale } from "@/src/game/ui/system/theme";
+import { ACCENT_LIGHT, ELEVATION, FONT, SPACE, TYPE, useStyles, useUiScale, useReadingFont } from "@/src/game/ui/system/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import { saveOnboardingResults } from "@/src/services/onboarding";
 import type { Theme } from "@/src/game/ui/system/theme";
@@ -236,6 +236,8 @@ const questionOptionImages = [
 
 export default function QuestionnaireScreen() {
   const styles = useStyles(makeStyles);
+  // Onboarding is where a player reads the most before they know the app.
+  const readingFont = useReadingFont();
   // The bubble fills whatever is left after the mascot, up to a readable maximum. Fixed on a phone
   // (the window is smaller than the cap), proportional on a tablet — so the row can never be wider
   // than the screen it sits in, at any scale.
@@ -515,10 +517,10 @@ export default function QuestionnaireScreen() {
               style={[styles.speechBubble, { width: bubbleW }]}
             >
             <SlideInDown delay={INTRO_STAGE.text}>
-              <Text style={styles.introText}>{questionnaireIntroText}</Text>
+              <Text style={[styles.introText, { fontFamily: readingFont }]}>{questionnaireIntroText}</Text>
             </SlideInDown>
             <SlideInDown delay={INTRO_STAGE.text + INTRO_STAGE.lineStep}>
-              <Text style={styles.introPrompt}>{questionnaireHandednessPrompt}</Text>
+              <Text style={[styles.introPrompt, { fontFamily: readingFont }]}>{questionnaireHandednessPrompt}</Text>
             </SlideInDown>
             <SlideInDown delay={INTRO_STAGE.text + INTRO_STAGE.lineStep * 2} style={styles.handOptions}>
               <Pressable

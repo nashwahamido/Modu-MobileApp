@@ -41,6 +41,60 @@ import type { ClusterId } from "@/src/game/core/type";
  * Native-driven: it runs on transform and opacity only, so the loop never touches the JS
  * thread — the same reason the orbit driver moved off it.
  */
+/**
+ * The "press this" tab under an openable stage.
+ *
+ * Rises into place and then breathes, native-driven on transform and opacity only — the same
+ * discipline as PulseRing, because this file deliberately keeps its loops off the JS thread.
+ */
+function TapCue({ label }: { label: string }) {
+  const t = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(t, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(t, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [t]);
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles_cue.wrap,
+        {
+          transform: [
+            { scale: t.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] }) },
+            { translateY: t.interpolate({ inputRange: [0, 1], outputRange: [0, -3] }) },
+          ],
+        },
+      ]}
+    >
+      <Text style={styles_cue.text}>{label}</Text>
+    </Animated.View>
+  );
+}
+
+/** Plain sheet: the cue takes no theme — it is one fixed accent either way. */
+const styles_cue = StyleSheet.create({
+  wrap: {
+    marginTop: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#8D7BA8",
+  },
+  text: {
+    color: "#FBF8F3",
+    fontFamily: FONT,
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.3,
+  },
+});
+
 function PulseRing({ style }: { style: StyleProp<ViewStyle> }) {
   const t = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -190,6 +244,11 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
           selectCluster((combineOwner ?? clusters[clusters.length - 1]) as ClusterId),
       },
     ];
+
+    // The one stage that carries the "tap to start" tab: the first that can be opened and is not
+    // already done. -1 when the map is fully finished or nothing is unlocked yet, and the strict
+    // equality below then matches no node at all.
+    const firstOpenIndex = nodes.findIndex((n) => n.enabled && !n.finished);
 
     // Nodes share the row, so they shrink as the count grows: EKET's three clusters plus combine is four across, which will not fit at the natural width.
     const INNER = 520;
@@ -383,6 +442,14 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                   >
                     {n.label}
                   </Text>
+
+                  {/* One tab, on the first stage that can be opened.
+                      The pulsing ring says "this one is LIVE", which is a state. It never says the
+                      circle is a button, and a diagram of stages is a perfectly ordinary thing to
+                      look at without touching — so a first-time player reads the map, understands
+                      it, and waits. This says what to do, in words, exactly once: more than one
+                      would be a scatter of instructions rather than a next step. */}
+                  {i === firstOpenIndex ? <TapCue label={n.doneCount > 0 ? "Resume" : "Tap to start"} /> : null}
                 </Pressable>
               </Fragment>
             ))}

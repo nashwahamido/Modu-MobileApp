@@ -13,7 +13,7 @@ import { useTutorialAudio } from './useTutorialAudio';
 import { Button } from '@/src/game/ui/system/Button';
 import { useGameStore } from '@/src/game/core/store';
 import { avatarForProfile } from '@/src/components/avatarAssets';
-import { ACCENT_LIGHT, ELEVATION, RADIUS, Theme, TYPE, useFixedStyles } from '@/src/game/ui/system/theme';
+import { ACCENT_LIGHT, ELEVATION, RADIUS, Theme, TYPE, useFixedStyles, useReadingFont } from "@/src/game/ui/system/theme";
 import { tutorialPresentationForProfile } from './presentation';
 import { VisualLongPressCue } from './VisualLongPressCue';
 import { VisualJoystickCue } from './VisualJoystickCue';
@@ -44,6 +44,8 @@ export function MascotGuideOverlay({
   audioEnabled = false,
 }: Props) {
   const styles = useFixedStyles(makeStyles);
+  // The tutorial is the most read text in the app.
+  const readingFont = useReadingFont();
   const overlayRef = useRef<View>(null);
   const windowSize = useWindowDimensions();
   const [overlaySize, setOverlaySize] = useState<{ width: number; height: number } | null>(null);
@@ -336,7 +338,7 @@ export function MascotGuideOverlay({
             {phase === 'settings' || step.targetId === 'settings' ? 'SETTINGS · ' : ''}{currentIndex + 1}/{steps.length}
           </Text>
           <View style={styles.messageRow}>
-            <Text style={[styles.message, presentation.showVisualDemo && styles.visualMessage]}>
+            <Text style={[styles.message, { fontFamily: readingFont }, presentation.showVisualDemo && styles.visualMessage]}>
               {message}
             </Text>
             {presentation.showVisualDemo ? (
