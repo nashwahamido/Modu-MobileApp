@@ -7,7 +7,7 @@ test("Clear Path uses the shared hint and progress presentation", () => {
   const presentation = tutorialPresentationForProfile("clearPath");
 
   assert.equal(presentation.showChecklist, false);
-  assert.equal(presentation.showMilestoneConfirmation, true);
+  assert.equal(presentation.showMilestoneConfirmation, false);
   assert.equal(presentation.emphasizeTarget, true);
 });
 

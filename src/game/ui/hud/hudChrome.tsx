@@ -184,13 +184,6 @@ export const tutorialChrome = {
     bottom: 70,
     width: 86,
   },
-  toolbarTarget: {
-    position: "absolute",
-    alignSelf: "center",
-    bottom: 16,
-    width: 118,
-    height: 48,
-  },
   toolTarget: {
     position: "absolute",
     // Match TightenControl exactly (right:220, bottom:120, 144×144).
@@ -200,11 +193,20 @@ export const tutorialChrome = {
     width: 144,
     height: 144,
   },
+  // Match BeatControl's bottom-right swipe card. This target exists only for
+  // tutorial spotlight measurement; the shared task control stays unchanged.
+  beatControlTarget: {
+    position: "absolute",
+    right: 56,
+    bottom: 54,
+    width: 320,
+    height: 142,
+  },
   undoTarget: {
     position: "absolute",
     top: 54,
     left: 14,
-    width: 92,
+    width: 36,
     height: 36,
   },
   // Match the real gear in GameSettings (left:14, top:8, 36×36). left:92 pointed the spotlight at the hint slot instead of the gear.

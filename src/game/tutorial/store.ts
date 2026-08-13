@@ -15,8 +15,19 @@ const DEFAULT_CONTEXT: TutorialContext = {
   softHints: true,
 };
 
-// How long a completed step shows its reward before advancing. The event cooldown matches it exactly, so the only window that blocks (and latches) events is the pending-advance one — which completeCurrentStep drains on advance. A longer cooldown would reopen a gap where an event is latched with nothing to replay it.
+// How long a completed step shows its reward before advancing. The event
+// cooldown matches it exactly; actions completed during this window are
+// latched and consumed atomically when the tutorial advances.
 const STEP_ADVANCE_DELAY_MS = 1200;
+
+// These actions are recorded by the game as soon as their success threshold is
+// reached, while the final tightening/turning animation may still be settling.
+// Keep the current instruction visible briefly so the next card (or completion
+// reward) cannot appear over an action that still looks unfinished.
+const EVENT_SETTLE_DELAY_MS: Partial<Record<TutorialEvent, number>> = {
+  connector_tightened: 450,
+  assembly_reoriented: 500,
+};
 
 interface TutorialState {
   steps: TutorialStep[];
@@ -32,8 +43,9 @@ interface TutorialState {
   lastCompletedStepLabel: string | null;
   stepRewardsClaimed: number;
   acceptsEventsAfter: number;
+  pendingCompletionStepId: string | null;
   pendingAdvanceStepId: string | null;
-  /** Events fired during a step's reward/cooldown window, replayed once the step they belong to becomes current (so a fast pick-up → snap gesture isn't lost). */
+  /** Events fired during a reward/cooldown window, consumed on advance so a fast pick-up → snap gesture is neither lost nor briefly re-rendered. */
   latchedEvents: TutorialEvent[];
   configureTutorial: (context: TutorialContext) => void;
   beginSettingsTutorial: () => void;
@@ -61,6 +73,7 @@ const resetState = (context: TutorialContext) => ({
   lastCompletedStepLabel: null,
   stepRewardsClaimed: 0,
   acceptsEventsAfter: 0,
+  pendingCompletionStepId: null,
   pendingAdvanceStepId: null,
   latchedEvents: [],
 });
@@ -86,6 +99,7 @@ export const useTutorialStore = create<TutorialState>()((set, get) => ({
       stepRewardReady: false,
       lastCompletedStepLabel: null,
       acceptsEventsAfter: Date.now() + 400,
+      pendingCompletionStepId: null,
       pendingAdvanceStepId: null,
       latchedEvents: [],
     });
@@ -99,13 +113,20 @@ export const useTutorialStore = create<TutorialState>()((set, get) => ({
       skipped,
       completed,
       acceptsEventsAfter,
+      pendingCompletionStepId,
       pendingAdvanceStepId,
       latchedEvents,
     } = get();
     if (skipped || completed) return;
     const step = steps[currentIndex];
-    // While the previous step's reward is still animating (pendingAdvanceStepId) or we're inside its cooldown, an event that belongs to the current or the very next step would otherwise be dropped. Since the action behind it (a placed part, say) usually can't happen again, latch it and replay it when that step becomes current — see the advance in completeCurrentStep.
-    if (pendingAdvanceStepId || Date.now() < acceptsEventsAfter) {
+    // While an action settles, the previous reward animates, or a cooldown is
+    // active, an event for the current/next step would otherwise be dropped.
+    // Latch it and consume it during the advance below.
+    if (
+      pendingCompletionStepId ||
+      pendingAdvanceStepId ||
+      Date.now() < acceptsEventsAfter
+    ) {
       const upcoming = steps[currentIndex + 1]?.event;
       if (
         (step?.event === event || upcoming === event) &&
@@ -116,6 +137,30 @@ export const useTutorialStore = create<TutorialState>()((set, get) => ({
       return;
     }
     if (!step || step.event !== event) return;
+    const settleDelay = EVENT_SETTLE_DELAY_MS[event] ?? 0;
+    if (settleDelay > 0) {
+      set({ pendingCompletionStepId: step.id });
+      setTimeout(() => {
+        const state = get();
+        if (
+          state.skipped ||
+          state.completed ||
+          state.pendingCompletionStepId !== step.id ||
+          state.steps[state.currentIndex]?.id !== step.id
+        ) {
+          return;
+        }
+        set({
+          pendingCompletionStepId: null,
+          acceptsEventsAfter: 0,
+          latchedEvents: state.latchedEvents.filter(
+            (latchedEvent) => latchedEvent !== event,
+          ),
+        });
+        get().completeCurrentStep();
+      }, settleDelay);
+      return;
+    }
     get().completeCurrentStep();
   },
   completeCurrentStep: () => {
@@ -139,6 +184,7 @@ export const useTutorialStore = create<TutorialState>()((set, get) => ({
       stepRewardsClaimed:
         get().stepRewardsClaimed + TUTORIAL_STEP_REWARD_TOKENS,
       acceptsEventsAfter: Date.now() + STEP_ADVANCE_DELAY_MS,
+      pendingCompletionStepId: null,
       pendingAdvanceStepId: step.id,
     });
     setTimeout(() => {
@@ -166,18 +212,49 @@ export const useTutorialStore = create<TutorialState>()((set, get) => ({
           });
         }
       } else {
-        set({ currentIndex: nextIndex, pendingAdvanceStepId: null });
-        // Replay an event that fired early (during this step's reward) and belongs to the now-current step; otherwise clear any stale latch.
+        // If the player already completed the next physical action during this
+        // reward window, consume that step atomically. Rendering it first and
+        // immediately completing it caused instructions such as "Release your
+        // finger" to flash for a single frame.
         const nextStep = state.steps[nextIndex];
         const { latchedEvents } = get();
         if (nextStep && latchedEvents.includes(nextStep.event)) {
+          const afterLatchedIndex = nextIndex + 1;
+          const remainingLatchedEvents = latchedEvents.filter(
+            (event) => event !== nextStep.event,
+          );
+          const claimedRewards =
+            get().stepRewardsClaimed + TUTORIAL_STEP_REWARD_TOKENS;
+          if (afterLatchedIndex >= state.steps.length) {
+            set({
+              completed: true,
+              settingsReady: state.phase === "core",
+              rewardReady: state.phase === "settings",
+              stepRewardReady: false,
+              lastCompletedStepLabel: `${nextIndex + 1}/${state.steps.length}`,
+              stepRewardsClaimed: claimedRewards,
+              acceptsEventsAfter: 0,
+              pendingAdvanceStepId: null,
+              latchedEvents: remainingLatchedEvents,
+            });
+          } else {
+            set({
+              currentIndex: afterLatchedIndex,
+              stepRewardReady: false,
+              lastCompletedStepLabel: `${nextIndex + 1}/${state.steps.length}`,
+              stepRewardsClaimed: claimedRewards,
+              acceptsEventsAfter: 0,
+              pendingAdvanceStepId: null,
+              latchedEvents: remainingLatchedEvents,
+            });
+          }
+        } else {
           set({
-            latchedEvents: latchedEvents.filter((e) => e !== nextStep.event),
+            currentIndex: nextIndex,
             acceptsEventsAfter: 0,
+            pendingAdvanceStepId: null,
+            ...(latchedEvents.length ? { latchedEvents: [] } : {}),
           });
-          get().completeCurrentStep();
-        } else if (latchedEvents.length) {
-          set({ latchedEvents: [] });
         }
       }
     }, STEP_ADVANCE_DELAY_MS);
@@ -187,6 +264,7 @@ export const useTutorialStore = create<TutorialState>()((set, get) => ({
       skipped: true,
       rewardReady: false,
       stepRewardReady: false,
+      pendingCompletionStepId: null,
       pendingAdvanceStepId: null,
       latchedEvents: [],
     }),

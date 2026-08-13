@@ -1,4 +1,4 @@
-// The controls shown while a piece is being placed: the colour swatches and the button column, in one rail on the RIGHT edge of the screen. Lifted out of RoomExperience so this whole cluster can be restyled on its own — the room screen only decides WHEN it is up (activeEdit), never how it looks.
+// The controls shown while a piece is being placed: the colour swatches and the button column, in one rail on the RIGHT edge of the screen. Lifted out of RoomExperience so this whole cluster can be restyled on its own â€” the room screen only decides WHEN it is up (activeEdit), never how it looks.
 //
 // Right edge, and a column, because the app is landscape: the free space is vertical, and the old bottom-centre bar sat across the room's width and on top of the bottom navigation. The rail is centred in the band left between the top stats cluster and the bottom bar, so it covers neither.
 import { StyleSheet, Pressable, Text, View } from "react-native";
@@ -27,7 +27,26 @@ function blockedHint(reason: string | null): string {
   }
 }
 
-export function PlacementRail() {
+export type PlacementGuideTarget =
+  | "style"
+  | "reposition"
+  | "rotate"
+  | "confirm";
+
+export interface PlacementGuideInteraction {
+  type: PlacementGuideTarget;
+  sequence: number;
+}
+
+interface PlacementRailProps {
+  guideTarget?: PlacementGuideTarget | null;
+  onGuideAction?: (type: PlacementGuideTarget) => void;
+}
+
+export function PlacementRail({
+  guideTarget = null,
+  onGuideAction,
+}: PlacementRailProps) {
   const s = useFixedStyles(makeStyles);
   const t = useTheme();
   // The HUD is absolutely positioned, so each corner nudges itself in by the insets
@@ -62,7 +81,10 @@ export function PlacementRail() {
         },
       ]}
     >
-      <ColourPicker />
+      <ColourPicker
+        highlighted={guideTarget === "style"}
+        onSelect={() => onGuideAction?.("style")}
+      />
 
       <View style={[s.bar, blocked && s.barBlocked]}>
         <Text style={[s.hint, blocked && s.hintBlocked]}>{blockedHint(blockedReason)}</Text>
@@ -82,15 +104,21 @@ export function PlacementRail() {
         <View style={s.row}>
           <Pressable
             accessibilityLabel="Rotate furniture left"
-            style={s.roundButton}
-            onPress={() => rotateGhost(-1)}
+            style={[s.roundButton, guideTarget === "rotate" && s.guideTarget]}
+            onPress={() => {
+              rotateGhost(-1);
+              onGuideAction?.("rotate");
+            }}
           >
             <RotateLeftIcon size={21} />
           </Pressable>
           <Pressable
             accessibilityLabel="Rotate furniture right"
-            style={s.roundButton}
-            onPress={() => rotateGhost(1)}
+            style={[s.roundButton, guideTarget === "rotate" && s.guideTarget]}
+            onPress={() => {
+              rotateGhost(1);
+              onGuideAction?.("rotate");
+            }}
           >
             <RotateRightIcon size={21} />
           </Pressable>
@@ -101,7 +129,7 @@ export function PlacementRail() {
             style={s.roundButton}
             onPress={cancelPlacement}
           >
-            <Text style={s.cancelGlyph}>✕</Text>
+            <Text style={s.cancelGlyph}>âœ•</Text>
           </Pressable>
           <Pressable
             accessibilityLabel="Delete furniture"
@@ -114,9 +142,16 @@ export function PlacementRail() {
         {/* Full width of the rail: the primary action, and the only one that ends the placement well. */}
         <Pressable
           accessibilityLabel="Confirm furniture position"
-          style={[s.confirm, blocked && s.confirmDisabled]}
+          style={[
+            s.confirm,
+            blocked && s.confirmDisabled,
+            guideTarget === "confirm" && s.guideTarget,
+          ]}
           disabled={blocked}
-          onPress={confirmPlacement}
+          onPress={() => {
+            confirmPlacement();
+            onGuideAction?.("confirm");
+          }}
         >
           <CheckIcon size={27} color={t.onSuccess} />
         </Pressable>
@@ -126,7 +161,7 @@ export function PlacementRail() {
 }
 
 const makeStyles = (t: Theme) => StyleSheet.create({
-  // The band the placement UI is centred in — pinned to the right edge, its top and bottom set at the render above. A row, so the swatches sit to the LEFT of the button column and the controls stay hard against the edge.
+  // The band the placement UI is centred in â€” pinned to the right edge, its top and bottom set at the render above. A row, so the swatches sit to the LEFT of the button column and the controls stay hard against the edge.
   rail: {
     position: 'absolute',
     zIndex: 16,
@@ -157,7 +192,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-  // Heads the column and wraps to its width — the rail is too narrow for a single line of hint text.
+  // Heads the column and wraps to its width â€” the rail is too narrow for a single line of hint text.
   hint: {
     alignSelf: 'stretch',
     color: CREAM.ink,
@@ -199,5 +234,12 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   },
   confirmDisabled: {
     opacity: .35,
+  },
+  guideTarget: {
+    borderWidth: 3,
+    borderColor: t.accent,
+    shadowColor: t.accent,
+    shadowOpacity: .45,
+    shadowRadius: 8,
   },
 });
