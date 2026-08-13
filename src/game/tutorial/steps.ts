@@ -26,7 +26,7 @@ export type TutorialEvent =
   | "assembly_reoriented"
   | "step_undone"
   | "step_redone"
-  | "release_behavior_changed"
+  | "backdrop_changed"
   | "instruction_preferences_changed"
   | "auto_view_toggled"
   | "spot_used"
@@ -209,12 +209,13 @@ export const CONTROL_TUTORIAL_STEPS: TutorialStep[] = [
 
 /** Optional preference walkthrough offered after the short core tutorial. */
 export const SETTINGS_TUTORIAL_STEPS: TutorialStep[] = [
+  // Background, not Released part: the in-build panel no longer carries the dev interaction rows, and this is the step every profile gets — Control pins mode "free", which filters the instructions step out, and Control/Momentum are filtered out of the two below. Teaching Background through the real panel is also the standing content decision (TUTORIAL_CONTENT_DECISIONS.display).
   {
-    id: "release-behavior-settings",
+    id: "background-settings",
     targetId: "settings",
     message:
-      "In Settings, you can choose how released parts behave: Auto-return or Float.",
-    event: "release_behavior_changed",
+      "In Settings, you can change the Build background behind the furniture.",
+    event: "backdrop_changed",
   },
   {
     id: "guided-instructions-settings",
@@ -224,13 +225,7 @@ export const SETTINGS_TUTORIAL_STEPS: TutorialStep[] = [
     event: "instruction_preferences_changed",
     when: ({ mode }) => mode === "guide",
   },
-  {
-    id: "focus-mode-settings",
-    targetId: "settings",
-    message:
-      "You can use Focus mode to show only the current part or action.",
-    event: "focus_mode_toggled",
-  },
+  // Focus is taught by hud-focus, on the chip itself — the in-build panel no longer carries the row.
   {
     id: "auto-view-settings",
     targetId: "settings",
@@ -265,10 +260,11 @@ export const tutorialStepsFor = (context: TutorialContext): TutorialStep[] => {
   const assemblySteps = finishingStep
     ? remainingCore.slice(0, -1)
     : remainingCore;
+  // Every profile learns Focus, because every profile SEES the Focus chip — ToggleChips renders unconditionally in play, and the tutorial fork now matches it. The rest of the shared HUD run stays with the two profiles built around user-directed controls.
   const sharedHudSteps =
     context.profile === "control" || context.profile === "momentum"
       ? SHARED_HUD_TUTORIAL_STEPS
-      : [];
+      : SHARED_HUD_TUTORIAL_STEPS.filter((step) => step.id === "hud-focus");
   const controlHudSteps =
     context.profile === "control"
       ? [
@@ -282,7 +278,7 @@ export const tutorialStepsFor = (context: TutorialContext): TutorialStep[] => {
       (!step.when || step.when(context)) &&
       !(
         (context.profile === "control" || context.profile === "momentum") &&
-        (step.id === "focus-mode-settings" || step.id === "auto-view-settings")
+        step.id === "auto-view-settings"
       ),
   );
 
