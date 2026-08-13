@@ -10,9 +10,12 @@ export type TutorialTargetId =
   | "undo"
   | "focus"
   | "autoView"
-  | "settings";
+  | "settings"
+  /** The whole screen, for the grip step: what it teaches is the DEVICE, not a control on it. */
+  | "device";
 
 export type TutorialEvent =
+  | "grip_acknowledged"
   | "joystick_moved"
   | "camera_recentered"
   | "pinch_zoomed"
@@ -30,8 +33,7 @@ export type TutorialEvent =
   | "spot_used"
   | "focus_mode_toggled"
   | "hint_requested"
-  | "tool_used"
-  | "grip_acknowledged";
+  | "tool_used";
 
 export type ToolTutorialKind = "tighten" | "tap" | "beat" | "press";
 export type TutorialAudioSource = number | { uri: string };
@@ -58,6 +60,16 @@ export const TUTORIAL_STEP_REWARD_TOKENS = 10;
 
 /** The short, first-run core loop. Preference education stays contextual. */
 export const TUTORIAL_STEPS: TutorialStep[] = [
+  {
+    // FIRST, before anything on screen. Every control after this assumes two thumbs on the edges -
+    // the joystick is bottom-left, the tray bottom-right - and a player holding the phone one-handed
+    // to read finds the first drag awkward for a reason the tutorial never mentions.
+    id: "hold-like-controller",
+    targetId: "device",
+    message: "Hold your device with both hands, like a game controller.",
+    shortLabel: "Get comfortable",
+    event: "grip_acknowledged",
+  },
   {
     id: "long-press-part",
     targetId: "partsTray",
@@ -230,8 +242,10 @@ export const tutorialStepsFor = (context: TutorialContext): TutorialStep[] => {
   const core = TUTORIAL_STEPS.filter(
     (step) => !step.when || step.when(context),
   );
-  const openingSteps = core.slice(0, 2);
-  const remainingCore = core.slice(2);
+  // Three, not two: the grip step precedes the first two touch steps, and the Settings
+  // introduction still belongs after the tabletop has been PLACED, not merely picked up.
+  const openingSteps = core.slice(0, 3);
+  const remainingCore = core.slice(3);
   const finishingStep = remainingCore.at(-1);
   const assemblySteps = finishingStep
     ? remainingCore.slice(0, -1)
