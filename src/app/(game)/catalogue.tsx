@@ -4,10 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
 import Animated, {
   cancelAnimation,
+  Extrapolation,
+  interpolate,
+  useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
   withSequence,
+  withSpring,
   withTiming,
 } from "react-native-reanimated";
 import { StyleSheet,
@@ -30,7 +34,7 @@ import { useCurrentUserId, useRepos } from "@/src/data";
 import { useCatalogRow, useCatalogStore } from "@/src/data/catalog/buildStore";
 import { useVariantStore } from "@/src/data/catalog/variantStore";
 import { brandFor } from "@/src/game/content/brands";
-import { ChevronIcon, ClockIcon, StagesIcon } from "@/src/components/Icons";
+import { ChevronIcon, ClockIcon } from "@/src/components/Icons";
 import { ConfettiRain } from "@/src/game/ui/celebration/Confetti";
 
 // styling
@@ -39,7 +43,6 @@ import { Button, GrainOverlay } from "@/src/game/ui/system/Button";
 import { LoadingScreen } from "@/src/game/ui/loading/LoadingScreen";
 import type { Theme } from "@/src/game/ui/system/theme";
 
-import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 // The catalogue's copy is DB-authored.
 // needs loading screen
 function CatalogueLoading({ onBack }: { onBack: () => void }) {
@@ -114,6 +117,23 @@ export default function CatalogueScreen() {
     };
   }, [items, me, repos]);
   // The dropdown stays MOUNTED and animates on a shared value rather than mounting/unmounting with entering/exiting: an exit animation on an unmounting child races the state that removed it, and the closed menu still has to be untouchable and invisible to a screen reader either way.
+  // The hanging sign: drops in with a spring bounce on mount, and fades out as soon as the grid
+  // scrolls, so it never floats over the cards. It does NOT scroll with the content.
+  const signDrop = useSharedValue(-140);
+  const scrollY = useSharedValue(0);
+  useEffect(() => {
+    // Settles with a little overshoot — a sign on ropes should swing before it hangs still.
+    signDrop.value = withSpring(0, { damping: 12, stiffness: 110, mass: 0.9 });
+  }, [signDrop]);
+  const scrollHandler = useAnimatedScrollHandler((e) => {
+    scrollY.value = e.contentOffset.y;
+  });
+  const signStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: signDrop.value }],
+    // Gone within the first ~70px of scroll, well before the first card reaches it.
+    opacity: interpolate(scrollY.value, [0, 70], [1, 0], Extrapolation.CLAMP),
+  }));
+
   const menuOpen = useSharedValue(0);
   useEffect(() => {
     menuOpen.value = withTiming(pickerOpen ? 1 : 0, { duration: 170 });
@@ -151,17 +171,9 @@ export default function CatalogueScreen() {
 
   return (
     <View style={styles.root}>
-      {/* Diagonal, so neither end of the ramp sits flat behind a whole row of cards. */}
-      <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
-        <Defs>
-          <LinearGradient id="catalogueBg" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor={BG_FROM} />
-            <Stop offset="1" stopColor={BG_TO} />
-          </LinearGradient>
-        </Defs>
-        <Rect x="0" y="0" width="100%" height="100%" fill="url(#catalogueBg)" />
-      </Svg>
-      <ScrollView
+      <Animated.ScrollView
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
         contentContainerStyle={[
           styles.content,
           { paddingLeft: SPACE.xl + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN), paddingRight: SPACE.xl + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN), paddingTop: SPACE.xl + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN) },
@@ -181,8 +193,9 @@ export default function CatalogueScreen() {
               style={styles.homeIcon}
               resizeMode="contain"
             />
+            <Text style={styles.homeLabel}>Home</Text>
           </Pressable>
-          <Text style={styles.title}>Pick a Model to Assemble</Text>
+          {/* Spacer where the board hangs — the sign itself is pinned to the screen (see boardSign). */}
           <View style={styles.headerSpacer} />
           {/* Category filter. The list hangs off this pill so it can't push the grid down. */}
           <View style={styles.pickerWrap}>
@@ -254,7 +267,18 @@ export default function CatalogueScreen() {
             />
           ))}
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
+      {/* Pinned to the SCREEN, not the scroll: the ropes run off the top edge and the sign hangs
+          beneath them. It fades on scroll rather than travelling with the grid. */}
+      <Animated.View style={[styles.boardSign, signStyle]} pointerEvents="none">
+        <Image
+          source={require("@/src/assets/ui/board-wooden.png")}
+          style={styles.board}
+          resizeMode="contain"
+          accessibilityRole="image"
+          accessibilityLabel="Furniture Catalogue"
+        />
+      </Animated.View>
     </View>
   );
 }
@@ -264,10 +288,9 @@ export default function CatalogueScreen() {
 const CELEBRATE_MS = 4200;
 
 /** This screen's backdrop. Deliberately its own pair rather than a shared token: each screen can be
- *  retuned without touching the others. Keep root.backgroundColor equal to BG_FROM — that is what
+ *  retuned without touching the others. The screen background is a flat cream (#F3ECE0) — what
  *  shows for the frame before the SVG paints. */
-const BG_FROM = ACCENT_LIGHT;
-const BG_TO = "#A9BFD9";
+
 
 /**
  * The stage count as a difficulty band.
@@ -279,8 +302,16 @@ const BG_TO = "#A9BFD9";
  */
 function stageBadgeColor(stages: number): string {
   if (stages <= 1) return "#8FA876";
-  if (stages <= 3) return "#E8D48C";
+  if (stages <= 2) return "#E8D48C";
   return "#C98B76";
+}
+
+/** Trend-arrow art per difficulty band — same thresholds as stageBadgeColor, so the icon and the
+ *  badge colour can never disagree. */
+function stageTrendArrow(stages: number) {
+  if (stages <= 1) return require("@/src/assets/ui/icons/icon-trend-green.png");
+  if (stages <= 2) return require("@/src/assets/ui/icons/icon-trend-yellow.png");
+  return require("@/src/assets/ui/icons/icon-trend-red.png");
 }
 
 /** The single text colour for this screen (wireframe ink). */
@@ -448,7 +479,11 @@ function FurnitureCard({
               The stage count is the closest thing this app has to a difficulty rating, so it is
               coloured like one: the number is the fact, and the colour is what it MEANS. */}
           <View style={styles.statRow}>
-            <StagesIcon size={22} color={INK} />
+            <Image
+              source={stageTrendArrow(meta.clusterCount)}
+              style={styles.trendArrow}
+              resizeMode="contain"
+            />
             <View style={[styles.stageBadge, { backgroundColor: stageBadgeColor(meta.clusterCount) }]}>
               <Text style={styles.stageBadgeText}>
                 {meta.clusterCount} {meta.clusterCount === 1 ? "stage" : "stages"}
@@ -500,7 +535,7 @@ function FurnitureCard({
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
     // Screen palette, per the wireframe. Held here rather than in theme.ts so the rest of the app keeps its own tokens until these are promoted deliberately. INK is every text on the screen — one colour, no dimmed secondary tier, so the hierarchy comes from size/weight.
-    root: { flex: 1, backgroundColor: BG_FROM },
+    root: { flex: 1, backgroundColor: "#F3ECE0" },
     loadingWrap: { flex: 1 },
     // Matches the grid header's inset so the button doesn't jump when the catalogue lands.
     loadingBack: { position: "absolute", top: 56, left: SPACE.xl },
@@ -509,22 +544,44 @@ const makeStyles = (t: Theme) =>
       flexDirection: "row",
       alignItems: "center",
       gap: SPACE.md,
-      marginBottom: SPACE.xl,
+      // Bottom room so the first cards clear the pinned sign while the page is at rest.
+      marginBottom: 40,
       // The dropdown hangs out of this row; without this its menu is clipped by the ScrollView.
       zIndex: 10,
     },
     homeBtn: {
-      width: 44,
-      height: 44,
-      borderRadius: RADIUS.control,
+      flexDirection: "row",
       alignItems: "center",
-      justifyContent: "center",
+      gap: SPACE.sm,
+      height: 44,
+      paddingHorizontal: SPACE.md,
+      borderRadius: RADIUS.pill,
       backgroundColor: "#FBF8F3",
       borderWidth: 1,
       borderColor: t.border,
       ...ELEVATION.card,
     },
-    homeIcon: { width: 28, height: 28 },
+    homeIcon: { width: 26, height: 26 },
+    homeLabel: { ...TYPE.label, fontWeight: "600", color: INK },
+    // The board sits BETWEEN the two pills and takes the middle. overflow hidden + the image's
+    // negative marginTop is what clips the rope-tops, so they read as running off the screen edge.
+    headerSpacer: { flex: 1 },
+    // The sign hangs from the top of the SCREEN. Centered across the full width; pinned so the grid
+    // scrolls underneath and the sign fades out instead of following it.
+    boardSign: {
+      position: "absolute",
+      top: 0,
+      // The extra right inset pushes the centred sign slightly LEFT of true centre. Increase it to
+      // shift further left; drop it back to 0 to re-centre.
+      left: 0,
+      right: 28,
+      alignItems: "center",
+      zIndex: 5,
+    },
+    // 2.77:1 art. The negative marginTop cancels the transparent cap above the ropes in the PNG, so
+    // the rope-tops meet the screen edge. Tune height to resize; width follows the aspect ratio.
+    board: { width: "100%", maxWidth: 360, height: 140, aspectRatio: 1109 / 401, marginTop: -44 },
+    trendArrow: { width: 24, height: 24 },
     pressedSurface: { backgroundColor: t.surfaceRaised },
     pickerWrap: { position: "relative", zIndex: 20 },
     picker: {
@@ -557,9 +614,6 @@ const makeStyles = (t: Theme) =>
     pickerItemSelected: { backgroundColor: t.surfaceRaised },
     pickerItemText: { ...TYPE.body, color: INK },
     pickerItemActive: { color: INK, fontFamily: FONT, fontWeight: "700" },
-    headerSpacer: { flex: 1 },
-    // Tracked-out slightly: this is a screen label, not a page title competing with the cards. Ink, not cream: cream measures 1.78:1 against the blue end of the gradient, and ink clears both ends (4.29 lavender, 8.65 blue).
-    title: { fontFamily: FONT, fontSize: 20, fontWeight: "800", color: INK, letterSpacing: 0.4 },
     subtitle: {
       ...TYPE.body,
       color: INK,
@@ -612,7 +666,7 @@ const makeStyles = (t: Theme) =>
     // INK on every band: all three colours are light enough to carry it (7.5:1 or better), and one
     // text colour keeps the badges reading as one set rather than three separate marks.
     stageBadgeText: { ...TYPE.labelSm, color: INK },
-    // Matches StagesIcon/ClockIcon so the three stat rows share one optical size.
+    // Matches the trend arrow/ClockIcon so the three stat rows share one optical size.
     xpIcon: { width: 22, height: 22 },
     cardCopy: { flex: 1, gap: SPACE.xs },
     // Centre, not flex-start: the logo now matches the title's cap height, so aligning on the text baseline row is what makes the pair read as one line.
