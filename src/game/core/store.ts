@@ -136,10 +136,13 @@ interface GameState {
 
   /** Reaching for a not-yet-available part in free mode → set a gentle nudge. */
   noteBlocked: (actionId: ActionId) => void;
-  /** Free-mode hint BUTTON: suggest one doable next step (never forces it). */
-  /** `source` is which control asked. The "?" button is a request FOR WORDS and always gets them;
-   *  Spot is a request for a demonstration, and in Control — which has the "?" button as a separate
-   *  affordance — it stays wordless. */
+  /** Free-mode next-step help: suggest one doable next step (never forces it). */
+  /** `source` is which control asked, and the two are now cleanly split:
+   *  - "hint" (the "?" button) is a request FOR WORDS: it shows the text nudge ONLY, with no ghost
+   *    demonstration and no tray flash. It is the whole answer on its own.
+   *  - "spot" is a request for a DEMONSTRATION: it plays the ghost into its socket and flashes the
+   *    tray card, with NO text in Control (which has "?" for words). On profiles WITHOUT a "?"
+   *    button, Spot keeps its text so those players still get a written nudge. */
   suggestNext: (source?: "hint" | "spot") => void;
   clearHint: () => void;
 
@@ -421,21 +424,30 @@ export const useGameStore = create<GameState>()((set, get) => ({
       next.actionId,
       s.settings.textLevel,
     );
-    // A pickup hint also names a tray card — flag its group so the tray can flash it and scroll it into view.
+    // A pickup step also names a tray card — its group lets the tray flash it and scroll it into view.
     const part = next.partId ? s.furniture.parts[next.partId] : undefined;
     const group = isPickupType(next.type) && part ? part.group : null;
-    // Suppressed only for SPOT in Control: that profile has the "?" button for written hints, so a
-    // toast on top of the demonstration is the same advice twice. Pressing "?" is a request for the
-    // words themselves and always produces them, on every profile.
-    const wantsText = !!text && (source === "hint" || s.profile !== "control");
+
+    // "?" (Hint) is WORDS ONLY. It shows the text nudge and nothing else — no ghost into the socket,
+    // no tray flash. That demonstration is Spot's job, and doing both here made the two buttons
+    // indistinguishable in Control (the report that started this): "?" was quietly also spotting.
+    if (source === "hint") {
+      set({
+        hint: text ? `Try: ${text}` : null,
+        hintGroup: null,
+        hintPartId: null,
+        hintPulse: s.hintPulse + 1,
+      });
+      return;
+    }
+
+    // Spot is the DEMONSTRATION: the ghost travels into its socket (hintPartId) and the tray flashes
+    // the card to pick up (hintGroup) — the two halves of "which part, and where". No text in Control,
+    // which has "?" for the words; kept on profiles without a "?" button so they still get a nudge.
+    const wantsText = !!text && s.profile !== "control";
     set({
       hint: wantsText ? `Try: ${text}` : null,
-      // NOT gated on the text. hintGroup drives the parts-tray highlight, which is the other half of
-      // the answer: the ghost shows WHERE the part goes, the tray flash shows WHICH card to pick up.
-      // Suppressing it in Control left the demonstration pointing at a socket with no way to find
-      // the part that fills it.
       hintGroup: group,
-      // The spotlight no longer depends on there being TEXT — a hint with no copy still has a part.
       hintPartId: next.partId ?? null,
       hintPulse: s.hintPulse + 1,
     });
