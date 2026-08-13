@@ -110,6 +110,7 @@ function GameScreen() {
   const {
     manipulator,
     stickActive,
+    panShared,
     onStickStart,
     onStickMove,
     onStickEnd,
@@ -373,6 +374,7 @@ function GameScreen() {
             carryShared={carryShared}
             stickShared={stickShared}
             stickActive={stickActive}
+            panShared={panShared}
             onModelReady={() => setModelReady(true)}
           />
         </View>

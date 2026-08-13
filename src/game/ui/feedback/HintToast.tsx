@@ -2,13 +2,15 @@ import { useEffect } from "react";
 import { GrainOverlay } from "@/src/game/ui/system/Button";
 import { StyleSheet, Text, View } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
-import { Theme, useStyles } from "@/src/game/ui/system/theme";
+import { Theme, useFixedStyles, useReadingFont } from "@/src/game/ui/system/theme";
 
 /** FREE-mode soft nudge: a calm, low-stimulation message shown when the player reaches for a part that isn't ready yet ("Maybe place the leg first."). Driven by store.hint (set by noteBlocked); off entirely in plan/guide and when the softHints setting is off (noteBlocked no-ops there). */
 const DISMISS_MS = 3200;
 
 export function HintToast() {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
+  // A hint is read, not glanced at.
+  const readingFont = useReadingFont();
   const hint = useGameStore((s) => s.hint);
   const clearHint = useGameStore((s) => s.clearHint);
   const fontScale = useGameStore((s) => s.settings.fontScale);
@@ -24,7 +26,7 @@ export function HintToast() {
     <View style={styles.wrap} pointerEvents="none">
       <View style={styles.bubble}>
         <GrainOverlay radius={14} />
-        <Text style={[styles.text, { fontSize: Math.round(14 * fontScale) }]}>{hint}</Text>
+        <Text style={[styles.text, { fontFamily: readingFont, fontSize: Math.round(14 * fontScale) }]}>{hint}</Text>
       </View>
     </View>
   );

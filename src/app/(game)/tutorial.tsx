@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { router } from "expo-router";
 import { OrientationLock } from "expo-screen-orientation";
-import { View } from "react-native";
+import { Animated, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useHudInsets } from '@/src/hooks/use-safe-insets';
 
@@ -20,7 +20,6 @@ import { TightenControl } from "@/src/game/input/dial/TightenControl";
 import { RotateControl } from "@/src/game/input/dial/RotateControl";
 import { SlideControl } from "@/src/game/input/slide/SlideControl";
 import { PressControl } from "@/src/game/input/pad/PressControl";
-import { ToolBar } from "@/src/game/ui/hud/ToolBar";
 import { ObjectiveBar } from "@/src/game/ui/hud/ObjectiveBar";
 import {
   HintButton,
@@ -32,6 +31,7 @@ import {
 } from "@/src/game/ui/hud/hudChrome";
 import { Button } from "@/src/game/ui/system/Button";
 import { useStepObjective } from "@/src/game/core/presentation/useStepObjective";
+import { useAssemblySfx } from "@/src/game/audio/useAssemblySfx";
 
 import { useGameStore } from "@/src/game/core/store";
 import { useCurrentUserId, useRepos } from "@/src/data";
@@ -50,7 +50,7 @@ import { CenterDropRing } from "@/src/game/ui/feedback/CenterDropRing";
 import { FitChip } from "@/src/game/ui/feedback/FitChip";
 import { PartsTray } from "@/src/game/ui/hud/PartsTray";
 import { ClusterTray } from "@/src/game/ui/hud/ClusterTray";
-import { RedoButton, UndoButton } from "@/src/game/ui/hud/UndoButton";
+import { UndoButton } from "@/src/game/ui/hud/UndoButton";
 import { GameSettings } from "@/src/game/ui/settings/GameSettings";
 import type { SettingsFocusTarget } from "@/src/game/ui/settings/SettingsControls";
 import {
@@ -70,19 +70,27 @@ import {
 import { availableInMode } from "@/src/game/core/evaluation/availability";
 import { TutorialTarget } from "@/src/game/tutorial/TutorialTarget";
 import { MascotGuideOverlay } from "@/src/game/tutorial/MascotGuideOverlay";
+import { GripCoach } from "@/src/game/tutorial/GripCoach";
+import {
+  SkipTutorialButton,
+  SkipTutorialConfirm,
+} from "@/src/game/tutorial/SkipTutorial";
 import { MomentumCompanion } from "@/src/game/tutorial/MomentumCompanion";
 import { MomentumAttentionOverlay } from "@/src/game/tutorial/MomentumAttentionOverlay";
 import { useTutorialStore } from "@/src/game/tutorial/store";
-import { furnitureForProfile } from "@/src/game/core/profile";
+import { useTutorialHaptics } from "@/src/game/tutorial/useTutorialHaptics";
 import {
   TUTORIAL_STEP_REWARD_TOKENS,
   type ToolTutorialKind,
+  type TutorialTargetId,
 } from "@/src/game/tutorial/steps";
 
 const TUTORIAL_FURNITURE_ID = "lack-table";
+const TUTORIAL_SPOT_MS = 2800;
 
 function TutorialScreen() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
+  useTutorialHaptics();
   const hud = useHudInsets();
   const sceneState = useSceneState();
   const {
@@ -97,6 +105,7 @@ function TutorialScreen() {
   const {
     manipulator,
     stickActive,
+    panShared,
     onStickStart,
     onStickMove,
     onStickEnd,
@@ -111,6 +120,74 @@ function TutorialScreen() {
   const lastScale = useRef(1);
   const joystickTutorialStartedAt = useRef<number | null>(null);
   const [guideCollapsed, setGuideCollapsed] = useState(false);
+  const [undoPreviewActive, setUndoPreviewActive] = useState(false);
+  const undoPreviewProgress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!undoPreviewActive) {
+      undoPreviewProgress.stopAnimation();
+      undoPreviewProgress.setValue(0);
+      return;
+    }
+
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(undoPreviewProgress, {
+          toValue: 1,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+        Animated.delay(420),
+        Animated.timing(undoPreviewProgress, {
+          toValue: 0,
+          duration: 450,
+          useNativeDriver: true,
+        }),
+        Animated.delay(220),
+      ]),
+    );
+    animation.start();
+    return () => {
+      animation.stop();
+      undoPreviewProgress.setValue(0);
+    };
+  }, [undoPreviewActive, undoPreviewProgress]);
+
+  const undoPreviewSceneStyle = {
+    opacity: undoPreviewProgress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [1, 0.35],
+    }),
+    transform: [
+      {
+        translateX: undoPreviewProgress.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, 72],
+        }),
+      },
+      {
+        scale: undoPreviewProgress.interpolate({
+          inputRange: [0, 1],
+          outputRange: [1, 0.92],
+        }),
+      },
+    ],
+  };
+
+  const handleTutorialUndo = useCallback(() => {
+    const tutorial = useTutorialStore.getState();
+    if (tutorial.steps[tutorial.currentIndex]?.id !== "hud-undo") {
+      useGameStore.getState().undoLastAction();
+      return;
+    }
+    setUndoPreviewActive(true);
+  }, []);
+
+  const dismissUndoPreview = useCallback(() => {
+    // Keep the preview visible while the tutorial store applies its normal
+    // advance delay. Hiding it first briefly reveals the old Undo guide again.
+    useTutorialStore.getState().completeEvent("step_undone");
+  }, []);
 
   // Stabilised with useCallback so <Joystick>'s internal gesture memo actually holds.
   // The tutorial needs to wrap the raw camera callbacks to drive step tracking; passing fresh inline arrows would hand Joystick new props every render, defeating its memo and reattaching the native pan handler mid-drag — the very stutter the memo prevents on the play screen. getState() and the ref read are non-reactive, so the underlying camera callback is the only real dependency.
@@ -184,12 +261,6 @@ function TutorialScreen() {
         if (state.completed.length < previous.completed.length) {
           tutorial.completeEvent("step_undone");
         }
-        if (
-          state.completed.length > previous.completed.length &&
-          state.undoneActions.length < previous.undoneActions.length
-        ) {
-          tutorial.completeEvent("step_redone");
-        }
         if (state.completed.length > previous.completed.length) {
           const added = state.completed.slice(previous.completed.length);
           for (const id of added) {
@@ -211,14 +282,8 @@ function TutorialScreen() {
             }
           }
         }
-        if (
-          !settingsTutorialActive &&
-          state.settings.autoView !== previous.settings.autoView
-        ) {
-          tutorial.completeEvent("auto_view_toggled");
-        }
-        // Spot writes hintPartId; a rising edge on it IS a press, and it needs no new plumbing.
-        if (!previous.hintPartId && state.hintPartId) {
+        // hintPulse increments on every Spot press, including repeated presses for the same part.
+        if (state.hintPulse > previous.hintPulse) {
           tutorial.completeEvent("spot_used");
         }
         if (
@@ -264,10 +329,6 @@ function TutorialScreen() {
       ? "releaseBehavior"
       : tutorialStep?.id === "guided-instructions-settings"
       ? "instructions"
-      : tutorialStep?.id === "focus-mode-settings"
-      ? "focusMode"
-      : tutorialStep?.id === "auto-view-settings"
-      ? "autoView"
       : null;
   const tutorialAdvancing = useTutorialStore(
     (s) => s.pendingAdvanceStepId !== null,
@@ -275,6 +336,26 @@ function TutorialScreen() {
   const activeCluster = useGameStore((s) => s.activeCluster);
   const mode = useGameStore((s) => s.mode);
   const settings = useGameStore((s) => s.settings);
+  const focusPreviewActive =
+    tutorialStepId === "hud-spot" && settings.focusMode;
+  const showingUndoPreview =
+    undoPreviewActive && tutorialStepId === "hud-undo";
+  useEffect(() => {
+    if (undoPreviewActive && tutorialStepId !== "hud-undo") {
+      setUndoPreviewActive(false);
+    }
+  }, [tutorialStepId, undoPreviewActive]);
+  useAssemblySfx(settings.soundEffects);
+  const hintPulse = useGameStore((s) => s.hintPulse);
+  const spotPartId = useGameStore((s) => s.hintPartId);
+  useEffect(() => {
+    if (!spotPartId) return;
+    const timer = setTimeout(
+      () => useGameStore.getState().clearSpot(),
+      TUTORIAL_SPOT_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [spotPartId, hintPulse]);
   const profile = useGameStore((s) => s.profile);
   const heldActionId = useGameStore((s) => s.heldActionId);
   const renderStyle = useGameStore((s) => s.renderStyle);
@@ -294,6 +375,27 @@ function TutorialScreen() {
     [furniture, completedSet, mode, activeCluster],
   );
   const completedCount = useGameStore((s) => s.completed.length);
+  const [skipAsked, setSkipAsked] = useState(false);
+  const gripStepActive = useTutorialStore(
+    (s) => s.steps[s.currentIndex]?.id === "hold-like-controller",
+  );
+  /**
+   * Past the grip step — meaning the player has pressed "Got it".
+   *
+   * Not `currentIndex > at` alone. completeCurrentStep does NOT advance the index straight away: it
+   * sets pendingAdvanceStepId and moves the index on a timer, after the step's reward animation. So
+   * for that whole window the index still points AT the grip step even though its event has fired.
+   * pendingAdvanceStepId is the immediate signal, and the index covers everything after it.
+   *
+   * `completed` here is a single boolean for the whole tutorial, not a list of finished ids.
+   * A grip step that is absent (index -1) counts as past, so a profile without it still shows the
+   * exit.
+   */
+  const gripAcknowledged = useTutorialStore((s) => {
+    const at = s.steps.findIndex((step) => step.id === "hold-like-controller");
+    if (at < 0) return true;
+    return s.currentIndex > at || s.pendingAdvanceStepId === "hold-like-controller";
+  });
   const guideCompleted = useTutorialStore((s) => s.completed);
   const guideStepCount = useTutorialStore((s) => s.steps.length);
   const orientationActionId = useGameStore((s) => s.orientationActionId);
@@ -308,6 +410,66 @@ function TutorialScreen() {
       ).length ?? 0,
     [completedSet, furniture],
   );
+  const repeatedAssemblyLabel = useMemo(() => {
+    if (tutorialStepId !== "install-four-legs") return null;
+    const nextAction = furniture?.actions.find(
+      (action) => action.actionId === firstAvailable,
+    );
+    const ordinal = Math.min(installedLegCount + 1, 4);
+
+    if (
+      nextAction?.type === "placeFastener" ||
+      nextAction?.type === "insertFastener"
+    ) {
+      return `Insert bolt ${ordinal} of 4`;
+    }
+    if (nextAction?.type === "tightenFastener") {
+      return `Tighten bolt ${ordinal} of 4`;
+    }
+    if (
+      nextAction?.type === "placePart" &&
+      nextAction.partId?.startsWith("leg_")
+    ) {
+      return `Install leg ${ordinal} of 4`;
+    }
+    return `Install all four legs · ${installedLegCount}/4`;
+  }, [firstAvailable, furniture, installedLegCount, tutorialStepId]);
+  const repeatedAssemblyGuide = useMemo<{
+    targetId: TutorialTargetId;
+    message: string;
+  } | null>(() => {
+    if (tutorialStepId !== "install-four-legs") return null;
+    const nextAction = furniture?.actions.find(
+      (action) => action.actionId === firstAvailable,
+    );
+    const ordinal = Math.min(installedLegCount + 1, 4);
+
+    if (
+      nextAction?.type === "placeFastener" ||
+      nextAction?.type === "insertFastener"
+    ) {
+      return {
+        targetId: "partsTray",
+        message: `Long-press bolt ${ordinal}, then place it into the highlighted hole.`,
+      };
+    }
+    if (nextAction?.type === "tightenFastener") {
+      return {
+        targetId: "tool",
+        message: `Turn clockwise to tighten bolt ${ordinal} by hand.`,
+      };
+    }
+    if (
+      nextAction?.type === "placePart" &&
+      nextAction.partId?.startsWith("leg_")
+    ) {
+      return {
+        targetId: "partsTray",
+        message: `Long-press leg ${ordinal}, then install it onto the bolt.`,
+      };
+    }
+    return null;
+  }, [firstAvailable, furniture, installedLegCount, tutorialStepId]);
   const collapsedLegGuide =
     guideCollapsed && tutorialStepId === "install-four-legs";
   const collapsedActionGuide =
@@ -464,13 +626,10 @@ function TutorialScreen() {
     totalCount,
   });
 
-  const selectedTool = useGameStore((s) => s.selectedTool);
-  const rawTool = sceneState.activeTighten?.tool ?? driveAction?.tool ?? null;
-  // Hand-driven fasteners have no toolbar entry; LACK explicitly uses the
-  // Allen key, so manual-tools mode waits until it is selected.
-  const neededTool = rawTool !== "hand" ? rawTool : null;
-  const toolReady =
-    profile !== "control" || !neededTool || selectedTool === neededTool;
+  // The LACK tutorial is hand-driven and deliberately has no toolbox. Any
+  // interaction control required by the current action appears automatically,
+  // matching the real LACK task instead of exposing an empty manual-tool HUD.
+  const toolReady = true;
   const activeToolKind: ToolTutorialKind | null =
     driveKind === "press"
       ? "press"
@@ -580,7 +739,7 @@ function TutorialScreen() {
       style={[styles.root, theme === "dark" && styles.rootDark]}
     >
       <GestureDetector gesture={sceneGesture}>
-        <View style={styles.sceneWrap}>
+        <Animated.View style={[styles.sceneWrap, undoPreviewSceneStyle]}>
           <TutorialTarget id="scene" style={styles.sceneTarget}>
             <AssemblyScene
               key={renderStyle}
@@ -594,9 +753,10 @@ function TutorialScreen() {
               carryShared={carryShared}
               stickShared={stickShared}
               stickActive={stickActive}
+            panShared={panShared}
             />
           </TutorialTarget>
-        </View>
+        </Animated.View>
       </GestureDetector>
       <TutorialTarget
         id="assemblyArea"
@@ -638,7 +798,7 @@ function TutorialScreen() {
                 ? null
                 : settings.showInstructions
                 ? collapsedLegGuide
-                  ? `Install all four legs · ${installedLegCount}/4`
+                  ? repeatedAssemblyLabel
                   : guideCompleted
                   ? `Finish the LACK table · ${displayedCompletedCount}/${displayedTotalCount}`
                   : tutorialStep?.shortLabel ?? objective
@@ -653,8 +813,7 @@ function TutorialScreen() {
         <CenterDropRing />
         <FitChip />
         <HintToast />
-        <UndoButton />
-        <RedoButton />
+        <UndoButton onPress={handleTutorialUndo} />
         <TutorialTarget
           id="undo"
           style={styles.undoTarget}
@@ -662,6 +821,7 @@ function TutorialScreen() {
         />
         <GameSettings
           tutorialTarget={settingsTutorialTarget}
+          confirmDisabled={tutorialAdvancing}
           onTutorialTargetActivated={() => {
             if (tutorialStep?.targetId === "settings") {
               useTutorialStore
@@ -675,16 +835,14 @@ function TutorialScreen() {
           style={styles.settingsTarget}
           pointerEvents="none"
         />
-        {profile === "control" || profile === "momentum" ? (
-          <View style={styles.togglesRow}>
-            <TutorialTarget id="focus" pointerEvents="auto">
-              <FocusToggleButton />
-            </TutorialTarget>
-            <TutorialTarget id="autoView" pointerEvents="auto">
-              <SpotButton />
-            </TutorialTarget>
-          </View>
-        ) : null}
+        <View style={styles.togglesRow}>
+          <TutorialTarget id="focus" pointerEvents="auto">
+            <FocusToggleButton />
+          </TutorialTarget>
+          <TutorialTarget id="autoView" pointerEvents="auto">
+            <SpotButton />
+          </TutorialTarget>
+        </View>
         {mode !== "strict" ? <ClusterFocusControl /> : null}
         <PartsTray
           items={tutorialTrayItems}
@@ -700,14 +858,6 @@ function TutorialScreen() {
         <TutorialTarget
           id="partsTray"
           style={styles.partsTrayTarget}
-          pointerEvents="none"
-        />
-        {profile === "control" ? (
-          <ToolBar neededTool={neededTool} forceVisible />
-        ) : null}
-        <TutorialTarget
-          id="toolbar"
-          style={styles.toolbarTarget}
           pointerEvents="none"
         />
         {mode === "free" && !focus ? (
@@ -770,14 +920,21 @@ function TutorialScreen() {
         !sceneState.activeTighten &&
         !orientationAction &&
         !driveAction ? (
-          <BeatControl
-            action={sceneState.activeBeat}
-            onSwipeStart={
-              sceneState.activeBeat.actionId === "finishing_checks"
-                ? resetCamera
-                : undefined
-            }
-          />
+          <>
+            <TutorialTarget
+              id="beatControl"
+              style={styles.beatControlTarget}
+              pointerEvents="none"
+            />
+            <BeatControl
+              action={sceneState.activeBeat}
+              onSwipeStart={
+                sceneState.activeBeat.actionId === "finishing_checks"
+                  ? resetCamera
+                  : undefined
+              }
+            />
+          </>
         ) : null}
         <TutorialTarget id="joystick" style={styles.joystickZone}>
           <Joystick
@@ -814,11 +971,45 @@ function TutorialScreen() {
       {profile === "momentum" ? <BuildMap overviewOnly /> : null}
       {ringOverlay}
       <GreenFlash trigger={completedCount} />
+      {/* Above everything, and only on its own step: how to HOLD the device comes before any control
+          on it, and every control after this assumes the grip it teaches. */}
+      {gripStepActive ? (
+        <GripCoach
+          onAcknowledge={() =>
+            useTutorialStore.getState().completeEvent("grip_acknowledged")
+          }
+        />
+      ) : null}
+      {/* Only AFTER the grip step is acknowledged. That step owns the screen while it is up, and
+          offering a way out of the tutorial before the player has seen a single thing it teaches
+          invites them out of it for no reason. */}
+      {gripAcknowledged ? (
+        <SkipTutorialButton onPress={() => setSkipAsked(true)} />
+      ) : null}
+      {skipAsked ? (
+        <SkipTutorialConfirm
+          onCancel={() => setSkipAsked(false)}
+          onConfirm={() => {
+            setSkipAsked(false);
+            // The same exit the guide already uses for "I'll finish this later": the room, with the
+            // welcome banner. The build is not discarded — it stays in the catalogue.
+            router.replace({
+              pathname: "/room",
+              params: { welcome: "tutorial" },
+            });
+          }}
+        />
+      ) : null}
       <MascotGuideOverlay
         activeToolKind={activeToolKind}
         assemblyComplete={totalCount > 0 && completedCount >= totalCount}
         audioEnabled={settings.audio}
         blocked={collapsedActionGuide}
+        focusReturnPrompt={focusPreviewActive}
+        undoPreviewActive={showingUndoPreview}
+        onDismissUndoPreview={dismissUndoPreview}
+        guideTargetOverride={repeatedAssemblyGuide?.targetId}
+        guideMessageOverride={repeatedAssemblyGuide?.message}
         earnedXp={completedCount * furniture.xpPerStep}
         onClaimReward={() => {}}
         onSimulatePinch={() => {
@@ -826,7 +1017,7 @@ function TutorialScreen() {
           onZoomDelta(0.18);
           useTutorialStore.getState().completeEvent("pinch_zoomed");
         }}
-        onContinueToAssembly={() => {
+        onPlaceInRoom={() => {
           const tutorial = useTutorialStore.getState();
           const finishedAllSteps =
             tutorial.completed &&
@@ -838,16 +1029,9 @@ function TutorialScreen() {
           const finishedAssembly =
             requiredActions > 0 && game.completed.length >= requiredActions;
           if (!finishedAllSteps || !finishedAssembly) return;
-          router.replace({
-            pathname: "/play",
-            params: { id: furnitureForProfile(game.profile) },
-          });
-        }}
-        onDeferAssembly={() => {
-          router.replace({
-            pathname: "/room",
-            params: { welcome: "tutorial" },
-          });
+          // The room guide owns the first placement. It presents a real draggable
+          // furniture card and only creates the placement ghost after that drag.
+          router.replace({ pathname: "/room", params: { firstPlacement: "lack-table" } });
         }}
       />
       <MomentumAttentionOverlay />

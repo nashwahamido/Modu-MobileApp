@@ -8,7 +8,7 @@ import { router } from "expo-router";
 import type { Href } from "expo-router";
 
 import { Button } from "@/src/game/ui/system/Button";
-import { SPACE, Theme, TYPE, useStyles } from "@/src/game/ui/system/theme";
+import { SPACE, Theme, TYPE, useFixedStyles } from "@/src/game/ui/system/theme";
 import { ENABLED_ROSTERS } from "./rosters";
 
 // A prepared account drops straight into its furnished room; a fresh one starts the questionnaire so the whole onboarding → tutorial run is on show.
@@ -16,7 +16,7 @@ const ESTABLISHED_ROUTE = "/room" as Href;
 const FRESH_ROUTE = "/onboarding-questionnaire" as Href;
 
 export function AccountPicker() {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 

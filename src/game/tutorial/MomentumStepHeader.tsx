@@ -1,11 +1,11 @@
 import { StyleSheet, Text, View } from "react-native";
 
-import { Theme, useStyles } from "@/src/game/ui/system/theme";
+import { Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 import { momentumFeedbackForStep } from "./MomentumCompanion";
 import { useTutorialStore } from "./store";
 
 export function MomentumStepHeader() {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const currentIndex = useTutorialStore((state) => state.currentIndex);
   const steps = useTutorialStore((state) => state.steps);
   const stepRewardReady = useTutorialStore((state) => state.stepRewardReady);

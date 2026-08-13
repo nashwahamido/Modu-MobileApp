@@ -2,7 +2,15 @@ import { router } from "expo-router";
 import type { Href } from "expo-router";
 import * as Speech from "@/src/onboarding/speech";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, Animated, Image, Pressable, Text, View } from "react-native";
+import {
+  Animated,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import {
   getRecommendedModes,
@@ -15,7 +23,7 @@ import {
 } from "@/src/onboarding/questionnaire";
 import { VoiceButton } from "@/src/game/ui/hud/VoiceButton";
 import { Button } from "@/src/game/ui/system/Button";
-import { ACCENT_LIGHT, SPACE, TYPE, ELEVATION, useStyles, FONT } from "@/src/game/ui/system/theme";
+import { ACCENT_LIGHT, ELEVATION, FONT, SPACE, TYPE, useStyles, useUiScale, useReadingFont } from "@/src/game/ui/system/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import { saveOnboardingResults } from "@/src/services/onboarding";
 import type { Theme } from "@/src/game/ui/system/theme";
@@ -39,7 +47,14 @@ const BG_SOLID = "#A9BFD9";
 const BUBBLE_RIM = ACCENT_LIGHT;
 /** One source for the bubble's width: the reveal animates a clip to exactly this, and the card
  *  inside is pinned to it so nothing squeezes as the clip opens. */
+/** The bubble's width ON A PHONE. Anything wider computes it from the screen instead — see bubbleW
+ *  at the call site. A fixed width plus a UI scale overflows a tablet, because the scale grows
+ *  faster than the extra screen it is there to fill: 640pt of row at 1.75 is 1120pt against 1280pt
+ *  of tablet, before padding. */
 const BUBBLE_W = 470;
+/** What the mascot and its gap take beside the bubble, in phone points. */
+const MASCOT_W = 150;
+const ROW_GAP = 20;
 
 /** The intro entrance, as one block: the mascot arrives, then its speech bubble, then what it says,
  *  then the thing you press. Every value is the moment that element starts. */
@@ -221,6 +236,21 @@ const questionOptionImages = [
 
 export default function QuestionnaireScreen() {
   const styles = useStyles(makeStyles);
+  // Onboarding is where a player reads the most before they know the app.
+  const readingFont = useReadingFont();
+  // The bubble fills whatever is left after the mascot, up to a readable maximum. Fixed on a phone
+  // (the window is smaller than the cap), proportional on a tablet — so the row can never be wider
+  // than the screen it sits in, at any scale.
+  const win = useWindowDimensions();
+  const uiScale = useUiScale();
+  const bubbleW = Math.round(
+    Math.min(
+      // A line of text past ~62 characters is hard to track back to the next line, so the bubble
+      // stops growing well before the screen does.
+      BUBBLE_W * uiScale,
+      win.width - (MASCOT_W + ROW_GAP) * uiScale - 140 * uiScale,
+    ),
+  );
   const safe = useSafeInsets();
   const [introComplete, setIntroComplete] = useState(false);
   const [handedness, setHandedness] = useState<Handedness | null>(null);
@@ -481,12 +511,16 @@ export default function QuestionnaireScreen() {
           {/* The button is a SIBLING of the reveal, not a child of it: the wipe needs overflow
               hidden, and anything hanging over the bubble's edge gets clipped by that same rule. */}
           <View style={styles.bubbleWrap}>
-            <BubbleReveal delay={INTRO_STAGE.bubble} width={BUBBLE_W} style={styles.speechBubble}>
+            <BubbleReveal
+              delay={INTRO_STAGE.bubble}
+              width={bubbleW}
+              style={[styles.speechBubble, { width: bubbleW }]}
+            >
             <SlideInDown delay={INTRO_STAGE.text}>
-              <Text style={styles.introText}>{questionnaireIntroText}</Text>
+              <Text style={[styles.introText, { fontFamily: readingFont }]}>{questionnaireIntroText}</Text>
             </SlideInDown>
             <SlideInDown delay={INTRO_STAGE.text + INTRO_STAGE.lineStep}>
-              <Text style={styles.introPrompt}>{questionnaireHandednessPrompt}</Text>
+              <Text style={[styles.introPrompt, { fontFamily: readingFont }]}>{questionnaireHandednessPrompt}</Text>
             </SlideInDown>
             <SlideInDown delay={INTRO_STAGE.text + INTRO_STAGE.lineStep * 2} style={styles.handOptions}>
               <Pressable
@@ -828,7 +862,7 @@ const makeStyles = (t: Theme) =>
       ...StyleSheet.absoluteFillObject,
     },
     speechBubble: {
-      width: BUBBLE_W,
+      // Width is set at the call site: it depends on the window, which a static sheet cannot see.
       minHeight: 190,
       borderRadius: 36,
       backgroundColor: t.surface,

@@ -2,7 +2,7 @@
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 
 import { COIN_ICON } from "@/src/components/iconAssets";
-import { CREAM, CREAM_LIFT, useStyles, LEXEND } from "@/src/game/ui/system/theme";
+import { CREAM, CREAM_LIFT, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 
 // Sage for accept, warm clay for decline, each with a darker stroke of its own hue
@@ -26,7 +26,7 @@ export function PurchaseConfirmPopup({
   onConfirm: () => void;
   onClose: () => void;
 }) {
-  const s = useStyles(makeStyles);
+  const s = useFixedStyles(makeStyles);
   return (
     <View style={s.layer}>
       {/* Tapping away declines, the same as No */}

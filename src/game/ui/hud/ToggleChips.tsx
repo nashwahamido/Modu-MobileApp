@@ -2,7 +2,6 @@ import { Image, StyleSheet, View } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
 import { Button } from "@/src/game/ui/system/Button";
 import { SPACE } from "@/src/game/ui/system/theme";
-
 /** The two in-scene toggles. A chip that is ON takes the ACCENT — the same fill as a
  *  pressed button — because "on" and "pressed" are the same idea in this language: the
  *  control is lifted and live. It is deliberately not the success green: green means the
@@ -15,11 +14,9 @@ export function ToggleChips() {
     </View>
   );
 }
-
 export function FocusToggleButton() {
   const focusMode = useGameStore((s) => s.settings.focusMode);
   const setSettings = useGameStore((s) => s.setSettings);
-
   return (
     <Button
       icon={
@@ -37,14 +34,21 @@ export function FocusToggleButton() {
     />
   );
 }
-
 export function AutoViewToggleButton() {
   const autoView = useGameStore((s) => s.settings.autoView);
   const setSettings = useGameStore((s) => s.setSettings);
-
   return (
     <Button
-      label="Auto-view"
+      // The play glyph, not the "Auto-view" text: the control frames the next part on its own, so a
+      // play triangle reads as "run the view for me" where the word only named the setting. Same icon
+      // treatment as Focus above, so the two chips stay one family.
+      icon={
+        <Image
+          source={require("@/src/assets/ui/icons/icon-play.png")}
+          style={styles.autoIcon}
+          resizeMode="contain"
+        />
+      }
       small
       pill
       variant={autoView ? "primary" : "secondary"}
@@ -53,7 +57,6 @@ export function AutoViewToggleButton() {
     />
   );
 }
-
 // Exported so the tutorial renders the SAME control the build does, rather than its own copy — that
 // divergence is how the tutorial ended up teaching an Auto-view chip the assembly no longer shows.
 // Rendered in FOCUS MODE too. Focus strips the HUD down to the current step, and Spot is about the
@@ -71,8 +74,8 @@ export function SpotButton() {
     />
   );
 }
-
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: SPACE.sm },
   focusIcon: { width: 22, height: 22 },
+  autoIcon: { width: 22, height: 22 },
 });

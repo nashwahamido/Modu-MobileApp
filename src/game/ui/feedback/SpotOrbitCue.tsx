@@ -20,7 +20,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useGameStore } from "@/src/game/core/store";
 import { projectToScreen, type LookAt } from "@/src/game/scene/projectToScreen";
-import { ELEVATION, FONT, RADIUS, SPACE, useStyles } from "@/src/game/ui/system/theme";
+import { ELEVATION, FONT, RADIUS, SPACE, useFixedStyles } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 import type { Vec3 } from "@/src/game/core/type";
 
@@ -36,7 +36,7 @@ export function SpotOrbitCue({
 }: {
   manipulator: { getLookAt: () => LookAt | null } | null | undefined;
 }) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const hintPartId = useGameStore((s) => s.hintPartId);
   const parts = useGameStore((s) => s.furniture?.parts);
   const { width: winW, height: winH } = useWindowDimensions();

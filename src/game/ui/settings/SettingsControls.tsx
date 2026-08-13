@@ -3,11 +3,10 @@
 // Visual language adopted from the on-release engine: a compact arrow Stepper (‹ Value ›) for multi-choice settings, Switch rows for booleans.
 import { StyleSheet, Alert, Pressable, Switch, Text, View, type LayoutChangeEvent } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
-import { useStyles, useTheme, FONT } from "@/src/game/ui/system/theme";
+import { useFixedStyles, useTheme, FONT } from "@/src/game/ui/system/theme";
 import type {
   DragPlane,
   GhostStyle,
-  LightingPreset,
   ReleaseBehavior,
   SnapStyle,
 } from "@/src/game/core/accessibility";
@@ -15,7 +14,6 @@ import type {
   AssemblyMode,
   BackdropId,
   RenderStyleId,
-  TextLevel,
 } from "@/src/game/core/type";
 import type { ProfileId } from "@/src/game/core/profile";
 // Built from the room's own backdrop table, so a photo added there appears here with no edit.
@@ -59,21 +57,13 @@ const STYLES: { value: RenderStyleId; label: string }[] = [
   { value: "illustrated", label: "Illustrated" },
 ];
 const BACKDROPS: { value: BackdropId; label: string }[] = [
-  { value: "studio", label: "Studio" },
+  // Grid first: it is the default and the neutral one, so it heads the list rather than sitting
+  // among the scenery.
+  { value: "grid", label: "Grid" },
   { value: "clear", label: "Clear" },
-  { value: "cozy", label: "Cozy" },
-  { value: "cartoon", label: "Cartoon" },
-];
-const LIGHTING: { value: LightingPreset; label: string }[] = [
-  { value: "auto", label: "Auto" },
-  { value: "studio", label: "Studio" },
-  { value: "warm", label: "Warm" },
-  { value: "soft", label: "Soft" },
-  { value: "golden", label: "Golden" },
-];
-const LEVELS: { value: TextLevel; label: string }[] = [
-  { value: "standard", label: "Standard" },
-  { value: "simple", label: "Simple" },
+  { value: "calm", label: "Calm" },
+  { value: "craft", label: "Craft" },
+  { value: "garden", label: "Garden" },
 ];
 
 // ── primitives (her arrow Stepper + a Switch row) ────────────────────────────
@@ -90,7 +80,7 @@ function Stepper<T extends string>({
   options: { value: T; label: string }[];
   onChange: (v: T) => void;
 }) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const idx = Math.max(0, options.findIndex((o) => o.value === value));
   const go = (dir: number) =>
     onChange(options[(idx + dir + options.length) % options.length].value);
@@ -129,7 +119,7 @@ function Segmented<T extends string>({
   options: { value: T; label: string }[];
   onChange: (v: T) => void;
 }) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   return (
     <View style={styles.segBlock}>
       <Text style={styles.rowLabel}>{label}</Text>
@@ -180,7 +170,7 @@ function Row({
   value: boolean;
   onValueChange: (v: boolean) => void;
 }) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const t = useTheme();
   return (
     <View style={styles.switchRow}>
@@ -200,7 +190,7 @@ function Row({
 }
 
 function SectionHeader({ children }: { children: string }) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   return <Text style={styles.section}>{children}</Text>;
 }
 
@@ -222,7 +212,7 @@ export function SettingsControls({
   onFocusTargetLayout,
   onFocusTargetActivated,
 }: SettingsControlsProps = {}) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const settings = useGameStore((s) => s.settings);
   const profile = useGameStore((s) => s.profile);
   const applyProfile = useGameStore((s) => s.applyProfile);
@@ -284,6 +274,78 @@ export function SettingsControls({
       />
 
       {/* Dev / interaction experiments. */}
+      <SectionHeader>Display</SectionHeader>
+      <Choice
+        label="Model look"
+        desc="How the furniture is rendered"
+        value={renderStyle}
+        options={STYLES}
+        onChange={setRenderStyle}
+      />
+      <Choice
+        label="Build background"
+        desc="Assembly scene backdrop, separate from the model"
+        value={backdrop}
+        options={BACKDROPS}
+        onChange={setBackdrop}
+      />
+      <Row
+        label="Dark mode"
+        desc="Use the dark background theme"
+        value={theme === "dark"}
+        onValueChange={(v) => setTheme(v ? "dark" : "light")}
+      />
+      <View style={styles.switchRow}>
+        <View style={styles.rowText}>
+          <Text style={styles.rowLabel}>Text size</Text>
+          <Text style={styles.rowDesc}>Objective and hint text size</Text>
+        </View>
+        <View style={styles.fontStepper}>
+          <Pressable style={styles.fontBtn} onPress={() => changeFont(-0.1)} hitSlop={6}>
+            <Text style={styles.arrowText}>A-</Text>
+          </Pressable>
+          <Text style={styles.stepperValue}>{settings.fontScale.toFixed(1)}x</Text>
+          <Pressable style={styles.fontBtn} onPress={() => changeFont(0.1)} hitSlop={6}>
+            <Text style={styles.arrowText}>A+</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <Row
+        label="Reading font"
+        desc="OpenDyslexic for instructions, hints and the tutorial"
+        value={settings.readingFont}
+        onValueChange={(v) => setSettings({ readingFont: v })}
+      />
+
+      <SectionHeader>Guidance</SectionHeader>
+      <Choice
+        label="Mode"
+        desc="How much the game guides you"
+        value={mode}
+        options={MODES}
+        onChange={setMode}
+      />
+      <Row
+        label="Choose tools"
+        desc="Pick the tool yourself before tightening"
+        value={settings.manualTools}
+        onValueChange={(v) => setSettings({ manualTools: v })}
+      />
+
+      <SectionHeader>Audio</SectionHeader>
+      <Row
+        label="Audio steps"
+        desc="Play each step's spoken clip"
+        value={settings.audio}
+        onValueChange={(v) => setSettings({ audio: v })}
+      />
+      <Row
+        label="Sound effects"
+        desc="Taps, screws and completion sounds"
+        value={settings.soundEffects}
+        onValueChange={(v) => setSettings({ soundEffects: v })}
+      />
       <SectionHeader>Interaction (dev)</SectionHeader>
       <Choice
         label="Snap"
@@ -317,124 +379,6 @@ export function SettingsControls({
         value={settings.dragPlane}
         options={DRAG_PLANE}
         onChange={(v) => setSettings({ dragPlane: v })}
-      />
-      <SectionHeader>Display</SectionHeader>
-      <Choice
-        label="Model look"
-        desc="How the furniture is rendered"
-        value={renderStyle}
-        options={STYLES}
-        onChange={setRenderStyle}
-      />
-      <Choice
-        label="Build background"
-        desc="Assembly scene backdrop, separate from the model"
-        value={backdrop}
-        options={BACKDROPS}
-        onChange={setBackdrop}
-      />
-      <Choice
-        label="Lighting"
-        desc="Auto = each model look's natural rig"
-        value={settings.lightingPreset}
-        options={LIGHTING}
-        onChange={(v) => setSettings({ lightingPreset: v })}
-      />
-      <Row
-        label="Dark mode"
-        desc="Use the dark background theme"
-        value={theme === "dark"}
-        onValueChange={(v) => setTheme(v ? "dark" : "light")}
-      />
-      <View onLayout={targetLayout("instructions")}>
-        <Choice
-          label="Instructions"
-          desc="Wording detail for each step"
-          value={settings.textLevel}
-          options={LEVELS}
-          onChange={(v) => {
-            setSettings({ textLevel: v });
-            targetActivated("instructions");
-          }}
-        />
-      </View>
-      <View style={styles.switchRow}>
-        <View style={styles.rowText}>
-          <Text style={styles.rowLabel}>Text size</Text>
-          <Text style={styles.rowDesc}>Objective and hint text size</Text>
-        </View>
-        <View style={styles.fontStepper}>
-          <Pressable style={styles.fontBtn} onPress={() => changeFont(-0.1)} hitSlop={6}>
-            <Text style={styles.arrowText}>A-</Text>
-          </Pressable>
-          <Text style={styles.stepperValue}>{settings.fontScale.toFixed(1)}x</Text>
-          <Pressable style={styles.fontBtn} onPress={() => changeFont(0.1)} hitSlop={6}>
-            <Text style={styles.arrowText}>A+</Text>
-          </Pressable>
-        </View>
-      </View>
-
-      <SectionHeader>Guidance</SectionHeader>
-      <Choice
-        label="Mode"
-        desc="How much the game guides you"
-        value={mode}
-        options={MODES}
-        onChange={setMode}
-      />
-      <View onLayout={targetLayout("focusMode")}>
-        <Row
-          label="Focus mode"
-          desc="Show only the current part + action"
-          value={settings.focusMode}
-          onValueChange={(v) => {
-            setSettings({ focusMode: v });
-            targetActivated("focusMode");
-          }}
-        />
-      </View>
-      <View onLayout={targetLayout("autoView")}>
-        <Row
-          label="Auto-view"
-          desc="Auto-frame the next open socket"
-          value={settings.autoView}
-          onValueChange={(v) => {
-            setSettings({ autoView: v });
-            targetActivated("autoView");
-          }}
-        />
-      </View>
-      <Row
-        label="Show instructions"
-        desc="Off: only the progress bar stays at the top"
-        value={settings.showInstructions}
-        onValueChange={(v) => setSettings({ showInstructions: v })}
-      />
-      <Row
-        label="Error hints"
-        desc="Nudge after a part flies back"
-        value={settings.softHints}
-        onValueChange={(v) => setSettings({ softHints: v })}
-      />
-      <Row
-        label="Choose tools"
-        desc="Pick the tool yourself before tightening"
-        value={settings.manualTools}
-        onValueChange={(v) => setSettings({ manualTools: v })}
-      />
-
-      <SectionHeader>Audio</SectionHeader>
-      <Row
-        label="Audio steps"
-        desc="Play each step's spoken clip"
-        value={settings.audio}
-        onValueChange={(v) => setSettings({ audio: v })}
-      />
-      <Row
-        label="Sound effects"
-        desc="Taps, screws and completion sounds"
-        value={settings.soundEffects}
-        onValueChange={(v) => setSettings({ soundEffects: v })}
       />
     </View>
   );

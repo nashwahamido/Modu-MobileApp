@@ -2,7 +2,7 @@
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 
 import { COIN_ICON, STAR_ICON } from "@/src/components/iconAssets";
-import { CREAM, useStyles, LEXEND } from "@/src/game/ui/system/theme";
+import { CREAM, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 
 // Well height as a fraction of the tile's width; the grid owns the width
@@ -44,7 +44,7 @@ export function ShopItemTile({
   onPress?: () => void;
   disabled?: boolean;
 }) {
-  const s = useStyles(makeStyles);
+  const s = useFixedStyles(makeStyles);
   const locked = lockLevel !== undefined;
   const wellHeight = Math.round(width * WELL_ASPECT);
   return (

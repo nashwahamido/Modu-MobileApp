@@ -3,11 +3,11 @@ import { router } from "expo-router";
 import { StyleSheet, Pressable, ScrollView, Text, View } from "react-native";
 import { useScreenInsets } from '@/src/hooks/use-safe-insets';
 import { SettingsControls } from "@/src/game/ui/settings/SettingsControls";
-import { SPACE, TYPE, useStyles } from "@/src/game/ui/system/theme";
+import { SPACE, TYPE, useFixedStyles } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 
 export default function SettingsScreen() {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const safe = useScreenInsets();
   // Landscape: the notch / home-indicator sit on the sides, so left/right insets matter as much as top. Pad the header and scroll content by them.
   const padL = 16 + safe.left;

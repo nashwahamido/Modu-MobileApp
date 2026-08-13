@@ -331,6 +331,11 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
     [manipulator, winW, winH],
   );
 
+  // Read at HOOK level, not inside the gesture callback. The callback that sets the drag plane runs
+  // from gesture-handler's event path, and reaching into the store from there was throwing on a
+  // snapshot that had not resolved — a subscription here is resolved before any gesture can fire.
+  const dragPlaneSetting = useGameStore((s) => s.settings.dragPlane);
+
   /** A part is "floating": float releaseBehavior is ON (the canvas re-grab has no separate toggle — it comes with float mode), the part is held with no live drag session, and it isn't in a post-release park/snap phase that owns the driver (this also keeps re-grab out of auto-return's recover animation window). */
   const isFloating = useCallback(() => {
     const store = useGameStore.getState();
@@ -416,10 +421,21 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
           // actually hover over its hole instead of being held at the depth it ends up at.
           const ownPark = parkShiftFor(part);
           const planeY = ownTarget[1] + grabOffset[1] + ownPark[1];
-          // Vertical-entry parts get the upright plane. 0.7 on the Y component is "mostly straight
-          // up or down" — a shallow diagonal still reads better on the ground plane.
+          // VERTICAL-ENTRY PARTS ONLY.
+          //
+          // A camera-facing plane fixes depth at the socket's own — which is what a part that drops
+          // in from above needs, because no horizontal plane can express downward travel. But it
+          // also pins the part to THAT depth while the finger is somewhere else on screen, so for an
+          // ordinary part the two visibly separate: the part sits at the socket's distance while the
+          // finger is at its own. Making this the default traded one problem for a worse one.
+          //
+          // So it stays scoped to parts authored to enter along a mostly-vertical axis — DALFRED's
+          // support pin and pole, EKET's panels — where the gesture is impossible otherwise.
+          // Everything else keeps the horizontal plane, which tracks the finger.
           const uprightAnchor: Vec3 | null =
-            part.placeDir && Math.abs(part.placeDir[1]) > 0.7
+            dragPlaneSetting !== "level" &&
+            part.placeDir &&
+            Math.abs(part.placeDir[1]) > 0.7
               ? [
                   ownTarget[0] + grabOffset[0] + ownPark[0],
                   planeY,
@@ -612,14 +628,19 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
 
             const magnetic =
               !!target && store.settings.snapStyle === "magnetic";
-            // Rotation factor: eases over the whole approach band (the gradual turn toward the socket's orientation).
-            const rotT = magnetic
+            // Rotation factor: eases over the whole approach band (the gradual turn toward the
+            // socket's orientation).
+            //
+            // NOT gated on snapStyle. A magnetic pull moves the part out from under the finger, and
+            // "onRelease" exists to refuse that — but turning to match the socket takes no control
+            // away, it only shows which way the part will sit. Without it a leg holds one angle all
+            // the way in and then spins on release, which is the moment it is least useful.
+            const rotT = target
               ? Math.max(
                   0,
                   Math.min(
                     1,
-                    (APPROACH_RADIUS_M - bestD) /
-                      (APPROACH_RADIUS_M - snapDist),
+                    (APPROACH_RADIUS_M - bestD) / (APPROACH_RADIUS_M - snapDist),
                   ),
                 )
               : 0;
@@ -788,6 +809,8 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
       onPanStart,
       onPanMove,
       onPanEnd,
+      // The gesture closure captures this, so a settings change has to rebuild it.
+      dragPlaneSetting,
     ],
   );
 

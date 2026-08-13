@@ -3,7 +3,7 @@
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 
 import { COIN_ICON } from "@/src/components/iconAssets";
-import { CREAM, CREAM_LIFT, useStyles, LEXEND } from "@/src/game/ui/system/theme";
+import { CREAM, CREAM_LIFT, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 import type { PurchaseBlock } from "./purchaseBlock";
 
@@ -25,7 +25,7 @@ export function PurchaseNoticePopup({
   block: PurchaseBlock;
   onClose: () => void;
 }) {
-  const s = useStyles(makeStyles);
+  const s = useFixedStyles(makeStyles);
   const lead = block === "coins" ? "Not enough money to buy " : `Reach level ${minLevel} to buy `;
   return (
     <View style={s.layer}>

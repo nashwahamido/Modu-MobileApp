@@ -7,14 +7,14 @@ import {
 } from "react-native";
 
 import { useGameStore } from "@/src/game/core/store";
-import { ACCENT_LIGHT, Theme, useStyles } from "@/src/game/ui/system/theme";
+import { ACCENT_LIGHT, Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 import { tutorialPresentationForProfile } from "./presentation";
 import { useTutorialStore } from "./store";
 
 const ROW_HEIGHT = 24;
 
 export function TutorialStepRail() {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const profile = useGameStore((state) => state.profile);
   const presentation = tutorialPresentationForProfile(profile);
   const steps = useTutorialStore((state) => state.steps);

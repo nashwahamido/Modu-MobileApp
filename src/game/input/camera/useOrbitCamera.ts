@@ -9,6 +9,7 @@ import { useSharedValue as useWorkletSharedValue } from "react-native-worklets-c
 import type { ISharedValue } from "react-native-worklets-core";
 import type { StickDeflection } from "@/src/game/scene/OrbitDrive";
 
+import { FOV_Y_DEG } from "@/src/game/scene/cameraConfig";
 /** Drop-in replacement for the library's useCameraManipulator that fixes its swap race. On a pivot change the library hook sets its state to undefined and releases the old native manipulator while the replacement is still arriving via a promise — the Camera's render-thread callback can execute the already-released pointer in between ("Pointer ManipulatorWrapper has already been manually released!"). Here the hook keeps returning the OLD manipulator until the replacement is created (synchronously) and committed; the old wrapper's release is deferred until well after the commit that hands the render callback its replacement. */
 function useStableOrbitManipulator(
   eye: readonly [number, number, number],
@@ -17,6 +18,17 @@ function useStableOrbitManipulator(
   const { engine } = useFilamentContext();
   const [manipulator, setManipulator] =
     useState<ReturnType<typeof useCameraManipulator>>();
+  /**
+   * Every manipulator this hook has ever made, released together when the screen goes away.
+   *
+   * The old approach released each one shortly after its replacement was committed, on a timer. That
+   * is a race against the RENDER thread, which holds its own reference through Camera's callback:
+   * entering a build updates the pivot several times as the furniture loads, so manipulators are
+   * created and freed in quick succession and the callback ends up calling lookAtCameraManipulator
+   * on a pointer that has just been released. Holding them costs a handful of small native objects
+   * for the length of one build; releasing them early costs a crash.
+   */
+  const retired = useRef<ReturnType<typeof useCameraManipulator>[]>([]);
   const [eyeX, eyeY, eyeZ] = eye;
   const [targetX, targetY, targetZ] = target;
   useEffect(() => {
@@ -27,12 +39,33 @@ function useStableOrbitManipulator(
     });
     setManipulator(next);
     return () => {
-      // The successor effect runs right after this cleanup and commits the replacement; by the time this fires the render thread is off the old pointer. runAfterInteractions also keeps the release out of an active gesture, matching the library's own withCleanupScope timing.
-      InteractionManager.runAfterInteractions(() => {
-        setTimeout(() => next.release(), 100);
-      });
+      // NOT released here — see `retired`. The successor is committed immediately after this
+      // cleanup, but the render thread may still be one frame behind on the old pointer, and one
+      // frame is all it takes.
+      retired.current.push(next);
     };
   }, [engine, eyeX, eyeY, eyeZ, targetX, targetY, targetZ]);
+
+  // The whole set goes when the screen does. By then no render callback is left to hold one.
+  useEffect(
+    () => () => {
+      const all = retired.current;
+      retired.current = [];
+      InteractionManager.runAfterInteractions(() => {
+        setTimeout(() => {
+          for (const m of all) {
+            try {
+              // The hook's return type includes undefined, so the array can hold one.
+              m?.release();
+            } catch {
+              // Already gone: releasing twice is not worth a crash on the way out of a screen.
+            }
+          }
+        }, 200);
+      });
+    },
+    [],
+  );
   return manipulator;
 }
 
@@ -85,6 +118,8 @@ export function useOrbitCamera(
 ) {
   // Whether a stick grab session is open — read by OrbitDrive's render callback. Owned here because grabBegin/grabEnd lifecycle lives on the JS side.
   const stickActive = useWorkletSharedValue(false);
+  /** The two-finger pan, read by OrbitDrive on the render thread. */
+  const panShared = useWorkletSharedValue({ x: 0, y: 0, z: 0 });
   const stage = useGameStore((s) => s.stage());
   const activeCluster = useGameStore((s) => s.activeCluster);
   const examine = useGameStore((s) => s.examine);
@@ -184,30 +219,9 @@ export function useOrbitCamera(
 
   const manipulator = useStableOrbitManipulator(home.eye, home.target);
 
-  /**
-   * How far the player has TRUCKED the camera away from the computed pivot.
-   *
-   * A two-finger pan is a truck: grabBegin(..., true) slides the eye and the target together. Only
-   * the eye used to be captured, so the next setHome rebuilt the camera with the panned eye and the
-   * un-panned target — which is why orbit still swung about the model's original centre, and why
-   * the drag plane (built from the camera basis) stopped agreeing with where the model actually was.
-   * Recording the offset keeps the pair consistent while still letting the pivot follow the step.
-   */
-  const panOffsetRef = useRef<[number, number, number]>([0, 0, 0]);
-
   const captureEye = useCallback(() => {
     const la = manipulator?.getLookAt();
-    if (!la) return;
-    eyeRef.current = [la[0][0], la[0][1], la[0][2]];
-    // The target the manipulator ACTUALLY has, minus the one the app computed for this step. After
-    // an orbit these agree and the offset stays zero; after a truck they do not, and the difference
-    // is exactly the player's pan.
-    const base = targetRef.current;
-    panOffsetRef.current = [
-      la[1][0] - base[0],
-      la[1][1] - base[1],
-      la[1][2] - base[2],
-    ];
+    if (la) eyeRef.current = [la[0][0], la[0][1], la[0][2]];
   }, [manipulator]);
 
   useEffect(() => {
@@ -215,17 +229,7 @@ export function useOrbitCamera(
     // In the tutorial, the first pickup aims the camera at the real drop point.
     // Keep that exact target after placement so the centre ring stays aligned and the newly placed part does not jump when held state is cleared.
     if (stableFraming && framedHasPlaced) return;
-    const base = pivot(stage, framingCluster, null, focusPartId, focusCluster);
-    // Carry the player's pan across the re-frame. Without this every step change yanked the view
-    // back to the model centre and silently re-broke the eye/target pairing.
-    const p = panOffsetRef.current;
-    // Mutable tuple, not Vec3: home.target is [number, number, number] and Vec3 is readonly, so the
-    // readonly one cannot be assigned into it.
-    const nextTarget: [number, number, number] = [
-      base[0] + p[0],
-      base[1] + p[1],
-      base[2] + p[2],
-    ];
+    const nextTarget = pivot(stage, framingCluster, null, focusPartId, focusCluster);
     const apply = () =>
       setHome((h) =>
         h.target.every((v, i) => Math.abs(v - nextTarget[i]) < 1e-5)
@@ -320,34 +324,72 @@ export function useOrbitCamera(
     [manipulator, captureEye],
   );
 
+  /**
+   * The pan is OURS now, not the manipulator's.
+   *
+   * grabBegin(..., true) trucks eye and target together, which moves the orbit centre off the model
+   * — that is what made rotation swing the model around the screen. Instead the gesture accumulates
+   * a world displacement in panShared, and OrbitDrive shifts the finished lookAt pair by it on the
+   * render thread. The manipulator's target never leaves the model, so orbit stays on its axis.
+   */
+  const panStartRef = useRef({ x: 0, y: 0, pan: { x: 0, y: 0, z: 0 } });
   const onPanStart = useCallback(
     (x: number, y: number) => {
-      // Don't start a pan grab while a stick grab session is open — one manipulator, one session. (Symmetric with onStickStart's panning.current guard.)
       if (grabbing.current) return;
       panning.current = true;
-      manipulator?.grabBegin(x, winH - y, true);
+      panStartRef.current = { x, y, pan: { ...panShared.value } };
     },
-    [manipulator, winH],
+    [panShared],
   );
   const onPanMove = useCallback(
     (x: number, y: number) => {
-      if (panning.current) manipulator?.grabUpdate(x, winH - y);
+      if (!panning.current) return;
+      const la = manipulator?.getLookAt();
+      if (!la) return;
+      const [eye, target] = la;
+      const f = [target[0] - eye[0], target[1] - eye[1], target[2] - eye[2]];
+      const fl = Math.hypot(f[0], f[1], f[2]) || 1;
+      const fwd = [f[0] / fl, f[1] / fl, f[2] / fl];
+      const up = la[2];
+      const r = [
+        fwd[1] * up[2] - fwd[2] * up[1],
+        fwd[2] * up[0] - fwd[0] * up[2],
+        fwd[0] * up[1] - fwd[1] * up[0],
+      ];
+      const rl = Math.hypot(r[0], r[1], r[2]) || 1;
+      const right = [r[0] / rl, r[1] / rl, r[2] / rl];
+      const camUp = [
+        right[1] * fwd[2] - right[2] * fwd[1],
+        right[2] * fwd[0] - right[0] * fwd[2],
+        right[0] * fwd[1] - right[1] * fwd[0],
+      ];
+      // Metres per pixel AT THE TARGET'S DISTANCE, so the model tracks the fingers 1:1 rather than
+      // sliding faster or slower depending on how far away it is.
+      const mPerPx = (2 * fl * Math.tan((FOV_Y_DEG * Math.PI) / 360)) / winH;
+      const dx = (x - panStartRef.current.x) * mPerPx;
+      const dy = (y - panStartRef.current.y) * mPerPx;
+      // Moving the fingers right moves the MODEL right, which means the view goes left — hence the
+      // negated right component. Screen-y grows downward, so its sign flips again for world up.
+      const base = panStartRef.current.pan;
+      panShared.value = {
+        x: base.x - right[0] * dx + camUp[0] * dy,
+        y: base.y - right[1] * dx + camUp[1] * dy,
+        z: base.z - right[2] * dx + camUp[2] * dy,
+      };
     },
-    [manipulator, winH],
+    [manipulator, panShared, winH],
   );
   const onPanEnd = useCallback(() => {
     if (!panning.current) return;
     panning.current = false;
-    manipulator?.grabEnd();
-    captureEye();
-  }, [manipulator, captureEye]);
+  }, []);
 
   const resetCamera = useCallback(() => {
     resetTick.current += 1;
     const target = pivot(stage, framingCluster, heldFocusPoint, focusPartId, focusCluster);
     eyeRef.current = HOME_EYE;
-    // Recentre means recentre: the accumulated pan is part of what the player is asking to undo.
-    panOffsetRef.current = [0, 0, 0];
+    // Recentre means recentre: the accumulated pan is part of what the player is undoing.
+    panShared.value = { x: 0, y: 0, z: 0 };
     setHome({
       eye: HOME_EYE,
       target: [
@@ -356,7 +398,7 @@ export function useOrbitCamera(
         target[2],
       ],
     });
-  }, [stage, framingCluster, heldFocusPoint, focusPartId, focusCluster, pivot]);
+  }, [stage, framingCluster, heldFocusPoint, focusPartId, focusCluster, pivot, panShared]);
 
   const getFocusPoint = useCallback((): Vec3 => targetRef.current, []);
   const isViewingUnderside = useCallback((): boolean => {
@@ -375,6 +417,7 @@ export function useOrbitCamera(
   return {
     manipulator,
     stickActive,
+    panShared,
     getFocusPoint,
     onStickStart,
     onStickMove,

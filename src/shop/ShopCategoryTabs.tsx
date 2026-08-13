@@ -7,7 +7,7 @@ import { SHOP_ICON } from "@/src/components/iconAssets";
 import { IconPlaceholder } from "@/src/components/IconPlaceholder";
 import { CATEGORY_LABELS, SHOP_CATEGORY_TABS } from "@/src/data";
 import type { ShopCategory } from "@/src/data";
-import { CREAM, useStyles, LEXEND } from "@/src/game/ui/system/theme";
+import { CREAM, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 
 // Kept in step with InventoryCategoryTabs, its twin. The two headers are separate components on purpose, so anything that must LOOK the same is a shared token or a shared helper rather than a number copied between them.
@@ -33,7 +33,7 @@ export function ShopCategoryTabs({
   /** The grid's side padding, so the pill ends level with the last column of items. */
   rightInset?: number;
 }) {
-  const s = useStyles(makeStyles);
+  const s = useFixedStyles(makeStyles);
   return (
     <View style={s.header}>
       {/* Indented from the left, leaving the space the badge is positioned into. */}

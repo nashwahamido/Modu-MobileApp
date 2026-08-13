@@ -3,7 +3,7 @@ import { useEffect, type ReactNode } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { ProgressBar } from "@/src/game/ui/system/Button";
-import { ELEVATION, RADIUS, SPACE, Theme, TYPE, useStyles, FONT } from "@/src/game/ui/system/theme";
+import { ELEVATION, RADIUS, SPACE, Theme, TYPE, useFixedStyles, useReadingFont, FONT } from "@/src/game/ui/system/theme";
 
 interface Props {
   /** The objective sentence; null hides the text row and collapses the bar to the slim fixed pill (instructions off). */
@@ -25,7 +25,9 @@ interface Props {
 const OBJECTIVE_WASH = "#C3D3E6";
 
 export function ObjectiveBar({ line, fontSize, value, total, xp, header }: Props) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
+  // The instruction IS the reading surface of the assembly screen.
+  const readingFont = useReadingFont();
   const expanded = line !== null || header != null;
   // Derived, not a constant: fontSize is already scaled by the caller's accessibility setting, so a fixed box height would clip the text at the larger scales.
   const lineHeight = Math.round(fontSize * 1.18);
@@ -58,7 +60,7 @@ export function ObjectiveBar({ line, fontSize, value, total, xp, header }: Props
                 right now, and gives the eye a fixed point to return to as the words change. */}
             <View style={styles.objectiveBullet} />
             <Text
-              style={[styles.objectiveText, { fontFamily: FONT, fontSize, lineHeight }]}
+              style={[styles.objectiveText, { fontFamily: readingFont, fontSize, lineHeight }]}
               numberOfLines={1}
               // Shrink rather than wrap: a second line would take the height back, and truncating an instruction is the one outcome this screen cannot afford.
               adjustsFontSizeToFit

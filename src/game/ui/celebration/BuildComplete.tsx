@@ -14,7 +14,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { useGameStore } from "@/src/game/core/store";
-import { useStyles, FONT } from "@/src/game/ui/system/theme";
+import { useFixedStyles, FONT } from "@/src/game/ui/system/theme";
 import { useRepos } from "@/src/data";
 import { usePlacementStore } from "@/src/room/core/placement";
 import { ConfettiRain } from "@/src/game/ui/celebration/Confetti";
@@ -123,7 +123,7 @@ function SlideIn({ delay, style, children }: { delay: number; style?: StyleProp<
  * the banner being unfurled, which a drop or a fade does not.
  */
 function CompletedRibbon({ label }: { label: string }) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const reveal = useSharedValue(0);
   useEffect(() => {
     reveal.value = withDelay(STAGE.ribbon, withTiming(1, { duration: REVEAL_MS, easing: Easing.out(Easing.cubic) }));
@@ -165,7 +165,7 @@ function CompletedRibbon({ label }: { label: string }) {
  * placement route can be restored to the first one without touching the layout.
  */
 export function BuildComplete() {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const router = useRouter();
   const repos = useRepos();
   const furniture = useGameStore((s) => s.furniture);

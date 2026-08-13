@@ -4,7 +4,7 @@ import { StyleSheet, Image, Text, View } from "react-native";
 
 import { Button } from "@/src/game/ui/system/Button";
 import { AccountPicker } from "@/src/dev/AccountPicker";
-import { SPACE, useStyles, FONT } from "@/src/game/ui/system/theme";
+import { FONT, SPACE, useStyles } from "@/src/game/ui/system/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import type { Theme } from "@/src/game/ui/system/theme";
 
@@ -84,15 +84,34 @@ const makeStyles = (t: Theme) =>
     header: {
       flexDirection: "row",
       alignItems: "center",
+      // No alignSelf: stretch. The row hugs its contents as it always did; minWidth 0 is all that is
+      // needed to let the wordmark give way when the column is too tight for it.
+      minWidth: 0,
       gap: 18,
     },
     mascot: {
       width: 82,
       height: 82,
       borderRadius: 20,
+      // The mascot holds its size; the wordmark is the one that gives way.
+      flexShrink: 0,
     },
     // Height derived from the art's 4.51 aspect, so the wordmark can never be stretched.
-    wordmark: { width: 230, height: 230 / 4.51 },
+    // flexShrink, not a fixed width. The brand row is mascot 82 + gap 18 + this, and the column it
+    // sits in is only what is left after the 300pt action stack — about 332pt on a phone. At a rigid
+    // 230 the row totals 330 with nothing to give, so the images were squeezed to nothing rather
+    // than the wordmark simply coming in a little narrower. maxWidth keeps it from growing past its
+    // drawn size on a screen that has room.
+    wordmark: {
+      // flexShrink alone. width:"100%" made the mark claim the whole column and the row read as
+      // stretched on a phone — shrinking is about what it gives up when space is short, not about
+      // what it takes when space is free.
+      flexShrink: 1,
+      width: 230,
+      // The art is 600x133, and aspectRatio keeps the height following whatever width survives the
+      // shrink — a fixed height here would letterbox it the moment the width gave way.
+      aspectRatio: 600 / 133,
+    },
     // One line under the wordmark, so the brand block reads as logo + promise and nothing else. Fixed ink, not t.text: the backdrop is a fixed blue, so a theme-driven colour would turn this bone in dark mode and land at 1.78:1 on it.
     slogan: {
       color: SLOGAN_INK,
