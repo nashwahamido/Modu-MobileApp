@@ -11,7 +11,8 @@ export type SfxName =
   | "seat"
   | "pickup"
   | "drop"
-  | "stage";
+  | "stage"
+  | "error";
 
 const SOURCES: Record<SfxName, number> = {
   tap: require("@/src/assets/audio/sfx/tap.wav"),
@@ -20,6 +21,7 @@ const SOURCES: Record<SfxName, number> = {
   pickup: require("@/src/assets/audio/sfx/pickup.wav"),
   drop: require("@/src/assets/audio/sfx/drop.wav"),
   stage: require("@/src/assets/audio/sfx/stage.wav"),
+  error: require("@/src/assets/audio/sfx/error.wav"),
 };
 
 /** Per-effect volume, so the mix can be balanced without re-exporting audio. The ticks and taps fire
@@ -31,6 +33,9 @@ const GAIN: Record<SfxName, number> = {
   pickup: 0.4,
   drop: 0.35,
   stage: 0.75,
+  // Deliberately quiet: it fires at the exact moment of a mistake, and a loud buzzer would
+  // punish where the design wants a calm "not that one".
+  error: 0.4,
 };
 
 const players = new Map<SfxName, AudioPlayer>();

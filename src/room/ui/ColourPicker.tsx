@@ -1,6 +1,6 @@
-// The colour/finish swatch column shown while a piece is being placed â€” the one place a player chooses which variant of an item goes into the room. Positioned by the placement rail in RoomExperience, which sets it beside the placement bar on the right edge so the ghost, the swatches and the confirm button read as one control.
+// The colour/finish swatch column shown while a piece is being placed — the one place a player chooses which variant of an item goes into the room. Positioned by the placement rail in RoomExperience, which sets it beside the placement bar on the right edge so the ghost, the swatches and the confirm button read as one control.
 //
-// What it offers comes from item_variants (the DB is the source for which colours exist); what it shows per swatch is that variation's own thumbnail, the SAME picture the Shop and Inventory tiles use. The variation name is captioned as well as pictured: it is the honest label when the artwork is missing. Hidden for anything with fewer than two variations â€” a one-look item has no choice to make.
+// What it offers comes from item_variants (the DB is the source for which colours exist); what it shows per swatch is that variation's own thumbnail, the SAME picture the Shop and Inventory tiles use. The variation name is captioned as well as pictured: it is the honest label when the artwork is missing. Hidden for anything with fewer than two variations — a one-look item has no choice to make.
 import { StyleSheet, Pressable, ScrollView, Text, View } from "react-native";
 
 import { CatalogThumb } from "../../components/CatalogThumb";
@@ -60,7 +60,7 @@ export function ColourPicker({ highlighted = false, onSelect }: ColourPickerProp
 
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
-    // Laid out by the rail, so no position of its own. maxHeight is what makes the list scroll rather than grow past the band the rail was given â€” the rail has a definite height, so the percentage resolves against it.
+    // Laid out by the rail, so no position of its own. maxHeight is what makes the list scroll rather than grow past the band the rail was given — the rail has a definite height, so the percentage resolves against it.
     bar: {
       maxHeight: "100%",
       borderRadius: RADIUS.panel,

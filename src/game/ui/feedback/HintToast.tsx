@@ -12,6 +12,7 @@ export function HintToast() {
   // A hint is read, not glanced at.
   const readingFont = useReadingFont();
   const hint = useGameStore((s) => s.hint);
+  const hintTone = useGameStore((s) => s.hintTone);
   const clearHint = useGameStore((s) => s.clearHint);
   const fontScale = useGameStore((s) => s.settings.fontScale);
 
@@ -24,7 +25,10 @@ export function HintToast() {
   if (!hint) return null;
   return (
     <View style={styles.wrap} pointerEvents="none">
-      <View style={styles.bubble}>
+      {/* A blocked move colours the BUBBLE in the warning tone — the same hue as the hard
+          difficulty band — so the toast registers as "that didn't work" before the words are
+          read. The ink stays dark: red-on-red text would cost the legibility the message needs. */}
+      <View style={[styles.bubble, hintTone === "error" && styles.bubbleError]}>
         <GrainOverlay radius={14} />
         <Text style={[styles.text, { fontFamily: readingFont, fontSize: Math.round(14 * fontScale) }]}>{hint}</Text>
       </View>
@@ -49,4 +53,5 @@ const makeStyles = (t: Theme) =>
     paddingHorizontal: 16,
   },
   text: { color: t.text, fontWeight: "700", textAlign: "center" },
+  bubbleError: { backgroundColor: "#C98B76" },
   });
