@@ -9,7 +9,7 @@ import {
 
 import { avatarForProfile } from "@/src/components/avatarAssets";
 import { useGameStore } from "@/src/game/core/store";
-import { ELEVATION, Theme, useStyles } from "@/src/game/ui/system/theme";
+import { ELEVATION, Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 import { tutorialPresentationForProfile } from "./presentation";
 import { useTutorialStore } from "./store";
 
@@ -33,7 +33,7 @@ export function momentumFeedbackForStep(index: number): string {
 }
 
 export function MomentumCompanion() {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const profile = useGameStore((state) => state.profile);
   const mapOpen = useGameStore((state) => state.mapOpen);
   const presentation = tutorialPresentationForProfile(profile);

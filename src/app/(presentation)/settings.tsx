@@ -15,7 +15,7 @@ import {
   ProfileSection,
   RestartRow,
 } from "@/src/game/ui/settings/sections";
-import { FONT, SPACE, TYPE, useStyles } from "@/src/game/ui/system/theme";
+import { FONT, SPACE, TYPE, useFixedStyles } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 
 type SettingsTab = "general" | "assembly";
@@ -26,7 +26,7 @@ const TABS: { id: SettingsTab; label: string }[] = [
 ];
 
 export default function SettingsScreen() {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const safe = useScreenInsets();
   const [tab, setTab] = useState<SettingsTab>("general");
   // Landscape: the notch / home-indicator sit on the sides, so left/right insets matter as much as top. Pad the header and scroll content by them.

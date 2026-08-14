@@ -29,6 +29,7 @@
 //   Three accents, three meanings, no overlap. Lavender = interactive (press this).
 //   Green = complete (you did this). Gold = earned (XP, score). If a fourth meaning shows up, it does NOT get a fourth colour — it gets a shape or a position.
 
+import { useWindowDimensions } from "react-native";
 import { useMemo } from "react";
 import type { TextStyle } from "react-native";
 import { ThemeId } from "@/src/game/core/type";
@@ -263,9 +264,136 @@ export function useTheme(): Theme {
  *  React Native has no cascade — no CSS variables, nothing inherits — so every StyleSheet
  *  has to reach for the tokens itself. This is the whole ceremony required to do that, and
  *  it memoises, so the sheet is rebuilt only when the theme actually changes. */
+/**
+ * THE RESPONSIVE LAYER.
+ *
+ * These layouts are authored in points against a phone in landscape — about 360dp on the short side.
+ * A tablet's short side is roughly 800dp, so the same numbers occupy less than half the relative
+ * space and every panel, label and control reads as shrunken and adrift on a large screen.
+ *
+ * The scale is applied HERE rather than screen by screen because the app has ~200 raw font sizes
+ * across ~54 sheets: a token-based fix would miss most of them, and editing 54 files by hand is a
+ * large diff with a small chance of being uniformly right. Every one of those sheets already goes
+ * through useStyles, so one place covers all of them at once.
+ *
+ * On a phone the scale is exactly 1 and scaleSheet returns the sheet untouched — this cannot change
+ * how the app looks on the device it was designed against.
+ */
 export function useStyles<T extends object>(make: (theme: Theme) => T): T {
   const theme = useTheme();
+  const k = useUiScale();
+  return useMemo(() => scaleSheet(make(theme), k), [make, theme, k]);
+}
+
+/**
+ * Theme-driven styles with NO device scaling. The opt-OUT, chosen PER SCREEN.
+ *
+ * Scaling is not a global property of the app — it is a decision about one screen. These surfaces
+ * are laid out to the point and their controls have no slack: the room, the catalogue, the assembly
+ * HUD, the project map, the completion screen, the shop and the inventory. Growing a 13pt label
+ * inside a fixed 36pt chip puts labels through their borders and icons over each other long before
+ * it makes anything more readable, so they are left exactly as authored on every device.
+ *
+ * The onboarding flow and the avatar recommendation keep useStyles and do scale: big panels,
+ * generous padding, one thing on screen at a time, and room to grow into.
+ */
+export function useFixedStyles<T extends object>(make: (theme: Theme) => T): T {
+  const theme = useTheme();
   return useMemo(() => make(theme), [make, theme]);
+}
+
+/**
+ * How much to enlarge fixed point dimensions on a bigger screen.
+ *
+ * Driven by the SHORT side: that is what differs most between a phone and a tablet in landscape, and
+ * what governs how big something feels in the hand.
+ *
+ * Capped below the true ratio of ~2.2: type sized for a phone at arm's length does not want to
+ * double on a tablet held at the same distance. 1.45 was too timid though — on a 1280dp tablet it
+ * left the UI visibly adrift in its own screen — so 1.75, which fills the screen without reading as
+ * a magnified phone.
+ *
+ * Anything laid out at a FIXED width has to be checked against this: a row of fixed points that fits
+ * a phone at 1.0 can overflow a tablet at 1.75, because the screen grew by less than the scale did.
+ * Prefer proportional widths for anything that spans the screen.
+ */
+export function useUiScale(): number {
+  const { width, height } = useWindowDimensions();
+  const short = Math.min(width, height);
+  // PHONES ARE LEFT ALONE, exactly. A continuous scale sounded right and was not: a phone whose
+  // short side measures 380 rather than the 360 these layouts assume would get k = 1.06, rebuild
+  // every sheet, and shift a layout that was already correct — for no benefit at all. The scale only
+  // engages on a screen big enough to genuinely need it, and below that the sheet is returned
+  // untouched rather than merely multiplied by one.
+  if (short < TABLET_MIN_SHORT_DP) return 1;
+  return Math.min(MAX_UI_SCALE, Math.max(1, short / PHONE_SHORT_DP));
+}
+
+/** The short side these layouts were authored against (phone, landscape). */
+const PHONE_SHORT_DP = 360;
+/** Below this the device is a phone and nothing is scaled. Comfortably above any phone in landscape
+ *  (~330-420dp) and comfortably below any tablet (~700dp+), so neither is a borderline case. */
+const TABLET_MIN_SHORT_DP = 600;
+const MAX_UI_SCALE = 1.75;
+
+/**
+ * Properties that describe SIZE, and therefore scale with the screen.
+ *
+ * Deliberately not everything numeric. borderWidth and elevation stay put — a hairline is a hairline
+ * at any size, and a shadow that grew with the screen would read as the whole UI floating higher.
+ * flex, opacity and zIndex are ratios and orderings, not measurements. Absolute offsets (top, left,
+ * right, bottom) are excluded as well: they are usually safe-area or edge insets, and scaling those
+ * pushes content off the screen rather than making it bigger.
+ */
+const SCALED_PROPS = new Set([
+  "fontSize",
+  "lineHeight",
+  "width",
+  "height",
+  "minWidth",
+  "minHeight",
+  "maxWidth",
+  "maxHeight",
+  "borderRadius",
+  "padding",
+  "paddingHorizontal",
+  "paddingVertical",
+  "paddingTop",
+  "paddingBottom",
+  "paddingLeft",
+  "paddingRight",
+  "margin",
+  "marginHorizontal",
+  "marginVertical",
+  "marginTop",
+  "marginBottom",
+  "marginLeft",
+  "marginRight",
+  "gap",
+  "rowGap",
+  "columnGap",
+]);
+
+/** Multiplies the size properties of a finished sheet. Percent strings and non-size values pass
+ *  through untouched, so a "48%" width still means half its container at any scale. */
+function scaleSheet<T extends object>(sheet: T, k: number): T {
+  if (k === 1) return sheet;
+  const out: Record<string, unknown> = {};
+  for (const [name, style] of Object.entries(sheet)) {
+    if (!style || typeof style !== "object") {
+      out[name] = style;
+      continue;
+    }
+    const next: Record<string, unknown> = {};
+    for (const [prop, value] of Object.entries(style as Record<string, unknown>)) {
+      next[prop] =
+        typeof value === "number" && SCALED_PROPS.has(prop)
+          ? Math.round(value * k)
+          : value;
+    }
+    out[name] = next;
+  }
+  return out as T;
 }
 
 // ── shape ───────────────────────────────────────────────────────────────────
@@ -319,6 +447,20 @@ export const SIZE = {
 //
 // React Native has no font inheritance, so FONT has to appear in every text style. A style that sets fontWeight without FONT silently renders in the system font — that mismatch is the failure mode to watch for, not a missing font.
 export const FONT = "Lexend";
+
+/** The OpenDyslexic family name, as registered by the expo-font plugin in app.json. */
+export const READING_FONT = "OpenDyslexic";
+
+/**
+ * The family for a READING surface — the objective line, a hint, a tutorial message.
+ *
+ * A hook rather than a constant, because it depends on a setting. Only the handful of components
+ * where a player is genuinely reading call this; everything else keeps FONT, which stays a constant
+ * so the other ~200 sheets are untouched.
+ */
+export function useReadingFont(): string {
+  return useGameStore((s) => (s.settings.readingFont ? READING_FONT : FONT));
+}
 
 /** The named weights, as spreadable style fragments:
  *

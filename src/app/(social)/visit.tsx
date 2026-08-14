@@ -7,7 +7,7 @@ import { StatusBar } from "expo-status-bar";
 import { Button } from "@/src/game/ui/system/Button";
 import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
 import { useGameStore } from "@/src/game/core/store";
-import { TYPE, SPACE, useStyles } from "@/src/game/ui/system/theme";
+import { TYPE, SPACE, useFixedStyles } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import type { Profile } from "@/src/data";
@@ -24,7 +24,7 @@ import { VisitHud } from "@/src/room/ui/VisitHud";
 import { useScreenInsets } from '@/src/hooks/use-safe-insets';
 
 export default function VisitScreen() {
-  const s = useStyles(makeStyles);
+  const s = useFixedStyles(makeStyles);
   const repos = useRepos();
   const me = useCurrentUserId();
   const { ownerId } = useLocalSearchParams<{ ownerId?: string }>();

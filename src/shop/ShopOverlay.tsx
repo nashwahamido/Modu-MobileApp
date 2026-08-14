@@ -4,7 +4,7 @@ import { ActivityIndicator, Animated, StyleSheet, Pressable, ScrollView, Text, V
 
 import { CloseIcon } from "@/src/components/Icons";
 import { Button } from "@/src/game/ui/system/Button";
-import { CREAM, CREAM_LIFT, useStyles, useTheme, LEXEND } from "@/src/game/ui/system/theme";
+import { CREAM, CREAM_LIFT, useFixedStyles, useTheme, LEXEND } from "@/src/game/ui/system/theme";
 import { useSlideUpPresentation } from "@/src/game/ui/system/slideUp";
 import type { Theme } from "@/src/game/ui/system/theme";
 import { isSurfaceCategory, useCurrentUserId, useRepos, viewCatalogue } from "@/src/data";
@@ -25,7 +25,7 @@ const GRID_GAP = 22;
 const GRID_EDGE = 22;
 
 export function ShopOverlay({ onClose }: { onClose: () => void }) {
-  const s = useStyles(makeStyles);
+  const s = useFixedStyles(makeStyles);
   const t = useTheme();
   const safe = useScreenInsets();
   const repos = useRepos();

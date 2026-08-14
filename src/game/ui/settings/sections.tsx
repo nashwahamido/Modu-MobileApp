@@ -4,7 +4,7 @@
 import { Alert, Pressable, Text, View, type LayoutChangeEvent } from "react-native";
 import { router } from "expo-router";
 import { useGameStore } from "@/src/game/core/store";
-import { useStyles } from "@/src/game/ui/system/theme";
+import { useFixedStyles } from "@/src/game/ui/system/theme";
 import { signOut } from "@/src/services/auth";
 import { SIGN_IN_ROUTE } from "@/src/hooks/useSessionGate";
 import {
@@ -62,10 +62,12 @@ const STYLES: { value: RenderStyleId; label: string }[] = [
 ];
 // Built from the room's own backdrop table, so a photo added there appears here with no edit.
 const BACKDROPS: { value: BackdropId; label: string }[] = [
-  { value: "studio", label: "Studio" },
+  // Grid first: it is the default and the neutral one, so it heads the list rather than sitting among the scenery.
+  { value: "grid", label: "Grid" },
   { value: "clear", label: "Clear" },
-  { value: "cozy", label: "Cozy" },
-  { value: "cartoon", label: "Cartoon" },
+  { value: "calm", label: "Calm" },
+  { value: "craft", label: "Craft" },
+  { value: "garden", label: "Garden" },
 ];
 const LIGHTING: { value: LightingPreset; label: string }[] = [
   { value: "auto", label: "Auto" },
@@ -328,7 +330,7 @@ export function AudioSection() {
 
 /** App chrome, not build chrome: these follow the player across the room, the catalogue and an assembly alike, which is why they sit in the general tab and not with the build settings. */
 export function AppDisplaySection() {
-  const styles = useStyles(makeSettingsStyles);
+  const styles = useFixedStyles(makeSettingsStyles);
   const settings = useGameStore((s) => s.settings);
   const theme = useGameStore((s) => s.theme);
   const setSettings = useGameStore((s) => s.setSettings);
@@ -361,6 +363,12 @@ export function AppDisplaySection() {
           </Pressable>
         </View>
       </View>
+      <Row
+        label="Reading font"
+        desc="OpenDyslexic for instructions, hints and the tutorial"
+        value={settings.readingFont}
+        onValueChange={(v) => setSettings({ readingFont: v })}
+      />
     </>
   );
 }

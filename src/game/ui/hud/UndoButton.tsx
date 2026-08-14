@@ -3,7 +3,7 @@ import { useGameStore } from "@/src/game/core/store";
 import { HUD_ICON, IconButtonBare } from "@/src/game/ui/hud/hudChrome";
 
 /** Back one step. Disabled dims rather than disappears — "not yet", not "gone". */
-export function UndoButton() {
+export function UndoButton({ onPress }: { onPress?: () => void } = {}) {
   const completedCount = useGameStore((s) => s.completed.length);
   const undoLastAction = useGameStore((s) => s.undoLastAction);
 
@@ -12,7 +12,7 @@ export function UndoButton() {
   return (
     <IconButtonBare
       source={require("@/src/assets/ui/icons/icon-undo.png")}
-      onPress={undoLastAction}
+      onPress={onPress ?? undoLastAction}
       disabled={disabled}
       size={HUD_ICON}
       style={styles.button}

@@ -5,14 +5,17 @@ export type TutorialTargetId =
   | "partsTray"
   | "assemblyArea"
   | "tool"
-  | "toolbar"
+  | "beatControl"
   | "hint"
   | "undo"
   | "focus"
   | "autoView"
-  | "settings";
+  | "settings"
+  /** The whole screen, for the grip step: what it teaches is the DEVICE, not a control on it. */
+  | "device";
 
 export type TutorialEvent =
+  | "grip_acknowledged"
   | "joystick_moved"
   | "camera_recentered"
   | "pinch_zoomed"
@@ -25,13 +28,10 @@ export type TutorialEvent =
   | "connector_tightened"
   | "assembly_reoriented"
   | "step_undone"
-  | "step_redone"
   | "backdrop_changed"
   | "instruction_preferences_changed"
-  | "auto_view_toggled"
   | "spot_used"
   | "focus_mode_toggled"
-  | "toolbar_used"
   | "hint_requested"
   | "tool_used";
 
@@ -60,6 +60,16 @@ export const TUTORIAL_STEP_REWARD_TOKENS = 10;
 
 /** The short, first-run core loop. Preference education stays contextual. */
 export const TUTORIAL_STEPS: TutorialStep[] = [
+  {
+    // FIRST, before anything on screen. Every control after this assumes two thumbs on the edges -
+    // the joystick is bottom-left, the tray bottom-right - and a player holding the phone one-handed
+    // to read finds the first drag awkward for a reason the tutorial never mentions.
+    id: "hold-like-controller",
+    targetId: "device",
+    message: "Hold your device with both hands, like a game controller.",
+    shortLabel: "Get comfortable",
+    event: "grip_acknowledged",
+  },
   {
     id: "long-press-part",
     targetId: "partsTray",
@@ -108,7 +118,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     id: "stand-table-upright",
-    targetId: "scene",
+    targetId: "beatControl",
     message:
       "All four legs are installed. Swipe down on the orange card to stand the table upright and finish.",
     shortLabel: "Stand the table upright",
@@ -147,12 +157,6 @@ export const CONTEXTUAL_TUTORIAL_STEPS: TutorialStep[] = [
     message: "Use Back one step to return to the previous assembly step.",
     event: "step_undone",
   },
-  {
-    id: "redo-step",
-    targetId: "undo",
-    message: "Use Forward one step to restore the step you just returned from.",
-    event: "step_redone",
-  },
 ];
 
 /** Momentum and Control explicitly teach the HUD controls requested in the review. */
@@ -170,13 +174,6 @@ export const SHARED_HUD_TUTORIAL_STEPS: TutorialStep[] = [
     message: "Tap Back one step to undo the last assembly action.",
     shortLabel: "Try Undo",
     event: "step_undone",
-  },
-  {
-    id: "hud-redo",
-    targetId: "undo",
-    message: "Tap Forward one step to restore the action and continue.",
-    shortLabel: "Restore the step",
-    event: "step_redone",
   },
   {
     id: "hud-focus",
@@ -226,13 +223,6 @@ export const SETTINGS_TUTORIAL_STEPS: TutorialStep[] = [
     when: ({ mode }) => mode === "guide",
   },
   // Focus is taught by hud-focus, on the chip itself — the in-build panel no longer carries the row.
-  {
-    id: "auto-view-settings",
-    targetId: "settings",
-    message:
-      "You can use Auto-view to automatically frame the next open socket.",
-    event: "auto_view_toggled",
-  },
 ];
 
 export const FUTURE_TUTORIAL_REQUIREMENTS = {
@@ -254,8 +244,10 @@ export const tutorialStepsFor = (context: TutorialContext): TutorialStep[] => {
   const core = TUTORIAL_STEPS.filter(
     (step) => !step.when || step.when(context),
   );
-  const openingSteps = core.slice(0, 2);
-  const remainingCore = core.slice(2);
+  // Three, not two: the grip step precedes the first two touch steps, and the Settings
+  // introduction still belongs after the tabletop has been PLACED, not merely picked up.
+  const openingSteps = core.slice(0, 3);
+  const remainingCore = core.slice(3);
   const finishingStep = remainingCore.at(-1);
   const assemblySteps = finishingStep
     ? remainingCore.slice(0, -1)
@@ -265,21 +257,14 @@ export const tutorialStepsFor = (context: TutorialContext): TutorialStep[] => {
     context.profile === "control" || context.profile === "momentum"
       ? SHARED_HUD_TUTORIAL_STEPS
       : SHARED_HUD_TUTORIAL_STEPS.filter((step) => step.id === "hud-focus");
-  const controlHudSteps =
-    context.profile === "control"
-      ? [
-          ...sharedHudSteps.slice(0, 3),
-          ...CONTROL_TUTORIAL_STEPS,
-          ...sharedHudSteps.slice(3),
-        ]
-      : sharedHudSteps;
+  // Hint is taught where it is wanted, not on the HUD tour: the step follows tighten-connector, the first moment the player is mid-action and could actually want a suggestion.
+  const assemblyStepsWithContextualHint = assemblySteps.flatMap((step) =>
+    context.profile === "control" && step.id === "tighten-connector"
+      ? [step, ...CONTROL_TUTORIAL_STEPS]
+      : [step],
+  );
   const settingsSteps = SETTINGS_TUTORIAL_STEPS.filter(
-    (step) =>
-      (!step.when || step.when(context)) &&
-      !(
-        (context.profile === "control" || context.profile === "momentum") &&
-        step.id === "auto-view-settings"
-      ),
+    (step) => !step.when || step.when(context),
   );
 
   // Introduce the real Settings panel once the tabletop is present, then return
@@ -287,8 +272,8 @@ export const tutorialStepsFor = (context: TutorialContext): TutorialStep[] => {
   return [
     ...openingSteps,
     ...settingsSteps,
-    ...controlHudSteps,
-    ...assemblySteps,
+    ...sharedHudSteps,
+    ...assemblyStepsWithContextualHint,
     ...(finishingStep ? [finishingStep] : []),
   ];
 };

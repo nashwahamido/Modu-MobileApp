@@ -2,7 +2,7 @@
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { avatarForProfile } from "@/src/components/avatarAssets";
-import { CREAM, useStyles, useTheme, LEXEND } from "@/src/game/ui/system/theme";
+import { CREAM, useFixedStyles, useTheme, LEXEND } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 import type { Profile } from "@/src/data";
 import { useScreenInsets } from '../../hooks/use-safe-insets';
@@ -23,7 +23,7 @@ export function VisitHud({
   onToggleLike: () => void;
   onBack: () => void;
 }) {
-  const s = useStyles(makeStyles);
+  const s = useFixedStyles(makeStyles);
   const t = useTheme();
   // Immersive mode reports 0 insets, so these floors sit UNDER the design's own offsets.
   const safe = useScreenInsets();

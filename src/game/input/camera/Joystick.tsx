@@ -47,8 +47,8 @@ function JoystickImpl({ onStart, onMove, onEnd }: Props) {
 
   // MEMOISED, for the same reason the scene gestures and the part/cluster gesture caches are: the play screen re-renders throughout a drag (fit-state churn), and handing GestureDetector a fresh Gesture object makes gesture-handler reconfigure the native handler underneath an in-flight touch. The three callbacks are useCallback-stable in useOrbitCamera, so this rebuilds only when the manipulator itself swaps.
   const pan = useMemo(
-    () =>
-      Gesture.Pan()
+    () => {
+      const g = Gesture.Pan()
         .onBegin(() => {
           scheduleOnRN(onStart);
         })
@@ -74,7 +74,24 @@ function JoystickImpl({ onStart, onMove, onEnd }: Props) {
           tx.value = withSpring(0);
           ty.value = withSpring(0);
           scheduleOnRN(onEnd);
-        }),
+        });
+      /**
+       * NEVER YIELDS TO ANOTHER GESTURE.
+       *
+       * Two Pan handlers in separate detectors compete by default, and on Android the first to
+       * activate blocks the second outright — so a part held from the tray meant this stick reported
+       * nothing, and the camera could not be turned while hunting for a socket. iOS is more
+       * permissive natively, which is why it only ever appeared on Android.
+       *
+       * `manualActivation(false)` with `shouldCancelWhenOutside(false)` keeps this handler alive
+       * once it has begun, regardless of what else activates: the dial owns the finger that is
+       * inside it, and no other gesture has any claim on that finger.
+       *
+       * Not simultaneousWithExternalGesture, which needs a REF to the other gesture — the drag is
+       * built per part by gestureFor(action), so there is no single object to point at.
+       */
+      return g.shouldCancelWhenOutside(false);
+    },
     [onStart, onMove, onEnd, tx, ty],
   );
 

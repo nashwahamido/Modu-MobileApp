@@ -1,5 +1,5 @@
-import { ELEVATION, FONT, RADIUS, SIZE, SPACE, useStyles } from "@/src/game/ui/system/theme";
-import { StyleSheet, Pressable, Text } from "react-native";
+import { ELEVATION, FONT, RADIUS, SIZE, SPACE, useFixedStyles } from "@/src/game/ui/system/theme";
+import { StyleSheet, Pressable, Text, View, Image } from "react-native";
 import { actionCluster } from "@/src/game/core/evaluation/clusters";
 import { engageAxis } from "@/src/game/core/evaluation/engagement";
 import { targetPositionForAction } from "@/src/game/core/scene/targets";
@@ -15,8 +15,7 @@ interface Props {
 
 /** DEV-only: performs the next assembly action through the real store/scene pipeline (pickup → glide → snap, or tighten). Lets the whole game be stepped through on an emulator where touch-gesture injection is flaky; also doubles as a demo mode. Ported from the on-release engine; `snapPart` → game's `placePart`, and the done set is passed to game's targetPositionForAction. Parts that need a follow-up (screw park / slide-press drive) complete on the NEXT press, since their tighten/drive is a separate available action. */
 export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
-  const styles = useStyles(makeStyles);
-  const heldActionId = useGameStore((s) => s.heldActionId);
+  const styles = useFixedStyles(makeStyles);
   const step = () => {
     const store = useGameStore.getState();
     const furniture = store.furniture;
@@ -154,7 +153,16 @@ export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
       style={styles.btn}
       onPress={step}
     >
-      <Text style={styles.text}>▶ auto</Text>
+      {/* icon + word, matching the Spot/recenter chips on the row. The play glyph is the app's own
+          icon-play.png rather than the ▶ text character, so it renders in the UI font/weight. */}
+      <View style={styles.content}>
+        <Image
+          source={require("@/src/assets/ui/icons/icon-play.png")}
+          style={styles.icon}
+          resizeMode="contain"
+        />
+        <Text style={styles.text}>auto</Text>
+      </View>
     </Pressable>
   );
 }
@@ -172,5 +180,7 @@ const makeStyles = (t: Theme) =>
     backgroundColor: t.surface,
     ...ELEVATION.card,
   },
+  content: { flexDirection: "row", alignItems: "center", gap: SPACE.xs },
+  icon: { width: 16, height: 16 },
   text: { color: t.text, fontFamily: FONT, fontSize: 13, fontWeight: "800" },
   });

@@ -2,7 +2,7 @@
 //
 // Split out of SettingsControls so the two panels — the tabbed /settings screen and the reduced in-build gear panel — compose the SAME rows instead of each carrying a copy that can drift.
 import { StyleSheet, Pressable, Switch, Text, View } from "react-native";
-import { useStyles, useTheme, FONT } from "@/src/game/ui/system/theme";
+import { useFixedStyles, useTheme, FONT } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 
 export function Stepper<T extends string>({
@@ -18,7 +18,7 @@ export function Stepper<T extends string>({
   options: { value: T; label: string }[];
   onChange: (v: T) => void;
 }) {
-  const styles = useStyles(makeSettingsStyles);
+  const styles = useFixedStyles(makeSettingsStyles);
   const idx = Math.max(0, options.findIndex((o) => o.value === value));
   const go = (dir: number) =>
     onChange(options[(idx + dir + options.length) % options.length].value);
@@ -57,7 +57,7 @@ export function Segmented<T extends string>({
   options: { value: T; label: string }[];
   onChange: (v: T) => void;
 }) {
-  const styles = useStyles(makeSettingsStyles);
+  const styles = useFixedStyles(makeSettingsStyles);
   return (
     <View style={styles.segBlock}>
       <Text style={styles.rowLabel}>{label}</Text>
@@ -108,7 +108,7 @@ export function Row({
   value: boolean;
   onValueChange: (v: boolean) => void;
 }) {
-  const styles = useStyles(makeSettingsStyles);
+  const styles = useFixedStyles(makeSettingsStyles);
   const t = useTheme();
   return (
     <View style={styles.switchRow}>
@@ -128,7 +128,7 @@ export function Row({
 }
 
 export function SectionHeader({ children }: { children: string }) {
-  const styles = useStyles(makeSettingsStyles);
+  const styles = useFixedStyles(makeSettingsStyles);
   return <Text style={styles.section}>{children}</Text>;
 }
 
@@ -146,7 +146,7 @@ export function ActionRow({
   disabled?: boolean;
   tone?: "danger" | "text";
 }) {
-  const styles = useStyles(makeSettingsStyles);
+  const styles = useFixedStyles(makeSettingsStyles);
   return (
     <Pressable
       style={[styles.actionRow, disabled && styles.actionRowIdle]}

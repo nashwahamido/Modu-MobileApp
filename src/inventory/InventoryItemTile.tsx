@@ -4,7 +4,7 @@ import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 import { CatalogThumb } from "@/src/components/CatalogThumb";
 import type { ItemSource } from "@/src/data/catalog/assets";
 import { brandFor } from "@/src/game/content/brands";
-import { CREAM, useStyles, LEXEND } from "@/src/game/ui/system/theme";
+import { CREAM, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 
 // Well height as a fraction of the tile's width; the grid owns the width
@@ -50,7 +50,7 @@ export function InventoryItemTile({
   placeable?: boolean;
   onPress?: () => void;
 }) {
-  const s = useStyles(makeStyles);
+  const s = useFixedStyles(makeStyles);
   const wellHeight = Math.round(width * WELL_ASPECT);
   return (
     <Pressable

@@ -13,7 +13,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useSafeInsets } from "@/src/hooks/use-safe-insets";
-import { ELEVATION, RADIUS, Theme, useStyles, FONT } from "@/src/game/ui/system/theme";
+import { ELEVATION, RADIUS, Theme, useFixedStyles, FONT } from "@/src/game/ui/system/theme";
 import {
   SettingsControls,
   type SettingsFocusTarget,
@@ -41,7 +41,7 @@ export function GameSettings({
   tutorialTarget = null,
   onTutorialTargetActivated,
 }: GameSettingsProps = {}) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const [open, setOpen] = useState(false);
   const [tutorialTargetY, setTutorialTargetY] = useState<number | null>(null);
   const scrollRef = useRef<ScrollView>(null);

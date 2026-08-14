@@ -22,7 +22,7 @@ import Animated, {
 import { avatarForProfile } from "@/src/components/avatarAssets";
 import { useGameStore } from "@/src/game/core/store";
 import { Button } from "@/src/game/ui/system/Button";
-import { ELEVATION, FONT, RADIUS, SPACE, useStyles } from "@/src/game/ui/system/theme";
+import { ELEVATION, FONT, RADIUS, SPACE, useFixedStyles } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 import type { ToolId } from "@/src/game/core/type";
 
@@ -30,7 +30,7 @@ import type { ToolId } from "@/src/game/core/type";
 const SEEN_KEY = "modu.toolbox-coach-seen.v1";
 
 export function ToolboxCoach({ neededTool }: { neededTool: ToolId | null }) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const profile = useGameStore((s) => s.profile);
   const selectedTool = useGameStore((s) => s.selectedTool);
   const [eligible, setEligible] = useState(false);

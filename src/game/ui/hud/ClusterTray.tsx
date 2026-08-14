@@ -12,7 +12,7 @@ import { clusterParkInfo } from "@/src/game/core/evaluation/clusterCombine";
 import type { ParkInfo } from "@/src/game/core/evaluation/engagement";
 import { pickThumb } from "@/src/game/core/presentation/labels";
 import { useGameStore } from "@/src/game/core/store";
-import { Theme, useStyles } from "@/src/game/ui/system/theme";
+import { Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 import type { ActionId, AssemblyAction, ClusterId } from "@/src/game/core/type";
 import { clusterSink, type OffsetSink } from "@/src/game/scene/combineDriver";
 import type { ClusterDriver } from "@/src/game/scene/offsetDriver";
@@ -30,7 +30,7 @@ interface Props {
 
 /** The combine stage's tray: one card per FINISHED cluster, shown until that cluster's own combine is done. The seed cluster's card enables first (its combine gates the others via the derived requires); dragging a card spawns the real cluster — the seed drops into place, a slide-joined cluster parks along its travel axis and is driven home by SlideControl, telescoping its runners. During the build phase a finished cluster earns a celebration, not a card here (this tray only renders with no cluster focus). */
 export function ClusterTray({ clusterDriver, clusterGestureFor }: Props) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const furniture = useGameStore((s) => s.furniture);
   const completed = useGameStore((s) => s.completed);
   const combiningCluster = useGameStore((s) => s.combiningCluster);

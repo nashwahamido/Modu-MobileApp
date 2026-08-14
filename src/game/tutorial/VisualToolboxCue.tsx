@@ -2,14 +2,14 @@ import { useEffect, useRef } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 
 import type { TutorialFrame } from "./targetRegistry";
-import { ELEVATION, Theme, useStyles } from "@/src/game/ui/system/theme";
+import { ELEVATION, Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 
 interface Props {
   frame: TutorialFrame;
 }
 
 export function VisualToolboxCue({ frame }: Props) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {

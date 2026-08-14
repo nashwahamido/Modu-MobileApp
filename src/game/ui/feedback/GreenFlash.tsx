@@ -1,11 +1,11 @@
-import { Theme, useStyles } from "@/src/game/ui/system/theme";
+import { Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 import { useEffect, useRef } from 'react';
 import { StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 
 /** Full-screen green completion flash; fires whenever `trigger` increases. */
 export function GreenFlash({ trigger }: { trigger: number }) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const opacity = useSharedValue(0);
   const prev = useRef(trigger);
 
