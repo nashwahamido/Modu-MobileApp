@@ -3,7 +3,7 @@ import { useEffect, type ReactNode } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { ProgressBar } from "@/src/game/ui/system/Button";
-import { ELEVATION, RADIUS, SPACE, Theme, TYPE, useFixedStyles, useReadingFont, FONT } from "@/src/game/ui/system/theme";
+import { ELEVATION, RADIUS, SPACE, Theme, TYPE, useFixedStyles, useReadingFont } from "@/src/game/ui/system/theme";
 
 interface Props {
   /** The objective sentence; null hides the text row and collapses the bar to the slim fixed pill (instructions off). */
@@ -88,13 +88,12 @@ export function ObjectiveBar({ line, fontSize, value, total, xp, header }: Props
         {/* Badge and total together on the left: they are one fact, and splitting them across the track made the track a divider between a picture and a number that belong to each other. */}
         <Text style={styles.xpLabel} numberOfLines={1}>{xp}</Text>
         <ProgressBar value={value} total={total} style={styles.xpTrack} />
-        {/* Step count as a ratio the eye can skip: the number that MOVES is full size in the text
-            colour, the one that never changes is smaller and muted. Same information as "0/18",
-            without two equal-weight numbers fighting over a slash. */}
-        <View style={styles.stepCount}>
-          <Text style={styles.stepNow}>{value}</Text>
-          <Text style={styles.stepTotal}>/{total}</Text>
-        </View>
+        {/* Progress as a PERCENTAGE, not a step ratio: "43%" answers "how far along am I"
+            directly, where "6/14" asks the player to do the division themselves. Whole
+            numbers only — decimal places would imply a precision the step count doesn't have. */}
+        <Text style={styles.stepPct}>
+          {total > 0 ? Math.round((value / total) * 100) : 0}%
+        </Text>
       </View>
     </View>
   );
@@ -158,7 +157,6 @@ const makeStyles = (t: Theme) =>
     xpTrack: { flex: 1 },
     // minWidth on both flanks: without it the track resizes every time a number gains a digit, which is the same jitter one level down.
     xpLabel: { ...TYPE.numeric, color: t.gold, minWidth: 26 },
-    stepCount: { flexDirection: "row", alignItems: "baseline", minWidth: 38, justifyContent: "flex-end" },
-    stepNow: { ...TYPE.numeric, color: t.text },
-    stepTotal: { ...TYPE.numeric, fontSize: 10, color: t.textDim },
+    // minWidth for the same reason as xpLabel: "9%" -> "10%" -> "100%" must not resize the track.
+    stepPct: { ...TYPE.numeric, color: t.text, minWidth: 44, textAlign: "right" },
   });

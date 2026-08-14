@@ -418,9 +418,12 @@ function GameScreen() {
         <SpotOrbitCue manipulator={manipulator} />
         {/* Focus mode clears the workbench: everything below is chrome the task doesn't
             need. What survives is the shortlist — joystick, the next part (PartsTray), the
-            progress bar, and Settings — plus the Focus toggle itself, since hiding it would
-            trap the player in focus mode. */}
-        {focus ? null : <UndoButton />}
+            progress bar, Settings, and the Focus toggle itself, since hiding it would trap
+            the player in focus mode. Undo and Recenter ALSO survive: mistake recovery and
+            re-framing the build are part of the task, not chrome — clearPath pins focus
+            mode on, and stripping those two left its players with no way back from an
+            error. */}
+        <UndoButton />
         <GameSettings />
         <View style={styles.togglesRow}>
           {focus ? null : (
@@ -555,13 +558,11 @@ function GameScreen() {
             dark={dark}
           />
         </View>
-        {focus ? null : (
-          <RecenterButton
-            enabled={sceneHasParts}
-            onPress={resetCamera}
-            style={hudControls.recenterButton}
-          />
-        )}
+        <RecenterButton
+          enabled={sceneHasParts}
+          onPress={resetCamera}
+          style={hudControls.recenterButton}
+        />
 
         {heldActionId && settings.releaseBehavior === "float" ? (
           // Float mode: a released part stays where it was set down; this is the way back to the tray. (In autoReturn mode a miss returns by itself.)

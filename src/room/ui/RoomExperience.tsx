@@ -55,7 +55,7 @@ export function RoomExperience() {
   // The hub's scene must stay down until the visit's teardown has actually landed: stopViewing() runs from a cleanup, which React fires in the passive-effect phase AFTER the commit that re-mounts RoomScene here, so heavySceneActive alone flips back to false one commit too early and the hub's first frame would read s.viewing?.layout ?? s.layout as the friend's room, mounting and then immediately unmounting every visited item's Filament asset (see the visit.tsx cleanup and RoomScene's asset-release churn).
   const stillViewingFriend = usePlacementStore((p) => p.viewing !== null);
   const sceneMounted = !(heavySceneActive || stillViewingFriend);
-  // The loading gate, re-armed on every mount of the scene rather than once per app run. Coming back from a friend's room (or from the assembly) is a genuine cold load â€” the scene was torn down, so the shell and every piece re-parse from scratch â€” and the room would otherwise be watched rebuilding itself piece by piece. Both flags reset while the scene is DOWN, so the overlay is already in place on the commit that brings it back.
+  // The loading gate, re-armed on every mount of the scene rather than once per app run. Coming back from a friend's room (or from the assembly) is a genuine cold load — the scene was torn down, so the shell and every piece re-parse from scratch — and the room would otherwise be watched rebuilding itself piece by piece. Both flags reset while the scene is DOWN, so the overlay is already in place on the commit that brings it back.
   const [sceneReady, setSceneReady] = useState(false);
   const [revealed, setRevealed] = useState(false);
   useEffect(() => {
@@ -67,7 +67,7 @@ export function RoomExperience() {
   const hour = useGameStore((s) => s.roomTimeOfDay);
   const setRoomTimeOfDay = useGameStore((s) => s.setRoomTimeOfDay);
   const roomBackdrop = sunPreset(hour).backdrop;
-  // The switch's deviation from this hour's default, stamped with the hour it was made at so it applies to THAT hour only â€” see ceilingLightOn. Note it is set aside rather than discarded: move away and the new hour's default rules, move back and the deviation applies again, which is what makes "off at night" stay a night preference instead of a one-shot. Only one slot exists, so touching the switch at a second hour replaces it. Deliberately NOT persisted and deliberately not in the store: the default follows the VIEWER's hour, so a visitor's room lights correctly with no owned state to disagree about.
+  // The switch's deviation from this hour's default, stamped with the hour it was made at so it applies to THAT hour only — see ceilingLightOn. Note it is set aside rather than discarded: move away and the new hour's default rules, move back and the deviation applies again, which is what makes "off at night" stay a night preference instead of a one-shot. Only one slot exists, so touching the switch at a second hour replaces it. Deliberately NOT persisted and deliberately not in the store: the default follows the VIEWER's hour, so a visitor's room lights correctly with no owned state to disagree about.
   const [lightOverride, setLightOverride] = useState<CeilingLightOverride>(null);
   const ceilingLight = ceilingLightOn(hour, lightOverride);
   const darkTheme = useGameStore((s) => s.theme) === 'dark';
@@ -75,7 +75,7 @@ export function RoomExperience() {
   // Placement is shared state (src/room/core/placement) so any route can start it and the scene can render the layout. This screen owns only the HUD: the ghost's drag lives in the scene's gesture layer, where the finger is converted to grid cells by ray picking.
   const me = useCurrentUserId();
   const hydrate = usePlacementStore((p) => p.hydrate);
-  // The saved room has answered â€” the loading screen's first milestone. False again for the length of an account switch's re-hydrate, which is exactly when the room is worth covering.
+  // The saved room has answered — the loading screen's first milestone. False again for the length of an account switch's re-hydrate, which is exactly when the room is worth covering.
   const hydrated = usePlacementStore((p) => p.hydrated);
   // Primitive selectors: activeEdit changes on every cell the ghost crosses.
   const editing = usePlacementStore((p) => p.activeEdit !== null);
@@ -116,7 +116,7 @@ export function RoomExperience() {
     roomRotationRef.current = roomRotation;
     roomZoomRef.current = roomZoom;
   }, [roomRotation, roomZoom]);
-  // Both guides wait on `revealed`, not merely on the data: a guide is advice ABOUT the room, so it has to arrive after the loading screen has handed the room over. Gated here rather than at the render so the AsyncStorage read waits too â€” raising one behind an opaque overlay would burn its once-only "seen" flag on a dialog nobody ever saw.
+  // Both guides wait on `revealed`, not merely on the data: a guide is advice ABOUT the room, so it has to arrive after the loading screen has handed the room over. Gated here rather than at the render so the AsyncStorage read waits too — raising one behind an opaque overlay would burn its once-only "seen" flag on a dialog nobody ever saw.
   useEffect(() => {
     if (
       welcomeFromTutorial ||
@@ -168,7 +168,7 @@ export function RoomExperience() {
       console.warn('[room] welcome guide state save failed', err),
     );
   };
-  // Every path into THIS view goes through here â€” orbit drag, pinch â€” so the zoom range is enforced once and cannot be forgotten by a new input path. Rotation is NOT clamped any more: the shell is enclosed on all four sides and the walls between the camera and the room fade out, so the room reads as a room at every azimuth (see src/room/core/wallCulling). NOTE: src/app/(social)/visit.tsx carries an identical copy of this function for the friend's-room screen, so this is one of TWO places the clamp lives â€” change both or the two scenes drift apart.
+  // Every path into THIS view goes through here — orbit drag, pinch — so the zoom range is enforced once and cannot be forgotten by a new input path. Rotation is NOT clamped any more: the shell is enclosed on all four sides and the walls between the camera and the room fade out, so the room reads as a room at every azimuth (see src/room/core/wallCulling). NOTE: src/app/(social)/visit.tsx carries an identical copy of this function for the friend's-room screen, so this is one of TWO places the clamp lives — change both or the two scenes drift apart.
   const applyRoomControls = (nextRotation: number, nextZoom: number) => {
     const clampedZoom = Math.max(ORBIT.zoom.min, Math.min(ORBIT.zoom.max, nextZoom));
     roomRotationRef.current = nextRotation;
@@ -224,7 +224,7 @@ export function RoomExperience() {
           hour={hour}
           onHourChange={setRoomTimeOfDay}
           lightOn={ceilingLight}
-          // Stamped with the CURRENT hour, which is what scopes it â€” see ceilingLightOn.
+          // Stamped with the CURRENT hour, which is what scopes it — see ceilingLightOn.
           onToggleLight={() => setLightOverride({ hour, on: !ceilingLight })}
           style={[
             s.lightControls,
@@ -244,7 +244,7 @@ export function RoomExperience() {
         onOpenVisit={() => setVisitPickerOpen(true)}
       />
 
-      {/* All of the placement UI â€” swatches and buttons â€” lives in one component on the right edge; this screen only decides when it is up. See PlacementRail. */}
+      {/* All of the placement UI — swatches and buttons — lives in one component on the right edge; this screen only decides when it is up. See PlacementRail. */}
       {editing ? (
         <PlacementRail
           guideTarget={placementGuideTarget}
@@ -319,12 +319,12 @@ export function RoomExperience() {
         </OverlaySheet>
       ) : null}
 
-      {/* Last child, and opaque: the room loads UNDERNEATH this â€” HUD included, so no bar or button flashes over a half-built room either. */}
+      {/* Last child, and opaque: the room loads UNDERNEATH this — HUD included, so no bar or button flashes over a half-built room either. */}
       {sceneMounted && !revealed ? (
         <RoomLoadingOverlay
           dataReady={hydrated}
           sceneReady={sceneReady}
-          label="Getting your room readyâ€¦"
+          label="Getting your room ready!"
           onRevealed={() => setRevealed(true)}
         />
       ) : null}
@@ -333,14 +333,14 @@ export function RoomExperience() {
 }
 
 const makeStyles = (t: Theme) => StyleSheet.create({
-  // The stage is FULL-BLEED: the Filament view is the screen, with the HUD floating over it. Any inset here becomes a hard clip line through the 3D scene the moment the room is zoomed or orbited near an edge â€” framing belongs to the camera (src/room/input/orbit.ts), not to this view's margins.
+  // The stage is FULL-BLEED: the Filament view is the screen, with the HUD floating over it. Any inset here becomes a hard clip line through the 3D scene the moment the room is zoomed or orbited near an edge — framing belongs to the camera (src/room/input/orbit.ts), not to this view's margins.
   screen: {
     flex: 1,
     backgroundColor: t.bg,
     overflow: 'hidden',
   },
   stage: StyleSheet.absoluteFillObject,
-  // Settings sits on its own, self-positioned at the top-left â€” RoomTopStats (coins + level) is the equivalent cluster at the top-right, now in its own file.
+  // Settings sits on its own, self-positioned at the top-left — RoomTopStats (coins + level) is the equivalent cluster at the top-right, now in its own file.
   settingsButton: {
     position: 'absolute',
     zIndex: 12,

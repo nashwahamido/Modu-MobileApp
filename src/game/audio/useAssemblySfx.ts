@@ -32,7 +32,14 @@ export function useAssemblySfx(enabled: boolean): void {
     return useGameStore.subscribe((s) => {
       // ── picking up and putting down ──────────────────────────────────────
       if (s.heldActionId !== prevHeldRef.current) {
-        if (s.heldActionId) playSfx("pickup");
+        if (s.heldActionId) {
+          // A pickup of a part whose step isn't available yet is a mistake in progress: it gets
+          // the error cue INSTEAD of the pickup cue — one sound, saying the right thing, rather
+          // than a cheerful pickup with a correction talking over it.
+          const held = s.heldActionId;
+          const blocked = !s.available().some((a) => a.actionId === held);
+          playSfx(blocked ? "error" : "pickup");
+        }
         // Only a genuine put-back: a release that COMPLETED the action is a seat, and the seat sound fires below. Playing both would double up on every successful placement.
         else if (s.completed.length === prevCompletedRef.current) playSfx("drop");
         prevHeldRef.current = s.heldActionId;

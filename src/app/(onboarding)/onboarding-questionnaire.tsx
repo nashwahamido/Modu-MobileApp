@@ -839,8 +839,11 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       justifyContent: "center",
       gap: 20,
-      // Room at the foot for the Next button and its halo, so the bubble clears it — but modest: too much and the row is pushed into the top margin instead.
-      paddingBottom: 58,
+      // Room at the foot for the Next button and its halo, so the bubble clears it — but modest:
+      // too much and the row is pushed into the top margin instead. Trimmed from 58 and paired
+      // with a top pad, which together sit the whole mascot+bubble row a step LOWER on screen.
+      paddingTop: 22,
+      paddingBottom: 36,
     },
     mascotCircle: {
       width: 150,
