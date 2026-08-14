@@ -60,6 +60,7 @@ import { GridOverlay } from "./GridOverlay";
 import { applySurfaceItem } from "./applySurfaceItem";
 import { SHELL_ORIGINAL } from "./shellMaterials";
 import { useSurfaceTextures } from "./useSurfaceTextures";
+import { RoomAvatar } from "./RoomAvatar";
 import { useCurrentUserId, useRepos } from "../../data";
 import { useShopStore } from "../../data/shop/store";
 import { setCameraAzimuth, usePlacementStore } from "../core/placement";
@@ -1504,6 +1505,7 @@ export function RoomScene({
           {ceilingLight ? <RoomCeilingLight light={sun.interiorLight} /> : null}
           <RoomPostProcess />
           <RoomModel onReady={handleReady} orbit={orbit} />
+          <RoomAvatar />
           {/* Committed pieces AND the ghost render from ONE array, and that is load-bearing: React keys only match within the same children array, so a ghost in its own sibling slot is a different element even with the same key — pick-up and confirm then unmount/remount the piece, and useModel reloads the whole GLB each time (useBuffer has no cache). That remount is what made a dragged piece invisible until seconds after settling, and where the old "Pointer FilamentAssetWrapper has already been manually released" race lived. In one array the key genuinely matches, the component morphs, and the model loads exactly once per piece.
               An id the catalog doesn't know (yet) has no model or dimensions — skip it. */}
           {scenePlacements.map((placement) => (
