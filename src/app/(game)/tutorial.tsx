@@ -837,7 +837,7 @@ function TutorialScreen() {
           <TutorialTarget id="focus" pointerEvents="auto">
             <FocusToggleButton />
           </TutorialTarget>
-          <TutorialTarget id="autoView" pointerEvents="auto">
+          <TutorialTarget id="spot" pointerEvents="auto">
             <SpotButton />
           </TutorialTarget>
         </View>

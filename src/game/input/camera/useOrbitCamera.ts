@@ -72,8 +72,6 @@ function useStableOrbitManipulator(
 const ZOOM_RATE = 32;
 const HOME_EYE: [number, number, number] = [1.0, 0.85, 1.0];
 const QUARTER_TURN_PX = Math.PI / 2 / 0.005;
-const AUTOVIEW_MIN_MOVE_M = 0.12;
-const AUTOVIEW_SETTLE_MS = 450;
 const NO_PLACED_PARTS = new Set<string>();
 
 /** Camera orbit pivot for a stage: the vertical centre of what's visible. When a cluster is focused, frame that sub-assembly; otherwise frame everything built up to and including the stage. */
@@ -148,21 +146,6 @@ export function useOrbitCamera(
   }, [furniture, heldActionId]);
   const examinePartId = examine?.kind === "part" ? examine.partId : null;
   const focusCluster = examine?.kind === "cluster" ? examine.cluster : null;
-  const autoView = useGameStore((s) => s.settings.autoView);
-  const nextTargetPartId = useGameStore((s) => {
-    if (!s.settings.autoView || !s.furniture) return null;
-    const a = s
-      .availableForMode()
-      .find(
-        (x) =>
-          x.partId && (x.type === "placePart" || x.type === "insertFastener"),
-      );
-    return a?.partId ?? null;
-  });
-  const effectiveAutoView = autoView && !stableFraming;
-  const focusPartId =
-    examinePartId ??
-    (effectiveAutoView && !heldActionId ? nextTargetPartId : null);
   const combiningCluster = useGameStore((s) => s.combiningCluster);
   const framingCluster = combiningCluster ? null : activeCluster;
 
@@ -210,7 +193,7 @@ export function useOrbitCamera(
   const { height: winH } = useWindowDimensions();
   const [home, setHome] = useState(() => ({
     eye: HOME_EYE,
-    target: pivot(stage, framingCluster, heldFocusPoint, focusPartId, focusCluster),
+    target: pivot(stage, framingCluster, heldFocusPoint, examinePartId, focusCluster),
   }));
 
   useEffect(() => {
@@ -229,36 +212,19 @@ export function useOrbitCamera(
     // In the tutorial, the first pickup aims the camera at the real drop point.
     // Keep that exact target after placement so the centre ring stays aligned and the newly placed part does not jump when held state is cleared.
     if (stableFraming && framedHasPlaced) return;
-    const nextTarget = pivot(stage, framingCluster, null, focusPartId, focusCluster);
-    const apply = () =>
-      setHome((h) =>
-        h.target.every((v, i) => Math.abs(v - nextTarget[i]) < 1e-5)
-          ? h
-          : { eye: eyeRef.current, target: nextTarget },
-      );
-    const autoDriven =
-      effectiveAutoView && !examinePartId && focusPartId != null;
-    if (autoDriven) {
-      const cur = targetRef.current;
-      const dist = Math.hypot(
-        nextTarget[0] - cur[0],
-        nextTarget[1] - cur[1],
-        nextTarget[2] - cur[2],
-      );
-      if (dist < AUTOVIEW_MIN_MOVE_M) return;
-      const id = setTimeout(apply, AUTOVIEW_SETTLE_MS);
-      return () => clearTimeout(id);
-    }
-    apply();
+    const nextTarget = pivot(stage, framingCluster, null, examinePartId, focusCluster);
+    setHome((h) =>
+      h.target.every((v, i) => Math.abs(v - nextTarget[i]) < 1e-5)
+        ? h
+        : { eye: eyeRef.current, target: nextTarget },
+    );
   }, [
     stage,
     framingCluster,
-    focusPartId,
+    examinePartId,
     focusCluster,
     framedHasPlaced,
     pivot,
-    effectiveAutoView,
-    examinePartId,
     stableFraming,
   ]);
 
@@ -386,7 +352,7 @@ export function useOrbitCamera(
 
   const resetCamera = useCallback(() => {
     resetTick.current += 1;
-    const target = pivot(stage, framingCluster, heldFocusPoint, focusPartId, focusCluster);
+    const target = pivot(stage, framingCluster, heldFocusPoint, examinePartId, focusCluster);
     eyeRef.current = HOME_EYE;
     // Recentre means recentre: the accumulated pan is part of what the player is undoing.
     panShared.value = { x: 0, y: 0, z: 0 };
@@ -398,7 +364,7 @@ export function useOrbitCamera(
         target[2],
       ],
     });
-  }, [stage, framingCluster, heldFocusPoint, focusPartId, focusCluster, pivot, panShared]);
+  }, [stage, framingCluster, heldFocusPoint, examinePartId, focusCluster, pivot, panShared]);
 
   const getFocusPoint = useCallback((): Vec3 => targetRef.current, []);
   const isViewingUnderside = useCallback((): boolean => {

@@ -34,8 +34,6 @@ export interface AccessibilitySettings {
   showInstructions: boolean;
   /** Show only the current part + action; hide the rest of the chrome. */
   focusMode: boolean;
-  /** Auto-orient the camera to frame the next open target socket. */
-  autoView: boolean;
   fontScale: number;
   /**
    * Set the READING surfaces in OpenDyslexic — the objective line, hints, the tutorial's messages

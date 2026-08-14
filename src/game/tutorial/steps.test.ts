@@ -102,9 +102,5 @@ test("every profile keeps the Settings walkthrough short and contextual", () => 
       settingsSteps.some((step) => step.id === "focus-mode-settings"),
       false,
     );
-    assert.equal(
-      settingsSteps.some((step) => step.id === "auto-view-settings"),
-      false,
-    );
   }
 });

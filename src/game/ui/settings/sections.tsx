@@ -83,7 +83,7 @@ const LEVELS: { value: TextLevel; label: string }[] = [
 
 // ── tutorial focus plumbing ──────────────────────────────────────────────────
 /** A row the settings walkthrough can scroll to and wait on. Every id here must name a row the IN-BUILD panel renders — the walkthrough opens that panel, not the /settings screen. */
-export type SettingsFocusTarget = "backdrop" | "instructions" | "autoView";
+export type SettingsFocusTarget = "backdrop" | "instructions";
 
 export interface FocusProps {
   focusTarget?: SettingsFocusTarget | null;
@@ -271,17 +271,6 @@ export function GuidanceSection({
           onValueChange={(v) => setSettings({ focusMode: v })}
         />
       ) : null}
-      <View onLayout={targetLayout("autoView")}>
-        <Row
-          label="Auto-view"
-          desc="Auto-frame the next open socket"
-          value={settings.autoView}
-          onValueChange={(v) => {
-            setSettings({ autoView: v });
-            targetActivated("autoView");
-          }}
-        />
-      </View>
       <Row
         label="Show instructions"
         desc="Off: only the progress bar stays at the top"

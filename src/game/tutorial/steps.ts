@@ -9,7 +9,7 @@ export type TutorialTargetId =
   | "hint"
   | "undo"
   | "focus"
-  | "autoView"
+  | "spot"
   | "settings"
   /** The whole screen, for the grip step: what it teaches is the DEVICE, not a control on it. */
   | "device";
@@ -184,7 +184,7 @@ export const SHARED_HUD_TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     id: "hud-spot",
-    targetId: "autoView",
+    targetId: "spot",
     // Spot no longer moves the camera. It plays a ghost of the next part travelling into its socket,
     // so the copy has to describe a demonstration rather than a framing.
     message: "Tap Spot to see the next part move into place.",

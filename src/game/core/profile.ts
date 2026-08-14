@@ -20,7 +20,6 @@ export const DEFAULT_SETTINGS: AccessibilitySettings = {
   showInstructions: true,
   manualTools: false,
   focusMode: false,
-  autoView: false,
   fontScale: 1,
 
   // dev-setting
@@ -44,7 +43,6 @@ export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>>
   control: {
     showInstructions: false,
     focusMode: false,
-    autoView: false,
     softHints: true,
     manualTools: true,
     // dev-setting
@@ -57,7 +55,6 @@ export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>>
     textLevel: "simple",
     audio: true,
     fontScale: 1.1,
-    autoView: true,
     softHints: false,
     // dev-setting
     ghostStyle: "staticSockets",
@@ -68,7 +65,6 @@ export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>>
   // Motivation (adhd), short tasks, quick feedback, progress recovery.
   momentum: {
     focusMode: false,
-    autoView: false,
     softHints: true,
     // dev-setting
     ghostStyle: "staticSockets",
@@ -81,7 +77,6 @@ export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>>
   clearPath: {
     textLevel: "standard",
     focusMode: true,
-    autoView: true,
     softHints: true,
     manualTools: false,
     // dev-setting
