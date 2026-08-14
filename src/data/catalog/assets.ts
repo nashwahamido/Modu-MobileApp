@@ -39,7 +39,7 @@ export function tilePath(source: ItemSource, id: CatalogId): string {
 // Trim maps are SEPARATE files rather than the slab's reused, because a cornice is separate geometry with its own UV mapping at its own physical scale: reusing the slab's map on it reads as an extruded strip of floor rather than as moulding. Only floor items carry them, and only when the author supplied them — an absent trim map leaves the cornice as authored.
 //
 // KTX2 rather than JPEG: Filament transcodes Basis-supercompressed textures straight to the device's native GPU format, which is the difference between ~38 MB and ~7 MB of VRAM for a full re-skin. The wire size is roughly a wash.
-// The array is the source of truth (also consumed at runtime by surfaceSpec.ts to validate portal-authored jsonb) — SurfaceMap is derived from it so the two can never drift apart.
+// The array is the source of truth — SurfaceMap is derived from it, so a map added here is a map every consumer's exhaustive switch must answer for. surfaceSpec.ts builds its own list of PUBLISHED maps against that type rather than against this array: a row lists the subset the portal actually uploaded, so validating against the full set would be the wrong question.
 export const SURFACE_MAPS = ["texture", "normal", "rough", "trim_texture", "trim_normal", "trim_rough"] as const;
 export type SurfaceMap = (typeof SURFACE_MAPS)[number];
 

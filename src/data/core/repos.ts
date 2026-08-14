@@ -257,7 +257,7 @@ export function workshopDraftToPlaceableRoomRow(r: WorkshopDraftRow): PlaceableR
   });
 }
 
-// listPlaceables fetches every status='testing' workshop_drafts row in one query and hands the whole batch here, rather than filtering server-side by category_id — the model/surface split is a fact the DB GUARANTEES about the row's SHAPE (workshop_drafts_kind_shape: a surface draft's size is null, full stop), and re-deriving it from category_id membership in ('floor','wall') here would mean trusting a second, driftable copy of that list instead of the one thing the constraint actually promises. A surface draft is silently excluded, not warned about — it belongs in the shop catalogue (see workshopSurfaceDraftsToShopItems, shop/items.ts), not here, and that is its ordinary, expected shape.
+// listPlaceables fetches every status='testing' workshop_drafts row in one query and hands the whole batch here, rather than filtering server-side by category_id — the model/surface split is a fact the DB GUARANTEES about the row's SHAPE (workshop_drafts_kind_shape: a surface draft's size is null, full stop), and re-deriving it from category_id membership in ('floor','wall') here would mean trusting a second, driftable copy of that list instead of the one thing the constraint actually promises. A surface draft is silently excluded, not warned about — it has no size to place by, and it reaches the player through the shop catalogue instead (workshopDraftsToShopItems, shop/items.ts, which maps model and surface drafts alike), so that is its ordinary, expected shape.
 export function workshopModelDraftsToPlaceableRoomRows(rows: WorkshopDraftRow[]): PlaceableRoomRow[] {
   return rows.filter((r) => r.size_x != null).map(workshopDraftToPlaceableRoomRow);
 }

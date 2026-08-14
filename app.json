@@ -24,7 +24,8 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.modu.app"
+      "bundleIdentifier": "com.modu.app",
+      "appleTeamId": "373HG67P3T"
     },
     "plugins": [
       "expo-router",

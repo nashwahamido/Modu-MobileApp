@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { FilamentProxy, useFilamentContext, type RenderableManager, type Texture, type TextureFlags } from "react-native-filament";
 
 import { surfaceMapUrl } from "../../data/catalog/urls";
+import { probeRemote } from "../../data/remoteAsset";
 import type { ItemSource, SurfaceMap } from "../../data/catalog/assets";
 import type { ShopItem } from "../../data/shop/items";
 import type { MapSet } from "./applySurfaceItem";
@@ -12,38 +13,7 @@ import type { MapSet } from "./applySurfaceItem";
 //
 // ALL OR NOTHING, deliberately. A base colour landing while its normal map is still in flight would show the new material lit by the old surface detail for a frame or two, which reads as a rendering bug rather than as loading. Resolving together costs nothing, because the maps are fetched in parallel; only the texture creation is serialised, and that runs on the Filament worklet thread rather than here — see stage 2.
 //
-// The probe exists for the reason it exists in variantModel.ts: react-native-filament's loader reports a failed fetch with a console.error and then leaves the buffer stuck in `loading` FOREVER — there is no error state to react to — so a missing texture has to be DETECTED with a HEAD request rather than awaited. It doubles as the cache-buster: storage serves with max-age=3600 and the device's HTTP cache honours it across restarts, so a re-uploaded texture would otherwise be invisible for an hour. The ETag becomes a ?v= query, which makes a re-upload a cache miss by construction.
-
-// url -> the ETag-stamped URL to load, or false when the file is not in storage. Session-lifetime.
-const resolved = new Map<string, string | false>();
-// In-flight probes, so two slots sharing a map cause ONE request.
-const probes = new Map<string, Promise<string | false>>();
-
-function probe(url: string): Promise<string | false> {
-  const existing = probes.get(url);
-  if (existing) return existing;
-  const p = fetch(url, { method: "HEAD", headers: { "Cache-Control": "no-cache" } })
-    .then(
-      (res): string | false => {
-        if (!res.ok) {
-          resolved.set(url, false);
-          return false;
-        }
-        const etag = res.headers.get("etag")?.replace(/[^A-Za-z0-9]/g, "") ?? "";
-        const versioned = etag ? `${url}?v=${etag}` : url;
-        resolved.set(url, versioned);
-        return versioned;
-      },
-      // Offline or DNS — transient. Fall back now but leave the URL UNCACHED, so the next mount re-probes instead of pinning this item to the authored look until the app restarts.
-      (): false => false,
-    )
-    .then((versioned) => {
-      probes.delete(url);
-      return versioned;
-    });
-  probes.set(url, p);
-  return p;
-}
+// The probe is data/remoteAsset.ts's probeRemote, the SAME one variantModel.ts loads models through — one module owns the rule for every remote asset this app fetches, and the session cache is shared with it rather than a second private copy. It exists because react-native-filament's loader reports a failed fetch with a console.error and then leaves the buffer stuck in `loading` FOREVER — there is no error state to react to — so a missing texture has to be DETECTED with a HEAD request rather than awaited. It doubles as the cache-buster: storage serves with max-age=3600 and the device's HTTP cache honours it across restarts, so a re-uploaded texture would otherwise be invisible for an hour. The ETag becomes a ?v= query, which makes a re-upload a cache miss by construction.
 
 // Base colour is sRGB; normal and metallic-roughness carry LINEAR data. Decoding those as sRGB does not throw — it just makes the lighting subtly wrong, which reads as "this material looks cheap" rather than as a bug, so it is the kind of mistake that ships.
 const FLAGS: Record<SurfaceMap, TextureFlags> = {
@@ -87,8 +57,9 @@ export function useSurfaceTextures(
         spec.maps.map(async (map) => {
           const url = surfaceMapUrl(source, item.id, map);
           if (!url) return null;
-          const versioned = resolved.get(url) ?? (await probe(url));
-          if (versioned === false) return null;
+          // probeRemote answers from its own session cache when the URL has already settled, so this awaits a real request only the first time — and null (not in storage, or offline) drops just this map, leaving the shell's own texture in that slot.
+          const versioned = await probeRemote(url);
+          if (versioned === null) return null;
           const buffer = await FilamentProxy.loadAsset(versioned);
           return { map, buffer };
         }),

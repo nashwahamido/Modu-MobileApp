@@ -206,7 +206,7 @@ export const CONTROL_TUTORIAL_STEPS: TutorialStep[] = [
 
 /** Optional preference walkthrough offered after the short core tutorial. */
 export const SETTINGS_TUTORIAL_STEPS: TutorialStep[] = [
-  // Background, not Released part: the in-build panel no longer carries the dev interaction rows, and this is the step every profile gets — Control pins mode "free", which filters the instructions step out, and Control/Momentum are filtered out of the two below. Teaching Background through the real panel is also the standing content decision (TUTORIAL_CONTENT_DECISIONS.display).
+  // Background, not Released part: the in-build panel no longer carries the dev interaction rows, and this is the one step every profile gets — Control pins mode "free", which filters the instructions step below out for it. Teaching Background through the real panel is also the standing content decision (TUTORIAL_CONTENT_DECISIONS.display).
   {
     id: "background-settings",
     targetId: "settings",
