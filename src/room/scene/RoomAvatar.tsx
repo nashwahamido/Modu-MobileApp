@@ -15,14 +15,14 @@ import { usePlacementStore } from "../core/placement";
 import { FLOOR_CELLS, ROOM_SHELL, SCENE_SCALE, roomToScene } from "../core/roomShell";
 
 const CAT_MODEL = require("../../assets/models/avatars/cute-cat.glb");
-const CAT_SIZE = { x: 0.802734, y: 0.998047, z: 0.69336 } as const;
+const CAT_SIZE = { x: 0.667114, y: 0.979554, z: 0.506043 } as const;
 const CAT_MAX_EXTENT = Math.max(CAT_SIZE.x, CAT_SIZE.y, CAT_SIZE.z);
 const CAT_FOOTPRINT = { w: 1, d: 1 } as const;
 
-// The export names its three clips NlaTrack*. The long third clip is treated as
-// idle and the first short clip as walk; swap walk to 1 here if device review
-// shows NlaTrack.001 is the better locomotion take.
-const ANIMATION = { walk: 0, idle: 2 } as const;
+// The optimized Felix export contains two in-place clips. Treat NlaTrack as
+// idle and NlaTrack.001 as walk; swap these indices if device review shows the
+// Tripo export ordered the selected actions differently.
+const ANIMATION = { walk: 1, idle: 0 } as const;
 // This GLB's authored forward axis already matches the yaw convention below:
 // yaw 0 walks toward +Z. Adding PI made the cat face away from every target and
 // therefore appear to moonwalk along an otherwise-correct path.
