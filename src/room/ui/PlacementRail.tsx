@@ -129,7 +129,7 @@ export function PlacementRail({
             style={s.roundButton}
             onPress={cancelPlacement}
           >
-            <Text style={s.cancelGlyph}>âœ•</Text>
+            <Text style={s.cancelGlyph}>✕</Text>
           </Pressable>
           <Pressable
             accessibilityLabel="Delete furniture"
