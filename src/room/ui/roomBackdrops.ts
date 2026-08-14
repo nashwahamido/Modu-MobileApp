@@ -18,7 +18,7 @@ export const ROOM_BACKDROPS = [
   },
   {
     id: "midday",
-    light: require("../../assets/images/backdrops/room/bg1.jpg"),
+    light: require("../../assets/images/backdrops/room/bg10.jpg"),
     dark: require("../../assets/images/backdrops/room/midday.png"),
   },
   {
