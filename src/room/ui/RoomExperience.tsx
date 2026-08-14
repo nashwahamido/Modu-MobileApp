@@ -63,7 +63,7 @@ export function RoomExperience() {
     setSceneReady(false);
     setRevealed(false);
   }, [sceneMounted]);
-  // Backdrop follows the HOUR (Settings â†’ "Time of day") rather than being its own axis: the view out of the room and the light inside it are the same fact, and letting them disagree only ever produces a daytime photo behind a night-lit room. Each preset names its backdrop; see core/timeOfDay.
+  // Backdrop follows the HOUR (Settings → "Time of day") rather than being its own axis: the view out of the room and the light inside it are the same fact, and letting them disagree only ever produces a daytime photo behind a night-lit room. Each preset names its backdrop; see core/timeOfDay.
   const hour = useGameStore((s) => s.roomTimeOfDay);
   const setRoomTimeOfDay = useGameStore((s) => s.setRoomTimeOfDay);
   const roomBackdrop = sunPreset(hour).backdrop;
