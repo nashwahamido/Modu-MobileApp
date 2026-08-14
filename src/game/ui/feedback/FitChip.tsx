@@ -34,6 +34,13 @@ export function FitChip() {
   const driveActionId = useGameStore((s) => s.driveActionId);
   const furniture = useGameStore((s) => s.furniture);
   const completed = useGameStore((s) => s.completed);
+  // A blocked part still drags (taking it away was worse than the mistake), but the chip must not
+  // coach "Find the spot" for a part that HAS no spot yet — that's two voices disagreeing, with
+  // the error toast already saying the true thing. availableForMode is recomputed here rather
+  // than read from a snapshot so the chip returns the moment the step becomes legal.
+  const heldBlocked = useGameStore(
+    (s) => !!s.heldActionId && !s.available().some((a) => a.actionId === s.heldActionId),
+  );
 
   let look = lookFor(t)[fitState];
   if (driveKind === "slide") {
@@ -57,6 +64,7 @@ export function FitChip() {
   }
 
   if (!look) return null;
+  if (heldBlocked) return null;
   return (
     <View
       style={[styles.chip, { backgroundColor: look.color }]}

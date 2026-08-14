@@ -1,4 +1,4 @@
-// The controls shown while a piece is being placed: the colour swatches and the button column, in one rail on the RIGHT edge of the screen. Lifted out of RoomExperience so this whole cluster can be restyled on its own â€” the room screen only decides WHEN it is up (activeEdit), never how it looks.
+// The controls shown while a piece is being placed: the colour swatches and the button column, in one rail on the RIGHT edge of the screen. Lifted out of RoomExperience so this whole cluster can be restyled on its own — the room screen only decides WHEN it is up (activeEdit), never how it looks.
 //
 // Right edge, and a column, because the app is landscape: the free space is vertical, and the old bottom-centre bar sat across the room's width and on top of the bottom navigation. The rail is centred in the band left between the top stats cluster and the bottom bar, so it covers neither.
 import { StyleSheet, Pressable, Text, View } from "react-native";
@@ -161,7 +161,7 @@ export function PlacementRail({
 }
 
 const makeStyles = (t: Theme) => StyleSheet.create({
-  // The band the placement UI is centred in â€” pinned to the right edge, its top and bottom set at the render above. A row, so the swatches sit to the LEFT of the button column and the controls stay hard against the edge.
+  // The band the placement UI is centred in — pinned to the right edge, its top and bottom set at the render above. A row, so the swatches sit to the LEFT of the button column and the controls stay hard against the edge.
   rail: {
     position: 'absolute',
     zIndex: 16,
@@ -192,7 +192,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-  // Heads the column and wraps to its width â€” the rail is too narrow for a single line of hint text.
+  // Heads the column and wraps to its width — the rail is too narrow for a single line of hint text.
   hint: {
     alignSelf: 'stretch',
     color: CREAM.ink,

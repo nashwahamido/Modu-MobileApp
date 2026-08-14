@@ -69,6 +69,9 @@ interface GameState {
   matchedActionId: ActionId | null;
   /** FREE-mode soft hint shown when reaching for a not-yet-available part. */
   hint: string | null;
+  /** Why the hint is showing: an "error" is a blocked/wrong move (the toast renders it in the
+   *  warning colour and it arrives with the error sound); "info" is a requested suggestion. */
+  hintTone: "info" | "error";
   /** Tray group the ? hint points at (a pickup step): the tray flashes that card and scrolls it into view. */
   hintGroup: GroupId | null;
   /** Bumped on every ? press so a repeated hint for the same group re-triggers the flash. */
@@ -188,6 +191,7 @@ const CLEARED = {
   fitState: "idle" as FitState,
   matchedActionId: null,
   hint: null,
+  hintTone: "info" as const,
   hintGroup: null,
   hintPartId: null,
 };
@@ -409,14 +413,14 @@ export const useGameStore = create<GameState>()((set, get) => ({
     if (s.mode !== "free" || !s.settings.softHints || !s.furniture) return;
     const reason = blockReason(s.furniture, actionId, new Set(s.completed));
     if (reason)
-      set({ hint: hintText(reason, s.furniture, s.settings.textLevel), hintGroup: null });
+      set({ hint: hintText(reason, s.furniture, s.settings.textLevel), hintTone: "error", hintGroup: null });
   },
   suggestNext: (source = "hint") => {
     const s = get();
     if (!s.furniture) return;
     const next = s.availableForMode()[0];
     if (!next) {
-      set({ hint: "This area is done — switch focus.", hintGroup: null, hintPartId: null });
+      set({ hint: "This area is done — switch focus.", hintTone: "info", hintGroup: null, hintPartId: null });
       return;
     }
     const text = instructionText(
@@ -434,6 +438,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
     if (source === "hint") {
       set({
         hint: text ? `Try: ${text}` : null,
+        hintTone: "info",
         hintGroup: null,
         hintPartId: null,
         hintPulse: s.hintPulse + 1,
@@ -447,6 +452,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
     const wantsText = !!text && s.profile !== "control";
     set({
       hint: wantsText ? `Try: ${text}` : null,
+      hintTone: "info",
       hintGroup: group,
       hintPartId: next.partId ?? null,
       hintPulse: s.hintPulse + 1,

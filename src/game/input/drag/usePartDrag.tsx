@@ -463,6 +463,13 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
           if (hasRidingBodies(furniture, action.partId)) slideDriver.set(base);
           store.beginPickup(action.actionId);
           if (useGameStore.getState().heldActionId !== action.actionId) return;
+          // A WRONG part still picks up and drags — taking the part away was worse than the
+          // mistake — but the toast arrives NOW, as the drag begins, not seconds later when the
+          // fly-back lands. (The sound is the audio layer's call: useAssemblySfx plays the error
+          // cue instead of the pickup cue for a blocked pickup, so the two never stack.)
+          if (!store.available().some((a) => a.actionId === action.actionId)) {
+            store.noteBlocked(action.actionId);
+          }
           Haptics.selectionAsync();
           if (!canvas) ringProgress.value = withTiming(0, { duration: 120 });
 
