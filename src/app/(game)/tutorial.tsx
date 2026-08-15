@@ -35,6 +35,7 @@ import { useAssemblySfx } from "@/src/game/audio/useAssemblySfx";
 
 import { useGameStore } from "@/src/game/core/store";
 import { useCurrentUserId, useRepos } from "@/src/data";
+import { asFurnitureId } from "@/src/game/core/ids";
 import {
   pressParkInfo,
   screwParkOffset,
@@ -85,7 +86,7 @@ import {
   type TutorialTargetId,
 } from "@/src/game/tutorial/steps";
 
-const TUTORIAL_FURNITURE_ID = "lack-table";
+const TUTORIAL_FURNITURE_ID = asFurnitureId("lack-table");
 const TUTORIAL_SPOT_MS = 2800;
 
 function TutorialScreen() {
@@ -292,12 +293,8 @@ function TutorialScreen() {
         ) {
           tutorial.completeEvent("focus_mode_toggled");
         }
-        if (
-          !settingsTutorialActive &&
-          state.settings.releaseBehavior !==
-          previous.settings.releaseBehavior
-        ) {
-          tutorial.completeEvent("release_behavior_changed");
+        if (!settingsTutorialActive && state.backdrop !== previous.backdrop) {
+          tutorial.completeEvent("backdrop_changed");
         }
         if (
           !settingsTutorialActive &&
@@ -325,8 +322,8 @@ function TutorialScreen() {
     (s) => s.steps[s.currentIndex],
   );
   const settingsTutorialTarget: SettingsFocusTarget | null =
-    tutorialStep?.id === "release-behavior-settings"
-      ? "releaseBehavior"
+    tutorialStep?.id === "background-settings"
+      ? "backdrop"
       : tutorialStep?.id === "guided-instructions-settings"
       ? "instructions"
       : null;
@@ -835,11 +832,12 @@ function TutorialScreen() {
           style={styles.settingsTarget}
           pointerEvents="none"
         />
+        {/* Ungated: play.tsx renders ToggleChips for every profile, so the tutorial showing them to only two was teaching a HUD the build does not have. */}
         <View style={styles.togglesRow}>
           <TutorialTarget id="focus" pointerEvents="auto">
             <FocusToggleButton />
           </TutorialTarget>
-          <TutorialTarget id="autoView" pointerEvents="auto">
+          <TutorialTarget id="spot" pointerEvents="auto">
             <SpotButton />
           </TutorialTarget>
         </View>

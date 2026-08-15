@@ -9,7 +9,7 @@ export type TutorialTargetId =
   | "hint"
   | "undo"
   | "focus"
-  | "autoView"
+  | "spot"
   | "settings"
   /** The whole screen, for the grip step: what it teaches is the DEVICE, not a control on it. */
   | "device";
@@ -28,7 +28,7 @@ export type TutorialEvent =
   | "connector_tightened"
   | "assembly_reoriented"
   | "step_undone"
-  | "release_behavior_changed"
+  | "backdrop_changed"
   | "instruction_preferences_changed"
   | "spot_used"
   | "focus_mode_toggled"
@@ -184,7 +184,7 @@ export const SHARED_HUD_TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     id: "hud-spot",
-    targetId: "autoView",
+    targetId: "spot",
     // Spot no longer moves the camera. It plays a ghost of the next part travelling into its socket,
     // so the copy has to describe a demonstration rather than a framing.
     message: "Tap Spot to see the next part move into place.",
@@ -206,12 +206,13 @@ export const CONTROL_TUTORIAL_STEPS: TutorialStep[] = [
 
 /** Optional preference walkthrough offered after the short core tutorial. */
 export const SETTINGS_TUTORIAL_STEPS: TutorialStep[] = [
+  // Background, not Released part: the in-build panel no longer carries the dev interaction rows, and this is the one step every profile gets — Control pins mode "free", which filters the instructions step below out for it. Teaching Background through the real panel is also the standing content decision (TUTORIAL_CONTENT_DECISIONS.display).
   {
-    id: "release-behavior-settings",
+    id: "background-settings",
     targetId: "settings",
     message:
-      "In Settings, you can choose how released parts behave: Auto-return or Float.",
-    event: "release_behavior_changed",
+      "In Settings, you can change the Build background behind the furniture.",
+    event: "backdrop_changed",
   },
   {
     id: "guided-instructions-settings",
@@ -221,6 +222,7 @@ export const SETTINGS_TUTORIAL_STEPS: TutorialStep[] = [
     event: "instruction_preferences_changed",
     when: ({ mode }) => mode === "guide",
   },
+  // Focus is taught by hud-focus, on the chip itself — the in-build panel no longer carries the row.
 ];
 
 export const FUTURE_TUTORIAL_REQUIREMENTS = {
@@ -250,10 +252,12 @@ export const tutorialStepsFor = (context: TutorialContext): TutorialStep[] => {
   const assemblySteps = finishingStep
     ? remainingCore.slice(0, -1)
     : remainingCore;
+  // Every profile learns Focus, because every profile SEES the Focus chip — ToggleChips renders unconditionally in play, and the tutorial fork now matches it. The rest of the shared HUD run stays with the two profiles built around user-directed controls.
   const sharedHudSteps =
     context.profile === "control" || context.profile === "momentum"
       ? SHARED_HUD_TUTORIAL_STEPS
-      : [];
+      : SHARED_HUD_TUTORIAL_STEPS.filter((step) => step.id === "hud-focus");
+  // Hint is taught where it is wanted, not on the HUD tour: the step follows tighten-connector, the first moment the player is mid-action and could actually want a suggestion.
   const assemblyStepsWithContextualHint = assemblySteps.flatMap((step) =>
     context.profile === "control" && step.id === "tighten-connector"
       ? [step, ...CONTROL_TUTORIAL_STEPS]

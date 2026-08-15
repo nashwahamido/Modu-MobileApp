@@ -305,32 +305,52 @@ export function useFixedStyles<T extends object>(make: (theme: Theme) => T): T {
 /**
  * How much to enlarge fixed point dimensions on a bigger screen.
  *
- * Driven by the SHORT side: that is what differs most between a phone and a tablet in landscape, and
- * what governs how big something feels in the hand.
+ * Bounded by BOTH sides, and the smaller bound wins. The short side is what governs how big
+ * something feels in the hand, so it sets the scale we WANT; the long side is what the layouts are
+ * actually laid out along, so it sets the scale we can AFFORD. Taking only the short side is what
+ * broke the iPad: see below.
  *
  * Capped below the true ratio of ~2.2: type sized for a phone at arm's length does not want to
  * double on a tablet held at the same distance. 1.45 was too timid though — on a 1280dp tablet it
  * left the UI visibly adrift in its own screen — so 1.75, which fills the screen without reading as
  * a magnified phone.
  *
- * Anything laid out at a FIXED width has to be checked against this: a row of fixed points that fits
- * a phone at 1.0 can overflow a tablet at 1.75, because the screen grew by less than the scale did.
- * Prefer proportional widths for anything that spans the screen.
+ * WHY THE LONG SIDE IS IN HERE. A 16:10 tablet and a 4:3 tablet with the SAME short side are not the
+ * same canvas: an iPad Air 3 (1112x834) has a LARGER short side than a Lenovo Tab M10 (1280x800) and
+ * a 168dp SMALLER long side. On the short side alone both capped at 1.75, so the iPad rendered full
+ * 1.75x type and padding inside a screen 21% narrower than the layouts assume — the tutorial popup
+ * on the avatar screen went 65dp off the left edge, and the questionnaire's option cards collapsed
+ * to four characters a line and burst their fixed height. Dividing the long side by the width these
+ * layouts were authored against gives the honest ceiling: 1.39 on the Air 3, 1.60 on the M10.
+ *
+ * Anything laid out at a FIXED width still has to be checked against this — the clamp buys headroom,
+ * it does not make a fixed width safe. Prefer proportional widths for anything that spans the screen,
+ * and never pair a SCALED width with an UNSCALED absolute offset (see SCALED_PROPS: top/left/right/
+ * bottom deliberately do not scale, so `right: 92` next to `width: 620 * k` has nothing holding it
+ * on screen).
  */
 export function useUiScale(): number {
   const { width, height } = useWindowDimensions();
   const short = Math.min(width, height);
+  const long = Math.max(width, height);
   // PHONES ARE LEFT ALONE, exactly. A continuous scale sounded right and was not: a phone whose
   // short side measures 380 rather than the 360 these layouts assume would get k = 1.06, rebuild
   // every sheet, and shift a layout that was already correct — for no benefit at all. The scale only
   // engages on a screen big enough to genuinely need it, and below that the sheet is returned
   // untouched rather than merely multiplied by one.
   if (short < TABLET_MIN_SHORT_DP) return 1;
-  return Math.min(MAX_UI_SCALE, Math.max(1, short / PHONE_SHORT_DP));
+  // Never below 1: a tablet narrower than the phone canvas would otherwise SHRINK the UI, which is
+  // not a case this scale is for. The max() sits inside the min() chain so the long-side ceiling can
+  // still pull the result down toward 1, but no further.
+  return Math.max(1, Math.min(MAX_UI_SCALE, short / PHONE_SHORT_DP, long / PHONE_LONG_DP));
 }
 
 /** The short side these layouts were authored against (phone, landscape). */
 const PHONE_SHORT_DP = 360;
+/** The long side these layouts were authored against (phone, landscape). The divisor for the
+ *  long-side ceiling above: at k = long / PHONE_LONG_DP a screen has exactly the horizontal room the
+ *  phone had, which is the most the fixed widths in these sheets can be trusted with. */
+const PHONE_LONG_DP = 800;
 /** Below this the device is a phone and nothing is scaled. Comfortably above any phone in landscape
  *  (~330-420dp) and comfortably below any tablet (~700dp+), so neither is a borderline case. */
 const TABLET_MIN_SHORT_DP = 600;

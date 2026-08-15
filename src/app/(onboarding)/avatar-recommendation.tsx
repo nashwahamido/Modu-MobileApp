@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from "expo-router";
 import type { Href } from "expo-router";
 import * as Speech from "@/src/onboarding/speech";
-import { StyleSheet, Animated, Image, Pressable, Text, View } from "react-native";
+import { StyleSheet, Animated, Image, Pressable, Text, View, useWindowDimensions } from "react-native";
 import { useEffect, useRef, useState } from "react";
 import { avatarModes } from "@/src/onboarding/avatarModes";
 import type { ModeId } from "@/src/onboarding/questionnaire";
@@ -192,6 +192,9 @@ const modes = avatarModes.map((mode) => ({
   image: AVATAR_IMAGES[mode.id],
 }));
 
+// How far the tutorial popup's right edge sits from the screen's right edge. Absolute offsets do NOT scale (see SCALED_PROPS in ui/system/theme), so this is raw device points on every device — which is exactly why the popup needs the clamp below: its WIDTH does scale, and an unscaled anchor plus a scaled width has nothing keeping the far edge on screen. Shared between the sheet and the clamp so the two cannot drift.
+const POPUP_RIGHT = 92;
+
 export default function AvatarRecommendationScreen() {
   const scale = useUiScale();
   const styles = useStyles(makeStyles);
@@ -219,6 +222,9 @@ export default function AvatarRecommendationScreen() {
     return () => loop.stop();
   }, [badgePulse]);
   const safe = useSafeInsets();
+  // The widest the tutorial popup may be before it runs off the LEFT edge, in raw device points. It is right-anchored at POPUP_RIGHT, so everything it is allowed to occupy is what remains once that anchor and the left safe margin are taken off. Measured, not assumed: the sheet asks for 620 * k, which on an iPad Air 3 (1112pt wide, k capped at 1.75) came to 1085 and put the left edge 65pt off the screen.
+  const { width: windowWidth } = useWindowDimensions();
+  const popupMaxWidth = windowWidth - POPUP_RIGHT - safe.left;
   const params = useLocalSearchParams<{ mode?: string }>();
   const initialModeId = modes.some((mode) => mode.id === params.mode) ? (params.mode as ModeId) : "momentum";
   const [selectedModeId, setSelectedModeId] = useState<ModeId>(initialModeId);
@@ -481,6 +487,7 @@ export default function AvatarRecommendationScreen() {
           <Animated.View
             style={[
               styles.highlightedPopup,
+              { maxWidth: popupMaxWidth },
               {
                 opacity: modeTipAnim,
                 transform: [
@@ -675,8 +682,9 @@ const makeStyles = (t: Theme, k = 1) =>
     },
     highlightedPopup: {
       position: "absolute",
-      right: 92,
+      right: POPUP_RIGHT,
       bottom: 58,
+      // The CALL SITE clamps this with an inline maxWidth — see POPUP_RIGHT. A maxWidth here could not: the sheet is run through scaleSheet, which would multiply the cap by the very k that overflows it.
       width: Math.round(620 * k),
       minHeight: Math.round(142 * k),
       flexDirection: "row",

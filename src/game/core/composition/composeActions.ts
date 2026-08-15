@@ -240,6 +240,38 @@ export function withStaging(
       requires: seat.requires,
       ...(seat.requiresAny?.length ? { requiresAny: seat.requiresAny } : {}),
     });
+    // Relocate the carrier's hardware actions out of the fastener appendix into the stage→place window: drops/inserts BEFORE the placement (fit the hardware while the part rests staged), tightens right AFTER it (their requires demand the placement anyway). Legality never depended on array position — this makes ORDER tell the same story the requires graph already enforces, so strict mode and step hints walk take-out → fit → carry-in per carrier instead of staging every carrier back to back.
+    const hw = new Set(hardwareOn(parts, carrier));
+    const fitting: DraftAction[] = [];
+    const tightens: DraftAction[] = [];
+    for (let i = out.length - 1; i >= 0; i--) {
+      const d = out[i];
+      if (d.partId && hw.has(d.partId) && (d.type === "placeFastener" || d.type === "insertFastener" || d.type === "tightenFastener")) {
+        (d.type === "tightenFastener" ? tightens : fitting).unshift(d);
+        out.splice(i, 1);
+      }
+    }
+    const placeAt = out.findIndex((d) => d.type === "placePart" && d.partId === carrier);
+    out.splice(placeAt + 1, 0, ...tightens);
+    out.splice(placeAt, 0, ...fitting);
+  }
+  // Serialize IDENTICAL staged carriers (same group): each later instance's take-out requires the previous instance's hardware fully tightened (which transitively requires its placement). Derived from the parts alone — never authored, never asked in a wizard — because instances of one group are interchangeable, so forcing completion order costs the player nothing, while allowing it would leave a half-built sub-assembly dangling in the staging area once the next one comes out. Ordering above made strict mode TELL this story; this makes every mode ENFORCE it.
+  const carriersByGroup = new Map<string, PartId[]>();
+  for (const c of carriers) {
+    const g = parts[c].group as string;
+    const list = carriersByGroup.get(g) ?? [];
+    list.push(c);
+    carriersByGroup.set(g, list);
+  }
+  for (const group of carriersByGroup.values()) {
+    if (group.length < 2) continue;
+    const stageIndex = (c: PartId) => out.findIndex((d) => d.actionId === stageId(c));
+    const ordered = [...group].sort((a, b) => stageIndex(a) - stageIndex(b));
+    for (let k = 1; k < ordered.length; k++) {
+      const prevSettled = hardwareOn(parts, ordered[k - 1]).map(tightenId);
+      const idx = stageIndex(ordered[k]);
+      out[idx] = { ...out[idx], requires: [...new Set([...out[idx].requires, ...prevSettled])] };
+    }
   }
   return out;
 }

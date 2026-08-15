@@ -121,8 +121,23 @@ export const FLOOR_CELLS = {
 // Wall and floor grids now share the same 0.25 pitch — wall grids were finer than the floor's old 0.5 until the quarter-cell flip. Wall items are small (frames, shelves, windows) and windows want quarter-metre sizing, so frames and windows share this one fine grid and plain occupancy keeps them apart — no cross-grid rounding anywhere.
 export const WALL_CELL_SIZE = 0.25;
 
+// The furniture-TOP grid's pitch — half of ROOM_SHELL.cellSize, deliberately a clean integer division of it rather than an independently-chosen number. A host's top extent (its floor footprint, scaled to this pitch) then always lands on a WHOLE number of top cells with no remainder to round away — see hostTopExtent in ./grid. 0.25 m was sized for furniture standing on the FLOOR; a book or a mug on a desk claims a fraction of that footprint, and a quarter-metre cell would make a paperback claim the same square as a stool. Everything a top surface does — extent, footprint, the cell<->room conversions — reads this constant instead of cellSize; see grid.ts's topCellToRoom/roomPointToTopCell and placeableItems.ts's topFootprint derivation.
+export const TOP_CELL_SIZE = 0.125;
+
 // The walls' authored thickness — HALF a rendering contract: every wall item's GLB is authored with its origin on the mounting plane and its back face exactly this far behind it (the anchor-empty convention, enforced by scripts/fix_window_anchors.py), so the renderer can reconstruct the model's AABB centre from its measured size alone. Re-measure on re-export.
 export const WALL_THICKNESS = 0.12;
+
+// How far a wall item's CENTRE sits from its anchor on the wall's inner face, in metres along the wall's OUTWARD normal (positive = into and through the wall). The unit-cube base re-centres every model on its AABB centre and erases the authored origin, so depth seating is a renderer policy over the measured size rather than something a GLB can express — and it is pure arithmetic, which is why it lives here and not inside the transform effect that consumes it.
+//
+// TWO policies, because there are two kinds of wall item and one rule buries the other:
+//   - A HOLE-CUTTER (a window) OCCUPIES the wall. Its front sits flush with the interior face and its body extends backward through the opening it knocked out. Deeper than the wall and the excess pokes out of the EXTERIOR, accepted by design since the diorama is viewed from inside; shallower and it keeps its back on the outer skin instead, which is how the approved shallow windows already sat.
+//   - Everything else SITS ON the wall, the way furniture sits on the floor: its back rests on the interior face and its whole body extends into the room. baseOffsetY is the exact analogue one axis over — a floor item's base meets the floor plane, a wall item's back meets the wall plane.
+// The second case is not a refinement of the first but its opposite in sign, and the miss is total rather than marginal: a 3.6 cm painting run through the window rule lands flush against the OUTER skin, wholly inside the wall and invisible from the room it hangs in.
+export function wallDepthOffset(sizeZ: number, opensWall: boolean): number {
+  if (!opensWall) return -sizeZ / 2;
+  const protrusion = Math.min(sizeZ - WALL_THICKNESS, 0);
+  return sizeZ / 2 - protrusion;
+}
 
 export const WALL_CELLS: Record<WallId, { w: number; h: number }> = {
   "x-min": wallCells("x-min"),

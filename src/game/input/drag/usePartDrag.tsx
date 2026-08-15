@@ -31,7 +31,8 @@ import type { CarryOffset } from "../../scene/CombineCarry";
 import { computeFit, APPROACH_FACTOR } from "@/src/game/core/geometry/fit";
 import { isStaged } from "@/src/game/core/model/staging";
 import { isPickupType } from "@/src/game/core/ids";
-import { quatSlerp, screenPointOnPlane } from "@/src/game/core/geometry/math";
+import { quatSlerp } from "@/src/game/core/geometry/math";
+import { dragPlanePoint, leashToBench } from "./dragPlane";
 import { ActionId, AssemblyAction, Furniture, PartDef, PartId, Quat, Vec3 } from "@/src/game/core/type";
 import { selectFirstDrop, useGameStore } from "@/src/game/core/store";
 import type { OrbitManipulator } from "../../scene/AssemblyScene";
@@ -52,8 +53,6 @@ type Float3 = [number, number, number];
 const PICKUP_MS = 450;
 /** The held part rides just above the fingertip so the finger doesn't cover it. */
 const FINGER_LIFT_DP = 22;
-/** Held parts are kept within this radius of the bench centre, world meters. */
-const BENCH_RADIUS_M = 0.9;
 /** Ghost/magnet targeting starts before the final snap threshold. */
 const APPROACH_RADIUS_M = 0.3;
 /** Magnetic POSITION pull band, decoupled from rotation: rotation eases in over the whole approach (0.3m), but position stays under the finger until this close and is fully seated at POS_PULL_FULL_M — capping finger→part drift at ~3cm (it used to reach snapDist, 14–19cm, which felt uncontrollable). */
@@ -193,12 +192,7 @@ export function usePartDrag({
           right[2] * ndcX * tanH * dist +
           camUp[2] * ndcY * tanV * dist,
       ];
-      const radius = Math.hypot(p[0], p[2]);
-      if (radius > BENCH_RADIUS_M) {
-        p[0] *= BENCH_RADIUS_M / radius;
-        p[2] *= BENCH_RADIUS_M / radius;
-      }
-      return p;
+      return leashToBench(eye, center, p);
     },
     [manipulator, winW, winH],
   );
@@ -219,13 +213,13 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
   return [-dir[0] * back, -dir[1] * back, -dir[2] * back];
 }
 
-  /** World point on the work plane under (just above) the finger, or null at the horizon. */
+  /** World point on the work plane under (just above) the finger. Null only when there is no camera yet — a finger aimed past the horizon is answered by the limit, not by a miss (see dragPlanePoint). */
   const fingerOnPlane = useCallback(
     (absX: number, absY: number, planeY: number): Float3 | null => {
       const la = manipulator?.getLookAt();
       if (!la) return null;
       const [eye, center, up] = la;
-      const p = screenPointOnPlane(
+      return dragPlanePoint(
         { eye, center, up },
         FOV_Y_DEG,
         winW,
@@ -234,13 +228,6 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
         absY - FINGER_LIFT_DP,
         planeY,
       );
-      if (!p) return null;
-      const r = Math.hypot(p[0], p[2]);
-      if (r > BENCH_RADIUS_M) {
-        p[0] *= BENCH_RADIUS_M / r;
-        p[2] *= BENCH_RADIUS_M / r;
-      }
-      return p;
     },
     [manipulator, winW, winH],
   );
@@ -288,12 +275,7 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
         anchor[1] + right[1] * dx - camUp[1] * dy,
         anchor[2] + right[2] * dx - camUp[2] * dy,
       ];
-      const radius = Math.hypot(p[0], p[2]);
-      if (radius > BENCH_RADIUS_M) {
-        p[0] *= BENCH_RADIUS_M / radius;
-        p[2] *= BENCH_RADIUS_M / radius;
-      }
-      return p;
+      return leashToBench(eye, center, p);
     },
     [manipulator, winH],
   );
@@ -442,13 +424,15 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
                   ownTarget[2] + grabOffset[2] + ownPark[2],
                 ]
               : null;
-          // The finger is on a TRAY CARD at pickup, which is low on the screen — with a near-level
-          // camera that ray never reaches a work plane set at the socket's height, and fingerOnPlane
-          // returns null. The old fallback was a plane FACING the camera through the focus point, so
-          // the part spawned close to the lens and then jumped to the model the first frame the ray
-          // finally hit the real plane. Falling back to the socket itself keeps the part in the
-          // model's own space from frame one; the first successful ray then MOVES it rather than
-          // teleporting it.
+          // Where the part materializes. Both spawn paths now answer every finger position the
+          // pickup can happen at, so this is a no-camera guard and nothing more.
+          //
+          // It used to carry the horizon: a card's ray never reaches a work plane at the socket's
+          // height under a near-level camera, fingerOnPlane returned null, and the part spawned at
+          // the SOCKET — yards from the finger, until the first connecting ray teleported it there.
+          // (The fallback before that put it on a camera-facing plane through the focus point, which
+          // spawned it close to the lens and jumped just as badly.) fingerOnPlane takes the horizon
+          // limit itself now, so the part starts under the finger and stays there.
           const socketStart: Float3 = [ownTarget[0], planeY, ownTarget[2]];
           const visualStart = uprightAnchor
             ? (fingerOnCameraPlaneAt(e.absoluteX, e.absoluteY, uprightAnchor) ?? socketStart)
@@ -546,7 +530,7 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
           const furniture = store.furniture;
           if (!s || !furniture || store.heldActionId !== action.actionId)
             return;
-          // Exact per-frame projection onto the (dynamic) horizontal drag plane — absolute mapping, so the part cannot drift from the finger. Camera-plane delta math kept only as a horizon fallback.
+          // Exact per-frame projection onto the (dynamic) horizontal drag plane — absolute mapping, so the part cannot drift from the finger. The camera-plane delta math is no longer the horizon's fallback (fingerOnPlane takes that limit itself); what is left for it is the upright path's own miss, an anchor gone behind the lens.
           const p = s.uprightAnchor
             ? (fingerOnCameraPlaneAt(e.absoluteX, e.absoluteY, s.uprightAnchor) ??
               fingerOnCameraPlane(e.absoluteX, e.absoluteY, s))
@@ -631,18 +615,10 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
               p[2] - s.grabOffset[2],
             ];
 
-            // ======= dev - setting; "onRelease" snap style: no magnetic pull — the part stays pinned under the finger (t = 0) and only animates into the socket on release. "magnetic" eases it toward the matched socket as it approaches. Fit feedback (color states) works the same in both.
-
-            const magnetic =
-              !!target && store.settings.snapStyle === "magnetic";
-            // Rotation factor: eases over the whole approach band (the gradual turn toward the
-            // socket's orientation).
-            //
-            // NOT gated on snapStyle. A magnetic pull moves the part out from under the finger, and
-            // "onRelease" exists to refuse that — but turning to match the socket takes no control
-            // away, it only shows which way the part will sit. Without it a leg holds one angle all
-            // the way in and then spins on release, which is the moment it is least useful.
-            const rotT = target
+            // Magnetic snap: once a socket is matched, the part eases toward it as it approaches (no match = it stays pinned under the finger, t = 0). Fit feedback (color states) is independent of the pull.
+            const magnetic = !!target;
+            // Rotation factor: eases over the whole approach band (the gradual turn toward the socket's orientation).
+            const rotT = magnetic
               ? Math.max(
                   0,
                   Math.min(

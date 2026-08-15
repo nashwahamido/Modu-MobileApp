@@ -9,8 +9,11 @@
 -- the -y (back) edge — the client contract is sanitizedMask in src/room/core/placeableItems.ts, which
 -- falls back to the solid rectangle on any mismatch, so a bad row over-claims but never mis-collides.
 -- Dimensions must equal the client's derived footprint: ceil(size / 0.25) per axis at quarter-metre
--- cells. Derive with scripts/derive_footprint_mask.mjs <model.glb>; null means solid, which is
--- correct for every convex item and is what all rows start as.
+-- cells, the rule pinned by src/room/core/footprintContract.json and asserted on both sides of it.
+-- Masks are DERIVED IN Modu-Portal, which owns the only implementation (packages/glb/footprintMask.mjs):
+-- the upload flow writes one at publish time, and scripts/backfill_footprint_masks.mjs there fills in
+-- rows that predate it. This repo only consumes them. null means solid, which is correct for every
+-- convex item and is what all rows start as.
 
 alter table public.item_build add column if not exists footprint_mask text;
 alter table public.item_buy  add column if not exists footprint_mask text;

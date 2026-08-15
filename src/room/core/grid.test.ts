@@ -9,6 +9,7 @@ import {
   cellsFor,
   clampToSurface,
   floorCellToRoom,
+  hostTopExtent,
   occupiedFootprint,
   roomPointToFloorCell,
   roomPointToWallCell,
@@ -21,6 +22,7 @@ import {
   roomPointToTopCell,
   wallCellToRoom,
   windowCellNamesFor,
+  type Footprint,
   type GridPlacement,
   type PlaceableItemDef,
 } from "./grid";
@@ -30,29 +32,35 @@ import {
   ROOM_SHELL,
   SCENE_SCALE,
   SHELL_WALL_IDS,
+  TOP_CELL_SIZE,
   WALL_CELLS,
   WINDOW_BANDS,
   isXWall,
   roomToScene,
   sceneToRoom,
+  wallDepthOffset,
   wallMountYaw,
   wallOutward,
   windowCellEntityName,
 } from "./roomShell";
 
+// "furniture" is explicit here (the on_top column, migration 021) because this def doubles as the CHILD in every furniture-top test below (onTop() places "dalfred-stool") — a plain floor item can no longer stack just because it lives on the floor; canPlace checks the surface kind against allowedSurfaces directly now, with no "furniture" -> "floor" remapping.
 const stool: PlaceableItemDef = {
   itemId: "dalfred-stool",
   footprint: { w: 1, d: 1 },
-  allowedSurfaces: ["floor"],
+  topFootprint: { w: 1, d: 1 },
+  allowedSurfaces: ["floor", "furniture"],
 };
 const table: PlaceableItemDef = {
   itemId: "lack-table",
   footprint: { w: 2, d: 1 },
+  topFootprint: { w: 4, d: 2 },
   allowedSurfaces: ["floor"],
 };
 const frame: PlaceableItemDef = {
   itemId: "painting-small",
   footprint: { w: 2, d: 1 },
+  topFootprint: { w: 4, d: 2 },
   allowedSurfaces: ["wall"],
   wallHeightCells: 3,
 };
@@ -71,6 +79,12 @@ const place = (over: Partial<GridPlacement> = {}): GridPlacement => ({
   cell: { x: 0, y: 0 },
   rotSteps: 0,
   ...over,
+});
+
+test("TOP_CELL_SIZE is a clean integer subdivision of the floor pitch", () => {
+  // Half the floor pitch, and specifically a whole-number divisor of it — a host's floor footprint must scale to a whole number of top cells with no remainder (see hostTopExtent).
+  assert.equal(TOP_CELL_SIZE, 0.125);
+  assert.equal(ROOM_SHELL.cellSize / TOP_CELL_SIZE, Math.round(ROOM_SHELL.cellSize / TOP_CELL_SIZE));
 });
 
 test("floor grid is derived from the measured shell, not hand-authored", () => {
@@ -132,6 +146,26 @@ test("a wall placement measures its second axis vertically, not in depth", () =>
   });
   // wallHeightCells wins over the rotated depth: a frame does not lie down when the room rotates.
   assert.deepEqual(occupiedFootprint(wallPlacement, frame), { w: 2, d: 3 });
+});
+
+// A 0.26 m item: ceil(0.26 / 0.25) = 2 floor cells, but ceil(0.26 / 0.125) = 3 top cells — 3 is TIGHT (0.375 m), while scaling the floor footprint by the ×2 pitch ratio would wrongly give 4 (0.5 m). This is the exact worked example from the task description.
+const bookish: PlaceableItemDef = {
+  itemId: "bookish",
+  footprint: { w: 2, d: 2 },
+  topFootprint: { w: 3, d: 3 },
+  allowedSurfaces: ["floor"],
+};
+
+test("occupiedFootprint on a furniture surface uses topFootprint verbatim, never footprint scaled by the floor/top pitch ratio", () => {
+  const childOnTop = place({
+    itemId: "bookish",
+    surface: { kind: "furniture", hostInstanceId: "host#1", slot: "top" },
+  });
+  assert.deepEqual(occupiedFootprint(childOnTop, bookish), { w: 3, d: 3 });
+  // The wrong answer a naive `footprint × TOP_SUBDIVISION` would give — pinned so nobody "simplifies" topFootprint away and re-derives it from footprint.
+  assert.notDeepEqual(occupiedFootprint(childOnTop, bookish), { w: 4, d: 4 });
+  // On the FLOOR, the same def still claims its floor footprint, untouched by topFootprint.
+  assert.deepEqual(occupiedFootprint(place({ itemId: "bookish" }), bookish), { w: 2, d: 2 });
 });
 
 test("cells cover the whole footprint from the anchor corner", () => {
@@ -235,6 +269,7 @@ test("a wall cell sits on the wall's inner face", () => {
 const sashWindow: PlaceableItemDef = {
   itemId: "window-sash",
   footprint: { w: 4, d: 1 },
+  topFootprint: { w: 8, d: 2 },
   allowedSurfaces: ["wall"],
   wallHeightCells: 5,
   opensWall: true,
@@ -344,6 +379,7 @@ const SOFA_MASK = ["XXXXXXXX", "XXXXXXXX", "XXXXXXXX", ".....XXX", ".....XXX", "
 const sofa: PlaceableItemDef = {
   itemId: "sofa-modular",
   footprint: { w: 8, d: 6 },
+  topFootprint: { w: 16, d: 12 },
   allowedSurfaces: ["floor"],
   mask: SOFA_MASK,
 };
@@ -371,6 +407,7 @@ test("cellsFor omits a masked item's empty cells", () => {
 const crate: PlaceableItemDef = {
   itemId: "crate",
   footprint: { w: 2, d: 2 },
+  topFootprint: { w: 4, d: 4 },
   allowedSurfaces: ["floor"],
 };
 
@@ -396,12 +433,14 @@ test("a maskless def still claims its full rectangle", () => {
 const desk: PlaceableItemDef = {
   itemId: "desk",
   footprint: { w: 4, d: 2 },
+  topFootprint: { w: 8, d: 4 },
   allowedSurfaces: ["floor"],
   hostsTop: true,
 };
 const roundTable: PlaceableItemDef = {
   itemId: "round-table",
   footprint: { w: 3, d: 3 },
+  topFootprint: { w: 6, d: 6 },
   allowedSurfaces: ["floor"],
   hostsTop: true,
   mask: [".X.", "XXX", ".X."],
@@ -433,23 +472,59 @@ test("a floor item stands on a flagged host; wall items and unknown hosts are re
   );
 });
 
-test("the top grid is the host's UNROTATED footprint — bounds ignore host rotation, cells are host-local", () => {
-  // desk is 4x2 at rotSteps 0; a stool at host-local (3,1) is the far corner — in bounds even when the HOST is rotated.
-  assert.deepEqual(canPlaceInLayout(onTop("desk#1", { cell: { x: 3, y: 1 } }), [hostAt({ rotSteps: 1 })], stackDefs), { ok: true });
+test("the top grid is the host's UNROTATED footprint, scaled to TOP_CELL_SIZE — bounds ignore host rotation, cells are host-local", () => {
+  // desk is 4x2 floor cells at rotSteps 0, so its top extent (hostTopExtent) is 8x4 TOP_CELL_SIZE cells; a stool at host-local (7,3) is the far corner — in bounds even when the HOST is rotated.
+  assert.deepEqual(hostTopExtent(desk), { w: 8, d: 4 });
+  assert.deepEqual(canPlaceInLayout(onTop("desk#1", { cell: { x: 7, y: 3 } }), [hostAt({ rotSteps: 1 })], stackDefs), { ok: true });
   assert.deepEqual(
-    canPlaceInLayout(onTop("desk#1", { cell: { x: 4, y: 0 } }), [hostAt()], stackDefs),
+    canPlaceInLayout(onTop("desk#1", { cell: { x: 8, y: 0 } }), [hostAt()], stackDefs),
     { ok: false, reason: "out-of-bounds" },
   );
 });
 
-test("a masked host only accepts children on its solid cells", () => {
+test("a host's top extent is its floor footprint scaled by the floor/top pitch ratio, for more than one footprint", () => {
+  assert.deepEqual(hostTopExtent(desk), { w: 8, d: 4 }); // 4x2 floor cells
+  assert.deepEqual(hostTopExtent(roundTable), { w: 6, d: 6 }); // 3x3 floor cells
+});
+
+test("a host's mask gates its top surface: nothing stands where the host is not", () => {
+  // round-table's plus-shaped mask leaves its four corners '.', so those corners are not table at all — a child there would float in mid-air over the notch, which is the whole reason the top consults the mask.
   const host = place({ instanceId: "round#1", itemId: "round-table", cell: { x: 0, y: 0 } });
-  // Centre cell (1,1) is 'X'; corner (0,0) is '.' on the plus-shaped mask.
-  assert.deepEqual(canPlaceInLayout(onTop("round#1", { cell: { x: 1, y: 1 } }), [host], stackDefs), { ok: true });
+  // Fine cells nest 2-to-1 inside floor cells, so top cell (0,0) reads mask[0][0] = '.' and top cell (4,4) reads mask[2][2] = '.'. Both are corners of the plus.
   assert.deepEqual(
     canPlaceInLayout(onTop("round#1", { cell: { x: 0, y: 0 } }), [host], stackDefs),
     { ok: false, reason: "out-of-bounds" },
   );
+  assert.deepEqual(
+    canPlaceInLayout(onTop("round#1", { cell: { x: 5, y: 5 } }), [host], stackDefs),
+    { ok: false, reason: "out-of-bounds" },
+  );
+  // The arms and the centre ARE table: top (2,0) -> mask[0][1] = 'X', top (0,2) -> mask[1][0] = 'X', top (2,2) -> the centre.
+  assert.deepEqual(canPlaceInLayout(onTop("round#1", { cell: { x: 2, y: 0 } }), [host], stackDefs), { ok: true });
+  assert.deepEqual(canPlaceInLayout(onTop("round#1", { cell: { x: 0, y: 2 } }), [host], stackDefs), { ok: true });
+  assert.deepEqual(canPlaceInLayout(onTop("round#1", { cell: { x: 2, y: 2 } }), [host], stackDefs), { ok: true });
+  // Still bounded by the top extent, 6x6, independently of the mask.
+  assert.deepEqual(
+    canPlaceInLayout(onTop("round#1", { cell: { x: 6, y: 0 } }), [host], stackDefs),
+    { ok: false, reason: "out-of-bounds" },
+  );
+});
+
+// The mask is authored at rotSteps 0 and child cells on a top are already in the host's own frame, so the top check must read it UNROTATED — rotating it here as the floor check does would turn it twice and move the notch. Turning the host a quarter step must therefore change nothing about which top cells are free.
+test("a rotated host's top mask does not turn with it", () => {
+  for (const rotSteps of [0, 1, 2, 3] as const) {
+    const host = place({ instanceId: "round#1", itemId: "round-table", cell: { x: 4, y: 4 }, rotSteps });
+    assert.deepEqual(
+      canPlaceInLayout(onTop("round#1", { cell: { x: 0, y: 0 } }), [host], stackDefs),
+      { ok: false, reason: "out-of-bounds" },
+      `corner must stay off the table at rotSteps ${rotSteps}`,
+    );
+    assert.deepEqual(
+      canPlaceInLayout(onTop("round#1", { cell: { x: 2, y: 2 } }), [host], stackDefs),
+      { ok: true },
+      `centre must stay on the table at rotSteps ${rotSteps}`,
+    );
+  }
 });
 
 test("depth 1: a host standing on furniture cannot itself host", () => {
@@ -472,31 +547,80 @@ test("two hosts are two independent grids; the same host's top collides", () => 
 });
 
 test("a stacked child's centre composes host centre + host-local offset + top height", () => {
-  // desk 4x2 at cell (2,2) rotSteps 0. Child cell (0,0) 1x1: host-local offset (-1.5, -0.5) cells = (-0.375, -0.125) m.
+  // desk 4x2 floor cells at cell (2,2) rotSteps 0, top extent 8x4 TOP_CELL_SIZE cells. Child cell (0,0) 1x1: host-local offset (0 + 0.5 - 4, 0 + 0.5 - 2) = (-3.5, -1.5) top cells = (-0.4375, -0.1875) m at TOP_CELL_SIZE 0.125.
   const host = { placement: hostAt(), def: desk };
   const at = topCellToRoom(host, { x: 0, y: 0 }, { w: 1, d: 1 }, 0.7);
   const hostCentre = floorCellToRoom({ x: 2, y: 2 }, { w: 4, d: 2 });
-  assert.ok(Math.abs(at.x - (hostCentre.x - 0.375)) < 1e-9);
-  assert.ok(Math.abs(at.z - (hostCentre.z - 0.125)) < 1e-9);
+  assert.ok(Math.abs(at.x - (hostCentre.x - 3.5 * TOP_CELL_SIZE)) < 1e-9);
+  assert.ok(Math.abs(at.z - (hostCentre.z - 1.5 * TOP_CELL_SIZE)) < 1e-9);
   assert.ok(Math.abs(at.y - (ROOM_SHELL.floor.y + 0.7)) < 1e-9);
 });
 
 test("host rotation turns the child's offset with the renderer's yaw convention", () => {
-  // Same child cell, host at rotSteps 1: +90° maps local (x, z) to (z, -x), and the ROTATED host footprint (2x4) centres the host box.
+  // Same child cell, host at rotSteps 1: +90° maps local (x, z) to (z, -x), and the ROTATED host footprint (2x4) centres the host box. hostTopExtent is unrotated (host.def.footprint, not the rotated box), so it is still 8x4 regardless of rotSteps.
   const host = { placement: hostAt({ rotSteps: 1 }), def: desk };
   const hostCentre = floorCellToRoom({ x: 2, y: 2 }, { w: 2, d: 4 });
   const at = topCellToRoom(host, { x: 0, y: 0 }, { w: 1, d: 1 }, 0.7);
-  // local (-0.375, -0.125) --(+90°)--> (-0.125, +0.375).
-  assert.ok(Math.abs(at.x - (hostCentre.x - 0.125)) < 1e-9);
-  assert.ok(Math.abs(at.z - (hostCentre.z + 0.375)) < 1e-9);
+  // local (-3.5, -1.5) top cells --(+90°)--> (-1.5, +3.5) top cells.
+  assert.ok(Math.abs(at.x - (hostCentre.x - 1.5 * TOP_CELL_SIZE)) < 1e-9);
+  assert.ok(Math.abs(at.z - (hostCentre.z + 3.5 * TOP_CELL_SIZE)) < 1e-9);
 });
 
 test("roomPointToTopCell inverts topCellToRoom at every host rotation", () => {
   for (const rotSteps of [0, 1, 2, 3] as const) {
     const host = { placement: hostAt({ rotSteps }), def: desk };
-    for (const cell of [{ x: 0, y: 0 }, { x: 3, y: 1 }, { x: 2, y: 0 }]) {
+    for (const cell of [{ x: 0, y: 0 }, { x: 3, y: 1 }, { x: 2, y: 0 }, { x: 7, y: 3 }]) {
       const centre = topCellToRoom(host, cell, { w: 1, d: 1 }, 0.7);
       assert.deepEqual(roomPointToTopCell(host, centre), cell, `rot ${rotSteps} cell ${cell.x},${cell.y}`);
+    }
+  }
+});
+
+// The round-trip property the header rationale calls out by name: topCellToRoom and roomPointToTopCell must stay exact inverses at the finer pitch, across host rotations and host footprints (so different hostTopExtent values) — this is the failure mode that would put a book visibly off the edge of a desk. Probed at childFootprint {w:1,d:1}, the same convention every real caller uses (ghostQuads, screenPointToTopCell): a MULTI-cell footprint's own bounding-box CENTRE is not a well-defined inverse target — for an even-width footprint it sits exactly ON the boundary between two cells, so which cell floor() resolves it to is a coin flip no caller ever relies on. The next test covers "child footprints" honestly, by round-tripping each unit cell a multi-cell child actually occupies.
+test("topCellToRoom/roomPointToTopCell round-trip for every combination of host footprint and host rotation", () => {
+  const hostDefs = [desk, roundTable, { ...desk, footprint: { w: 6, d: 5 }, topFootprint: { w: 12, d: 10 } }];
+  for (const hostDef of hostDefs) {
+    const top = hostTopExtent(hostDef);
+    for (const rotSteps of [0, 1, 2, 3] as const) {
+      const host = { placement: hostAt({ rotSteps }), def: hostDef };
+      // Corners and centre of the host's top — the extremes most likely to expose an off-by-one in the extent or the centring term.
+      const cells = [
+        { x: 0, y: 0 },
+        { x: top.w - 1, y: 0 },
+        { x: 0, y: top.d - 1 },
+        { x: top.w - 1, y: top.d - 1 },
+        { x: Math.floor(top.w / 2), y: Math.floor(top.d / 2) },
+      ];
+      for (const cell of cells) {
+        const centre = topCellToRoom(host, cell, { w: 1, d: 1 }, 0.7);
+        assert.deepEqual(
+          roomPointToTopCell(host, centre),
+          cell,
+          `host ${hostDef.footprint.w}x${hostDef.footprint.d} rot ${rotSteps} cell ${cell.x},${cell.y}`,
+        );
+      }
+    }
+  }
+});
+
+test("every unit cell a multi-cell child occupies round-trips through topCellToRoom/roomPointToTopCell, at each host rotation", () => {
+  const childFootprints: Footprint[] = [{ w: 2, d: 1 }, { w: 1, d: 2 }, { w: 2, d: 2 }, { w: 3, d: 1 }];
+  for (const rotSteps of [0, 1, 2, 3] as const) {
+    const host = { placement: hostAt({ rotSteps }), def: desk };
+    for (const childFootprint of childFootprints) {
+      const anchor = { x: 1, y: 0 };
+      // Every cell the anchored footprint covers is itself a valid 1x1 probe — this is exactly what cellsFor hands the renderer's ghost quads.
+      for (let dx = 0; dx < childFootprint.w; dx += 1) {
+        for (let dy = 0; dy < childFootprint.d; dy += 1) {
+          const cell = { x: anchor.x + dx, y: anchor.y + dy };
+          const centre = topCellToRoom(host, cell, { w: 1, d: 1 }, 0.7);
+          assert.deepEqual(
+            roomPointToTopCell(host, centre),
+            cell,
+            `child ${childFootprint.w}x${childFootprint.d} rot ${rotSteps} cell ${cell.x},${cell.y}`,
+          );
+        }
+      }
     }
   }
 });
@@ -510,4 +634,25 @@ test("a stacked pick box stands on the host top and contains the child's centre"
   const centre = topCellToRoom(host, { x: 3, y: 1 }, { w: 1, d: 1 }, 0.7);
   assert.ok(box.min.x <= centre.x && centre.x <= box.max.x);
   assert.ok(box.min.z <= centre.z && centre.z <= box.max.z);
+});
+
+// The bug this pins, found 2026-08-10: every wall item was seated with the WINDOW policy, which is the opposite sign from what a mounted piece needs. A painting hung on a wall was pushed OUTWARD until it sat flush against the outer skin — entirely inside the wall, invisible from the room. Nothing caught it because the arithmetic lived inside a React effect where no test could reach it.
+test("a mounted wall item's back rests on the wall face; a hole-cutter's front does", () => {
+  // Positive is OUTWARD (into and through the wall). A 3.6 cm painting moves INWARD by half its depth, so its back lands exactly on the anchor and the whole canvas hangs in the room.
+  assert.equal(wallDepthOffset(0.036, false), -0.018);
+  // The same canvas under the old window rule: protrusion = 0.036 - 0.12 = -0.084, offset = 0.018 + 0.084 = +0.102 outward, which buries it. Pinned as the WRONG answer so the two policies can never be collapsed back into one.
+  assert.equal(+wallDepthOffset(0.036, true).toFixed(4), 0.102);
+
+  // A window deeper than the wall keeps the window policy: front flush with the interior face, body extending back through the hole.
+  assert.equal(wallDepthOffset(0.218, true), 0.109);
+  // And a deep MOUNTED piece — a wall cabinet — still hangs off the face rather than sinking: back on the wall, 0.35 m of body in the room.
+  assert.equal(wallDepthOffset(0.35, false), -0.175);
+});
+
+test("wallDepthOffset is sign-opposite for the two policies at every depth", () => {
+  // Not a coincidence of one value: a mounted piece always moves inward and a hole-cutter always outward, so no depth exists where the two rules agree and the distinction could be dropped.
+  for (const depth of [0.01, 0.036, 0.12, 0.218, 0.5, 1]) {
+    assert.ok(wallDepthOffset(depth, false) < 0, `mounted at ${depth} must move inward`);
+    assert.ok(wallDepthOffset(depth, true) > 0, `hole-cutter at ${depth} must move outward`);
+  }
 });

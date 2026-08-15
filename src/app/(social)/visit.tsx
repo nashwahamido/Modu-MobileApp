@@ -12,6 +12,7 @@ import type { Theme } from "@/src/game/ui/system/theme";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import type { Profile } from "@/src/data";
 import { ceilingLightOn, sunPreset, type CeilingLightOverride } from "@/src/room/core/timeOfDay";
+import { readRoomFinishes } from "@/src/data/room/layoutMigrate";
 import { sanitizeLayout } from "@/src/room/core/layoutSanitise";
 import { toGrid, usePlacementStore } from "@/src/room/core/placement";
 import { ORBIT } from "@/src/room/input/orbit";
@@ -91,7 +92,9 @@ export default function VisitScreen() {
         }
         // The same stale-row filter hydrate() applies to the player's own room. Skipping it would show this room artifacts the OWNER never sees, and a visit is read-only, so nobody could fix them.
         const layout = sanitizeLayout(saved.placements.map(toGrid));
-        startViewing(ownerId, layout);
+        // Shape-validated only, same as hydrate() — the ids are checked against the catalogue at render time in RoomScene.
+        const finishes = readRoomFinishes(saved);
+        startViewing(ownerId, layout, finishes);
         setHost(profile);
         setLiked(hasLiked);
         setLikes(profile?.likes ?? 0);

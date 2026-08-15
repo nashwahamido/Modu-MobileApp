@@ -65,6 +65,8 @@ export interface RoomLayout {
   ownerId: UserId;
   version: typeof ROOM_LAYOUT_VERSION;
   placements: PlacedFurniture[];
+  // The room's chosen surface items — a floor and a wall shop item id. Optional, and an unset slot means the shell AS AUTHORED rather than a default item: a room with no finishes does zero texture work at load and renders byte-identically to before the feature existed. Read with readRoomFinishes (src/data/room/layoutMigrate.ts), which validates shape only. Deliberately duplicates the shape from layoutMigrate.ts: types.ts is upstream and does not import downstream modules.
+  finishes?: { floor?: string; wall?: string };
   // ISO-8601 timestamp of the last save.
   updatedAt: string;
 }

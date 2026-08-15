@@ -7,7 +7,7 @@ import { Button } from "@/src/game/ui/system/Button";
 import { CREAM, CREAM_LIFT, useFixedStyles, useTheme, LEXEND } from "@/src/game/ui/system/theme";
 import { useSlideUpPresentation } from "@/src/game/ui/system/slideUp";
 import type { Theme } from "@/src/game/ui/system/theme";
-import { useCurrentUserId, useRepos, viewCatalogue } from "@/src/data";
+import { isSurfaceCategory, useCurrentUserId, useRepos, viewCatalogue } from "@/src/data";
 import type { ShopCategory, ShopItem, ShopItemId } from "@/src/data";
 import { useProfileStore } from "@/src/data/player/profileStore";
 import { useShopStore } from "@/src/data/shop/store";
@@ -147,9 +147,11 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
               ? visible.map((item) => (
                   <ShopItemTile
                     key={item.id}
+                    itemId={item.id}
                     name={item.name}
                     price={item.price}
                     width={tileWidth}
+                    surface={isSurfaceCategory(item.category)}
                     owned={owned.has(item.id)}
                     lockLevel={level < item.minLevel ? item.minLevel : undefined}
                     onPress={() => requestBuy(item)}

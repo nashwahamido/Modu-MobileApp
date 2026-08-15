@@ -6,7 +6,7 @@ import type { FurnitureId } from "@/src/game/core/type";
 import type { BuildCatalogRow, Repos } from "../core/repos";
 
 // Versioned: a shape change must not try to read rows written by an older build.
-const CACHE_KEY = "modu.catalog.builds.v1";
+const CACHE_KEY = "modu.catalog.builds.v2";
 
 // "cached" = serving AsyncStorage, may be stale. "live" = this session fetched it. Callers that must not show stale curation can check.
 export type CatalogStatus = "empty" | "cached" | "live" | "error";

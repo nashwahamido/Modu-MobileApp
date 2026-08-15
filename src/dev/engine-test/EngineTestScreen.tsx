@@ -17,9 +17,10 @@ import type {
 } from "@/src/game/core/type";
 import {
   FURNITURE_METAS,
-  isPlayable,
+  isBundled,
   loadFurnitureById,
 } from "@/src/game/content/furnitures/furnitures";
+import { asFurnitureId } from "@/src/game/core/ids";
 import { OrientationLock } from "expo-screen-orientation";
 import { availableInMode } from "@/src/game/core/evaluation/availability";
 import {
@@ -31,7 +32,7 @@ import {
 
 const LEVELS: TextLevel[] = ["standard", "simple"];
 const TEST_DENSITY = 0.74;
-const DEFAULT_FURNITURE_ID: FurnitureId = "dalfred-stool";
+const DEFAULT_FURNITURE_ID: FurnitureId = asFurnitureId("dalfred-stool");
 
 function loadHarnessFurniture(id: FurnitureId) {
   loadFurnitureById(id).then((f) => useGameStore.getState().loadFurniture(f));
@@ -148,7 +149,7 @@ export default function EngineTestScreen() {
       <Text style={[styles.h, { color: C.muted, fontSize: t.caption }]}>FURNITURE</Text>
       <View style={styles.compactRow}>
         {FURNITURE_METAS.map((meta) => {
-          const selectable = isPlayable(meta.id);
+          const selectable = isBundled(meta.id);
           const selected = furniture.meta.id === meta.id;
           return (
             <Pressable
