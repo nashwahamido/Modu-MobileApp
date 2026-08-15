@@ -25,7 +25,7 @@ import {
 import { useGameStore } from "@/src/game/core/store";
 import Svg, { Circle as SvgCircle, Defs, RadialGradient, Stop } from "react-native-svg";
 import { StarBadge } from "@/src/game/ui/system/Icons";
-import { CoinMedalIcon } from "@/src/components/Icons";
+import { COIN_ICON } from "@/src/components/iconAssets";
 import { Theme, useFixedStyles, useTheme, FONT } from "@/src/game/ui/system/theme";
 import { useRepos } from "@/src/data";
 import { useCatalogRow } from "@/src/data/catalog/buildStore";
@@ -487,7 +487,7 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
             </View>
             <View style={styles.rewardRow}>
               <View style={styles.rewardTile}>
-                <CoinMedalIcon size={26} />
+                <Image source={COIN_ICON} style={styles.rewardCoin} resizeMode="contain" />
                 <Text style={styles.rewardText}>+ {coins}</Text>
               </View>
               <View style={styles.rewardTile}>
@@ -908,6 +908,7 @@ const makeStyles = (t: Theme) =>
       color: "#FBF8F3",
     },
     rewardRow: { flexDirection: "row", gap: 6, alignSelf: "stretch" },
+    rewardCoin: { width: 26, height: 26 },
     rewardText: { fontFamily: FONT, fontSize: 10, fontWeight: "700", color: INK },
 
   switcher: {

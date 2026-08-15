@@ -334,10 +334,10 @@ function stageTrendArrow(stages: number) {
 // SHADOW = chrome (pills, cards). SHADOW_SM = the small action buttons that sit ON a card.
 // Darker: raise the alpha in rgba(). Sharper: lower the blur (the 3rd length).
 const SHADOW = {
-  boxShadow: "0px 5px 4px rgba(0,0,0,0.40)",
+  boxShadow: "0px 5px 4px rgba(0,0,0,0.22)",
   // iOS fallback for the old architecture; harmless where boxShadow is supported.
   shadowColor: "#000",
-  shadowOpacity: 0.8,
+  shadowOpacity: 0.45,
   shadowRadius: 2,
   shadowOffset: { width: 0, height: 4 },
   elevation: 6,

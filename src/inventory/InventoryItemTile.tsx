@@ -1,14 +1,18 @@
 // One owned tile in the inventory popup: brand mark, picture well, name
-import { StyleSheet, Image, Pressable, Text, View } from "react-native";
+import { StyleSheet, Image, Pressable, View } from "react-native";
 
+import {
+  FRAME_RADIUS,
+  FRAME_STROKE,
+  FRAME_STROKE_WIDTH,
+  TILE_ROW_GAP,
+  ItemNameTab,
+  WELL_ASPECT,
+  WELL_TOP_PAD,
+} from "@/src/components/ItemTileFrame";
 import { brandFor } from "@/src/game/content/brands";
-import { CREAM, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
-import type { Theme } from "@/src/game/ui/system/theme";
+import { useFixedStyles } from "@/src/game/ui/system/theme";
 
-// Well height as a fraction of the tile's width; the grid owns the width
-const WELL_ASPECT = 0.79;
-// Room for the brand mark to sit at the well's top-right without clipping. Its twin uses the same pad for its price badge, so the two grids' wells start on the same line.
-const WELL_TOP_PAD = 14;
 const IKEA_LOGO = brandFor("IKEA").logo;
 
 const LOGO_CANVAS = { w: 3000, h: 2000 };
@@ -66,17 +70,15 @@ export function InventoryItemTile({
         ) : null}
       </View>
 
-      <Text style={s.name} numberOfLines={1}>
-        {name}
-      </Text>
+      <ItemNameTab name={name} />
     </Pressable>
   );
 }
 
-const makeStyles = (t: Theme) =>
+const makeStyles = () =>
   StyleSheet.create({
     tile: {
-      marginBottom: 18,
+      marginBottom: TILE_ROW_GAP,
     },
     tilePressed: {
       opacity: 0.7,
@@ -85,10 +87,10 @@ const makeStyles = (t: Theme) =>
       paddingTop: WELL_TOP_PAD,
     },
     well: {
-      borderRadius: 6,
+      borderRadius: FRAME_RADIUS,
       backgroundColor: "#FFFFFF",
-      borderWidth: 1,
-      borderColor: t.border,
+      borderWidth: FRAME_STROKE_WIDTH,
+      borderColor: FRAME_STROKE,
     },
     brandMark: {
       position: "absolute",
@@ -105,12 +107,5 @@ const makeStyles = (t: Theme) =>
       top: MARK.imageTop,
       width: MARK.imageWidth,
       height: MARK.imageHeight,
-    },
-    name: {
-      marginTop: 8,
-      ...LEXEND.regular,
-      fontSize: 14,
-      color: CREAM.ink,
-      textAlign: "center",
     },
   });
