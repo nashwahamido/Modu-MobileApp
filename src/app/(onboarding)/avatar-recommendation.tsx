@@ -284,6 +284,9 @@ export default function AvatarRecommendationScreen() {
     setSaveError(null);
     try {
       await saveSelectedAvatarMode(selectedMode.id as ModeId);
+      // Keep the already-mounted room in sync when the player returns home in
+      // this session; the next cold start hydrates the same value from the DB.
+      useGameStore.getState().applyProfile(selectedMode.id as ProfileId);
       setShowModeTip(true);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not save avatar choice.";

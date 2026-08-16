@@ -9,20 +9,34 @@ import {
 import { useSharedValue } from "react-native-worklets-core";
 
 import { findPath, inflateBlocked, nearestWalkable } from "../character/navigation";
+import {
+  roomAvatarKindForProfile,
+  type RoomAvatarKind,
+} from "../character/avatarChoice";
 import { cellKey, cellsFor, floorCellToRoom, roomPointToFloorCell } from "../core/grid";
 import { getRoomItemDef } from "../core/placeableItems";
 import { usePlacementStore } from "../core/placement";
 import { FLOOR_CELLS, ROOM_SHELL, SCENE_SCALE, roomToScene } from "../core/roomShell";
+import { useGameStore } from "../../game/core/store";
 
-const CAT_MODEL = require("../../assets/models/avatars/cute-cat.glb");
-const CAT_SIZE = { x: 0.667114, y: 0.979554, z: 0.506043 } as const;
-const CAT_MAX_EXTENT = Math.max(CAT_SIZE.x, CAT_SIZE.y, CAT_SIZE.z);
 const CAT_FOOTPRINT = { w: 1, d: 1 } as const;
 
-// The optimized Felix export contains two in-place clips. Treat NlaTrack as
-// idle and NlaTrack.001 as walk; swap these indices if device review shows the
-// Tripo export ordered the selected actions differently.
-const ANIMATION = { walk: 1, idle: 0 } as const;
+const AVATAR_CONFIG = {
+  felix: {
+    model: require("../../assets/models/avatars/cute-cat.glb"),
+    size: { x: 0.667114, y: 0.979554, z: 0.506043 },
+    // Optimized Felix: NlaTrack is idle; NlaTrack.001 is walk.
+    animation: { walk: 1, idle: 0 },
+  },
+  sparky: {
+    model: require("../../assets/models/avatars/sparky.glb"),
+    size: { x: 0.679871, y: 0.980042, z: 0.516876 },
+    // Optimized Sparky: the long NlaTrack is idle; NlaTrack.002 is the
+    // symmetric, seamless leg-driven walk cycle.
+    animation: { walk: 2, idle: 0 },
+  },
+} as const;
+
 // This GLB's authored forward axis already matches the yaw convention below:
 // yaw 0 walks toward +Z. Adding PI made the cat face away from every target and
 // therefore appear to moonwalk along an otherwise-correct path.
@@ -30,7 +44,6 @@ const MODEL_FORWARD_OFFSET = 0;
 const WALK_SPEED = 0.55;
 const TURN_SPEED = 7;
 const ARRIVAL_EPSILON = 0.025;
-const BODY_RADIUS_CELLS = Math.ceil((CAT_SIZE.x / 2) / ROOM_SHELL.cellSize);
 
 type Point = { x: number; z: number };
 type Motion = { position: Point; yaw: number; path: Point[]; idleUntil: number };
@@ -44,14 +57,25 @@ const pointForCell = (cell: { x: number; y: number }): Point => {
 };
 
 export function RoomAvatar() {
-  const model = useModel(CAT_MODEL);
+  const avatarKind = useGameStore((state) => roomAvatarKindForProfile(state.profile));
+
+  // A recommendation change must create fresh native model/animator state rather
+  // than asking one Filament wrapper to change the asset underneath itself.
+  return <WalkingRoomAvatar key={avatarKind} avatarKind={avatarKind} />;
+}
+
+function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
+  const config = AVATAR_CONFIG[avatarKind];
+  const maxExtent = Math.max(config.size.x, config.size.y, config.size.z);
+  const bodyRadiusCells = Math.ceil((config.size.x / 2) / ROOM_SHELL.cellSize);
+  const model = useModel(config.model);
   // useModel returns a fresh wrapper object on React re-renders; the loaded asset
   // has stable identity. Keying the animator to the asset prevents accidentally
   // creating a second native animator when furniture/layout state changes.
   const asset = model.state === "loaded" ? model.asset : null;
   const animator = useAnimator(asset ?? undefined);
   const { transformManager } = useFilamentContext();
-  const animationIndex = useSharedValue<number>(ANIMATION.idle);
+  const animationIndex = useSharedValue<number>(config.animation.idle);
   const baseTransform = useRef<Mat4 | null>(null);
   const layout = usePlacementStore((state) => state.viewing?.layout ?? state.layout);
   const editing = usePlacementStore((state) => state.activeEdit !== null);
@@ -67,9 +91,9 @@ export function RoomAvatar() {
     return inflateBlocked(
       occupied,
       { w: FLOOR_CELLS.w, h: FLOOR_CELLS.d },
-      BODY_RADIUS_CELLS,
+      bodyRadiusCells,
     );
-  }, [layout]);
+  }, [bodyRadiusCells, layout]);
 
   const motion = useRef<Motion>({
     position: pointForCell({ x: 8, y: 8 }),
@@ -100,7 +124,7 @@ export function RoomAvatar() {
     let previous = performance.now();
     let stopped = false;
     const bounds = { w: FLOOR_CELLS.w, h: FLOOR_CELLS.d };
-    const unitScale = 2 / CAT_MAX_EXTENT;
+    const unitScale = 2 / maxExtent;
 
     const setAnimation = (index: number) => {
       if (animationIndex.value !== index) animationIndex.value = index;
@@ -123,7 +147,7 @@ export function RoomAvatar() {
         const path = findPath(currentCell, target, blocked, bounds);
         if (!path || path.length < 4) continue;
         motion.current.path = path.map(pointForCell);
-        setAnimation(ANIMATION.walk);
+        setAnimation(config.animation.walk);
         return true;
       }
       return false;
@@ -135,7 +159,7 @@ export function RoomAvatar() {
       const transform = baseTransform.current!
         .scaling([SCENE_SCALE / unitScale, SCENE_SCALE / unitScale, SCENE_SCALE / unitScale])
         .rotate(state.yaw + MODEL_FORWARD_OFFSET, [0, 1, 0])
-        .translate([centre.x, centre.y + (CAT_SIZE.y * SCENE_SCALE) / 2, centre.z]);
+        .translate([centre.x, centre.y + (config.size.y * SCENE_SCALE) / 2, centre.z]);
       transformManager.setTransform(model.rootEntity, transform);
     };
 
@@ -146,12 +170,12 @@ export function RoomAvatar() {
       previous = now;
       const state = motion.current;
       if (editing) {
-        setAnimation(ANIMATION.idle);
+        setAnimation(config.animation.idle);
         paint();
         return;
       }
       if (state.path.length === 0) {
-        setAnimation(ANIMATION.idle);
+        setAnimation(config.animation.idle);
         if (now >= state.idleUntil && !choosePath()) state.idleUntil = now + 1_000;
         paint();
         return;
@@ -165,7 +189,7 @@ export function RoomAvatar() {
         state.path.shift();
         if (state.path.length === 0) {
           state.idleUntil = now + 1_200 + Math.random() * 1_800;
-          setAnimation(ANIMATION.idle);
+          setAnimation(config.animation.idle);
         }
         paint();
         return;
@@ -177,7 +201,7 @@ export function RoomAvatar() {
         x: state.position.x + (dx / distance) * step,
         z: state.position.z + (dz / distance) * step,
       };
-      setAnimation(ANIMATION.walk);
+      setAnimation(config.animation.walk);
       paint();
     };
 
@@ -189,7 +213,7 @@ export function RoomAvatar() {
       stopped = true;
       cancelAnimationFrame(frame);
     };
-  }, [animationIndex, asset, blocked, editing, transformManager]);
+  }, [animationIndex, asset, blocked, config, editing, maxExtent, transformManager]);
 
   return null;
 }
