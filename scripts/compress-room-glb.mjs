@@ -11,17 +11,18 @@
 import { Buffer } from "node:buffer";
 import { statSync } from "node:fs";
 
-import { NodeIO } from "@gltf-transform/core";
+import { NodeIO, PropertyType } from "@gltf-transform/core";
 import { ALL_EXTENSIONS } from "@gltf-transform/extensions";
 import { dedup, prune, textureCompress } from "@gltf-transform/functions";
 import sharp from "sharp";
 
-// Per-role budgets. Roughness and occlusion are low-frequency grayscale data and survive a hard
-// downscale; normals need the most resolution and the gentlest quantization; base colour sits between.
+// Per-role budgets. Roughness is low-frequency grayscale data and survives a hard downscale; normals need the most resolution and the gentlest quantization; base colour sits between.
+// OCCLUSION IS NOT ROUGHNESS AND MUST NOT SHARE ITS BUDGET, which is what it did until the AO bake landed. Every other map here is TILED, so it is small, repeated, and forgiving. The shell's occlusion map is a unique-UV ATLAS produced by scripts/bake_room_ao.py — every surface in the room owns its own patch of it, so 512 px spreads roughly 7 mm of wall across a texel and the corner gradients turn to mush. It also stays PNG: the content is large smooth ramps across flat walls, which is precisely where JPEG's 8x8 blocking shows, and banding in a lightmap reads as dirty walls. Costs ~340 KB against a multi-MB asset. WebP is not an option at any size — Filament ships no WebP decoder and those textures render flat black.
 const ROLES = [
-  { name: "normal", slots: /normalTexture/, size: 1024, quality: 90 },
-  { name: "roughness/metal/ao", slots: /(metallicRoughness|occlusion)Texture/, size: 512, quality: 80 },
-  { name: "colour/emissive", slots: /(baseColor|emissive)Texture/, size: 1024, quality: 82 },
+  { name: "normal", slots: /normalTexture/, size: 1024, quality: 90, format: "jpeg" },
+  { name: "roughness/metal", slots: /metallicRoughnessTexture/, size: 512, quality: 80, format: "jpeg" },
+  { name: "occlusion (AO atlas)", slots: /occlusionTexture/, size: 1024, quality: 100, format: "png" },
+  { name: "colour/emissive", slots: /(baseColor|emissive)Texture/, size: 1024, quality: 82, format: "jpeg" },
 ];
 
 const mb = (bytes) => `${(bytes / 1024 / 1024).toFixed(2)} MB`;
@@ -43,7 +44,8 @@ const before = { file: statSync(input).size, textures: textureBytes(), count: ro
 
 // Duplicate images are common when a source scene reuses the same map under different names — the
 // authored shell ships two byte-identical gold roughness maps. Drop those before paying to re-encode.
-await document.transform(dedup(), prune());
+// MATERIALS ARE DELIBERATELY EXCLUDED. The shell carries one material per wall and per cornice run purely so the renderer can fade them independently (gltfio hands out a MaterialInstance per glTF material — see src/room/core/roomShell.ts), which means Wall_xmin..Wall_zmax are IDENTICAL by construction and dedup merges all four into one. That silently collapses 15 materials to 5 and leaves camera-facing wall culling with nothing to fade. Textures and accessors still dedup, which is where the real savings are anyway: the exporter emits one texture object per material, 13 of them referencing 2 images.
+await document.transform(dedup({ propertyTypes: ["Accessor", "Mesh", "Texture", "Skin"] }), prune());
 
 // A texture carrying real alpha must not become JPEG. In practice the shell has none, but a silent
 // alpha loss is the kind of thing that only shows up on device, so it is checked rather than assumed.
@@ -66,7 +68,7 @@ for (const role of ROLES) {
   await document.transform(
     textureCompress({
       encoder: sharp,
-      targetFormat: "jpeg",
+      targetFormat: role.format,
       slots: role.slots,
       resize: [role.size, role.size],
       quality: role.quality,
@@ -74,7 +76,7 @@ for (const role of ROLES) {
       pattern: alphaTextures.size > 0 ? /^(?!.*__keep-alpha).*$/ : undefined,
     }),
   );
-  console.log(`  ${role.name.padEnd(20)} -> ${role.size}px jpeg q${role.quality}`);
+  console.log(`  ${role.name.padEnd(22)} -> ${role.size}px ${role.format} q${role.quality}`);
 }
 
 await io.write(output, document);

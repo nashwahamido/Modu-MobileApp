@@ -270,9 +270,11 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
       await delay(latency);
       return clone(shopItems);
     },
+    // Purchased UNION granted, matching the Supabase adapter: a granted item is owned by everyone without an ownership row, which is what makes the two default surfaces reachable as ordinary inventory items rather than as a special case.
     async listOwned(userId) {
       await delay(latency);
-      return [...(inventory.get(userId) ?? [])];
+      const granted = shopItems.filter((i) => i.granted).map((i) => i.id);
+      return [...new Set([...(inventory.get(userId) ?? []), ...granted])];
     },
     async purchase(userId, itemId) {
       await delay(latency);

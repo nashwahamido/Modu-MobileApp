@@ -57,6 +57,11 @@ import {
 } from "../core/placeableItems";
 import { useVariantModelSource } from "./variantModel";
 import { GridOverlay } from "./GridOverlay";
+import { applySurfaceItem } from "./applySurfaceItem";
+import { SHELL_ORIGINAL } from "./shellMaterials";
+import { useSurfaceTextures } from "./useSurfaceTextures";
+import { useCurrentUserId, useRepos } from "../../data";
+import { useShopStore } from "../../data/shop/store";
 import { setCameraAzimuth, usePlacementStore } from "../core/placement";
 import { aimToDirection } from "../core/lightAim";
 import { useGameStore } from "../../game/core/store";
@@ -83,7 +88,7 @@ import {
   wallMountYaw,
   wallOutward,
   WALL_CELLS,
-  WALL_THICKNESS,
+  wallDepthOffset,
   roomToScene,
   windowCellEntityName,
   type ShellWallId,
@@ -236,10 +241,9 @@ function RoomModel({
   }, [model, layout, activeEdit, scene]);
 
   // Camera-facing wall culling, half one: group the shell's material instances by which wall they belong to, ONCE, when the asset loads. Every renderable of a wall — its slab, its corner post, its cornice run, and its 84 diced band cells — carries that wall's material name, so this collapses ~180 entities into four buckets and leaves the per-frame work at four alpha writes. Each instance's authored RGB is captured here because the fade must write the full baseColorFactor. The walls stay in Filament's DEFAULT transparency mode on purpose, and changeAlpha is NOT used anywhere in this path because it force-switches the instance to twoPassesOneSide. Two-pass runs a depth pre-pass that ignores alpha entirely, so an invisible wall kept occluding whatever stood behind it — on device that clipped both far walls along the hidden walls' silhouette. Default-mode blending has no depth write; correctness comes from the shell shipping each wall as its OWN renderable (Shell_* nodes), which Filament depth-sorts back to front per frame. Keyed by MATERIAL NAME rather than by wall, because not every fading surface answers to a single wall: a cornice corner follows whichever of its two walls is more visible, and the ceiling never appears at all.
-  const wallMaterials = useRef<Map<
-    string,
-    { instance: MaterialInstance; rgb: [number, number, number] }[]
-  > | null>(null);
+  const wallMaterials = useRef<Map<string, { instance: MaterialInstance; rgb: [number, number, number] }[]> | null>(null);
+  // Every shell material instance by material NAME — the cache surface items write through. Built in the wall-culling walk below rather than its own pass, and cleared in the same teardown for the same reason that one is: useModel's cleanup runs ahead of both, and a write through a stale instance reaches an asset that has already been released.
+  const shellMaterialsByName = useRef<Partial<Record<string, MaterialInstance>>>({});
   useEffect(() => {
     if (model.state !== "loaded") return;
     const groups = new Map<
@@ -255,10 +259,9 @@ function RoomModel({
           (instance as unknown as { getName?: string }).getName ??
           instance.name;
         const name = instanceName ?? "";
-        const fades =
-          name === CEILING_MATERIAL ||
-          shellWallOfMaterial(name) !== null ||
-          cornerAlpha(name, 0) !== null;
+        // Recorded for EVERY material, not just the fading ones, and deliberately BEFORE the early return below: the Floor slab and the FloorEdge plinth never fade, so collecting after that line would silently miss exactly the two materials a floor item needs. A wall's 86 primitives all carry the same material name and therefore hand back the same instance, so this collapses ~355 entities into 15 entries and one texture write repaints a whole wall — the same property camera-facing culling relies on for its alpha write.
+        if (name) shellMaterialsByName.current[name] = instance;
+        const fades = name === CEILING_MATERIAL || shellWallOfMaterial(name) !== null || cornerAlpha(name, 0) !== null;
         if (!fades) continue;
         const [r, g, b] = instance.getFloat4Parameter("baseColorFactor");
         // Walls run twoPassesOneSide ALWAYS, at every alpha. Default BLEND writes no depth, so a wall composites as its own internal geometry stacked up — band-cell side faces and window jambs drawing over the skin as a grid of seams; faint at alpha 1, and glaring on a HALF-FADED wall, where the camera can legitimately park. The pre-pass gives each wall proper self-occlusion in every state. The pre-pass writing depth even at alpha 0 is safe for the WALLS, and the reason is narrow: the shell ships each wall as its own renderable (Shell_* nodes), Filament sorts blended renderables back to front by bounding-box centre, and a hidden wall is by definition the one between the eye and the room — so it draws AFTER everything behind it and nothing is left for its depth to clip. (With the old single-'room'-node shell, primitive order put hidden walls' pre-pass BEFORE the far walls, which clipped them along the hidden silhouette — that is what the per-wall split fixed.) Read that as a CONDITION, not a blanket licence: an alpha-0 surface may run this mode only while it is guaranteed to sort nearest. The ceiling never was — it sits at the room's centre and half the shell sorts after it — and it silently ate diced band cells for exactly that reason, which is why it now returns before this line. The ceiling is the exception to every rule here: it is written once, to zero, and never touched again. It exists ONLY to stop the sun falling into the room from above — which is what confines daylight to the window openings, instead of the walls printing their silhouettes across the floor. Invisible in colour, solid in the shadow map. It is deliberately returned BEFORE the transparency mode below, and must stay that way. A ceiling on twoPassesOneSide is a room-spanning depth occluder that draws nothing: it spans the whole floor plan, its underside sits exactly on the band top (ROOM_SHELL.walls[*].top), and it overhangs out past the wall inner faces — so a grazing ray to the top of a band crosses it. The wall SLABS survive that (one big renderable each, always sorting farther than the ceiling, so they draw first), but a DICED band is 84 small renderables sorted individually, and the ones at the camera-end of a wall sort NEARER than the ceiling: they draw after it, their own depth pre-pass loses to the depth it already wrote, and their colour pass — testing EQUAL — draws nothing at all. Whole cells vanish from an otherwise intact wall, worst at the four azimuths where the camera looks straight down an axis and two walls go edge-on. Shadows do not depend on this: the shadow pass ignores the colour pass's transparency mode.
@@ -275,6 +278,7 @@ function RoomModel({
     wallMaterials.current = groups;
     return () => {
       wallMaterials.current = null;
+      shellMaterialsByName.current = {};
     };
   }, [model, renderableManager]);
 
@@ -320,6 +324,63 @@ function RoomModel({
     });
     return () => cancelAnimationFrame(frame);
   }, [model, orbit]);
+
+  // The room's chosen surface items, as SAVED IDS. Through the viewing layer, same as `layout` above, so a visited room paints ITS finishes rather than the player's own.
+  const finishes = usePlacementStore((s) => s.viewing?.finishes ?? s.finishes);
+  // The catalogue is loaded HERE and not only by the Shop and Inventory popups, because the room needs it whether or not either of them is ever opened. Without this a player's own saved wallpaper stays invisible until they happen to open the inventory and the room re-skins itself behind the sheet, and a VISITED room never renders its host's finishes at all — visit.tsx mounts neither popup, so nothing on that route would ever fetch the rows the ids resolve against. load() is documented as cheap to call repeatedly and serves a cached list after the first fetch, so this costs one request per session.
+  const repos = useRepos();
+  const me = useCurrentUserId();
+  useEffect(() => {
+    // Deliberately not awaited and deliberately not surfaced: the catalogue failing to load means finishes resolve to null and the shell renders as authored, which is the same graceful degradation every other failure in this feature falls back to. The popups own the retry affordance.
+    void useShopStore.getState().load(repos, me);
+  }, [repos, me]);
+
+  // The catalogue rows those ids name. Validated HERE rather than in readRoomFinishes: that module is dependency-free by design, and the item set is remote and mutable, so an id that was valid when saved can stop being valid. An unknown id — or one whose row has landed under the WRONG category, which is the same class of mistake as a deleted one — resolves to null and drops THAT slot only, leaving the shell as authored. The catalogue is a network fetch, so this correctly resolves to null on the first frames and fills in when the sync lands.
+  const catalogue = useShopStore((s) => s.items);
+  const floorItem = useMemo(
+    () => catalogue.find((i) => i.id === finishes.floor && i.category === "floor") ?? null,
+    [catalogue, finishes.floor],
+  );
+  const wallItem = useMemo(
+    () => catalogue.find((i) => i.id === finishes.wall && i.category === "wall") ?? null,
+    [catalogue, finishes.wall],
+  );
+
+  // Each finish carries its own source: a testing workshop draft applied in a dev build reads from room/workshop/, and hardcoding "bought" here would 404 every one of its maps while the data layer served the row perfectly.
+  const floorTextures = useSurfaceTextures(floorItem, floorItem?.source ?? "bought", renderableManager);
+  const wallTextures = useSurfaceTextures(wallItem, wallItem?.source ?? "bought", renderableManager);
+
+  // The cornice is the WALL's joinery — it sits at the wall/ceiling junction and follows the wallpaper, not the floor — but most wall items will not ship maps for it, and a slot nobody writes keeps whatever the LAST item left there, so applying wall A then wall B would leave B's walls under A's moulding. The room-as-designed item always carries a full cornice set, so it is the honest thing to fall back to: a wall item that says nothing about the cornice gets the room's original one rather than its predecessor's.
+  // Resolved from the catalogue like any other item and loaded only when it is actually needed — useSurfaceTextures returns null for a null item, so a wall that ships its own trim costs nothing here.
+  const shellWall = useMemo(() => catalogue.find((i) => i.id === SHELL_ORIGINAL.wall) ?? null, [catalogue]);
+  const needsTrimFallback = wallItem != null && wallItem.id !== SHELL_ORIGINAL.wall && !wallItem.surface?.maps.includes("trim_texture");
+  // The fallback is always the shipped shell wallpaper, which is a published item by construction — but read its source anyway rather than assert one, so this line cannot be the odd one out if the shell items ever move.
+  const fallbackTrim = useSurfaceTextures(needsTrimFallback ? shellWall : null, shellWall?.source ?? "bought", renderableManager);
+
+  // Keyed on the ASSET, so a re-render cannot re-apply through instances belonging to a released load. Surface items apply only AFTER the asset has loaded and the name cache above is populated — the cache is built in an effect on the same `asset`, declared ABOVE this one, and React runs a commit's creates in declaration order, so this one always sees it filled. The emptiness check is the belt to that braces: an empty cache means the walk has not run, and painting through nothing would silently do nothing while marking the slot applied.
+  useEffect(() => {
+    if (!asset) return;
+    const instances = shellMaterialsByName.current;
+    if (Object.keys(instances).length === 0) return;
+
+    // spec is what tells applySurfaceItem how to tile; an item row that arrived without its portal-authored surface block is not applicable yet, and the slot stays as authored until it is.
+    // floorItem/wallItem come from a useMemo over the store and floorTextures/wallTextures come from useSurfaceTextures's own setState, two hooks updating on different schedules, so within a single commit the memo can already read a NEW item while the texture hook's state still holds the OLD item's maps — itemId is therefore checked against the resolved item's id before anything is written, or a mismatched commit paints the old textures under the new item's tiling.
+    if (floorItem?.surface && floorTextures && floorTextures.itemId === floorItem.id) {
+      applySurfaceItem({ slot: "floor", instances, renderableManager, maps: floorTextures.maps, spec: floorItem.surface });
+    }
+    if (wallItem?.surface && wallTextures && wallTextures.itemId === wallItem.id) {
+      // The fallback cornice is folded in HERE rather than inside applySurfaceItem, so that module keeps knowing nothing about which item is the default one — it is handed a complete set and writes it.
+      const trim = wallTextures.maps.trim ?? (fallbackTrim && fallbackTrim.itemId === SHELL_ORIGINAL.wall ? fallbackTrim.maps.trim : undefined);
+      const trimTiling = wallTextures.maps.trim ? wallItem.surface.trimTiling : shellWall?.surface?.trimTiling;
+      applySurfaceItem({
+        slot: "wall",
+        instances,
+        renderableManager,
+        maps: { ...wallTextures.maps, trim },
+        spec: { ...wallItem.surface, trimTiling },
+      });
+    }
+  }, [asset, floorItem, wallItem, floorTextures, wallTextures, fallbackTrim, shellWall, renderableManager]);
 
   return null;
 }
@@ -425,7 +486,8 @@ const RoomLit = memo(function RoomLit({
       ? undefined
       : item.light;
 
-  const footprint = rotatedFootprint(item.def.footprint, placement.rotSteps);
+  // occupiedFootprint, not a raw rotatedFootprint(item.def.footprint, ...): a stacked lamp's footprint is topFootprint, at TOP_CELL_SIZE, not the floor footprint scaled.
+  const footprint = occupiedFootprint(placement, item.def);
   const centre =
     hostId !== null && hostPlacement && hostDef
       ? topCellToRoom(
@@ -603,7 +665,11 @@ const LoadedItem = memo(function LoadedItem({
     const unitScale = 2 / Math.max(item.size.x, item.size.y, item.size.z);
 
     if (placement.surface.kind === "wall") {
-      // A wall item mounts by its ANCHOR — hole centre on the wall's inner face — while the unit-cube base re-centres the model on its AABB centre. Authored origins CANNOT express depth (the unit-cube erases them), so seating is a renderer POLICY over the measured size: the INTERIOR is what must look right — the window's front sits flush with the interior wall face and its body extends backward. A model deeper than the wall pokes out of the EXTERIOR by the excess, which is accepted by design (the diorama is viewed from inside; the outside face is scenery). A model shallower than the wall keeps its back on the outer skin instead (recessed front), which is how the approved shallow windows already sat. Width and height need no correction — the anchor scripts centre them exactly.
+      // A wall item mounts by its ANCHOR on the wall's inner face, while the unit-cube base re-centres the model on its AABB centre. Authored origins CANNOT express depth (the unit-cube erases them), so seating is a renderer POLICY over the measured size — and there are TWO policies, because there are two kinds of wall item and applying one rule to both buries the other.
+      //
+      // A HOLE-CUTTING item (opensWall — a window) OCCUPIES the wall: its front sits flush with the interior face and its body extends backward through the opening it knocked out. A model deeper than the wall pokes out of the EXTERIOR by the excess, accepted by design (the diorama is viewed from inside; the outside face is scenery), and a model shallower than the wall keeps its back on the outer skin instead (recessed front), which is how the approved shallow windows already sat.
+      //
+      // Everything else SITS ON the wall the way furniture sits on the floor: its BACK rests on the interior face and its whole body extends into the room. baseOffsetY is the exact analogue one axis over — a floor item's base meets the floor plane, a wall item's back meets the wall plane. Applying the window rule to a painting is not a near miss but a total one: a 3.6 cm canvas has protrusion -0.084, so the old formula pushed it 0.102 OUTWARD and left it flush against the outer skin, entirely inside the wall and invisible from the room it hangs in.
       const wall = placement.surface.wall;
       const anchor = roomToScene(
         wallCellToRoom(
@@ -614,8 +680,8 @@ const LoadedItem = memo(function LoadedItem({
       );
       // Models are authored facing the room with the wall at −z behind them, which is exactly the z-max pose; the x-min wall looks along +x, a quarter turn the other way.
       const yaw = wallMountYaw(wall);
-      const protrusion = Math.min(item.size.z - WALL_THICKNESS, 0);
-      const depthOffset = (item.size.z / 2 - protrusion) * scale;
+      // Positive is OUTWARD (see the translate below), so a hole-cutter moves out to put its front on the anchor and a mounted piece moves IN by half its depth to put its back there. The arithmetic is wallDepthOffset in roomShell, where it is unit-tested — it was silently wrong for every non-window wall item until 2026-08-10.
+      const depthOffset = wallDepthOffset(item.size.z, item.def.opensWall === true) * scale;
       const transform = unit
         .scaling([scale / unitScale, scale / unitScale, scale / unitScale])
         .rotate(yaw, [0, 1, 0])
@@ -638,13 +704,9 @@ const LoadedItem = memo(function LoadedItem({
       if (!hostPlacement || !hostDef || !hostItem) return;
       const host = { placement: hostPlacement, def: hostDef };
       const topHeight = hostItem.size.y * fitScale(hostItem);
-      const childFootprint = rotatedFootprint(
-        item.def.footprint,
-        placement.rotSteps,
-      );
-      const centre = roomToScene(
-        topCellToRoom(host, placement.cell, childFootprint, topHeight),
-      );
+      // occupiedFootprint, not rotatedFootprint(item.def.footprint, ...): a stacked child's footprint on the host's top is topFootprint, at TOP_CELL_SIZE, never the floor footprint scaled — see PlaceableItemDef.topFootprint.
+      const childFootprint = occupiedFootprint(placement, item.def);
+      const centre = roomToScene(topCellToRoom(host, placement.cell, childFootprint, topHeight));
       const transform = unit
         .scaling([scale / unitScale, scale / unitScale, scale / unitScale])
         .rotate(
@@ -741,7 +803,9 @@ const LoadedItem = memo(function LoadedItem({
     }
     const wall = placement.surface.wall;
     let drawn = true;
-    let written = 1;
+    // Seeded from a real write, never from the ASSUMPTION that the materials already hold authored colour × 1. That assumption holds on a fresh mount and is false on the one transition that matters: committing a wall ghost re-runs this effect with tint gone, and the materials are still carrying the ghost's green multiplier, which the branch above only clears for non-wall pieces. wallAlpha returns EXACTLY 1 for any wall the camera is inside of — i.e. the wall you just placed the piece on — so seeding written = 1 made the guard below true on every frame and the untinted repaint never happened. The piece stayed green until an orbit wide enough to start fading its wall finally moved alpha off 1.
+    let written = wallAlpha(wall, orbit.value.smoothed.theta);
+    paint(written);
     const setDrawn = (draw: boolean) => {
       drawn = draw;
       for (const entity of asset.getRenderableEntities()) {
@@ -1490,11 +1554,9 @@ export function RoomScene({
           occluders={occluders}
           ghostQuads={(() => {
             const p = activeEdit.placement;
-            const def = getRoomItemDef(p.itemId) ?? {
-              itemId: p.itemId,
-              footprint: { w: 1, d: 1 },
-              allowedSurfaces: ["floor" as const],
-            };
+            const def =
+              getRoomItemDef(p.itemId) ??
+              { itemId: p.itemId, footprint: { w: 1, d: 1 }, topFootprint: { w: 1, d: 1 }, allowedSurfaces: ["floor" as const] };
             const cells = cellsFor(p, def);
             const CORNERS = [
               [0, 0],

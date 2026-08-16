@@ -6,6 +6,7 @@
 
 import { AccessibilitySettings } from "@/src/game/core/accessibility";
 import { AssemblyMode, FurnitureId } from "@/src/game/core/type";
+import { asFurnitureId } from "@/src/game/core/ids";
 
 export const DEFAULT_SETTINGS: AccessibilitySettings = {
   textLevel: "standard",
@@ -19,11 +20,9 @@ export const DEFAULT_SETTINGS: AccessibilitySettings = {
   showInstructions: true,
   manualTools: false,
   focusMode: false,
-  autoView: false,
   fontScale: 1,
 
   // dev-setting
-  snapStyle: "magnetic",
   ghostStyle: "movingGhost",
   releaseBehavior: "autoReturn",
   lightingPreset: "auto",
@@ -36,7 +35,7 @@ export type ProfileId = "visual" | "momentum" | "clearPath" | "control";
 /** Default onboarding task for each support profile. Catalogue choices still override this. */
 // idk if we should keep this - Ge
 export function furnitureForProfile(profile: ProfileId): FurnitureId {
-  return "dalfred-stool";
+  return asFurnitureId("dalfred-stool");
 }
 
 export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>> = {
@@ -44,37 +43,33 @@ export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>>
   control: {
     showInstructions: false,
     focusMode: false,
-    autoView: false,
     softHints: true,
     manualTools: true,
     // dev-setting
-    snapStyle: "magnetic",
     ghostStyle: "movingGhost",
     releaseBehavior: "autoReturn",
+    snapDistance: 0.14, // baseline: the magnet reaches no further than the default — this profile asks for the most precision.
   },
   // Visual, low-text, spatial, multimodal guidance.
   visual: {
     textLevel: "simple",
     audio: true,
     fontScale: 1.1,
-    autoView: true,
     softHints: false,
     // dev-setting
     ghostStyle: "staticSockets",
-    snapStyle: "magnetic",
     releaseBehavior: "autoReturn",
+    snapDistance: 0.18, // wider than baseline: aiming is done by feel here, so the magnet takes over sooner.
   },
 
   // Motivation (adhd), short tasks, quick feedback, progress recovery.
   momentum: {
     focusMode: false,
-    autoView: false,
     softHints: true,
     // dev-setting
-    snapStyle: "onRelease",
     ghostStyle: "staticSockets",
     releaseBehavior: "float",
-    snapDistance: 0.18,
+    snapDistance: 0.18, // wider than baseline: quick, low-effort placement — a near-miss should still seat.
     dragPlane: "level", // her engine: drag on a horizontal plane at the target's height
   },
 
@@ -82,13 +77,12 @@ export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>>
   clearPath: {
     textLevel: "standard",
     focusMode: true,
-    autoView: true,
     softHints: true,
     manualTools: false,
     // dev-setting
-    snapStyle: "onRelease",
     ghostStyle: "staticSockets",
     releaseBehavior: "autoReturn",
+    snapDistance: 0.2, // the most forgiving fit, at the geometry-safe cap (SNAP_DIST_MAX) — one step at a time, so a socket is rarely contested.
   },
 };
 

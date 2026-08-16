@@ -41,11 +41,12 @@ import {
 
 import { useGameStore } from "@/src/game/core/store";
 import { useBuildPersistence } from "@/src/hooks/useBuildPersistence";
+import { asFurnitureId } from "@/src/game/core/ids";
 
-import {
-  isPlayable,
-  loadFurnitureById,
-} from "@/src/game/content/furnitures/furnitures";
+import { isBundled, loadFurnitureById } from "@/src/game/content/furnitures/furnitures";
+// RECIPE LANE — held back from this commit along with src/game/recipe/ and src/game/content/loadFurniture.ts. Three blocks in this file are commented out under this marker; restore all three together with those modules, and nothing else in the app touches them.
+// import { loadPlayableFurniture } from "@/src/game/content/loadFurniture";
+// import { useCatalogRow, useCatalogStore } from "@/src/data/catalog/buildStore";
 
 // UI Elemets
 import { BuildComplete } from "@/src/game/ui/celebration/BuildComplete";
@@ -130,21 +131,32 @@ function GameScreen() {
   const [loaderVisible, setLoaderVisible] = useState(true);
   const [retryKey, setRetryKey] = useState(0);
 
-  const target: FurnitureId = isPlayable(id as FurnitureId)
-    ? (id as FurnitureId)
-    : "dalfred-stool";
+  // The route id is only trusted once it resolves to something playable, which without the recipe lane means a BUNDLED id and nothing else. Anything unrecognised falls back to the same default bundled furniture as before.
+  const requestedId = (id as FurnitureId | undefined) ?? asFurnitureId("dalfred-stool");
+  const target: FurnitureId = isBundled(requestedId) ? requestedId : asFurnitureId("dalfred-stool");
+  // RECIPE LANE — with cloud recipes in play, a catalog row pointing at an assembly build is playable too, so an unrecognised id is no longer the only route to the fallback: a cloud id whose row has not synced yet takes it as well.
+  // const requestedRow = useCatalogRow(requestedId);
+  // const target: FurnitureId =
+  //   isBundled(requestedId) || requestedRow?.assemblyModel ? requestedId : asFurnitureId("dalfred-stool");
   // Autosave progress and resume it next time this furniture is opened (through the repo seam).
   useBuildPersistence(target);
   useEffect(() => {
+    // Bail before touching any state when the store already holds this target, ahead of the three setters rather than after them: re-running this effect on an already-loaded furniture used to raise the loading overlay and then never lower it, because nothing downstream fires when there is no load to finish.
+    if (useGameStore.getState().furniture?.meta.id === target) return;
     setModelReady(false);
     setLoadError(false);
     setLoaderVisible(true);
-    if (useGameStore.getState().furniture?.meta.id === target) return;
     loadFurnitureById(target)
-      .then((f) => {
-        useGameStore.getState().loadFurniture(f);
-      })
+      .then((f) => useGameStore.getState().loadFurniture(f))
       .catch(() => setLoadError(true));
+    // RECIPE LANE — the row is read here IMPERATIVELY off useCatalogStore.getState() rather than through the useCatalogRow hook, and that is the whole point: it keeps this effect's deps free of the row's object identity, which changes on every catalog refresh/auth event and would otherwise re-run the effect after a completed load and strand the overlay. Keep the early bail above when restoring.
+    // const row = useCatalogStore.getState().rows[target];
+    // loadPlayableFurniture(target, row)
+    //   .then((result) => {
+    //     if (result.ok) useGameStore.getState().loadFurniture(result.furniture);
+    //     else setLoadError(true);
+    //   })
+    //   .catch(() => setLoadError(true));
   }, [target, retryKey]);
 
   const furniture = useGameStore((s) => s.furniture);

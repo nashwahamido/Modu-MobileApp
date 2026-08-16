@@ -26,7 +26,7 @@ test("a fast pick-up and snap skips the already-satisfied card without flashing 
   await wait(1250);
 
   const state = useTutorialStore.getState();
-  assert.equal(state.steps[state.currentIndex]?.id, "release-behavior-settings");
+  assert.equal(state.steps[state.currentIndex]?.id, "background-settings");
   assert.equal(state.stepRewardsClaimed, 20);
   assert.equal(state.latchedEvents.length, 0);
   state.resetTutorial();

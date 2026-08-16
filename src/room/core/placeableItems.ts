@@ -10,7 +10,7 @@ import { catalogUrl } from "../../data/catalog/urls";
 import type { PlaceableRoomRow, RoomItemLight } from "../../data/core/repos";
 import type { AssetSrc } from "../../game/core/type";
 import type { Footprint, PlaceableItemDef } from "./grid";
-import { ROOM_SHELL, WALL_CELL_SIZE } from "./roomShell";
+import { ROOM_SHELL, TOP_CELL_SIZE, WALL_CELL_SIZE } from "./roomShell";
 
 export type RoomItemModel = {
   def: PlaceableItemDef;
@@ -31,10 +31,13 @@ export const FURNITURE_WORLD_SCALE = 1;
 // footprint = ceil(size × FURNITURE_WORLD_SCALE / cellSize) per axis — the cells a piece claims at its rendered size. ceil, so collision may over-claim a sliver but never lets two pieces touch. The epsilon keeps an exact multiple (0.75 × 1.6 / 0.5 = 2.4 → 3, but 0.5 × 1.6 / 0.5 = 1.6 → 2) from gaining a phantom cell to float error.
 const cells = (meters: number): number => Math.ceil((meters * FURNITURE_WORLD_SCALE) / CELL - 1e-9);
 
-// Wall footprints round to the NEAREST fine cell, unlike the floor's ceil: a window's footprint IS its hole, and a hole smaller than the glazing shows wall through the glass — while one slightly larger than the frame just reads as a plaster reveal. Same rule as scripts/fix_window_anchors.py.
+// topFootprint = ceil(size × FURNITURE_WORLD_SCALE / TOP_CELL_SIZE) per axis — the SAME rule as `cells` above, just at the finer top pitch, and deliberately computed from the measured SIZE again rather than by scaling `footprint`. Scaling would compound `cells`' own ceil: a 0.26 m item is ceil(0.26/0.25) = 2 floor cells, and scaling that by the ×2 subdivision gives 4 fine cells (0.5 m) — a real over-claim, since deriving straight from size gives ceil(0.26/0.125) = 3 (0.375 m), the tight answer. Every item gets one, wall items included (see PlaceableItemDef.topFootprint), even though a window's is never read.
+const topCells = (meters: number): number => Math.ceil((meters * FURNITURE_WORLD_SCALE) / TOP_CELL_SIZE - 1e-9);
+
+// Wall footprints round to the NEAREST fine cell, unlike the floor's ceil: for a window this footprint IS its hole, and a hole smaller than the glazing shows wall through the glass while one slightly larger than the frame just reads as a plaster reveal — and a non-opening wall item (a frame) gets the same tight rounding for consistency, since every mount:'wall' row shares one footprint rule now (migration 021), not just the ones that cut holes. Same rule as scripts/fix_window_anchors.py.
 const wallCells = (meters: number): number => Math.max(1, Math.round(meters / WALL_CELL_SIZE));
 
-// category routes the SURFACE: 'window' rows hang on walls with a hole-sized footprint; everything else (including rows cached before category existed) stands on the floor. It also routes whether a piece EMITS light: a lamp is ordinary floor furniture that happens to carry a bulb, so 'lit' keeps the floor surface and only turns emitsLight on — exactly the shape 'win' has for walls.
+// mount/onTop/opensWall (placeable_items columns, migration 021) route placement now, not category — floor and wall are mutually exclusive so mount is one nullable choice, onTop is orthogonal (a book stands on a host's top whether that host is on the floor or the wall), and opensWall is meaningful only when mount is 'wall'. category is left with exactly one job: routing whether a piece EMITS light. A lamp is ordinary furniture (mount 'floor', maybe onTop) that happens to carry a bulb, so 'lit' does not touch allowedSurfaces at all and only turns emitsLight on.
 //
 // The light's NUMBERS do not come from the category, they come from row.light (item_lights, joined in by the placeable_items view — migration 012). A 'lit' row with no light row is a seeding mistake, and it degrades quietly: emitsLight is true but there is nothing to build a light from, so the piece places as ordinary furniture. That is the failure the audit query in 012 exists to catch. A mask that disagrees with its footprint is a seeding mistake; warn and fall back to the solid rect, which can only over-claim, never let pieces intersect. The border rule: every edge row/column must hold an 'X', or the bbox (which bounds checks and clamping still use) lies about the piece's extent.
 function sanitizedMask(joined: string | undefined, footprint: Footprint): readonly string[] | undefined {
@@ -55,14 +58,22 @@ function sanitizedMask(joined: string | undefined, footprint: Footprint): readon
 }
 
 function toModel(row: PlaceableRoomRow): RoomItemModel {
+  // Every def carries topFootprint (see PlaceableItemDef) even a wall item's, which allowedSurfaces guarantees is never read for one that has no "furniture" entry: occupiedFootprint only consults topFootprint for a "furniture" surface.
+  //
+  // Measured off contactSize when the row has one (migration 023), not off `size`. topFootprint is a plain rectangle taken from the model's full bounding box, so anything wider above the surface than on it — an open laptop, a lamp with a shade, a plant with a canopy — claims top cells it never touches; the laptop holds a 3x3 block of a desk for a base that fits in 2x3. contactSize is the piece's own base extent, so this is still "measured from a size" and still lands on whole top cells the same way. It changes NOTHING else: `footprint` below stays on `size` because a floor item's collision really is its widest extent (a shade overhanging a neighbour clips), and the piece still renders at `size` — fitScale reads that, not this.
+  const topSize = row.contactSize ?? { x: row.size.x, z: row.size.z };
+  const topFootprint: Footprint = { w: topCells(topSize.x), d: topCells(topSize.z) };
+  // Floor and wall are mutually exclusive (one `mount`, required since migration 024); standing on a host's top (`onTop`) is orthogonal and is APPENDED to that mount, never a replacement for it. Every item therefore has at least one surface, which is what lets startPlacing answer "where does this ghost open" with a complete two-way branch instead of searching the room for a host and refusing when there is none.
+  const allowedSurfaces = [row.mount, ...(row.onTop ? (["furniture"] as const) : [])];
   const def: PlaceableItemDef =
-    row.category === "win"
+    row.mount === "wall"
       ? {
           itemId: row.id,
           footprint: { w: wallCells(row.size.x), d: 1 },
+          topFootprint,
           wallHeightCells: wallCells(row.size.y),
-          allowedSurfaces: ["wall"],
-          opensWall: true,
+          allowedSurfaces,
+          opensWall: row.opensWall === true,
         }
       : (() => {
           const footprint = { w: cells(row.size.x), d: cells(row.size.z) };
@@ -70,9 +81,10 @@ function toModel(row: PlaceableRoomRow): RoomItemModel {
           return {
             itemId: row.id,
             footprint,
+            topFootprint,
             ...(mask ? { mask } : {}),
             ...(row.topSurface ? { hostsTop: true } : {}),
-            allowedSurfaces: ["floor" as const],
+            allowedSurfaces,
             emitsLight: row.category === "lit" && row.light != null,
           };
         })();
@@ -81,10 +93,10 @@ function toModel(row: PlaceableRoomRow): RoomItemModel {
 
 // The baked-in BUILT set: sizes mirror the DB seed (003_catalog.sql) the same way seed.ts does, so offline placement matches what the catalog will say once it loads.
 const BUNDLED_ROWS: PlaceableRoomRow[] = [
-  { id: "dalfred-stool", source: "built", category: "fur", size: { x: 0.5, y: 0.79, z: 0.5 }, baseOffsetY: 0.007 },
-  { id: "lack-table", source: "built", category: "fur", size: { x: 0.55, y: 0.45, z: 0.55 }, baseOffsetY: 0 },
-  { id: "eket-cabinet", source: "built", category: "fur", size: { x: 0.37, y: 0.35, z: 0.75 }, baseOffsetY: 0.175 },
-  { id: "bekvam-stool", source: "built", category: "fur", size: { x: 0.39, y: 0.5, z: 0.43 }, baseOffsetY: 0 },
+  { id: "dalfred-stool", source: "built", category: "fur", size: { x: 0.5, y: 0.79, z: 0.5 }, baseOffsetY: 0.007, mount: "floor" },
+  { id: "lack-table", source: "built", category: "fur", size: { x: 0.55, y: 0.45, z: 0.55 }, baseOffsetY: 0, mount: "floor" },
+  { id: "eket-cabinet", source: "built", category: "fur", size: { x: 0.37, y: 0.35, z: 0.75 }, baseOffsetY: 0.175, mount: "floor" },
+  { id: "bekvam-stool", source: "built", category: "fur", size: { x: 0.39, y: 0.5, z: 0.43 }, baseOffsetY: 0, mount: "floor" },
 ];
 
 const toItems = (rows: PlaceableRoomRow[]): Record<string, RoomItemModel> =>
@@ -104,17 +116,19 @@ export function registerPlaceables(rows: PlaceableRoomRow[]): void {
   useRoomCatalogStore.setState({ items: { ...toItems(BUNDLED_ROWS), ...toItems(rows) } });
 }
 
-// Model assets resolve LAZILY, inside a function: a top-level require() of a .glb only works under Metro, and this module must stay importable by node:test, which pins the numbers above.
-const MODEL_SOURCES: Record<string, () => AssetSrc> = {
-  /* eslint-disable @typescript-eslint/no-require-imports */
-  "dalfred-stool": () => require("../../assets/models/furnitures/DALFRED/DALFRED.glb"),
-  "lack-table": () => require("../../assets/models/furnitures/LACK/LACK.glb"),
-  "eket-cabinet": () => require("../../assets/models/furnitures/EKET/EKET.glb"),
-  "bekvam-stool": () => require("../../assets/models/furnitures/BEKVAM/BEKVAM.glb"),
-  /* eslint-enable @typescript-eslint/no-require-imports */
-};
+// The BUILT set, as ids rather than as model assets. This used to BE the model map — "the bundle IS the built set" — which quietly coupled two unrelated questions, so removing the models below would have silently reclassified every built item as bought and sent it looking down the wrong storage subtree.
+const BUILT_ITEM_IDS = new Set(["dalfred-stool", "lack-table", "eket-cabinet", "bekvam-stool"]);
 
-// The BUNDLED model — one look per item, no colour axis. Only BUILT furniture ships one; a bought item resolves null, and its callers must wait for the storage variant instead of falling back.
+// DELIBERATELY EMPTY, and it is a fix rather than an omission.
+//
+// This map used to point each built item at its ASSEMBLY GLB — the model the construction minigame uses, with every panel, screw and fastener as its own mesh. As a room decoration none of that geometry is ever visible (a built cabinet is closed), but all of it was parsed: EKET is 66.9 MB and BEKVAM 40.8 MB, against storage variants of 0.29 MB and 0.14 MB for the same pieces. A 230x cost to draw the same object.
+//
+// It was not merely a slow first frame either. variantModel drops to this bundle whenever a colour's URL is unprobed OR its probe fails, so an item whose default variant is missing from storage sits on the assembly model FOREVER — which is exactly what eket-cabinet does today, its default being 'black' while only white.glb exists in the bucket.
+//
+// The guarantee being given up is "a built piece is NEVER invisible", which was cheap when a bundled model was the same object at the same size and stopped being cheap when the assembly models grew. Bought items already accept it (variantModel returns null and the caller renders nothing), so built items now behave the same way. If it needs to come back, the answer is a SMALL room-sized GLB per item, never the assembly one — the shape of this map is preserved for exactly that.
+const MODEL_SOURCES: Record<string, () => AssetSrc> = {};
+
+// The BUNDLED model — one look per item, no colour axis. Nothing ships one at present (see above), so this resolves null for everything and callers wait for the storage variant, rendering nothing until it arrives.
 export function getRoomItemModelSource(itemId: string): AssetSrc | null {
   return MODEL_SOURCES[itemId]?.() ?? null;
 }
@@ -124,7 +138,7 @@ export function getRoomItemModelSource(itemId: string): AssetSrc | null {
 export function roomItemSource(itemId: string): ItemSource {
   const item = useRoomCatalogStore.getState().items[itemId];
   if (item) return item.source;
-  return itemId in MODEL_SOURCES ? "built" : "bought";
+  return BUILT_ITEM_IDS.has(itemId) ? "built" : "bought";
 }
 
 // The storage path of the model to load (room/<built|bought>/<id>/<variation|'default'>.glb). Null when the caller should use the bundled model instead: unknown items always, and BUILT items with no colour picked (their bundle is the default look, no round trip needed). A BOUGHT item has no bundle, so even with no colour axis it resolves to its 'default' segment in storage. Pure (a path, not a URL), so node:test can pin the routing without a Supabase client.

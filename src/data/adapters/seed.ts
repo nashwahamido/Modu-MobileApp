@@ -1,7 +1,9 @@
 // Demo seed data for the in-memory adapter: a fake "me" plus demo friends, each with a profile and a room. Doubles as demo data (the DEV panel) and test fixtures.
 import type { FurnitureId } from "@/src/game/core/type";
+import { asFurnitureId } from "@/src/game/core/ids";
 import type { LevelRow } from "../player/levels";
 import type { ShopCategory, ShopItem, ShopItemId } from "../shop/items";
+import type { SurfaceMap } from "../catalog/assets";
 import type { BuildCatalogRow, ItemVariant, PlaceableRoomRow } from "../core/repos";
 import type { BuildSave, Friend, Profile, RoomLayout, UserId } from "../core/types";
 import { ROOM_LAYOUT_VERSION } from "../core/types";
@@ -64,11 +66,12 @@ export function seedBuilds(): BuildSave[] {
 
 // Dev stand-in for the item_build catalogue rows the picker displays. The real source is item_build joined to furniture_types; keep this roughly in step, but the table wins.
 export function seedBuildCatalog(): BuildCatalogRow[] {
+  // assembly_model/xp_per_step/xp_bonus mirror the bundled ids' rows in 003_catalog.sql: null model (bundled, no cloud build payload yet), 6 xp per step, 0 bonus.
   return [
-    { id: "dalfred-stool", name: "DALFRED Stool", brand: "IKEA", type: "Table & Chair", durationMin: 10 },
-    { id: "lack-table", name: "LACK Table", brand: "IKEA", type: "Table & Chair", durationMin: 8 },
-    { id: "eket-cabinet", name: "EKET Cabinet", brand: "IKEA", type: "Shelf & Cabinet", durationMin: 35 },
-    { id: "bekvam-stool", name: "BEKVÄM Stool", brand: "IKEA", type: "Other", durationMin: 15 },
+    { id: asFurnitureId("dalfred-stool"), name: "DALFRED Stool", brand: "IKEA", type: "Table & Chair", durationMin: 10, assemblyModel: null, xpPerStep: 6, xpBonusOnComplete: 0 },
+    { id: asFurnitureId("lack-table"), name: "LACK Table", brand: "IKEA", type: "Table & Chair", durationMin: 8, assemblyModel: null, xpPerStep: 6, xpBonusOnComplete: 0 },
+    { id: asFurnitureId("eket-cabinet"), name: "EKET Cabinet", brand: "IKEA", type: "Shelf & Cabinet", durationMin: 35, assemblyModel: null, xpPerStep: 6, xpBonusOnComplete: 0 },
+    { id: asFurnitureId("bekvam-stool"), name: "BEKVÄM Stool", brand: "IKEA", type: "Other", durationMin: 15, assemblyModel: null, xpPerStep: 6, xpBonusOnComplete: 0 },
   ];
 }
 
@@ -79,22 +82,56 @@ export function seedBuiltItems(): Record<FurnitureId, { name: string; category: 
     "bekvam-stool": { name: "BEKVÄM Stool", category: "fur" },
     "dalfred-stool": { name: "DALFRED Stool", category: "fur" },
     "lack-table": { name: "LACK Table", category: "fur" },
-  };
+  } as Record<FurnitureId, { name: string; category: ShopCategory }>;
 }
 
 // Completed furniture per user — the source of the derived itemsAssembled count.
 export function seedCompleted(): Record<UserId, FurnitureId[]> {
   return {
-    [DEMO_ME]: ["lack-table"],
-    [DEMO_FRIEND_A]: ["lack-table", "dalfred-stool", "eket-cabinet", "bekvam-stool"],
+    [DEMO_ME]: [asFurnitureId("lack-table")],
+    [DEMO_FRIEND_A]: ["lack-table", "dalfred-stool", "eket-cabinet", "bekvam-stool"].map(asFurnitureId),
     [DEMO_FRIEND_B]: [],
   };
 }
 
 // The purchasable catalog — the in-memory mirror of the item_buy seed in migration 003_catalog.sql. Ids, prices and min_levels are copied from it verbatim: this is the stand-in players see when EXPO_PUBLIC_DATA_BACKEND is not "supabase", so it is only useful insofar as it matches the real thing. (It had drifted to a disjoint set — shelving-units-wooden / bed-slattum-white — which meant the demo inventory silently rendered fewer items than it claimed to own.)
-// NOTE: the wall/floor/deco tabs are legitimately empty here — that is the catalog's state (windows arrived with 010_windows.sql; surfaces still have no rows), not a gap in the fixture.
+// NOTE: the deco tab is legitimately empty here — that is the catalog's state, not a gap in the fixture. floor/wall used to be empty too (windows arrived with 010_windows.sql; surfaces had no rows at all), but the two fixtures below give them one row each ahead of Modu-Portal's item_buy.surface migration, which is out of scope for this repo and has not been written.
+// Surface fixtures: hand-authored to the SurfaceItemSpec shape a real portal upload would produce, so Tasks 9-14 (buying, applying, rendering a surface) have something to exercise before that migration lands. oak-plank-flooring carries an edgeColor and a trim map set — kept as a fixture of an item authored BEFORE the cornice moved to the wall slot (020_trim_follows_wall.sql), so trimTiling on a floor item is now inert data applySurfaceItem's floor branch never reads, exercising the same "extra fields the renderer ignores" path a stale row could arrive in; linen-wallpaper ships base colour only (a smooth wallpaper's normal/rough maps are near-uniform, so the portal's variance check omits them and `maps` lists only what it kept).
+const OAK_PLANK_MAPS: SurfaceMap[] = ["texture", "normal", "rough", "trim_texture", "trim_rough"];
+const LINEN_WALLPAPER_MAPS: SurfaceMap[] = ["texture"];
+
+// The shell's OWN art, as two granted items — the in-memory mirror of migration 018 as amended by 020 (the cornice moved from the floor item to the wall item: it sits at the wall/ceiling junction and follows the wallpaper, not the rug). Named for the material rather than the role: these are not "the defaults", they are the herringbone parquet and cream plaster the room was built with, and which item ships as a player's starting floor may change without either becoming a different texture. Their tiling and plinth colour are the values MEASURED off the shipped shell (Floor's texture transform is scale [5.1, 5] offset [0, -4]; FloorEdge's factor is the plinth brown chosen against the wooden floor; Wall and Trim carry an identity transform because their tiling is baked into the shell's own UV0), so applying them puts the room back exactly as it shipped rather than approximately.
+const HERRINGBONE_MAPS: SurfaceMap[] = ["texture", "normal", "rough"];
+const CREAM_PLASTER_MAPS: SurfaceMap[] = ["texture", "normal", "rough", "trim_texture", "trim_normal", "trim_rough"];
+
 export function seedShopItems(): ShopItem[] {
   return [
+    {
+      id: "herringbone-parquet",
+      name: "Herringbone Parquet",
+      category: "floor",
+      price: 0,
+      minLevel: 1,
+      granted: true,
+      surface: {
+        tiling: { scale: [5.1, 5], offset: [0, -4] },
+        edgeColor: [0.36, 0.22, 0.11],
+        maps: HERRINGBONE_MAPS,
+      },
+    },
+    {
+      id: "cream-plaster",
+      name: "Cream Plaster",
+      category: "wall",
+      price: 0,
+      minLevel: 1,
+      granted: true,
+      surface: {
+        tiling: { scale: [1, 1], offset: [0, 0] },
+        trimTiling: { scale: [1, 1], offset: [0, 0] },
+        maps: CREAM_PLASTER_MAPS,
+      },
+    },
     { id: "malm-chest", name: "MALM Chest", category: "fur", price: 150, minLevel: 1 },
     { id: "neiden-bedframe", name: "NEIDEN Bedframe", category: "fur", price: 120, minLevel: 1 },
     { id: "rosentorp-table", name: "ROSENTORP Table", category: "fur", price: 100, minLevel: 1 },
@@ -103,6 +140,30 @@ export function seedShopItems(): ShopItem[] {
     { id: "window-pvc-single", name: "PVC Single Window", category: "win", price: 90, minLevel: 1 },
     { id: "window-sash", name: "Victorian Sash Window", category: "win", price: 120, minLevel: 1 },
     { id: "window-wood-classic", name: "Classic Wood Window", category: "win", price: 140, minLevel: 1 },
+    {
+      id: "oak-plank-flooring",
+      name: "Oak Plank Flooring",
+      category: "floor",
+      price: 180,
+      minLevel: 1,
+      surface: {
+        tiling: { scale: [2, 2], offset: [0, 0] },
+        edgeColor: [0.36, 0.25, 0.16],
+        trimTiling: { scale: [1, 0.1], offset: [0, 0] },
+        maps: OAK_PLANK_MAPS,
+      },
+    },
+    {
+      id: "linen-wallpaper",
+      name: "Linen Wallpaper",
+      category: "wall",
+      price: 90,
+      minLevel: 1,
+      surface: {
+        tiling: { scale: [1, 1], offset: [0, 0] },
+        maps: LINEN_WALLPAPER_MAPS,
+      },
+    },
   ];
 }
 
@@ -144,22 +205,22 @@ export function seedItemVariants(): ItemVariant[] {
   ];
 }
 
-// Room-placement metadata per item — the in-memory mirror of the size seeds in migration 003_catalog.sql, copied verbatim like seedShopItems is. Sizes are measured world-AABB extents in authored meters; tutorial has no room model, so it has no row here.
+// Room-placement metadata per item — the in-memory mirror of the size seeds in migration 003_catalog.sql, copied verbatim like seedShopItems is. Sizes are measured world-AABB extents in authored meters; tutorial has no room model, so it has no row here. mount/opensWall mirror migration 021's backfill (mount 'wall' + opensWall for category 'win', 'floor' for everything else) — placement now reads these columns, not category, so a row missing them here is placeable nowhere, exactly the failure the DB's `mount is not null or on_top` constraint exists to catch.
 export function seedPlaceableItems(): PlaceableRoomRow[] {
   return [
-    { id: "dalfred-stool", source: "built", category: "fur", size: { x: 0.5, y: 0.79, z: 0.5 }, baseOffsetY: 0.007 },
-    { id: "lack-table", source: "built", category: "fur", size: { x: 0.55, y: 0.45, z: 0.55 }, baseOffsetY: 0 },
-    { id: "eket-cabinet", source: "built", category: "fur", size: { x: 0.37, y: 0.35, z: 0.75 }, baseOffsetY: 0.175 },
-    { id: "bekvam-stool", source: "built", category: "fur", size: { x: 0.39, y: 0.5, z: 0.43 }, baseOffsetY: 0 },
-    { id: "malm-chest", source: "bought", category: "fur", size: { x: 0.804, y: 1.004, z: 0.483 }, baseOffsetY: 0 },
-    { id: "neiden-bedframe", source: "bought", category: "fur", size: { x: 0.96, y: 0.647, z: 1.95 }, baseOffsetY: 0 },
-    { id: "rosentorp-table", source: "bought", category: "fur", size: { x: 1.101, y: 0.751, z: 1.101 }, baseOffsetY: 0 },
+    { id: "dalfred-stool", source: "built", category: "fur", size: { x: 0.5, y: 0.79, z: 0.5 }, baseOffsetY: 0.007, mount: "floor" },
+    { id: "lack-table", source: "built", category: "fur", size: { x: 0.55, y: 0.45, z: 0.55 }, baseOffsetY: 0, mount: "floor" },
+    { id: "eket-cabinet", source: "built", category: "fur", size: { x: 0.37, y: 0.35, z: 0.75 }, baseOffsetY: 0.175, mount: "floor" },
+    { id: "bekvam-stool", source: "built", category: "fur", size: { x: 0.39, y: 0.5, z: 0.43 }, baseOffsetY: 0, mount: "floor" },
+    { id: "malm-chest", source: "bought", category: "fur", size: { x: 0.804, y: 1.004, z: 0.483 }, baseOffsetY: 0, mount: "floor" },
+    { id: "neiden-bedframe", source: "bought", category: "fur", size: { x: 0.96, y: 0.647, z: 1.95 }, baseOffsetY: 0, mount: "floor" },
+    { id: "rosentorp-table", source: "bought", category: "fur", size: { x: 1.101, y: 0.751, z: 1.101 }, baseOffsetY: 0, mount: "floor" },
     // Windows (010_windows.sql): wall items — size x = width, y = height, z = depth out of the wall.
-    { id: "window-wc-narrow", source: "bought", category: "win", size: { x: 0.504, y: 1.251, z: 0.165 }, baseOffsetY: 0 },
-    { id: "window-double-hung", source: "bought", category: "win", size: { x: 0.73, y: 1.04, z: 0.107 }, baseOffsetY: 0 },
-    { id: "window-pvc-single", source: "bought", category: "win", size: { x: 1.005, y: 1.256, z: 0.167 }, baseOffsetY: 0 },
-    { id: "window-sash", source: "bought", category: "win", size: { x: 1.061, y: 1.262, z: 0.218 }, baseOffsetY: 0 },
-    { id: "window-wood-classic", source: "bought", category: "win", size: { x: 1.239, y: 1.231, z: 0.349 }, baseOffsetY: 0 },
+    { id: "window-wc-narrow", source: "bought", category: "win", size: { x: 0.504, y: 1.251, z: 0.165 }, baseOffsetY: 0, mount: "wall", opensWall: true },
+    { id: "window-double-hung", source: "bought", category: "win", size: { x: 0.73, y: 1.04, z: 0.107 }, baseOffsetY: 0, mount: "wall", opensWall: true },
+    { id: "window-pvc-single", source: "bought", category: "win", size: { x: 1.005, y: 1.256, z: 0.167 }, baseOffsetY: 0, mount: "wall", opensWall: true },
+    { id: "window-sash", source: "bought", category: "win", size: { x: 1.061, y: 1.262, z: 0.218 }, baseOffsetY: 0, mount: "wall", opensWall: true },
+    { id: "window-wood-classic", source: "bought", category: "win", size: { x: 1.239, y: 1.231, z: 0.349 }, baseOffsetY: 0, mount: "wall", opensWall: true },
   ];
 }
 

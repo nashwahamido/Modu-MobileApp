@@ -2,12 +2,14 @@ import {
   ActionId,
   ClusterId,
   ComponentId,
+  FurnitureId,
   GroupId,
   LiaisonId,
   PartId,
 } from "@/src/game/core/type";
 
 export const asPartId = (s: string): PartId => s as PartId;
+export const asFurnitureId = (s: string): FurnitureId => s as FurnitureId;
 export const asGroupId = (s: string): GroupId => s as GroupId;
 export const asActionId = (s: string): ActionId => s as ActionId;
 export const asClusterId = (s: string): ClusterId => s as ClusterId;

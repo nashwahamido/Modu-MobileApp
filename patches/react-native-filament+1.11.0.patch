@@ -1,0 +1,617 @@
+diff --git a/node_modules/react-native-filament/cpp/core/RNFMaterialInstanceWrapper.cpp b/node_modules/react-native-filament/cpp/core/RNFMaterialInstanceWrapper.cpp
+index a08977c..27925d1 100644
+--- a/node_modules/react-native-filament/cpp/core/RNFMaterialInstanceWrapper.cpp
++++ b/node_modules/react-native-filament/cpp/core/RNFMaterialInstanceWrapper.cpp
+@@ -4,6 +4,7 @@
+ 
+ #include "RNFMaterialInstanceWrapper.h"
+ #include "RNFCullingModeEnum.h"
++#include "RNFRenderableManagerWrapper.h"
+ #include "RNFTransparencyModeEnum.h"
+ #include <filament/Material.h>
+ #include <math/mat3.h>
+@@ -18,6 +19,7 @@ void MaterialInstanceWrapper::loadHybridMethods() {
+   registerHybridMethod("setFloat3Parameter", &MaterialInstanceWrapper::setFloat3Parameter, this);
+   registerHybridMethod("setFloat4Parameter", &MaterialInstanceWrapper::setFloat4Parameter, this);
+   registerHybridMethod("setMat3fParameter", &MaterialInstanceWrapper::setMat3fParameter, this);
++  registerHybridMethod("setTextureParameter", &MaterialInstanceWrapper::setTextureParameter, this);
+   registerHybridMethod("getFloatParameter", &MaterialInstanceWrapper::getFloatParameter, this);
+   registerHybridMethod("getIntParameter", &MaterialInstanceWrapper::getIntParameter, this);
+   registerHybridMethod("getFloat3Parameter", &MaterialInstanceWrapper::getFloat3Parameter, this);
+@@ -135,6 +137,39 @@ void MaterialInstanceWrapper::setMat3fParameter(std::string name, std::vector<do
+   _materialInstance->setParameter(name.c_str(), matrix);
+ }
+ 
++void MaterialInstanceWrapper::setTextureParameter(std::shared_ptr<RenderableManagerWrapper> renderableManager, std::string name,
++                                                  std::shared_ptr<TextureWrapper> texture) {
++  std::unique_lock lock(_mutex);
++
++  // The JSIConverter's null and type checks all live inside #if DEBUG, so in a release build a null argument reaches this function intact and texture->get() dereferences it. Same guard, same wording, as RenderableManagerImpl::changeMaterialTextureMap.
++  if (renderableManager == nullptr || texture == nullptr) {
++    throw std::invalid_argument("renderableManager or texture is null!");
++  }
++
++  Material const* material = _materialInstance->getMaterial();
++
++  // gltfio picks a shader VARIANT from the material's declared features, so a material exported without a normalTexture genuinely has no normalMap to write and setParameter would abort the process. Checking turns that into a legible JS error. scripts/declare-shell-map-slots.mjs is what guarantees the shell's thirteen materials declare every slot.
++  if (!material->hasParameter(name.c_str())) {
++    throw std::runtime_error("MaterialInstance \"" + std::string(_materialInstance->getName()) + "\" has no parameter \"" + name + "\"");
++  }
++
++  // hasParameter alone does not prove the slot takes a texture: a non-sampler name like "baseColorFactor" passes it and then reaches MaterialInstance::setParameter, which is documented @throws utils::PreConditionPanic — the native abort this guard exists to prevent. The two messages are kept distinct because the fixes differ: a missing parameter means re-export the material, a non-sampler parameter means the caller picked the wrong name.
++  if (!material->isSampler(name.c_str())) {
++    throw std::runtime_error("MaterialInstance \"" + std::string(_materialInstance->getName()) + "\" parameter \"" + name +
++                             "\" is not a sampler (texture) parameter");
++  }
++
++  // NOT the sampler RenderableManager::changeMaterialTextureMap uses. That one hardcodes MinFilter::LINEAR, which never samples a mip level however many the texture has — on a floor tiled 5.1 x 5 that shimmers badly at grazing angles. The shell's own GLB sampler is LINEAR_MIPMAP_LINEAR (minFilter 9987) and a swapped texture has to match it or the swap is visibly worse than the thing it replaced.
++  TextureSampler sampler(TextureSampler::MinFilter::LINEAR_MIPMAP_LINEAR, TextureSampler::MagFilter::LINEAR,
++                         TextureSampler::WrapMode::REPEAT);
++  sampler.setAnisotropy(8.0f);
++
++  _materialInstance->setParameter(name.c_str(), texture->get(), sampler);
++
++  // Retain it on the RENDERABLE MANAGER, not on this wrapper: setParameter copied only the handle, and this wrapper is not the thing whose life matches the material's — getMaterialInstanceAt mints a fresh MaterialInstanceWrapper over an asset-owned pointer on every call, so this object dying says nothing about whether the material is still sampling. The renderable manager outlives every asset, which is the lifetime the retention actually needs.
++  renderableManager->retainTexture(_materialInstance, name, texture);
++}
++
+ std::string MaterialInstanceWrapper::getName() {
+   std::unique_lock lock(_mutex);
+ 
+diff --git a/node_modules/react-native-filament/cpp/core/RNFMaterialInstanceWrapper.h b/node_modules/react-native-filament/cpp/core/RNFMaterialInstanceWrapper.h
+index 7e18c0a..8d357ef 100644
+--- a/node_modules/react-native-filament/cpp/core/RNFMaterialInstanceWrapper.h
++++ b/node_modules/react-native-filament/cpp/core/RNFMaterialInstanceWrapper.h
+@@ -4,14 +4,20 @@
+ 
+ #pragma once
+ 
++#include <filament/Material.h>
+ #include <filament/MaterialInstance.h>
++#include <filament/TextureSampler.h>
+ 
++#include "RNFTextureWrapper.h"
+ #include "jsi/RNFHybridObject.h"
+ 
+ namespace margelo {
+ 
+ using namespace filament;
+ 
++// Forward declared, not included: RNFRenderableManagerWrapper.h includes RNFRenderableManagerImpl.h which includes this header, so including it back would be a cycle. The definition is pulled in by RNFMaterialInstanceWrapper.cpp instead, exactly as MaterialWrapper does for the same parameter.
++class RenderableManagerWrapper;
++
+ class MaterialInstanceWrapper : public HybridObject {
+ 
+ public:
+@@ -33,6 +39,8 @@ public: // Public API
+   void setFloat3Parameter(std::string name, std::vector<double> vector);
+   void setFloat4Parameter(std::string name, std::vector<double> vector);
+   void setMat3fParameter(std::string name, std::vector<double> value);
++  void setTextureParameter(std::shared_ptr<RenderableManagerWrapper> renderableManager, std::string name,
++                           std::shared_ptr<TextureWrapper> texture);
+   double getFloatParameter(std::string name);
+   int getIntParameter(std::string name);
+   std::vector<double> getFloat3Parameter(std::string name);
+diff --git a/node_modules/react-native-filament/cpp/core/RNFRenderableManagerImpl.cpp b/node_modules/react-native-filament/cpp/core/RNFRenderableManagerImpl.cpp
+index b86b4a3..5eb9577 100644
+--- a/node_modules/react-native-filament/cpp/core/RNFRenderableManagerImpl.cpp
++++ b/node_modules/react-native-filament/cpp/core/RNFRenderableManagerImpl.cpp
+@@ -10,6 +10,8 @@
+ #include "core/RNFFilamentInstanceWrapper.h"
+ 
+ #include <cmath>
++#include <cstring>
++#include <utility>
+ 
+ #include <filament/IndexBuffer.h>
+ #include <filament/MaterialInstance.h>
+@@ -90,12 +92,31 @@ Texture* RenderableManagerImpl::createTextureFromBuffer(std::shared_ptr<Filament
+   // The mimeType isn't actually used in the stb provider, so we can leave it out!
+   const char* mimeType = nullptr;
+   auto bufferData = buffer->getBuffer();
+-  Texture* texture = _textureProvider->pushTexture(bufferData->getData(), bufferData->getSize(), mimeType, textureFlagsEnum);
++  const uint8_t* bytes = bufferData->getData();
++  const size_t size = bufferData->getSize();
++
++  // KTX2 files start with the 12-byte identifier 0xAB 'KTX' ' ' '2' '0' 0xBB '\r' '\n' 0x1A '\n'. Sniffing beats trusting a filename or a mimeType: the buffer arrives from useBuffer with neither.
++  static const uint8_t KTX2_MAGIC[12] = {0xAB, 0x4B, 0x54, 0x58, 0x20, 0x32, 0x30, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A};
++  const bool isKtx2 = size >= sizeof(KTX2_MAGIC) && std::memcmp(bytes, KTX2_MAGIC, sizeof(KTX2_MAGIC)) == 0;
++  const char* providerName = isKtx2 ? "KTX2" : "stb";
++
++  // Single guard on the SELECTED provider rather than one check per provider: createStbProvider's header comment says it "works only if your build configuration includes STB", which is the same undocumented-null risk createKtx2Provider carries, so stb gets the same guard KTX2 already had instead of being trusted implicitly. No fallback to the other provider on a null selection either: stb cannot decode KTX2 at all, so a KTX2 buffer handed to it would surface as a null texture and the generic throw below, reading like a corrupt file rather than a missing decoder, and an image buffer has no KTX2 decoder to fall back to in the other direction.
++  TextureProvider* provider = isKtx2 ? _ktx2Provider.get() : _textureProvider.get();
++  if (provider == nullptr) {
++    Logger::log(TAG, "Error loading texture: no %s provider is available", providerName);
++    throw std::runtime_error(std::string("Error loading texture: no ") + providerName +
++                             " provider is available in this build of Filament. " +
++                             (isKtx2 ? "Ship the texture as PNG or JPEG instead." : "This build cannot decode image textures at all."));
++  }
++
++  Texture* texture = provider->pushTexture(bytes, size, mimeType, textureFlagsEnum);
+ 
+   if (texture == nullptr) {
+-    std::string error = _textureProvider->getPushMessage();
+-    Logger::log(TAG, "Error loading texture: %s", error.c_str());
+-    throw std::runtime_error("Error loading texture: " + error);
++    // TextureProvider.h only says the failure reason "can be obtained" with getPushMessage(), never that every implementation sets one on every failure path, so the pointer is treated as possibly null rather than hand it straight to std::string's constructor, which is UB on a null char*.
++    const char* pushMessage = provider->getPushMessage();
++    std::string error = pushMessage != nullptr ? pushMessage : "unknown push failure";
++    Logger::log(TAG, "Error loading texture (%s provider): %s", providerName, error.c_str());
++    throw std::runtime_error(std::string("Error loading texture (") + providerName + " provider): " + error);
+   }
+ 
+   startUpdateResourceLoading();
+@@ -103,6 +124,18 @@ Texture* RenderableManagerImpl::createTextureFromBuffer(std::shared_ptr<Filament
+   return texture;
+ }
+ 
++void RenderableManagerImpl::retainTexture(MaterialInstance* instance, const std::string& name, std::shared_ptr<TextureWrapper> texture) {
++  // The only lock a caller could already hold on this path is a per-call MaterialInstanceWrapper::_mutex that no other caller shares, so this is the sole thing keeping two threads from rehashing the map under each other. See _retainedTexturesMutex for why taking it here cannot deadlock.
++  // The DISPLACED texture is moved out and destroyed after the lock is released, never inside it: ~TextureWrapper enqueues onto the dispatcher, and JDispatcher::trigger runs its jobs while holding the very mutex runAsync needs — so destroying under this lock is an ABBA against the render thread rather than the innermost lock the comment used to claim.
++  std::shared_ptr<TextureWrapper> displaced;
++  {
++    std::unique_lock lock(_retainedTexturesMutex);
++    // Assigning over the same instance+name drops the reference to whatever texture that slot held before; moving it into `displaced` first means that drop happens below, after the lock is gone.
++    displaced = std::move(_retainedTextures[instance][name]);
++    _retainedTextures[instance][name] = std::move(texture);
++  }
++}
++
+ void RenderableManagerImpl::changeMaterialTextureMap(std::shared_ptr<EntityWrapper> entityWrapper, const std::string& materialName,
+                                                      std::shared_ptr<FilamentBuffer> textureBuffer, const std::string& textureFlags) {
+   // Input validation:
+@@ -159,14 +192,40 @@ void RenderableManagerImpl::changeMaterialTextureMap(std::shared_ptr<EntityWrapp
+ }
+ 
+ void RenderableManagerImpl::startUpdateResourceLoading() {
+-  while (_textureProvider->getPoppedCount() < _textureProvider->getPushedCount()) {
++  // ONE loop over BOTH providers, and neither of the two obvious shortcuts. Nesting the KTX2 drain inside the existing stb-gated `while` would never run it when only KTX2 textures are in flight — stb's popped == pushed, the loop body is skipped, and the transcode is never reaped, so the miplevels silently never become ready. Running the two loops back to back is at least correct, but it pins the foreground thread in a spin on the first provider while the second's finished transcodes sit unreaped and its uploads (updateQueue is what calls Texture::setImage, on THIS thread) do not start until the first is completely done.
++  TextureProvider* providers[] = {_textureProvider.get(), _ktx2Provider.get()};
++
++  // Reaps whatever this provider has finished since the last call and reports whether it still has textures in flight. Returns false immediately for a provider with nothing pushed, so a session that never loads KTX2 makes exactly the same calls it did before this provider existed, and a null provider (see _ktx2Provider) is simply never in flight.
++  auto pump = [](TextureProvider* provider) -> bool {
++    if (provider == nullptr || provider->getPoppedCount() >= provider->getPushedCount()) {
++      return false;
++    }
++
+     // The following call gives the provider an opportunity to reap the results of any
+     // background decoder work that has been completed
+-    _textureProvider->updateQueue();
++    provider->updateQueue();
++
++    // Check for textures that now have all their miplevels initialized. Per TextureProvider.h:99-101/130-141, a non-null pop does not by itself mean success: decoding may have failed or been cancelled, and getPopMessage() is the only way to tell, so it is checked on every pop rather than assuming the log line below is always true; the nullptr branch below is what makes that check safe even though the header does not guarantee non-null on the failure path either, mirroring the getPushMessage() null-safety above. Logged, not thrown: this loop drains a queue and a throw here would strand every texture still behind this one.
++    while (Texture* _texture = provider->popTexture()) {
++      const char* popMessage = provider->getPopMessage();
++      if (popMessage != nullptr) {
++        Logger::log(TAG, "%p failed to decode or was cancelled: %s", _texture, popMessage);
++      } else {
++        Logger::log(TAG, "%p has all its miplevels ready.", _texture);
++      }
++    }
++
++    return provider->getPoppedCount() < provider->getPushedCount();
++  };
+ 
+-    // Check for textures that now have all their miplevels initialized.
+-    while (Texture* _texture = _textureProvider->popTexture()) {
+-      Logger::log(TAG, "%p has all its miplevels ready.", _texture);
++  bool pending = true;
++  while (pending) {
++    pending = false;
++    for (TextureProvider* provider : providers) {
++      // Written out rather than `pending = pending || pump(provider)`, which would short-circuit: once one provider reported pending, the other would stop being pumped and would never finish.
++      if (pump(provider)) {
++        pending = true;
++      }
+     }
+   }
+ }
+diff --git a/node_modules/react-native-filament/cpp/core/RNFRenderableManagerImpl.h b/node_modules/react-native-filament/cpp/core/RNFRenderableManagerImpl.h
+index 5b968c7..995f294 100644
+--- a/node_modules/react-native-filament/cpp/core/RNFRenderableManagerImpl.h
++++ b/node_modules/react-native-filament/cpp/core/RNFRenderableManagerImpl.h
+@@ -8,12 +8,15 @@
+ #include "RNFFilamentBuffer.h"
+ #include "RNFMaterialInstanceWrapper.h"
+ #include "RNFMaterialWrapper.h"
++#include "RNFTextureWrapper.h"
+ #include "VertexEntity.h"
+ #include "core/utils/RNFEntityWrapper.h"
+ #include "jsi/RNFPointerHolder.h"
+ 
+ #include <filament/RenderableManager.h>
+ #include <gltfio/TextureProvider.h>
++#include <mutex>
++#include <unordered_map>
+ 
+ namespace margelo {
+ using namespace filament;
+@@ -31,6 +34,9 @@ public:
+   explicit RenderableManagerImpl(std::shared_ptr<Engine> engine, std::shared_ptr<Dispatcher> rendererDispatcher)
+       : _engine(engine), _rendererDispatcher(rendererDispatcher) {
+     _textureProvider = std::shared_ptr<TextureProvider>(filament::gltfio::createStbProvider(_engine.get()));
++    // A SECOND provider, because the stb one handles PNG and JPEG only and therefore lands every texture on the GPU as uncompressed RGBA8. A full room re-skin is 3 material groups x 3 maps; at 1024 square with mips that is ~38 MB of VRAM, which is a crash on a mid-range Android rather than a slowdown. Basis-supercompressed KTX2 transcodes to the device's native format (ASTC / BC / ETC2) and lands the same set at ~7 MB.
++    // Constructed here rather than as a default member initialiser so it is built from the same already-initialised _engine, in the same place and the same way as _textureProvider. A null result is NOT thrown on here: it would take down every engine on a device whose build lacks the transcoder, including sessions that never touch a KTX2 file. createTextureFromBuffer throws instead, at the point a KTX2 buffer actually arrives.
++    _ktx2Provider = std::shared_ptr<TextureProvider>(filament::gltfio::createKtx2Provider(_engine.get()));
+   }
+ 
+ public: // Public API
+@@ -50,6 +56,11 @@ public: // Public API
+ 
+   Texture* createTextureFromBuffer(std::shared_ptr<FilamentBuffer> buffer, const std::string& textureFlags);
+ 
++  /**
++   * Keeps the given texture alive for as long as the given material instance may still be sampling it. See `_retainedTextures`.
++   */
++  void retainTexture(MaterialInstance* instance, const std::string& name, std::shared_ptr<TextureWrapper> texture);
++
+   /**
+    * Will select the first material instance from the entity. Will set the baseColorMap parameter to the given textureBuffer.
+    */
+@@ -79,6 +90,10 @@ public: // Public API
+     return _engine;
+   }
+ 
++  std::shared_ptr<Dispatcher> getDispatcher() {
++    return _rendererDispatcher;
++  }
++
+   size_t getMorphTargetCount(std::shared_ptr<EntityWrapper> entity);
+   void setMorphWeights(std::shared_ptr<EntityWrapper> entity, const std::vector<float>& weights, size_t offset);
+ 
+@@ -91,6 +106,17 @@ private:
+   std::shared_ptr<Engine> _engine;
+   std::shared_ptr<Dispatcher> _rendererDispatcher;
+   std::shared_ptr<TextureProvider> _textureProvider;
++  // Declared directly beside _textureProvider on purpose: the two are peers, and this position puts both providers at the SAME point in the reverse-declaration-order teardown as before this member existed — after _retainedTextures (so every retained TextureWrapper has already enqueued its destroy) and before _engine (which both providers hold a raw pointer into). It deliberately does NOT sit between _retainedTextures and _materialInstances, whose relative order is load-bearing and documented below.
++  // May be null: unlike createWebpProvider, which documents returning nullptr when webp support was not built in, createKtx2Provider documents no failure contract at all, so this null guard is speculative rather than backed by a documented contract — it covers the benign case but is not proof the real failure mode (an assert or abort inside the provider's constructor on a Basis-less build) goes through this path at all. Every use site must null-check; startUpdateResourceLoading skips it and createTextureFromBuffer throws.
++  std::shared_ptr<TextureProvider> _ktx2Provider;
++  // Guards _retainedTextures, which nothing else synchronises: this class has no other lock, and the only lock on the setTextureParameter path is MaterialInstanceWrapper::_mutex, which cannot serialise anything here because getMaterialInstanceAt hands every caller a FRESH wrapper carrying its own mutex. Two threads writing this map unsynchronised is undefined behaviour once a rehash races an insert, not a benign lost update, and concurrency is real — material instances are driven from the Filament worklet thread and from JS.
++  // NOT safe as a mere innermost lock: a std::shared_ptr assignment under this mutex can run ~TextureWrapper on the value it displaces, and that destructor calls JDispatcher::runAsync, which blocks on JDispatcher::_mutex — the same mutex the Filament worklet thread already holds while executing a job inside JDispatcher::trigger. Holding this mutex while a displaced TextureWrapper is destroyed is therefore an ABBA against the render thread (JS: _retainedTexturesMutex -> JDispatcher::_mutex; render thread inside trigger: JDispatcher::_mutex -> _retainedTexturesMutex), not a safe new innermost lock. retainTexture avoids it by moving the displaced pointer out and letting it die only after this lock is released; any other caller of this mutex must keep the same discipline.
++  std::mutex _retainedTexturesMutex;
++  // Filament stores a texture HANDLE in the material and does not retain the Texture, so something has to outlive every instance that samples it. It cannot be MaterialInstanceWrapper: getMaterialInstanceAt builds a FRESH wrapper per call over a pointer the asset owns, so that object's death says nothing about whether the material is still sampling.
++  // WRITE-ONLY BY DESIGN — never read, never consulted for a decision. That is what makes a stale key harmless: an entry whose asset is gone merely over-retains, and a new instance landing on a freed address REPLACES the entry, freeing a texture nothing was sampling any more. Reading this map for correctness would turn both cases into bugs.
++  // GROWTH IS NOT BOUNDED BY THE LIVE SCENE. Entries are replaced per (instance, parameter) but NEVER erased, so the true bound is every distinct MaterialInstance address ever passed times every distinct parameter name, for the whole life of this object: a workflow that loads and unloads furniture assets accumulates one dead entry per instance, each pinning several MB of GPU memory until the RenderableManager itself dies. Accepted deliberately — erasing on asset teardown would need ownership knowledge this class does not have, and freeing early is precisely the use-after-free this map exists to prevent, so over-retention is the trade.
++  // Declared BEFORE _materialInstances on purpose: members are destroyed in reverse declaration order, so the instances that may still reference these textures are torn down first and the textures outlive them.
++  std::unordered_map<MaterialInstance*, std::unordered_map<std::string, std::shared_ptr<TextureWrapper>>> _retainedTextures;
+   // Keep a list of all material instances the RenderableManager creates, so we can clean them up when the RenderableManager is
+   std::vector<std::shared_ptr<MaterialInstance>> _materialInstances;
+   std::vector<std::unique_ptr<DebugVertex[]>> _debugVerticesList;
+diff --git a/node_modules/react-native-filament/cpp/core/RNFRenderableManagerWrapper.cpp b/node_modules/react-native-filament/cpp/core/RNFRenderableManagerWrapper.cpp
+index 3c89a95..0e6259b 100644
+--- a/node_modules/react-native-filament/cpp/core/RNFRenderableManagerWrapper.cpp
++++ b/node_modules/react-native-filament/cpp/core/RNFRenderableManagerWrapper.cpp
+@@ -8,6 +8,8 @@
+ #include "core/RNFFilamentInstanceWrapper.h"
+ #include "utils/RNFConverter.h"
+ 
++#include <utility>
++
+ namespace margelo {
+ void RenderableManagerWrapper::loadHybridMethods() {
+   registerHybridMethod("getPrimitiveCount", &RenderableManagerWrapper::getPrimitiveCount, this);
+@@ -16,6 +18,7 @@ void RenderableManagerWrapper::loadHybridMethods() {
+   registerHybridMethod("setAssetEntitiesOpacity", &RenderableManagerWrapper::setAssetEntitiesOpacity, this);
+   registerHybridMethod("setInstanceEntitiesOpacity", &RenderableManagerWrapper::setInstanceWrapperEntitiesOpacity, this);
+   registerHybridMethod("changeMaterialTextureMap", &RenderableManagerWrapper::changeMaterialTextureMap, this);
++  registerHybridMethod("createTexture", &RenderableManagerWrapper::createTexture, this);
+   registerHybridMethod("setCastShadow", &RenderableManagerWrapper::setCastShadow, this);
+   registerHybridMethod("setReceiveShadow", &RenderableManagerWrapper::setReceiveShadow, this);
+   registerHybridMethod("createPlane", &RenderableManagerWrapper::createPlane, this);
+@@ -87,6 +90,21 @@ Texture* RenderableManagerWrapper::createTextureFromBuffer(std::shared_ptr<Filam
+   return pointee()->createTextureFromBuffer(buffer, textureFlags);
+ }
+ 
++void RenderableManagerWrapper::retainTexture(MaterialInstance* instance, const std::string& name, std::shared_ptr<TextureWrapper> texture) {
++  pointee()->retainTexture(instance, name, std::move(texture));
++}
++
++std::shared_ptr<TextureWrapper> RenderableManagerWrapper::createTexture(std::shared_ptr<FilamentBuffer> buffer,
++                                                                       const std::string& textureFlags) {
++  // Everything that can throw runs BEFORE the texture exists: pointee() throws if the holder was released, so fetching the engine and dispatcher first leaves only the make_shared allocation between the raw Texture* appearing and an owner taking it. Ordered the other way, a throw would strand a decoded texture with nothing to free it.
++  std::shared_ptr<RenderableManagerImpl> renderableManager = pointee();
++  std::shared_ptr<Engine> engine = renderableManager->getEngine();
++  std::shared_ptr<Dispatcher> dispatcher = renderableManager->getDispatcher();
++
++  Texture* texture = renderableManager->createTextureFromBuffer(buffer, textureFlags);
++  return std::make_shared<TextureWrapper>(engine, dispatcher, texture);
++}
++
+ std::shared_ptr<BoxWrapper> RenderableManagerWrapper::getAxisAlignedBoundingBox(std::shared_ptr<EntityWrapper> entityWrapper) {
+   Box box = pointee()->getAxisAlignedBoundingBox(entityWrapper);
+   return std::make_shared<BoxWrapper>(box);
+diff --git a/node_modules/react-native-filament/cpp/core/RNFRenderableManagerWrapper.h b/node_modules/react-native-filament/cpp/core/RNFRenderableManagerWrapper.h
+index c981aa4..ecfd70b 100644
+--- a/node_modules/react-native-filament/cpp/core/RNFRenderableManagerWrapper.h
++++ b/node_modules/react-native-filament/cpp/core/RNFRenderableManagerWrapper.h
+@@ -6,6 +6,7 @@
+ 
+ #include "RNFBoxWrapper.h"
+ #include "RNFRenderableManagerImpl.h"
++#include "RNFTextureWrapper.h"
+ #include "jsi/RNFPointerHolder.h"
+ 
+ namespace margelo {
+@@ -19,6 +20,7 @@ public:
+ 
+ public: // Public APIs to be used by other native classes, not exposed to JS
+   Texture* createTextureFromBuffer(std::shared_ptr<FilamentBuffer> buffer, const std::string& textureFlags);
++  void retainTexture(MaterialInstance* instance, const std::string& name, std::shared_ptr<TextureWrapper> texture);
+ 
+ private: // Exposed JS API
+   int getPrimitiveCount(std::shared_ptr<EntityWrapper> entity);
+@@ -28,6 +30,7 @@ private: // Exposed JS API
+   void setInstanceWrapperEntitiesOpacity(std::shared_ptr<FilamentInstanceWrapper> instanceWrapper, double opacity);
+   void changeMaterialTextureMap(std::shared_ptr<EntityWrapper> entityWrapper, const std::string& materialName,
+                                 std::shared_ptr<FilamentBuffer> textureBuffer, const std::string& textureFlags = "none");
++  std::shared_ptr<TextureWrapper> createTexture(std::shared_ptr<FilamentBuffer> buffer, const std::string& textureFlags);
+   void setCastShadow(std::shared_ptr<EntityWrapper> entityWrapper, bool castShadow);
+ 
+   void setReceiveShadow(std::shared_ptr<EntityWrapper> entityWrapper, bool receiveShadow);
+diff --git a/node_modules/react-native-filament/cpp/core/RNFTextureWrapper.h b/node_modules/react-native-filament/cpp/core/RNFTextureWrapper.h
+new file mode 100644
+index 0000000..d165f19
+--- /dev/null
++++ b/node_modules/react-native-filament/cpp/core/RNFTextureWrapper.h
+@@ -0,0 +1,51 @@
++#pragma once
++
++#include <filament/Engine.h>
++#include <filament/Texture.h>
++
++#include "jsi/RNFHybridObject.h"
++#include "threading/RNFDispatcher.h"
++
++namespace margelo {
++
++using namespace filament;
++
++// A Filament Texture with an OWNER. createTextureFromBuffer hands back a raw Texture* that nothing frees, and a 1024-square RGBA8 texture with its mip chain is ~5.6 MB — so an unmanaged implementation leaks several megabytes for every surface item a player tries. Tying the texture's life to this JS object means dropping the last JS reference frees the GPU memory, and the caller never has to remember to.
++class TextureWrapper : public HybridObject {
++public:
++  TextureWrapper(std::shared_ptr<Engine> engine, std::shared_ptr<Dispatcher> dispatcher, Texture* texture)
++      : HybridObject("TextureWrapper"), _engine(engine), _dispatcher(dispatcher), _texture(texture) {}
++
++  // Deferred, exactly as MaterialInstance destruction already is in RNFRenderableManagerImpl: engine calls belong on the renderer thread, and a JS GC can land on any thread.
++  // INHERITED HAZARD, not introduced here: if this destructor ever ran from inside a job that JDispatcher::trigger is already executing, runAsync would block on the very JDispatcher::_mutex that trigger is holding, self-deadlocking on that non-recursive mutex — RNFRenderableManagerImpl.cpp's existing MaterialInstance deleter has the identical shape, so this is a pre-existing upstream hazard being inherited here, not a new one, and is not being fixed by this patch.
++  ~TextureWrapper() {
++    auto engine = _engine;
++    auto texture = _texture;
++    _dispatcher->runAsync([engine, texture]() { engine->destroy(texture); });
++  }
++
++  void loadHybridMethods() override {
++    registerHybridGetter("width", &TextureWrapper::getWidth, this);
++    registerHybridGetter("height", &TextureWrapper::getHeight, this);
++  }
++
++  int getWidth() {
++    return static_cast<int>(_texture->getWidth());
++  }
++  int getHeight() {
++    return static_cast<int>(_texture->getHeight());
++  }
++
++public: // Internal API
++  Texture* get() {
++    return _texture;
++  }
++
++private:
++  // A STRONG reference, deliberately: it is what makes the deferred destructor safe (the Engine cannot die before the destroy runs), and it matches the deleter changeMaterialTextureMap already uses. The cost is that a leaked TextureWrapper pins the whole Engine and its GPU context, so the failure signature of a leak here is "the Engine never dies", not "a texture never dies" — look for a surviving JS reference to a Texture before suspecting the Engine's own teardown.
++  std::shared_ptr<Engine> _engine;
++  std::shared_ptr<Dispatcher> _dispatcher;
++  Texture* _texture;
++};
++
++} // namespace margelo
+diff --git a/node_modules/react-native-filament/lib/typescript/index.d.ts b/node_modules/react-native-filament/lib/typescript/index.d.ts
+index a97008a..3e20bdc 100644
+--- a/node_modules/react-native-filament/lib/typescript/index.d.ts
++++ b/node_modules/react-native-filament/lib/typescript/index.d.ts
+@@ -19,6 +19,7 @@ export * from './utilities/getAssetFromModel';
+ export * from './utilities/withCleanupScope';
+ export * from './utilities/logger/LoggingInterface';
+ export { setLogger } from './utilities/logger/Logger';
++export { FilamentProxy } from './native/FilamentProxy';
+ export * from './bullet';
+ export { useFilamentContext } from './hooks/useFilamentContext';
+ export { FilamentViewWithRenderCallbacks as FilamentView } from './react/FilamentViewWithRenderCallbacks';
+diff --git a/node_modules/react-native-filament/lib/typescript/types/MaterialInstance.d.ts b/node_modules/react-native-filament/lib/typescript/types/MaterialInstance.d.ts
+index 2fa4c2e..e6a2cb5 100644
+--- a/node_modules/react-native-filament/lib/typescript/types/MaterialInstance.d.ts
++++ b/node_modules/react-native-filament/lib/typescript/types/MaterialInstance.d.ts
+@@ -1,4 +1,6 @@
+ import { Float3, Float4, Mat3f } from './Math';
++import type { RenderableManager } from './RenderableManager';
++import { Texture } from './Texture';
+ export type CullingMode = 'none' | 'back' | 'front' | 'frontAndBack';
+ export type TransparencyMode = 'default' | 'twoPassesOneSide' | 'twoPassesTwoSides';
+ export interface MaterialInstance {
+@@ -10,6 +12,26 @@ export interface MaterialInstance {
+     setMat3fParameter(name: string, value: Mat3f): void;
+     setFloat3Parameter(name: string, vector: Float3): void;
+     setFloat4Parameter(name: string, vector: Float4): void;
++    /**
++     * Sets a texture parameter (e.g. `baseColorMap`, `normalMap`, `metallicRoughnessMap`) on THIS
++     * instance, preserving its identity — unlike RenderableManager.changeMaterialTextureMap, which
++     * duplicates the instance and swaps it in. Throws if the material has no such parameter, or if
++     * that parameter is not a sampler.
++     *
++     * The `renderableManager` is not merely a handle to call through: it takes over retaining the
++     * texture for as long as the texture may still be sampled. Filament stores only the texture's
++     * handle in the material, and a `MaterialInstance` object is a short-lived view over a pointer
++     * the asset owns, so neither of them can own the texture. The retention lives exactly as long as
++     * the `RenderableManager` you pass here — not as long as the scene — so pass the one from
++     * `useFilamentContext()` rather than an ad-hoc `engine.createRenderableManager()`, whose
++     * `release()` would drop the retention while the material is still sampling. Given that one, the
++     * caller need not keep the `Texture` handle — nor this `MaterialInstance` — alive after this call.
++     *
++     * Retention happens after the parameter has been written, so a throw from this method can leave
++     * the material sampling a texture that nothing retains. Keep the `Texture` handle if you intend
++     * to recover from such an error rather than remount the scene.
++     */
++    setTextureParameter(renderableManager: RenderableManager, name: string, texture: Texture): void;
+     getFloatParameter(name: string): number;
+     getIntParameter(name: string): number;
+     getMat3fParameter(name: string): Mat3f;
+diff --git a/node_modules/react-native-filament/lib/typescript/types/RenderableManager.d.ts b/node_modules/react-native-filament/lib/typescript/types/RenderableManager.d.ts
+index 3bf855f..0ca0258 100644
+--- a/node_modules/react-native-filament/lib/typescript/types/RenderableManager.d.ts
++++ b/node_modules/react-native-filament/lib/typescript/types/RenderableManager.d.ts
+@@ -7,6 +7,7 @@ import type { MaterialInstance } from './MaterialInstance';
+ import { PointerHolder } from './PointerHolder';
+ import { Float3 } from './Math';
+ import { TextureFlags } from './TextureFlags';
++import { Texture } from './Texture';
+ import { Box } from './Boxes';
+ /**
+  * Factory and manager for \em renderables, which are entities that can be drawn.
+@@ -60,6 +61,17 @@ export interface RenderableManager extends PointerHolder {
+      * @worklet
+      */
+     changeMaterialTextureMap(renderable: Entity, materialName: string, textureBuffer: FilamentBuffer, textureFlags: TextureFlags): void;
++    /**
++     * Decodes a texture from a buffer. One texture can be set on many material instances without
++     * duplication. Passing it to {@linkcode MaterialInstance.setTextureParameter} hands retention to
++     * the RenderableManager given there, which keeps the texture alive for exactly as long as that
++     * RenderableManager itself lives — so pass the one from `useFilamentContext()` rather than an
++     * ad-hoc `engine.createRenderableManager()`, whose `release()` would drop the retention while the
++     * material is still sampling. Given that one, the caller need not keep this handle, nor the
++     * material instance it was set on, alive. A texture that is never set on anything is owned by
++     * this handle alone and freed when it is garbage collected.
++     */
++    createTexture(buffer: FilamentBuffer, textureFlags: TextureFlags): Texture;
+     /**
+      * Changes whether or not the renderable casts shadows.
+      * @default false
+diff --git a/node_modules/react-native-filament/lib/typescript/types/Texture.d.ts b/node_modules/react-native-filament/lib/typescript/types/Texture.d.ts
+new file mode 100644
+index 0000000..609e37c
+--- /dev/null
++++ b/node_modules/react-native-filament/lib/typescript/types/Texture.d.ts
+@@ -0,0 +1,5 @@
++// Deliberately does not extend PointerHolder: release() and isValid come from the C++ PointerHolder<T> template, but TextureWrapper derives from HybridObject, so declaring them here would type-check a call that fails at runtime.
++export interface Texture {
++    readonly width: number;
++    readonly height: number;
++}
+diff --git a/node_modules/react-native-filament/lib/typescript/types/index.d.ts b/node_modules/react-native-filament/lib/typescript/types/index.d.ts
+index 72cc3df..1517b3e 100644
+--- a/node_modules/react-native-filament/lib/typescript/types/index.d.ts
++++ b/node_modules/react-native-filament/lib/typescript/types/index.d.ts
+@@ -21,6 +21,7 @@ export * from './Options';
+ export * from './LightManager';
+ export * from './Color';
+ export * from './TextureFlags';
++export * from './Texture';
+ export * from './Choreographer';
+ export * from './NameComponentManager';
+ export * from './CameraManipulator';
+diff --git a/node_modules/react-native-filament/src/index.tsx b/node_modules/react-native-filament/src/index.tsx
+index ddef2eb..0a6652d 100644
+--- a/node_modules/react-native-filament/src/index.tsx
++++ b/node_modules/react-native-filament/src/index.tsx
+@@ -24,6 +24,9 @@ export * from './utilities/withCleanupScope'
+ export * from './utilities/logger/LoggingInterface'
+ export { setLogger } from './utilities/logger/Logger'
+ 
++// native
++export { FilamentProxy } from './native/FilamentProxy'
++
+ // Bullet 3
+ export * from './bullet'
+ 
+diff --git a/node_modules/react-native-filament/src/types/MaterialInstance.ts b/node_modules/react-native-filament/src/types/MaterialInstance.ts
+index 513c532..bae013d 100644
+--- a/node_modules/react-native-filament/src/types/MaterialInstance.ts
++++ b/node_modules/react-native-filament/src/types/MaterialInstance.ts
+@@ -1,4 +1,7 @@
+ import { Float3, Float4, Mat3f } from './Math'
++// `import type`, deliberately: RenderableManager.ts imports MaterialInstance, so a value import here would be a runtime require cycle. These are declaration-only files, so erasing the import costs nothing.
++import type { RenderableManager } from './RenderableManager'
++import { Texture } from './Texture'
+ 
+ export type CullingMode = 'none' | 'back' | 'front' | 'frontAndBack'
+ 
+@@ -13,6 +16,26 @@ export interface MaterialInstance {
+   setMat3fParameter(name: string, value: Mat3f): void
+   setFloat3Parameter(name: string, vector: Float3): void
+   setFloat4Parameter(name: string, vector: Float4): void
++  /**
++   * Sets a texture parameter (e.g. `baseColorMap`, `normalMap`, `metallicRoughnessMap`) on THIS
++   * instance, preserving its identity — unlike RenderableManager.changeMaterialTextureMap, which
++   * duplicates the instance and swaps it in. Throws if the material has no such parameter, or if
++   * that parameter is not a sampler.
++   *
++   * The `renderableManager` is not merely a handle to call through: it takes over retaining the
++   * texture for as long as the texture may still be sampled. Filament stores only the texture's
++   * handle in the material, and a `MaterialInstance` object is a short-lived view over a pointer
++   * the asset owns, so neither of them can own the texture. The retention lives exactly as long as
++   * the `RenderableManager` you pass here — not as long as the scene — so pass the one from
++   * `useFilamentContext()` rather than an ad-hoc `engine.createRenderableManager()`, whose
++   * `release()` would drop the retention while the material is still sampling. Given that one, the
++   * caller need not keep the `Texture` handle — nor this `MaterialInstance` — alive after this call.
++   *
++   * Retention happens after the parameter has been written, so a throw from this method can leave
++   * the material sampling a texture that nothing retains. Keep the `Texture` handle if you intend
++   * to recover from such an error rather than remount the scene.
++   */
++  setTextureParameter(renderableManager: RenderableManager, name: string, texture: Texture): void
+   getFloatParameter(name: string): number
+   getIntParameter(name: string): number
+   getMat3fParameter(name: string): Mat3f
+diff --git a/node_modules/react-native-filament/src/types/RenderableManager.ts b/node_modules/react-native-filament/src/types/RenderableManager.ts
+index d94874e..1f3d10f 100644
+--- a/node_modules/react-native-filament/src/types/RenderableManager.ts
++++ b/node_modules/react-native-filament/src/types/RenderableManager.ts
+@@ -7,6 +7,7 @@ import type { MaterialInstance } from './MaterialInstance'
+ import { PointerHolder } from './PointerHolder'
+ import { Float3 } from './Math'
+ import { TextureFlags } from './TextureFlags'
++import { Texture } from './Texture'
+ import { Box } from './Boxes'
+ 
+ /**
+@@ -65,6 +66,18 @@ export interface RenderableManager extends PointerHolder {
+    */
+   changeMaterialTextureMap(renderable: Entity, materialName: string, textureBuffer: FilamentBuffer, textureFlags: TextureFlags): void
+ 
++  /**
++   * Decodes a texture from a buffer. One texture can be set on many material instances without
++   * duplication. Passing it to {@linkcode MaterialInstance.setTextureParameter} hands retention to
++   * the RenderableManager given there, which keeps the texture alive for exactly as long as that
++   * RenderableManager itself lives — so pass the one from `useFilamentContext()` rather than an
++   * ad-hoc `engine.createRenderableManager()`, whose `release()` would drop the retention while the
++   * material is still sampling. Given that one, the caller need not keep this handle, nor the
++   * material instance it was set on, alive. A texture that is never set on anything is owned by
++   * this handle alone and freed when it is garbage collected.
++   */
++  createTexture(buffer: FilamentBuffer, textureFlags: TextureFlags): Texture
++
+   /**
+    * Changes whether or not the renderable casts shadows.
+    * @default false
+diff --git a/node_modules/react-native-filament/src/types/Texture.ts b/node_modules/react-native-filament/src/types/Texture.ts
+new file mode 100644
+index 0000000..708da5a
+--- /dev/null
++++ b/node_modules/react-native-filament/src/types/Texture.ts
+@@ -0,0 +1,5 @@
++// Deliberately does not extend PointerHolder: release() and isValid come from the C++ PointerHolder<T> template, but TextureWrapper derives from HybridObject, so declaring them here would type-check a call that fails at runtime.
++export interface Texture {
++  readonly width: number
++  readonly height: number
++}
+diff --git a/node_modules/react-native-filament/src/types/index.ts b/node_modules/react-native-filament/src/types/index.ts
+index 510510c..42a9b6f 100644
+--- a/node_modules/react-native-filament/src/types/index.ts
++++ b/node_modules/react-native-filament/src/types/index.ts
+@@ -21,6 +21,7 @@ export * from './Options'
+ export * from './LightManager'
+ export * from './Color'
+ export * from './TextureFlags'
++export * from './Texture'
+ export * from './Choreographer'
+ export * from './NameComponentManager'
+ export * from './CameraManipulator'

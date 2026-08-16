@@ -9,7 +9,7 @@ import { useSlideUpPresentation } from "@/src/game/ui/system/slideUp";
 import type { Theme } from "@/src/game/ui/system/theme";
 import { useCatalogStore } from "@/src/data/catalog/buildStore";
 import { useShopStore } from "@/src/data/shop/store";
-import { useCurrentUserId, useRepos, viewCatalogue } from "@/src/data";
+import { isSurfaceCategory, useCurrentUserId, useRepos, viewCatalogue } from "@/src/data";
 import type { ShopCategory } from "@/src/data";
 import { useScreenInsets } from '@/src/hooks/use-safe-insets';
 import { useRoomCatalogStore } from "@/src/room/core/placeableItems";
@@ -77,8 +77,9 @@ export function InventoryOverlay({ onClose }: { onClose: () => void }) {
   const owned = useMemo<OwnedItem[]>(() => {
     const bought: OwnedItem[] = boughtCatalogue
       .filter((i) => ownedIds.has(i.id))
-      .map((i) => ({ id: i.id, name: i.name, category: i.category, price: i.price, source: "bought" as const }));
-    // De-dupe by id- a shared id would render duplicate React keys
+      // source comes from the ITEM, not from the fact that this list is the bought half: a dev build merges workshop drafts here, and their assets live under room/workshop/. Absent still reads as "bought", which is every published row.
+      .map((i) => ({ id: i.id, name: i.name, category: i.category, price: i.price, source: i.source ?? ("bought" as const) }));
+    // De-dupe by id: a shared id would render duplicate React keys. Built wins, being rarer
     const merged = new Map<string, OwnedItem>();
     for (const item of [...(built ?? []), ...bought]) {
       if (!merged.has(item.id)) merged.set(item.id, item);
@@ -91,6 +92,11 @@ export function InventoryOverlay({ onClose }: { onClose: () => void }) {
   const place = (id: string) => {
     if (!usePlacementStore.getState().startPlacing(id)) return;
     requestClose();
+  };
+
+  // A surface item covers the room rather than standing in it, so there is no ghost to reveal and no placement to start — the room simply repaints. The sheet stays OPEN, unlike place(): trying finishes is a browsing activity, and closing after every tap would make comparing two wallpapers mean reopening the inventory between them.
+  const applySurface = (item: { id: string; category: ShopCategory }) => {
+    usePlacementStore.getState().setFinish(item.category === "floor" ? "floor" : "wall", item.id);
   };
 
   const padTop = 18 + safe.top;
@@ -136,11 +142,14 @@ export function InventoryOverlay({ onClose }: { onClose: () => void }) {
               ? visible.map((item) => (
                   <InventoryItemTile
                     key={item.id}
+                    itemId={item.id}
+                    source={item.source}
                     name={item.name}
                     width={tileWidth}
+                    surface={isSurfaceCategory(item.category)}
                     ikea={catalogRows[item.id]?.brand === "IKEA"}
-                    placeable={roomItems[item.id] !== undefined}
-                    onPress={() => place(item.id)}
+                    placeable={isSurfaceCategory(item.category) || roomItems[item.id] !== undefined}
+                    onPress={() => (isSurfaceCategory(item.category) ? applySurface(item) : place(item.id))}
                   />
                 ))
               : null}

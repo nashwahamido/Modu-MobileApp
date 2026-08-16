@@ -1,6 +1,7 @@
 // One purchasable tile in the shop popup: price badge, picture well, name
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 
+import { CatalogThumb } from "@/src/components/CatalogThumb";
 import { COIN_ICON, STAR_ICON } from "@/src/components/iconAssets";
 import {
   FRAME_RADIUS,
@@ -28,17 +29,23 @@ const PILL_LEFT = BADGE_LEFT + COIN_SIZE - PRICE_TUCK;
 const OWNED_WIDTH = 70;
 
 export function ShopItemTile({
+  itemId,
   name,
   price,
   width,
+  surface,
   owned,
   lockLevel,
   onPress,
   disabled,
 }: {
+  /** Catalog id, for the well's picture. Source is "bought" by construction: the shop IS the item_buy catalogue */
+  itemId: string;
   name: string;
   price: number;
   width: number;
+  /** A wallpaper or a floor, whose picture is its own tile image rather than a variation's render */
+  surface?: boolean;
   owned?: boolean;
   lockLevel?: number;
   onPress?: () => void;
@@ -62,6 +69,13 @@ export function ShopItemTile({
     >
       <View style={s.wellWrap}>
         <View style={[s.well, { width, height: wellHeight }]} />
+
+        {/* Directly over the well and under everything else, so the veil dims a locked item's picture and the price badge stays on top of it. Not interactive: the whole tile is the one control. */}
+        <View style={[s.art, { height: wellHeight }]} pointerEvents="none">
+          <CatalogThumb source="bought" itemId={itemId} surface={surface} size={wellHeight} />
+        </View>
+
+        {/* A tint, not a blur — RN has no blur without a native module */}
         {locked ? <View style={s.veil} pointerEvents="none" /> : null}
         {locked ? (
           <View style={s.lockBadge} pointerEvents="none">
@@ -105,6 +119,15 @@ const makeStyles = (_t: Theme) =>
       backgroundColor: "#FFFFFF",
       borderWidth: FRAME_STROKE_WIDTH,
       borderColor: FRAME_STROKE,
+    },
+    // Spans the well and centres the art in it; the height is the well's, passed inline
+    art: {
+      position: "absolute",
+      top: WELL_TOP_PAD,
+      left: 0,
+      right: 0,
+      alignItems: "center",
+      justifyContent: "center",
     },
     veil: {
       ...StyleSheet.absoluteFillObject,

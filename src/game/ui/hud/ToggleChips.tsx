@@ -34,31 +34,8 @@ export function FocusToggleButton() {
     />
   );
 }
-export function AutoViewToggleButton() {
-  const autoView = useGameStore((s) => s.settings.autoView);
-  const setSettings = useGameStore((s) => s.setSettings);
-  return (
-    <Button
-      // The play glyph, not the "Auto-view" text: the control frames the next part on its own, so a
-      // play triangle reads as "run the view for me" where the word only named the setting. Same icon
-      // treatment as Focus above, so the two chips stay one family.
-      icon={
-        <Image
-          source={require("@/src/assets/ui/icons/icon-play.png")}
-          style={styles.autoIcon}
-          resizeMode="contain"
-        />
-      }
-      small
-      pill
-      variant={autoView ? "primary" : "secondary"}
-      onPress={() => setSettings({ autoView: !autoView })}
-      accessibilityLabel="Auto-view"
-    />
-  );
-}
 // Exported so the tutorial renders the SAME control the build does, rather than its own copy — that
-// divergence is how the tutorial ended up teaching an Auto-view chip the assembly no longer shows.
+// divergence is how the tutorial ended up teaching a chip the assembly no longer shows.
 // Rendered in FOCUS MODE too. Focus strips the HUD down to the current step, and Spot is about the
 // current step — "which part, and where does it go" is the question focus mode leaves a player alone
 // with, so it is the last thing that should disappear alongside the rest of the chrome.
@@ -77,5 +54,4 @@ export function SpotButton() {
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: SPACE.sm },
   focusIcon: { width: 22, height: 22 },
-  autoIcon: { width: 22, height: 22 },
 });

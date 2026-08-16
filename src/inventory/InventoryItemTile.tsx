@@ -10,6 +10,8 @@ import {
   WELL_ASPECT,
   WELL_TOP_PAD,
 } from "@/src/components/ItemTileFrame";
+import { CatalogThumb } from "@/src/components/CatalogThumb";
+import type { ItemSource } from "@/src/data/catalog/assets";
 import { brandFor } from "@/src/game/content/brands";
 import { useFixedStyles } from "@/src/game/ui/system/theme";
 
@@ -29,15 +31,24 @@ const MARK = {
 };
 
 export function InventoryItemTile({
+  itemId,
+  source,
   name,
   width,
+  surface,
   ikea,
   placeable,
   onPress,
 }: {
+  /** Catalog id, for the well's picture */
+  itemId: string;
+  /** Which subtree the picture lives in. Unlike the shop's tile this grid mixes both, since it lists what was built alongside what was bought */
+  source: ItemSource;
   name: string;
   /** Column width handed down by the grid */
   width: number;
+  /** A wallpaper or a floor, whose picture is its own tile image rather than a variation's render */
+  surface?: boolean;
   /** Shows the brand mark. Only buildable furniture carries a brand */
   ikea?: boolean;
   placeable?: boolean;
@@ -59,6 +70,12 @@ export function InventoryItemTile({
     >
       <View style={s.wellWrap}>
         <View style={[s.well, { width, height: wellHeight }]} />
+
+        {/* Over the well and under the brand mark, which must stay readable on top of the picture. Not interactive: the whole tile is the one control. */}
+        <View style={[s.art, { height: wellHeight }]} pointerEvents="none">
+          <CatalogThumb source={source} itemId={itemId} surface={surface} size={wellHeight} />
+        </View>
+
         {ikea ? (
           <View
             style={s.brandMark}
@@ -91,6 +108,15 @@ const makeStyles = () =>
       backgroundColor: "#FFFFFF",
       borderWidth: FRAME_STROKE_WIDTH,
       borderColor: FRAME_STROKE,
+    },
+    // Spans the well and centres the art in it; the height is the well's, passed inline
+    art: {
+      position: "absolute",
+      top: WELL_TOP_PAD,
+      left: 0,
+      right: 0,
+      alignItems: "center",
+      justifyContent: "center",
     },
     brandMark: {
       position: "absolute",
