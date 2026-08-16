@@ -135,11 +135,15 @@ export const hudChrome = {
   // The row owns the position; the ObjectiveBar is just a flex child of it.
   topRow: {
     position: "absolute",
-    // top:3 puts the pause icon's centre on the same line as the settings gear and hint, whose centres sit at 8 + their box height. Tuned so pause reads as level with the top-left grid.
-    top: 3,
+    // top:8 is THE grid line for the whole HUD: the gear (GameSettings, top:8) and the hint
+    // (hintButton, top:8) sit on it, and pause now shares it exactly rather than being tuned by eye.
+    top: 8,
     alignSelf: "center",
     flexDirection: "row",
-    alignItems: "center",
+    // flex-start, NOT center: centring made pause ride the objective bar's height, so it moved
+    // whenever a mode changed the bar (instructions on/off, structured header). Its top edge is
+    // now fixed to the row's, which is fixed to the grid — the bar can be any height it likes.
+    alignItems: "flex-start",
     gap: SPACE.sm,
   },
 

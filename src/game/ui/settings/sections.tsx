@@ -57,7 +57,8 @@ const STYLES: { value: RenderStyleId; label: string }[] = [
   { value: "realistic", label: "Realistic" },
   { value: "cozy", label: "Cozy" },
   { value: "cartoon", label: "Cartoon" },
-  { value: "toon", label: "Toon" },
+  // "toon" retired from the offering (the RenderStyleId and its material survive in scene/shaders,
+  // so a profile saved on it still renders — it just can't be chosen anew).
   { value: "illustrated", label: "Illustrated" },
 ];
 // Built from the room's own backdrop table, so a photo added there appears here with no edit.
@@ -189,9 +190,11 @@ export function BuildDisplaySection({
   const settings = useGameStore((s) => s.settings);
   const renderStyle = useGameStore((s) => s.renderStyle);
   const backdrop = useGameStore((s) => s.backdrop);
+  const theme = useGameStore((s) => s.theme);
   const setSettings = useGameStore((s) => s.setSettings);
   const setRenderStyle = useGameStore((s) => s.setRenderStyle);
   const setBackdrop = useGameStore((s) => s.setBackdrop);
+  const setTheme = useGameStore((s) => s.setTheme);
   const { targetLayout, targetActivated } = useFocusHandlers(focus);
   // A FRAGMENT, not a View: the walkthrough scrolls to a row by the `y` its onLayout reports, and that y is relative to the immediate parent. Wrapping a section in its own container would measure the target against the section instead of against the scrolled list, and the panel would scroll to the wrong row.
   return (
@@ -206,7 +209,7 @@ export function BuildDisplaySection({
       />
       <View onLayout={targetLayout("backdrop")}>
         <Choice
-          label="Build background"
+          label="Background"
           desc="Assembly scene backdrop, separate from the model"
           value={backdrop}
           options={BACKDROPS}
@@ -216,6 +219,16 @@ export function BuildDisplaySection({
           }}
         />
       </View>
+      {/* Dark mode is reachable from INSIDE a build again, next to the Background it flips: every
+          backdrop has a dark variant and the scene ground follows the theme, so leaving the
+          assembly for the app settings screen just to switch was a detour for a display choice.
+          Same store field as the general tab's toggle — the two rows can never disagree. */}
+      <Row
+        label="Dark mode"
+        desc="Use the dark background theme"
+        value={theme === "dark"}
+        onValueChange={(v) => setTheme(v ? "dark" : "light")}
+      />
       {showLighting ? (
         <Choice
           label="Lighting"

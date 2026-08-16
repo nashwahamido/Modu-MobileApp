@@ -185,7 +185,18 @@ function GameScreen() {
   const focus = settings.focusMode;
   const dark = theme === "dark";
   const t = useTheme();
-  const rootStyle = useMemo(() => [styles.root, { backgroundColor: t.bg }], [t]);
+  // "Clear" is a flat warm cream, not the theme surface: the backdrop SETTING chose a colour, so it
+  // should look chosen, not like the app behind the scene. Dark theme keeps its own dark ground —
+  // a cream flood in dark mode would be a torch.
+  const rootStyle = useMemo(
+    () => [
+      styles.root,
+      // "Clear" is the SAME flat beige in both themes. It is a backdrop the player picked, not a
+      // surface that follows the theme — and the dark variant read as mud against the dark chrome.
+      { backgroundColor: backdrop === "clear" ? "#DACAAE" : t.bg },
+    ],
+    [t, backdrop, theme],
+  );
   const firstAvailable = useMemo(
     () =>
       furniture

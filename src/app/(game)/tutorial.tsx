@@ -733,7 +733,14 @@ function TutorialScreen() {
   return (
     <SceneBackdrop
       source={backdropSource(backdrop, theme === "dark")}
-      style={[styles.root, theme === "dark" && styles.rootDark]}
+      style={[
+        styles.root,
+        theme === "dark" && styles.rootDark,
+        // "Clear" is a flat warm cream in the light theme — the same rule as play.tsx, so the
+        // tutorial and the build show the same ground for the same setting. Dark keeps its own.
+        // Same rule as play.tsx: clear is the same beige in both themes.
+        backdrop === "clear" && { backgroundColor: "#DACAAE" },
+      ]}
     >
       <GestureDetector gesture={sceneGesture}>
         <Animated.View style={[styles.sceneWrap, undoPreviewSceneStyle]}>
