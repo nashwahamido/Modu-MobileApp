@@ -353,8 +353,9 @@ const SHADOW_SM = {
 
 /** The thumbnail groove. A SOLID mid grey rather than a translucent brown wash: the card beneath is
  *  cream, so a low-alpha inset just tinted the cream and left a white finish with nothing to sit
- *  against. Neutral and warm-leaning, so it reads as a recess and not as a second surface colour. */
-const THUMB_INSET = "#B9B4AC";
+ *  against. Light enough to stay a recess rather than a grey panel — a white finish separates from
+ *  it without the tile reading as dark. */
+const THUMB_INSET = "#CFCAC2";
 
 /** The single text colour for this screen (wireframe ink). */
 const INK = "#231F20";

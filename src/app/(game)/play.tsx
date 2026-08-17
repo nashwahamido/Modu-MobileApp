@@ -1,6 +1,7 @@
 // TODO: settle down the part marked as dev-setting (float mode vs auto return)
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { hudIcon } from "@/src/game/ui/hud/hudIcons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { OrientationLock } from "expo-screen-orientation";
 import { View } from "react-native";
@@ -419,7 +420,7 @@ function GameScreen() {
             centred together whatever width the bar takes. */}
         <View style={styles.topRow} pointerEvents="box-none">
           <IconButtonBare
-            source={require("@/src/assets/ui/icons/icon-pause.png")}
+            source={hudIcon("pause", theme === "dark")}
             size={HUD_ICON}
             onPress={() => useGameStore.getState().setMapOpen(true)}
             accessibilityLabel="Pause and show the build map"

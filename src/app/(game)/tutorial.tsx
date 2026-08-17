@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { hudIcon } from "@/src/game/ui/hud/hudIcons";
 import { router } from "expo-router";
 import { OrientationLock } from "expo-screen-orientation";
 import { Animated, View } from "react-native";
@@ -790,7 +791,7 @@ function TutorialScreen() {
           <MomentumCompanion />
           {profile === "momentum" ? (
             <IconButtonBare
-              source={require("@/src/assets/ui/icons/icon-pause.png")}
+              source={hudIcon("pause", theme === "dark")}
               size={HUD_ICON}
               onPress={() => useGameStore.getState().setMapOpen(true)}
               accessibilityLabel="Pause and show the build map"

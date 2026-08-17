@@ -9,6 +9,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { ELEVATION, RADIUS, SPACE, useTheme } from "@/src/game/ui/system/theme";
+import { useHudIcon } from "@/src/game/ui/hud/hudIcons";
 import { GrainOverlay } from "@/src/game/ui/system/Button";
 import { SCENE_BACKGROUND } from "@/src/game/scene/lighting";
 
@@ -78,7 +79,7 @@ export function RecenterButton({
 }) {
   return (
     <IconButtonBare
-      source={require("@/src/assets/ui/icons/icon-recenter.png")}
+      source={useHudIcon("recenter")}
       onPress={onPress}
       disabled={!enabled}
       style={style}
@@ -135,15 +136,11 @@ export const hudChrome = {
   // The row owns the position; the ObjectiveBar is just a flex child of it.
   topRow: {
     position: "absolute",
-    // top:8 is THE grid line for the whole HUD: the gear (GameSettings, top:8) and the hint
-    // (hintButton, top:8) sit on it, and pause now shares it exactly rather than being tuned by eye.
-    top: 8,
+    // top:3 puts the pause icon's centre on the same line as the settings gear and hint, whose centres sit at 8 + their box height. Tuned so pause reads as level with the top-left grid.
+    top: 3,
     alignSelf: "center",
     flexDirection: "row",
-    // flex-start, NOT center: centring made pause ride the objective bar's height, so it moved
-    // whenever a mode changed the bar (instructions on/off, structured header). Its top edge is
-    // now fixed to the row's, which is fixed to the grid — the bar can be any height it likes.
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: SPACE.sm,
   },
 

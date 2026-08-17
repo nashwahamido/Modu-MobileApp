@@ -1,4 +1,5 @@
 import { StyleSheet } from "react-native";
+import { useHudIcon } from "@/src/game/ui/hud/hudIcons";
 import { useGameStore } from "@/src/game/core/store";
 import { HUD_ICON, IconButtonBare } from "@/src/game/ui/hud/hudChrome";
 
@@ -11,7 +12,7 @@ export function UndoButton({ onPress }: { onPress?: () => void } = {}) {
 
   return (
     <IconButtonBare
-      source={require("@/src/assets/ui/icons/icon-undo.png")}
+      source={useHudIcon("undo")}
       onPress={onPress ?? undoLastAction}
       disabled={disabled}
       size={HUD_ICON}

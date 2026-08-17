@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useHudIcon } from "@/src/game/ui/hud/hudIcons";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
 import { ELEVATION, RADIUS, Theme, useFixedStyles } from "@/src/game/ui/system/theme";
@@ -21,6 +22,10 @@ export function ToolBar({
   const manualTools = useGameStore((s) => s.settings.manualTools);
   const selectedTool = useGameStore((s) => s.selectedTool);
   const setSelectedTool = useGameStore((s) => s.setSelectedTool);
+  // Read with the other hooks, ABOVE the early returns below: this component bails out when manual
+  // tools are off or the build has none, so a hook called down at the icon would run on some
+  // renders and not others.
+  const toolsIcon = useHudIcon("tools");
   if ((!manualTools && !forceVisible) || !furniture) return null;
 
   const tools = toolList(furniture);
@@ -81,7 +86,7 @@ export function ToolBar({
       >
         <GrainOverlay radius={RADIUS.control} />
         <Image
-          source={require("@/src/assets/ui/icons/icon-tools.png")}
+          source={toolsIcon}
           style={styles.toolboxIcon}
           resizeMode="contain"
         />
