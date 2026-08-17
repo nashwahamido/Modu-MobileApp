@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { findNodeHandle, Image, Pressable, StyleSheet, Text, useWindowDimensions, UIManager, View, type LayoutChangeEvent } from 'react-native';
 import * as Speech from 'expo-speech';
 import {
@@ -66,8 +67,7 @@ export function MascotGuideOverlay({
   const currentIndex = useTutorialStore((s) => s.currentIndex);
   const profile = useGameStore((s) => s.profile);
   const mapOpen = useGameStore((s) => s.mapOpen);
-  // HEAD art, not the full body: at 82pt the whole character was a speck, and each one shrank
-  // to a different part of itself.
+  // HEAD art, not the full body: at 78pt the whole character was a speck.
   const mascotImage = avatarHeadForProfile(profile);
   const presentation = tutorialPresentationForProfile(profile);
   const steps = useTutorialStore((s) => s.steps);
@@ -374,10 +374,22 @@ export function MascotGuideOverlay({
       <View style={[styles.bubble, bubbleStyle]} pointerEvents="box-none">
         {!presentation.showMomentumCompanion ? (
           <View style={styles.mascotPortrait}>
+            {/* White at the centre falling to cream at the rim — the same pool of light the hint
+                toast uses, so one character reads identically in both places. SVG because RN has no
+                radial gradient. */}
+            <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+              <Defs>
+                <RadialGradient id="mascotglow" cx="50%" cy="45%" r="65%">
+                  <Stop offset="0" stopColor="#FFFFFF" />
+                  <Stop offset="1" stopColor="#EADFCB" />
+                </RadialGradient>
+              </Defs>
+              <Rect x="0" y="0" width="100%" height="100%" fill="url(#mascotglow)" />
+            </Svg>
             <Image
               source={mascotImage}
               style={styles.mascotPortraitImage}
-              resizeMode="contain"
+              resizeMode="cover"
             />
           </View>
         ) : null}
@@ -605,20 +617,20 @@ const makeStyles = (t: Theme) =>
       gap: 10,
     },
     mascotPortrait: {
-      width: 78,
-      height: 78,
+      width: 88,
+      height: 88,
       borderRadius: 16,
       borderWidth: 3,
       borderColor: t.surface,
-      // CREAM, not lavender: the tile sits among cream chrome, and the lavender read as a selection
-      // state — a colour that means "chosen" everywhere else in this app.
-      backgroundColor: '#F7F0E6',
+      // Only the corners the gradient's square Rect can't reach — matched to its OUTER stop.
+      backgroundColor: '#EADFCB',
       overflow: 'hidden',
       alignItems: 'center',
       justifyContent: 'center',
     },
-    // The head fits its frame — no negative offsets to tune per character.
-    mascotPortraitImage: { width: '100%', height: '100%' },
+    // OVER 100%, same reason as the hint toast's tile: the head art has its own padding, so filling
+    // the frame exactly still left the face small. The overflow is cropped by the tile.
+    mascotPortraitImage: { width: '124%', height: '124%' },
     copy: {
       flex: 1,
       backgroundColor: t.surface,
@@ -630,8 +642,8 @@ const makeStyles = (t: Theme) =>
       ...ELEVATION.card,
     },
     stepText: { color: t.success, fontSize: 11, fontWeight: '800', marginBottom: 4 },
-    // flex + minWidth 0: without them the message can't shrink inside messageRow, so in visual mode
-    // (where a demo cue shares the row) a long line ran straight out of the card.
+    // flex + minWidth 0: without them a long line ran out of the card in visual mode, where a demo
+    // cue shares the row.
     message: { flex: 1, minWidth: 0, color: t.text, fontSize: 14, lineHeight: 19, fontWeight: '700' },
     messageRow: {
       flexDirection: 'row',

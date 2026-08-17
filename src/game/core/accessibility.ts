@@ -26,6 +26,12 @@ export interface AccessibilitySettings {
    *  Separate from `audio`, which is the spoken instruction clips — a player may want the mallet to
    *  thud without having every step read aloud. */
   soundEffects: boolean;
+  /** Background music while building. */
+  music: boolean;
+  /** Music level, 0-1. Separate from the toggle so turning it down is not the same act as turning it
+   *  off — a player who wants it quiet under their own audio should not have to choose between the
+   *  two. */
+  musicVolume: number;
   /** FREE-mode soft hints when reaching for a not-yet-available part. */
   softHints: boolean;
   /** Player picks the tool from the tool bar before tightening; off = the system equips the right tool automatically. */

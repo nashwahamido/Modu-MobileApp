@@ -4,6 +4,7 @@
 import { Alert, Pressable, Text, View, type LayoutChangeEvent } from "react-native";
 import { router } from "expo-router";
 import { useGameStore } from "@/src/game/core/store";
+import { setMusicEnabled, setMusicVolume } from "@/src/game/audio/music";
 import { useFixedStyles } from "@/src/game/ui/system/theme";
 import { signOut } from "@/src/services/auth";
 import { SIGN_IN_ROUTE } from "@/src/hooks/useSessionGate";
@@ -57,9 +58,10 @@ const STYLES: { value: RenderStyleId; label: string }[] = [
   { value: "realistic", label: "Realistic" },
   { value: "cozy", label: "Cozy" },
   { value: "cartoon", label: "Cartoon" },
-  // "Wooden" is what the ink pass actually produces on this catalogue — grain and outline over the
-  // base model. The id stays `illustrated` (it is the shader's name in scene/shaders and in saved
-  // settings); only the word the player reads changes.
+  // "toon" retired from the offering (the RenderStyleId and its material survive in scene/shaders,
+  // so a profile saved on it still renders — it just can't be chosen anew).
+  // "Wooden" is what the ink pass produces on this catalogue; the id stays `illustrated`, which is
+  // the shader's name in scene/shaders and in saved settings.
   { value: "illustrated", label: "Wooden" },
 ];
 // Built from the room's own backdrop table, so a photo added there appears here with no edit.
@@ -201,9 +203,8 @@ export function BuildDisplaySection({
   return (
     <>
       <SectionHeader>Display</SectionHeader>
-      {/* Scoped to the BUILD, and named for it. Every backdrop has a dark variant and the scene
-          ground follows it, but the room, catalogue and shop are unaffected — a dark workbench is a
-          working preference, not a request for a dark app. */}
+      {/* Scoped to the BUILD, and named for it: the room, catalogue and shop are unaffected — a dark
+          workbench is a working preference, not a request for a dark app. */}
       <Row
         label="Assemble in Dark Mode"
         desc="Dark background while you build. The rest of the app is unchanged."
@@ -308,9 +309,22 @@ export function GuidanceSection({
   );
 }
 
+/** The music meter's rungs: ten, so a tap moves 10% and the bar reads as a level rather than as a
+ *  handful of presets. */
+const MUSIC_STEPS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
+
 export function AudioSection() {
+  const styles = useFixedStyles(makeSettingsStyles);
   const settings = useGameStore((s) => s.settings);
   const setSettings = useGameStore((s) => s.setSettings);
+  const changeMusicVolume = (delta: number) => {
+    const next = Math.min(1, Math.max(0, +(settings.musicVolume + delta).toFixed(2)));
+    // `music` stays in the settings as the on/off FACT other code reads — derived from the level now
+    // rather than set by hand, so the two can never disagree.
+    setSettings({ musicVolume: next, music: next > 0 });
+    setMusicVolume(next);
+    setMusicEnabled(next > 0);
+  };
   return (
     <>
       <SectionHeader>Audio</SectionHeader>
@@ -326,6 +340,33 @@ export function AudioSection() {
         value={settings.soundEffects}
         onValueChange={(v) => setSettings({ soundEffects: v })}
       />
+      {/* ONE control, not a switch plus a slider. Zero IS off — a player taking the music down to
+          nothing has already said what they want, and making them find a separate toggle to finish
+          the thought is the app arguing with them. The meter shows level and state at once. */}
+      <View style={styles.switchRow}>
+        <View style={styles.rowText}>
+          <Text style={styles.rowLabel}>Music</Text>
+          <Text style={styles.rowDesc}>
+            {settings.musicVolume > 0 ? "Background music while you build" : "Off — raise it to play"}
+          </Text>
+        </View>
+        <View style={styles.meterRow}>
+          <Pressable style={styles.fontBtn} onPress={() => changeMusicVolume(-0.1)} hitSlop={6}>
+            <Text style={styles.arrowText}>–</Text>
+          </Pressable>
+          <View style={styles.meter}>
+            {MUSIC_STEPS.map((step) => (
+              <View
+                key={step}
+                style={[styles.meterBar, settings.musicVolume >= step && styles.meterBarOn]}
+              />
+            ))}
+          </View>
+          <Pressable style={styles.fontBtn} onPress={() => changeMusicVolume(0.1)} hitSlop={6}>
+            <Text style={styles.arrowText}>+</Text>
+          </Pressable>
+        </View>
+      </View>
     </>
   );
 }

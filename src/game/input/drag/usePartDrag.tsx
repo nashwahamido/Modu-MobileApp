@@ -339,9 +339,14 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
       let g = Gesture.Pan().runOnJS(true);
       g = canvas
         ? g.maxPointers(1).minDistance(10)
-        : g.activateAfterLongPress(PICKUP_MS);
+        : // INSTANT: a card drag begins the moment the finger moves, with no hold first. The hold was
+          // there to beat the tray's ScrollView, which claims a bare pan as soon as the finger clears
+          // its slop — activeOffsetX does the same job without the wait, because the tray scrolls
+          // VERTICALLY and a part is always pulled sideways out of it. Vertical movement is left to
+          // the ScrollView, so the tray still scrolls normally.
+          g.minDistance(0).activeOffsetX([-6, 6]);
       g = g
-        .onTouchesDown((e) => {
+        .onTouchesDown(() => {
           if (canvas) return;
           const store = useGameStore.getState();
           if (store.heldActionId) {
@@ -366,15 +371,9 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
               return;
             }
           }
-          const t = e.allTouches[0];
-          ringX.value = t.absoluteX;
-          ringY.value = t.absoluteY;
-          ringProgress.value = 0;
-          ringProgress.value = withTiming(1, { duration: PICKUP_MS });
-        })
-        .onTouchesUp(() => {
-          if (canvas) return;
-          ringProgress.value = withTiming(0, { duration: 80 });
+          // No pickup ring on a card any more: the ring drew the HOLD's progress, and there is no
+          // hold to wait through. It still runs for the cluster drag below, which kept its long
+          // press (a whole assembled section is not something to move by brushing past it).
         })
         .onStart((e) => {
           if (canvas) {

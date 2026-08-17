@@ -83,6 +83,7 @@ import { LoadingOverlay } from "@/src/game/ui/loading/LoadingOverlay";
 import type { Milestone } from "@/src/game/ui/loading/loadingProgress";
 import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
 import { backdropSource } from "@/src/game/ui/backdrop/backdrops";
+import { setMusicEnabled, setMusicVolume, stopMusic } from "@/src/game/audio/music";
 
 // Dev
 import { DevAutoStep } from "@/src/dev/DevAutoStep";
@@ -174,6 +175,17 @@ function GameScreen() {
   const activeCluster = useGameStore((s) => s.activeCluster);
   const mode = useGameStore((s) => s.mode);
   const settings = useGameStore((s) => s.settings);
+  // The music is the BUILD's, so it starts here and stops on the way out — including when the app is
+  // backgrounded, which unmounts nothing but should not leave a loop playing under someone's podcast.
+  const musicOn = settings.music;
+  const musicVolume = settings.musicVolume;
+  useEffect(() => {
+    // Volume BEFORE enable, so the first bar plays at the level the player set rather than at the
+    // module default and then correcting itself.
+    setMusicVolume(musicVolume);
+    setMusicEnabled(musicOn);
+    return () => stopMusic();
+  }, [musicOn, musicVolume]);
 
   // Dev-setting: float mode vs auto return
   const heldActionId = useGameStore((s) => s.heldActionId);
