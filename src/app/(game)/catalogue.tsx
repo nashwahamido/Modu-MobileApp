@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
 import Animated, {
   cancelAnimation,
+  runOnJS,
+  useAnimatedReaction,
   Extrapolation,
   interpolate,
   useAnimatedScrollHandler,
@@ -24,13 +26,14 @@ import { StyleSheet,
 
 // type
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
-import type { FurnitureMeta, ThumbSet } from "@/src/game/core/type";
+import type { FurnitureMeta, RenderStyleId, ThumbSet } from "@/src/game/core/type";
 import { type Milestone } from "@/src/game/ui/loading/loadingProgress";
 
 // data
 import { FURNITURE_METAS } from "@/src/game/content/furnitures/furnitures";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import { useCatalogRow, useCatalogStore } from "@/src/data/catalog/buildStore";
+import { useGameStore } from "@/src/game/core/store";
 import { useVariantStore } from "@/src/data/catalog/variantStore";
 import { brandFor } from "@/src/game/content/brands";
 import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
@@ -363,6 +366,23 @@ const INK = "#231F20";
 /** The finish carousel: how long a table sits still, and how long the slide to the next one takes.
  *  Together they set the loop's pace — four cells at 1.75s each is a ~7s cycle, slow enough to read
  *  as a showcase running in the background rather than something demanding attention. */
+/**
+ * What each carousel finish means to the BUILD.
+ *
+ * The assembly screen has exactly one lever for how a model looks — `renderStyle` — and it drives
+ * either a whole-model swap (cozy / cartoon ship their own GLB) or a material pass (illustrated is
+ * the wood-grain shader, shown as "Wooden" in settings). The DB's variations are a different axis:
+ * they dress the FINISHED piece in the room, and the build screen does not read them at all, which
+ * is why white and black land on the plain model here rather than silently doing nothing.
+ */
+const FINISH_STYLE: Record<string, RenderStyleId> = {
+  cozy: "cozy",
+  cartoon: "cartoon",
+  wooden: "illustrated",
+  white: "realistic",
+  black: "realistic",
+};
+
 const FINISH_HOLD_MS = 1100;
 const FINISH_SLIDE_MS = 650;
 
@@ -425,7 +445,8 @@ function FurnitureCard({
     const t = setTimeout(() => setBurst(0), CELEBRATE_MS);
     return () => clearTimeout(t);
   }, [burst]);
-  // The build always uses the DEFAULT finish — the carousel is a showcase, not a picker, so a tap on Start mid-slide must not launch whatever frame was on screen.
+  // The DEFAULT finish, kept as the fallback for anything the carousel is showing that a build can't
+  // actually be started in.
   const buildFinish = finishes[0] ?? null;
   // The carousel is a SHOWCASE, so it runs on the artwork a build ships, not on item_variants:
   // "cartoon" and "cozy" are finishes the catalogue can display but nobody can buy or build, and
@@ -434,12 +455,13 @@ function FurnitureCard({
   const reel = useMemo(() => {
     const art = meta.variantThumbnails;
     if (!art) return [] as string[];
-    const keys = Object.keys(art);
-    // Default first (it is the tile's resting image), then the rest in their authored order.
-    const first = finishes[0] && keys.includes(finishes[0]) ? finishes[0] : keys[0];
-    return [first, ...keys.filter((k) => k !== first)];
-  }, [meta.variantThumbnails, finishes]);
-  // Cells: the alternates in reverse, then the default, then the FIRST cell again — so the pass opens and closes on the same finish (white for LACK). That repeat is also what makes a REPLAY seamless: the run ends parked on the last cell, and jumping back to cell 0 to start again lands on an identical image, so the reset is never seen.
+    // THE META'S OWN ORDER, untouched. This used to hoist the DB default to the front, which quietly
+    // took the choice away from the meta: the pass opens on the reel's LAST entry, so reordering the
+    // list moved the opening finish somewhere nobody had asked for (every model opened on whatever
+    // happened to trail the default). The meta lists its finishes in the order it wants them shown.
+    return Object.keys(art);
+  }, [meta.variantThumbnails]);
+  // Cells: the alternates in reverse, then the first, then the LAST cell again — so the pass opens and closes on the meta's last-listed finish. That repeat is also what makes a REPLAY seamless: the run ends parked on the last cell, and jumping back to cell 0 to start again lands on an identical image, so the reset is never seen.
   const track = useMemo(
     () => (reel.length > 1 ? [...reel.slice(1).reverse(), reel[0], reel[reel.length - 1]] : []),
     [reel],
@@ -475,6 +497,41 @@ function FurnitureCard({
     slide.value = withSequence(...steps);
     return () => cancelAnimation(slide);
   }, [slide, track.length, selected]);
+  // WHICH finish is on the tile right now. The carousel is a picker as well as a showcase: a player
+  // who taps Start while Cozy is up expects to build the cozy one, so the visible cell has to exist
+  // on the JS side, not only on the UI thread. Rounded, because a tap mid-slide should launch the
+  // finish it is closest to rather than a half-scrolled neither.
+  const [shownIndex, setShownIndex] = useState(0);
+  useAnimatedReaction(
+    () => Math.round(slide.value),
+    (cell, prev) => {
+      if (cell !== prev) runOnJS(setShownIndex)(cell);
+    },
+    [],
+  );
+  const shownFinish = track.length ? track[Math.min(shownIndex, track.length - 1)] : null;
+
+  /**
+   * Start the build in the finish the tile is SHOWING.
+   *
+   * The carousel mixes two different things, and they launch differently:
+   *   - a DB VARIATION (wooden / white / black) is the build's own artwork — it travels as the
+   *     `variation` route param, exactly as the default did.
+   *   - a RENDER STYLE (cozy / cartoon) is a whole-model look owned by settings, not by the route,
+   *     so it is applied to the store before navigating.
+   * Anything the carousel can show but a build can't honour falls back to the default variation,
+   * so Start never launches something that doesn't exist.
+   */
+  const startShown = () => {
+    const shown = shownFinish;
+    // ALWAYS set it, including for the plain finishes: renderStyle is session state, so a player who
+    // built the cozy LACK and then starts the white one would otherwise get cozy again.
+    useGameStore.getState().setRenderStyle(shown ? FINISH_STYLE[shown] ?? "realistic" : "realistic");
+    // The variation still travels with the route: the build ignores it today, but it is the piece's
+    // finish once it reaches the room, and dropping it here would lose the player's choice there.
+    onStart(shown && finishes.includes(shown) ? shown : buildFinish);
+  };
+
   const trackStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: -slide.value * THUMB_CELL }],
   }));
@@ -574,7 +631,7 @@ function FurnitureCard({
       {/* Now a real target: the card body selects, this starts. Two jobs, two touch areas — a nested Pressable swallows its own touch, so it never falls through to selection. */}
       <Pressable
         style={({ pressed }) => [styles.startBtn, { backgroundColor: PILL_STYLE[state].bg }, pressed && styles.startBtnPressed]}
-        onPress={() => (armsFirst ? onSelect() : onStart(buildFinish))}
+        onPress={() => (armsFirst ? onSelect() : startShown())}
         accessibilityRole="button"
         accessibilityLabel={`${PILL_LABEL[state].replace(" ›", "")} ${row?.name ?? meta.id}`}
         accessibilityHint={armsFirst ? "Shows the available finishes. Tap again to start building." : undefined}

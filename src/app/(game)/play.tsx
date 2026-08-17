@@ -72,18 +72,16 @@ import {
   hudControlStyles as hudControls,
   hudChrome as styles,
 } from "@/src/game/ui/hud/hudChrome";
-import { useTheme } from "@/src/game/ui/system/theme";
+import { ThemeScope, useTheme } from "@/src/game/ui/system/theme";
 import {
   combineReady,
   requiresClusterFocus,
 } from "@/src/game/core/evaluation/clusters";
 import { availableInMode } from "@/src/game/core/evaluation/availability";
-import type { FurnitureId } from "@/src/game/core/type";
+import type { FurnitureId, ThemeId } from "@/src/game/core/type";
 import { LoadingOverlay } from "@/src/game/ui/loading/LoadingOverlay";
 import type { Milestone } from "@/src/game/ui/loading/loadingProgress";
 import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
-import { ThemeScope } from "@/src/game/ui/system/theme";
-import type { ThemeId } from "@/src/game/core/type";
 import { backdropSource } from "@/src/game/ui/backdrop/backdrops";
 
 // Dev

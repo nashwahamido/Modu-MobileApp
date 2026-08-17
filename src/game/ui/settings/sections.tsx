@@ -57,7 +57,10 @@ const STYLES: { value: RenderStyleId; label: string }[] = [
   { value: "realistic", label: "Realistic" },
   { value: "cozy", label: "Cozy" },
   { value: "cartoon", label: "Cartoon" },
-  { value: "illustrated", label: "Illustrated" },
+  // "Wooden" is what the ink pass actually produces on this catalogue — grain and outline over the
+  // base model. The id stays `illustrated` (it is the shader's name in scene/shaders and in saved
+  // settings); only the word the player reads changes.
+  { value: "illustrated", label: "Wooden" },
 ];
 // Built from the room's own backdrop table, so a photo added there appears here with no edit.
 const BACKDROPS: { value: BackdropId; label: string }[] = [

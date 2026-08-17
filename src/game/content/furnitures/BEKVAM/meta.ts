@@ -22,13 +22,13 @@ export const ACTIONS = composeFurnitureActions(
 const CATALOGUE_THUMBS: Record<string, ThumbSet> = {
   wooden: { light: require("../../../../assets/thumbnails/catalogue/BEKVAM-wooden.png") },
   cozy: { light: require("../../../../assets/thumbnails/catalogue/BEKVAM-cozy.png") },
-  black: { light: require("../../../../assets/thumbnails/catalogue/BEKVAM-black.png") },
   cartoon: { light: require("../../../../assets/thumbnails/catalogue/BEKVAM-cartoon.png") },
+  black: { light: require("../../../../assets/thumbnails/catalogue/BEKVAM-black.png") },
 };
 
 export const BEKVAM_META: FurnitureMeta = {
   id: asFurnitureId("bekvam-stool"),
-  thumbnail: CATALOGUE_THUMBS.cartoon,
+  thumbnail: CATALOGUE_THUMBS.black,
   variantThumbnails: CATALOGUE_THUMBS,
   ...metaCounts(ALL_PART_IDS, ACTIONS, CLUSTERS),
 };
