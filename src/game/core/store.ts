@@ -107,6 +107,10 @@ interface GameState {
   roomTimeOfDay: TimeOfDayId;
   /** Display theme (backdrop + thumbnails): light | dark | high_contrast. */
   theme: ThemeId;
+  /** "Assemble in dark mode": the BUILD screens render dark while the rest of the app stays as it
+   *  is. Deliberately separate from `theme` — that one is the whole app's, and a player who wants a
+   *  dark workbench is not asking for a dark shop. */
+  assembleDark: boolean;
 
   loadFurniture: (f: Furniture) => void;
   reset: () => void;
@@ -122,6 +126,7 @@ interface GameState {
   setBackdrop: (backdrop: BackdropId) => void;
   setRoomTimeOfDay: (time: TimeOfDayId) => void;
   setTheme: (theme: ThemeId) => void;
+  setAssembleDark: (on: boolean) => void;
 
   completeAction: (id: ActionId) => void;
   /** Undo history for redo: actions undone since the last new completion. */
@@ -225,6 +230,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
   roomTimeOfDay: "afternoon",
   // Light by default. The palette (ui/theme.ts) was designed against the dark reference, but light is the safer default for a study: it survives a bright room, a projector, and a participant's own phone brightness, none of which we control. Dark and high-contrast are the SAME product in different light — same three accent hues, same meanings — so switching costs nothing but the setting.
   theme: "light",
+  assembleDark: false,
 
   loadFurniture: (f) =>
     set({
@@ -289,6 +295,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
   setBackdrop: (backdrop) => set({ backdrop }),
   setRoomTimeOfDay: (roomTimeOfDay) => set({ roomTimeOfDay }),
   setTheme: (theme) => set({ theme }),
+  setAssembleDark: (assembleDark) => set({ assembleDark }),
 
   completeAction: (id) => {
     const s = get();

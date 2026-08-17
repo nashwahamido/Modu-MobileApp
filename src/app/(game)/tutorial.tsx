@@ -64,6 +64,8 @@ import {
   FocusToggleButton,
 } from "@/src/game/ui/hud/ToggleChips";
 import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
+import { ThemeScope } from "@/src/game/ui/system/theme";
+import type { ThemeId } from "@/src/game/core/type";
 import { backdropSource } from "@/src/game/ui/backdrop/backdrops";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 import {
@@ -358,7 +360,9 @@ function TutorialScreen() {
   const heldActionId = useGameStore((s) => s.heldActionId);
   const renderStyle = useGameStore((s) => s.renderStyle);
   const backdrop = useGameStore((s) => s.backdrop);
-  const theme = useGameStore((s) => s.theme);
+  // The BUILD's theme, not the app's: "Assemble in Dark Mode" darkens this screen only. Everything
+  // under ThemeScope below (the HUD, the settings panel, the toasts) resolves through it.
+  const theme: ThemeId = useGameStore((s) => s.assembleDark) ? "dark" : "light";
   const focus = settings.focusMode;
   // Recenter means nothing until there IS a build on the canvas — same rule as play.tsx.
   const sceneHasParts = Object.values(sceneState.modes).some(
@@ -729,9 +733,10 @@ function TutorialScreen() {
 
   // Also holds while the store still shows a PREVIOUS session's furniture: rendering that here would flash the wrong build (and its finished ObjectiveBar) until the tutorial recipe lands.
   if (!furniture || furniture.meta.id !== TUTORIAL_FURNITURE_ID)
-    return <View style={styles.root} />;
+    return <ThemeScope value={theme}><View style={styles.root} /></ThemeScope>;
 
   return (
+    <ThemeScope value={theme}>
     <SceneBackdrop
       source={backdropSource(backdrop, theme === "dark")}
       style={[
@@ -1042,6 +1047,7 @@ function TutorialScreen() {
       />
       <MomentumAttentionOverlay />
     </SceneBackdrop>
+    </ThemeScope>
   );
 }
 

@@ -7,7 +7,7 @@
 // these buttons, and the moment the choice is made per file they drift — one gets a dark variant,
 // the next keeps the light one, and the row stops matching itself.
 import type { ImageSourcePropType } from "react-native";
-import { useGameStore } from "@/src/game/core/store";
+import { useThemeId } from "@/src/game/ui/system/theme";
 
 export type HudIconName = "pause" | "undo" | "recenter" | "settings" | "tools" | "play" | "focus";
 
@@ -34,7 +34,9 @@ const DARK: Record<HudIconName, ImageSourcePropType> = {
 /** The icon for a HUD control in the CURRENT theme. Dark art in dark mode, the original everywhere
  *  else — high-contrast rides with dark, since it shares the dark chrome. */
 export function useHudIcon(name: HudIconName): ImageSourcePropType {
-  const theme = useGameStore((s) => s.theme);
+  // The SCOPED theme: inside the assembly this is the build's own, so the icons follow the chrome
+  // they sit on rather than the app's setting.
+  const theme = useThemeId();
   return theme === "light" ? LIGHT[name] : DARK[name];
 }
 

@@ -1,7 +1,6 @@
 // TODO: settle down the part marked as dev-setting (float mode vs auto return)
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { hudIcon } from "@/src/game/ui/hud/hudIcons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { OrientationLock } from "expo-screen-orientation";
 import { View } from "react-native";
@@ -63,14 +62,12 @@ import { ClusterCelebration } from "@/src/game/ui/celebration/ClusterCelebration
 import { UndoButton } from "@/src/game/ui/hud/UndoButton";
 import { GameSettings } from "@/src/game/ui/settings/GameSettings";
 import { ToggleChips } from "@/src/game/ui/hud/ToggleChips";
-import { BuildMap, ClusterFocusControl } from "@/src/game/ui/hud/ClusterFocusControl";
+import { BuildMap, MapButton } from "@/src/game/ui/hud/ClusterFocusControl";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 import { Button } from "@/src/game/ui/system/Button";
 import { ObjectiveBar } from "@/src/game/ui/hud/ObjectiveBar";
 import {
   HintButton,
-  HUD_ICON,
-  IconButtonBare,
   RecenterButton,
   hudControlStyles as hudControls,
   hudChrome as styles,
@@ -85,6 +82,8 @@ import type { FurnitureId } from "@/src/game/core/type";
 import { LoadingOverlay } from "@/src/game/ui/loading/LoadingOverlay";
 import type { Milestone } from "@/src/game/ui/loading/loadingProgress";
 import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
+import { ThemeScope } from "@/src/game/ui/system/theme";
+import type { ThemeId } from "@/src/game/core/type";
 import { backdropSource } from "@/src/game/ui/backdrop/backdrops";
 
 // Dev
@@ -182,7 +181,9 @@ function GameScreen() {
   const heldActionId = useGameStore((s) => s.heldActionId);
   const renderStyle = useGameStore((s) => s.renderStyle);
   const backdrop = useGameStore((s) => s.backdrop);
-  const theme = useGameStore((s) => s.theme);
+  // The BUILD's theme, not the app's: "Assemble in Dark Mode" darkens this screen only. Everything
+  // under ThemeScope below (the HUD, the settings panel, the toasts) resolves through it.
+  const theme: ThemeId = useGameStore((s) => s.assembleDark) ? "dark" : "light";
   const focus = settings.focusMode;
   const dark = theme === "dark";
   const t = useTheme();
@@ -377,9 +378,10 @@ function GameScreen() {
     />
   ) : null;
 
-  if (!furniture) return <View style={rootStyle}>{loadingOverlay}</View>;
+  if (!furniture) return <ThemeScope value={theme}><View style={rootStyle}>{loadingOverlay}</View></ThemeScope>;
 
   return (
+    <ThemeScope value={theme}>
     <SceneBackdrop
       source={backdropSource(backdrop, theme === "dark")}
       style={rootStyle}
@@ -416,15 +418,9 @@ function GameScreen() {
         ]}
         pointerEvents="box-none"
       >
-        {/* Pause sits to the LEFT of the progress bar, grouped with it so the pair stays
-            centred together whatever width the bar takes. */}
+        {/* Pause is gone: it was a second door to the same map the Map button opens, and a control
+            named "pause" that actually navigates was the wrong promise anyway. */}
         <View style={styles.topRow} pointerEvents="box-none">
-          <IconButtonBare
-            source={hudIcon("pause", theme === "dark")}
-            size={HUD_ICON}
-            onPress={() => useGameStore.getState().setMapOpen(true)}
-            accessibilityLabel="Pause and show the build map"
-          />
           {/* Instructions hidden → only the progress bar stays (slim pill). */}
           <ObjectiveBar
             // The sentence only. The step count rides on the progress row inside the bar — keeping it out of here is what stops the line's length changing with the count.
@@ -456,7 +452,9 @@ function GameScreen() {
           {focus ? null : <DevMenu />}
           <ToggleChips />
         </View>
-        {!focus && mode !== "strict" ? <ClusterFocusControl /> : null}
+        {/* One Map button where the cluster discs were. Same visibility rule they had: hidden in
+            focus mode and in strict, where the step is chosen for you. */}
+        {!focus && mode !== "strict" ? <MapButton /> : null}
         <PartsTray
           items={sceneState.trayItems}
           gestureFor={gestureFor}
@@ -612,6 +610,7 @@ function GameScreen() {
       <BuildComplete />
       {loadingOverlay}
     </SceneBackdrop>
+    </ThemeScope>
   );
 }
 

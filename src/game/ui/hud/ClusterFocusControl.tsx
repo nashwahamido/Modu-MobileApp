@@ -26,7 +26,7 @@ import { useGameStore } from "@/src/game/core/store";
 import Svg, { Circle as SvgCircle, Defs, RadialGradient, Stop } from "react-native-svg";
 import { StarBadge } from "@/src/game/ui/system/Icons";
 import { CoinMedalIcon } from "@/src/components/Icons";
-import { Theme, useFixedStyles, useTheme, FONT } from "@/src/game/ui/system/theme";
+import { Theme, useFixedStyles, useTheme, FONT, RADIUS, SIZE } from "@/src/game/ui/system/theme";
 import { useRepos } from "@/src/data";
 import { useCatalogRow } from "@/src/data/catalog/buildStore";
 import { HUD_SIDE_MARGIN, HUD_VERTICAL_MARGIN } from "@/src/hooks/use-safe-insets";
@@ -522,6 +522,37 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
  * leaves a lighter rectangle of scene around the edges. The chips are the opposite — they
  * are positioned AGAINST those insets, so they have to stay inside it.
  */
+/**
+ * The one control that opens the project map, in the slot the cluster discs used to occupy.
+ *
+ * The discs were a SECOND way to change focus — a horizontal stack you scrolled and tapped — sitting
+ * beside a map that already does that job with more context. A single button that opens the map is
+ * the same capability without a parallel UI to learn, and it gives the HUD's top-right back.
+ */
+export function MapButton() {
+  const styles = useFixedStyles(makeStyles);
+  const furniture = useGameStore((s) => s.furniture);
+  const setMapOpen = useGameStore((s) => s.setMapOpen);
+  if (!furniture) return null;
+  return (
+    <View style={styles.mapSlot}>
+      <Pressable
+        style={({ pressed }) => [styles.mapButton, pressed && styles.mapButtonPressed]}
+        onPress={() => {
+          setMapOpen(true);
+          Haptics.selectionAsync();
+        }}
+        accessibilityRole="button"
+        accessibilityLabel="Open the project map"
+      >
+        {({ pressed }) => (
+          <Text style={[styles.mapLabel, pressed && styles.mapLabelPressed]}>Map</Text>
+        )}
+      </Pressable>
+    </View>
+  );
+}
+
 export function ClusterFocusControl() {
   const styles = useFixedStyles(makeStyles);
   const furniture = useGameStore((s) => s.furniture);
@@ -910,6 +941,32 @@ const makeStyles = (t: Theme) =>
     rewardRow: { flexDirection: "row", gap: 6, alignSelf: "stretch" },
     rewardText: { fontFamily: FONT, fontSize: 10, fontWeight: "700", color: INK },
 
+  // TOP-RIGHT corner. top:8 is the HUD's grid line — the settings gear, the hint and the pause row
+  // all sit on it — and right:14 is the parts tray's own margin, so the button lines up with the
+  // tray column beneath it and with the left-hand controls across from it.
+  mapSlot: { position: "absolute", right: 14, top: 8, zIndex: 20 },
+  // The same 36pt chip height the settings gear, hint and undo sit on, and the PARTS TRAY's width
+  // (86) so the button and the column beneath it read as one right-hand rail rather than two
+  // stacked shapes of different sizes.
+  mapButton: {
+    width: 86,
+    minHeight: SIZE.controlHeightSm,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: RADIUS.pill,
+    // THEME-driven, not CREAM: this chip sits in the HUD beside the gear and the tray, which both
+    // follow the theme — cream here was a light-mode surface floating on the dark build.
+    backgroundColor: t.surface,
+    borderWidth: 1,
+    borderColor: t.border,
+    boxShadow: "0px 3px 3px rgba(0,0,0,0.28)",
+  },
+  // Lavender on press — the app's one "you can act on this" colour, the same fill a primary button
+  // takes when held.
+  // The accent is the same lavender in both themes — "act on this" does not change meaning.
+  mapButtonPressed: { backgroundColor: t.accent, borderColor: t.accent },
+  mapLabel: { fontFamily: FONT, fontSize: 13, fontWeight: "800", color: t.text, letterSpacing: 0.2, textAlign: "center" },
+  mapLabelPressed: { color: t.onAccent },
   switcher: {
     position: "absolute",
     right: 14,

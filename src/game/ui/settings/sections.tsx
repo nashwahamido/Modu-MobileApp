@@ -57,8 +57,6 @@ const STYLES: { value: RenderStyleId; label: string }[] = [
   { value: "realistic", label: "Realistic" },
   { value: "cozy", label: "Cozy" },
   { value: "cartoon", label: "Cartoon" },
-  // "toon" retired from the offering (the RenderStyleId and its material survive in scene/shaders,
-  // so a profile saved on it still renders — it just can't be chosen anew).
   { value: "illustrated", label: "Illustrated" },
 ];
 // Built from the room's own backdrop table, so a photo added there appears here with no edit.
@@ -190,16 +188,25 @@ export function BuildDisplaySection({
   const settings = useGameStore((s) => s.settings);
   const renderStyle = useGameStore((s) => s.renderStyle);
   const backdrop = useGameStore((s) => s.backdrop);
-  const theme = useGameStore((s) => s.theme);
   const setSettings = useGameStore((s) => s.setSettings);
   const setRenderStyle = useGameStore((s) => s.setRenderStyle);
   const setBackdrop = useGameStore((s) => s.setBackdrop);
-  const setTheme = useGameStore((s) => s.setTheme);
+  const assembleDark = useGameStore((s) => s.assembleDark);
+  const setAssembleDark = useGameStore((s) => s.setAssembleDark);
   const { targetLayout, targetActivated } = useFocusHandlers(focus);
   // A FRAGMENT, not a View: the walkthrough scrolls to a row by the `y` its onLayout reports, and that y is relative to the immediate parent. Wrapping a section in its own container would measure the target against the section instead of against the scrolled list, and the panel would scroll to the wrong row.
   return (
     <>
       <SectionHeader>Display</SectionHeader>
+      {/* Scoped to the BUILD, and named for it. Every backdrop has a dark variant and the scene
+          ground follows it, but the room, catalogue and shop are unaffected — a dark workbench is a
+          working preference, not a request for a dark app. */}
+      <Row
+        label="Assemble in Dark Mode"
+        desc="Dark background while you build. The rest of the app is unchanged."
+        value={assembleDark}
+        onValueChange={setAssembleDark}
+      />
       <Choice
         label="Model look"
         desc="How the furniture is rendered"
@@ -219,16 +226,6 @@ export function BuildDisplaySection({
           }}
         />
       </View>
-      {/* Dark mode is reachable from INSIDE a build again, next to the Background it flips: every
-          backdrop has a dark variant and the scene ground follows the theme, so leaving the
-          assembly for the app settings screen just to switch was a detour for a display choice.
-          Same store field as the general tab's toggle — the two rows can never disagree. */}
-      <Row
-        label="Dark mode"
-        desc="Use the dark background theme"
-        value={theme === "dark"}
-        onValueChange={(v) => setTheme(v ? "dark" : "light")}
-      />
       {showLighting ? (
         <Choice
           label="Lighting"
@@ -334,9 +331,7 @@ export function AudioSection() {
 export function AppDisplaySection() {
   const styles = useFixedStyles(makeSettingsStyles);
   const settings = useGameStore((s) => s.settings);
-  const theme = useGameStore((s) => s.theme);
   const setSettings = useGameStore((s) => s.setSettings);
-  const setTheme = useGameStore((s) => s.setTheme);
   const changeFont = (delta: number) =>
     setSettings({
       fontScale: Math.min(1.5, Math.max(0.9, +(settings.fontScale + delta).toFixed(2))),
@@ -344,12 +339,8 @@ export function AppDisplaySection() {
   return (
     <>
       <SectionHeader>Display</SectionHeader>
-      <Row
-        label="Dark mode"
-        desc="Use the dark background theme"
-        value={theme === "dark"}
-        onValueChange={(v) => setTheme(v ? "dark" : "light")}
-      />
+      {/* The app-wide dark switch is gone: dark is a BUILD preference now ("Assemble in Dark Mode",
+          in the build's own Display section). One switch, in the place it applies. */}
       <View style={styles.switchRow}>
         <View style={styles.rowText}>
           <Text style={styles.rowLabel}>Text size</Text>
