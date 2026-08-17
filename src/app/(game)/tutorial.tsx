@@ -64,7 +64,6 @@ import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
 import { ThemeScope } from "@/src/game/ui/system/theme";
 import type { ThemeId } from "@/src/game/core/type";
 import { backdropSource } from "@/src/game/ui/backdrop/backdrops";
-import { setMusicEnabled, setMusicVolume, stopMusic } from "@/src/game/audio/music";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 import {
   requiresClusterFocus,
@@ -336,15 +335,6 @@ function TutorialScreen() {
   const settings = useGameStore((s) => s.settings);
   // The tutorial is an assembly task too, and it is the first one a player sees — starting silent
   // here and playing in the build would read as a bug rather than as a setting.
-  const musicOn = settings.music;
-  const musicVolume = settings.musicVolume;
-  useEffect(() => {
-    // Volume BEFORE enable, so the first bar plays at the level the player set rather than at the
-    // module default and then correcting itself.
-    setMusicVolume(musicVolume);
-    setMusicEnabled(musicOn);
-    return () => stopMusic();
-  }, [musicOn, musicVolume]);
   const focusPreviewActive =
     tutorialStepId === "hud-spot" && settings.focusMode;
   const showingUndoPreview =
