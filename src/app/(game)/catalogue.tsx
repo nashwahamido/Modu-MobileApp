@@ -17,7 +17,6 @@ import Animated, {
 import { StyleSheet,
   Image,
   Pressable,
-  ScrollView,
   Text,
   useColorScheme,
   View,
@@ -351,6 +350,11 @@ const SHADOW_SM = {
   shadowOffset: { width: 0, height: 2 },
   elevation: 4,
 } as const;
+
+/** The thumbnail groove. A SOLID mid grey rather than a translucent brown wash: the card beneath is
+ *  cream, so a low-alpha inset just tinted the cream and left a white finish with nothing to sit
+ *  against. Neutral and warm-leaning, so it reads as a recess and not as a second surface colour. */
+const THUMB_INSET = "#B9B4AC";
 
 /** The single text colour for this screen (wireframe ink). */
 const INK = "#231F20";
@@ -698,8 +702,11 @@ const makeStyles = (t: Theme) =>
       width: 118,
       height: 118,
       borderRadius: RADIUS.control,
-      // Inset, like every other groove in the palette — the thumbnail sits IN the card.
-      backgroundColor: t.surfaceInset,
+      // Inset, like every other groove in the palette — the thumbnail sits IN the card. Held LOCALLY
+      // and darker than t.surfaceInset (0.10): these tiles carry white and pale-wood furniture, and
+      // at the theme's value a white LACK dissolved into its own groove. Every other inset in the
+      // app sits behind text or controls, which is why the token stays where it is.
+      backgroundColor: THUMB_INSET,
       alignItems: "center",
       justifyContent: "center",
       // The carousel is wider than the frame; without this the off-screen cells spill over the card.

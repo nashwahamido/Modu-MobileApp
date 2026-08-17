@@ -2,7 +2,9 @@
 import { Link } from "expo-router";
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- restored with the buttons below
 import type { Href } from "expo-router";
-// `Image` and `Text` are unused while the brand block is commented out — both come back with it.
+// `Image` and `Text` are unused while the brand block is commented out — both come back with it,
+// so they are kept imported and silenced rather than removed and re-added during the rebuild.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { StyleSheet, Image, Text, View } from "react-native";
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- restored with the buttons below
@@ -81,13 +83,19 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       justifyContent: "center",
       backgroundColor: BG_SOLID,
+      // The content is vertically centred, so extra padding at the FOOT lifts the whole block —
+      // cards, caption and Start Fresh together — without moving any of them relative to each other.
+      paddingBottom: 110,
     },
     content: {
       width: "100%",
       maxWidth: 980,
-      flexDirection: "row",
+      // COLUMN while the brand block is commented out: as a row it kept a 300pt actions column
+      // pinned right and an empty intro column left, which is what pushed the demo cards off centre.
+      // Restore flexDirection:"row" + justifyContent:"space-between" when the brand block returns.
+      flexDirection: "column",
       alignItems: "center",
-      justifyContent: "space-between",
+      justifyContent: "center",
       gap: 36,
     },
     intro: {
@@ -137,7 +145,9 @@ const makeStyles = (t: Theme) =>
       textAlign: "center",
     },
     actions: {
-      width: 300,
+      // Was a fixed 300 for the two buttons; the demo cards need the full width to centre in.
+      width: "100%",
+      alignItems: "center",
       gap: SPACE.md,
     },
   });
