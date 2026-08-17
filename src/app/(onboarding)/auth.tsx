@@ -1,7 +1,11 @@
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- restored with the buttons below
 import { Link } from "expo-router";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- restored with the buttons below
 import type { Href } from "expo-router";
+// `Image` and `Text` are unused while the brand block is commented out — both come back with it.
 import { StyleSheet, Image, Text, View } from "react-native";
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- restored with the buttons below
 import { Button } from "@/src/game/ui/system/Button";
 import { AccountPicker } from "@/src/dev/AccountPicker";
 import { FONT, SPACE, useStyles } from "@/src/game/ui/system/theme";
@@ -9,16 +13,25 @@ import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src
 import type { Theme } from "@/src/game/ui/system/theme";
 
 
+// ─────────────────────────────────────────────────────────────────────────────
+// REBUILD IN PROGRESS. The mascot, the wordmark, the "Everyone Can Build!" line and the Create
+// account / Log in buttons are COMMENTED OUT, not deleted, while this screen is redesigned — the markup, the styles
+// and the imports they need are all still here, so restoring any piece is uncommenting it.
+//
+// NOTE: with both buttons out there is no route past this screen for a normal player. The dev
+// AccountPicker still signs in on a dev build, so the app stays reachable meanwhile.
+// ─────────────────────────────────────────────────────────────────────────────
+
 /** Flat, not a ramp. The brand art decides it: the mascot is white and the wordmark is dark taupe,
  *  so a cream backdrop would swallow the mascot whole (1.01:1) while the blue keeps both readable
  *  and lets the cream buttons carry the contrast instead. */
 const BG_SOLID = "#A9BFD9";
 const SLOGAN_INK = "#595551";
 
-const mascot = require("../../assets/images/mascot/mascot.png");
-const wordmark = require("../../assets/ui/brand/logo-modu.png");
-const createAccountRoute = "/create-account" as Href;
-const loginRoute = "/create-account?mode=login" as Href;
+// const mascot = require("../../assets/images/mascot/mascot.png");
+// const wordmark = require("../../assets/ui/brand/logo-modu.png");
+// const createAccountRoute = "/create-account" as Href;
+// const loginRoute = "/create-account?mode=login" as Href;
 
 export default function AuthScreen() {
   const styles = useStyles(makeStyles);
@@ -39,18 +52,20 @@ export default function AuthScreen() {
       <View style={styles.content}>
         <View style={styles.intro}>
           <View style={styles.header}>
-            <Image source={mascot} style={styles.mascot} />
-            <Image source={wordmark} style={styles.wordmark} resizeMode="contain" />
+            {/* <Image source={mascot} style={styles.mascot} /> */}
+            {/* <Image source={wordmark} style={styles.wordmark} resizeMode="contain" /> */}
           </View>
-          <Text style={styles.slogan}>Everyone Can Build!</Text>
+          {/* <Text style={styles.slogan}>Everyone Can Build!</Text> */}
         </View>
         <View style={styles.actions}>
+          {/*
           <Link href={createAccountRoute} asChild>
             <Button label="Create account" variant="primary" pill />
           </Link>
           <Link href={loginRoute} asChild>
             <Button label="Log in" pill />
           </Link>
+          */}
           {/* Renders nothing unless a dev or showcase roster is live in this build. */}
           <AccountPicker />
         </View>

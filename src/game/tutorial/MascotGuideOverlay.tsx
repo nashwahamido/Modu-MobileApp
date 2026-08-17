@@ -13,7 +13,7 @@ import { useTutorialTargets, type TutorialFrame } from './targetRegistry';
 import { useTutorialAudio } from './useTutorialAudio';
 import { Button } from '@/src/game/ui/system/Button';
 import { useGameStore } from '@/src/game/core/store';
-import { avatarForProfile } from '@/src/components/avatarAssets';
+import { avatarHeadForProfile } from '@/src/components/avatarAssets';
 import { ACCENT_LIGHT, ELEVATION, RADIUS, Theme, TYPE, useFixedStyles, useReadingFont } from "@/src/game/ui/system/theme";
 import { tutorialPresentationForProfile } from './presentation';
 import { VisualLongPressCue } from './VisualLongPressCue';
@@ -66,7 +66,9 @@ export function MascotGuideOverlay({
   const currentIndex = useTutorialStore((s) => s.currentIndex);
   const profile = useGameStore((s) => s.profile);
   const mapOpen = useGameStore((s) => s.mapOpen);
-  const mascotImage = avatarForProfile(profile);
+  // HEAD art, not the full body: at 82pt the whole character was a speck, and each one shrank
+  // to a different part of itself.
+  const mascotImage = avatarHeadForProfile(profile);
   const presentation = tutorialPresentationForProfile(profile);
   const steps = useTutorialStore((s) => s.steps);
   const phase = useTutorialStore((s) => s.phase);
@@ -375,7 +377,7 @@ export function MascotGuideOverlay({
             <Image
               source={mascotImage}
               style={styles.mascotPortraitImage}
-              resizeMode="cover"
+              resizeMode="contain"
             />
           </View>
         ) : null}
@@ -603,21 +605,20 @@ const makeStyles = (t: Theme) =>
       gap: 10,
     },
     mascotPortrait: {
-      width: 82,
-      height: 66,
-      borderRadius: 14,
+      width: 78,
+      height: 78,
+      borderRadius: 16,
       borderWidth: 3,
       borderColor: t.surface,
-      backgroundColor: t.surface,
+      // CREAM, not lavender: the tile sits among cream chrome, and the lavender read as a selection
+      // state — a colour that means "chosen" everywhere else in this app.
+      backgroundColor: '#F7F0E6',
       overflow: 'hidden',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
-    mascotPortraitImage: {
-      position: 'absolute',
-      width: 150,
-      height: 150,
-      left: -37,
-      top: -17,
-    },
+    // The head fits its frame — no negative offsets to tune per character.
+    mascotPortraitImage: { width: '100%', height: '100%' },
     copy: {
       flex: 1,
       backgroundColor: t.surface,
@@ -629,7 +630,9 @@ const makeStyles = (t: Theme) =>
       ...ELEVATION.card,
     },
     stepText: { color: t.success, fontSize: 11, fontWeight: '800', marginBottom: 4 },
-    message: { color: t.text, fontSize: 14, lineHeight: 19, fontWeight: '700' },
+    // flex + minWidth 0: without them the message can't shrink inside messageRow, so in visual mode
+    // (where a demo cue shares the row) a long line ran straight out of the card.
+    message: { flex: 1, minWidth: 0, color: t.text, fontSize: 14, lineHeight: 19, fontWeight: '700' },
     messageRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -638,6 +641,7 @@ const makeStyles = (t: Theme) =>
     },
     visualMessage: {
       flex: 1,
+      minWidth: 0,
       fontSize: 15,
       lineHeight: 19,
       fontWeight: '800',

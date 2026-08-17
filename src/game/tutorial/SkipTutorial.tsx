@@ -83,8 +83,11 @@ const makeStyles = (t: Theme) =>
     // Bottom-centre, away from the joystick and the tray — the two places a thumb already lives.
     skip: {
       position: "absolute",
-      bottom: 6,
-      alignSelf: "center",
+      // Level with the OBJECTIVE BAR's centre: the bar sits at top:10 and runs ~70 tall, so 38 puts
+      // this text on its midline. right:112 clears the PARTS TRAY (right:14, width:86) and sits just
+      // inboard of it, so the link never overlaps the tray column or its cards.
+      top: 38,
+      right: 48,
       paddingHorizontal: SPACE.md,
       paddingVertical: SPACE.xs,
       borderRadius: RADIUS.pill,

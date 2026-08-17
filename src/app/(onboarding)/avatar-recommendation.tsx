@@ -180,6 +180,9 @@ const styles_halo = {
   borderColor: ACCENT_LIGHT,
 };
 
+/** The avatar circle behind every mode's character — Clear Path's soft mint, kept for all four.
+ *  Sampled from Pebble's card, which was the one that read as a backdrop rather than a state. */
+const AVATAR_CIRCLE = "#dff2e4";
 const BG_FROM = "#E8D48C";
 const BG_TO = "#A9BFD9";
 
@@ -370,11 +373,18 @@ export default function AvatarRecommendationScreen() {
             competing to be the thing you look at. */}
         <View style={styles.modeColumn}>
           <PopIn delay={STAGE.avatar} big animate={introPlaying}>
-            <View style={[styles.avatarCircle, { backgroundColor: selectedMode.color }]}>
+            {/* ONE circle colour for every mode. Per-mode tints made the four cards read as four
+                different components, and the avatars — which now carry their own colour — had to
+                sit on whatever hue the mode happened to own. Control's light lavender is the one
+                that worked against all four characters. */}
+            <View style={styles.avatarCircle}>
               <Image
                 source={selectedMode.image}
                 style={styles.avatarImage}
-                resizeMode="cover"
+                // contain, not cover: cover cropped the taller characters (Lumi's magnifier, Sparky's
+                // ears) against the circle, so two of the four lost their heads while the other two
+                // fitted by luck. Contain shows every avatar whole, whatever its silhouette.
+                resizeMode="contain"
               />
             </View>
             {/* Outside the circle's overflow:hidden, so the glints can sit ON its rim. */}
@@ -567,11 +577,14 @@ const makeStyles = (t: Theme, k = 1) =>
       justifyContent: "center",
       borderRadius: Math.round(105 * k),
       overflow: "hidden",
+      // The one avatar circle colour, for every mode (was selectedMode.color).
+      backgroundColor: AVATAR_CIRCLE,
     },
+    // Sized INSIDE the circle now (was 232 in a 210 circle, which relied on the crop). With contain
+    // the art fits the box, so the box has to sit within the rim or the character floats in a gap.
     avatarImage: {
-      width: Math.round(232 * k),
-      height: Math.round(232 * k),
-      borderRadius: Math.round(116 * k),
+      width: Math.round(196 * k),
+      height: Math.round(196 * k),
     },
     // Straddling the circle's top edge. alignSelf centre plus a negative top pulls it back over the rim, so it reads as pinned to the avatar rather than floating above it.
     recommendedBadge: {

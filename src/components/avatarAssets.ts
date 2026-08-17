@@ -13,6 +13,21 @@ export const AVATAR_IMAGES: Record<ProfileId, ImageSourcePropType> = {
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 // Falls back to "control" when a profile has no mode set — an account that predates onboarding, or one that skipped it.
+/** HEAD-ONLY art, for the small round/rect frames: the tutorial portrait, and anywhere a character
+ *  appears at chip size. A full body shrunk into an 82pt box became an unreadable speck, and a crop
+ *  of the body art framed a different part of each character — so the heads are their own assets. */
+export const AVATAR_HEAD_IMAGES: Record<ProfileId, ImageSourcePropType> = {
+  visual: require("@/src/assets/images/avatars/lumi-head.png"),
+  momentum: require("@/src/assets/images/avatars/sparky-head.png"),
+  clearPath: require("@/src/assets/images/avatars/pebble-head.png"),
+  control: require("@/src/assets/images/avatars/felix-head.png"),
+};
+
+/** The head-only avatar for a Helping Mode. */
+export function avatarHeadForProfile(profile: ProfileId): ImageSourcePropType {
+  return AVATAR_HEAD_IMAGES[profile];
+}
+
 export function avatarForProfile(
   profile: ProfileId | null | undefined,
 ): ImageSourcePropType {

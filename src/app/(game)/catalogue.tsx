@@ -422,10 +422,22 @@ function FurnitureCard({
   }, [burst]);
   // The build always uses the DEFAULT finish — the carousel is a showcase, not a picker, so a tap on Start mid-slide must not launch whatever frame was on screen.
   const buildFinish = finishes[0] ?? null;
+  // The carousel is a SHOWCASE, so it runs on the artwork a build ships, not on item_variants:
+  // "cartoon" and "cozy" are finishes the catalogue can display but nobody can buy or build, and
+  // gating the reel on the purchasable list meant three of the four models had nothing to show.
+  // buildFinish above still comes from the DB list, so what a tap on Start launches is unchanged.
+  const reel = useMemo(() => {
+    const art = meta.variantThumbnails;
+    if (!art) return [] as string[];
+    const keys = Object.keys(art);
+    // Default first (it is the tile's resting image), then the rest in their authored order.
+    const first = finishes[0] && keys.includes(finishes[0]) ? finishes[0] : keys[0];
+    return [first, ...keys.filter((k) => k !== first)];
+  }, [meta.variantThumbnails, finishes]);
   // Cells: the alternates in reverse, then the default, then the FIRST cell again — so the pass opens and closes on the same finish (white for LACK). That repeat is also what makes a REPLAY seamless: the run ends parked on the last cell, and jumping back to cell 0 to start again lands on an identical image, so the reset is never seen.
   const track = useMemo(
-    () => (finishes.length > 1 ? [...finishes.slice(1).reverse(), finishes[0], finishes[finishes.length - 1]] : []),
-    [finishes],
+    () => (reel.length > 1 ? [...reel.slice(1).reverse(), reel[0], reel[reel.length - 1]] : []),
+    [reel],
   );
   // `dark` survives here for the ARTWORK, not the styling: each meta ships a light and a dark thumbnail, and that choice can't come from a colour token.
   const pickThumb = (set: ThumbSet) => (dark ? set.dark : set.light) ?? set.light;
