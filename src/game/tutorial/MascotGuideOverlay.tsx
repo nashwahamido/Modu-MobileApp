@@ -21,6 +21,7 @@ import { VisualLongPressCue } from './VisualLongPressCue';
 import { VisualJoystickCue } from './VisualJoystickCue';
 import { VisualSwipeCue } from './VisualSwipeCue';
 import { VoiceButton } from '@/src/game/ui/hud/VoiceButton';
+import { mirror, useHandedness } from "@/src/game/ui/system/handedness";
 const PADDING = 0;
 
 interface Props {
@@ -56,6 +57,8 @@ export function MascotGuideOverlay({
   guideMessageOverride = null,
 }: Props) {
   const styles = useFixedStyles(makeStyles);
+  // Read HERE, above every early return below — this component has eight of them, and a hook called past any one of them changes the hook order between renders.
+  const handedness = useHandedness();
   // The tutorial is the most read text in the app.
   const readingFont = useReadingFont();
   const overlayRef = useRef<View>(null);
@@ -317,13 +320,23 @@ export function MascotGuideOverlay({
       : presentation.reducedText
         ? visualMessageForStep(step.id, step.shortLabel ?? step.message)
         : step.message;
-  const bubbleStyle = bubblePosition(
-    activeTargetId,
-    frame,
-    width,
-    height,
-    presentation.showVisualDemo,
-    presentation.showMomentumCompanion,
+  // UN-MIRROR IN, MIRROR OUT — and both halves are needed.
+  //
+  // `frame` is the MEASURED rectangle of the control being pointed at, so in left-hand mode it has already crossed the screen with that control. Mirroring only the RESULT therefore flipped a placement that was already correct, and every bubble landed on the far side of the screen from its target.
+  //
+  // Nor is doing nothing right: the branches below encode a SIDE ("beside the target, to its right", "hard against the left edge"), and a side preference authored for a right-handed HUD has to flip with the HUD. Reflecting the frame back into right-handed space lets that logic run exactly as written, and reflecting its answer back out puts it where a mirrored screen wants it. One reflection at each end, one set of placement rules in the middle.
+  const placementFrame =
+    handedness === "left" ? { ...frame, x: width - frame.x - frame.width } : frame;
+  const bubbleStyle = mirror(
+    bubblePosition(
+      activeTargetId,
+      placementFrame,
+      width,
+      height,
+      presentation.showVisualDemo,
+      presentation.showMomentumCompanion,
+    ),
+    handedness,
   );
 
   return (

@@ -14,10 +14,33 @@ import { useItemVariants } from "@/src/data/catalog/variantStore";
 import { FURNITURE_METAS } from "@/src/game/content/furnitures/furnitures";
 import type { AssetSrc } from "@/src/game/core/type";
 
-// Bundled fallback art, keyed by catalog id. Built furniture already ships a thumbnail for the catalogue/build screens; reusing it means the Inventory has pictures even with an empty bucket.
-const BUNDLED: Record<string, AssetSrc> = Object.fromEntries(
-  FURNITURE_METAS.map((meta) => [meta.id, meta.thumbnail.light]),
-);
+// Bundled fallback art, keyed by catalog id. Built furniture already ships thumbnails for the
+// catalogue/build screens; reusing them means the Inventory has pictures even with an empty bucket —
+// and, more to the point, that a model looks the SAME in the shop, the inventory and the catalogue.
+//
+// PER VARIATION, not one picture per item: a build now ships art for each finish it can be built in
+// (meta.variantThumbnails), so a white LACK in the inventory can be the white LACK from the
+// catalogue rather than the model's default picture standing in for every colour.
+const BUNDLED: Record<string, { default: AssetSrc; byVariation: Record<string, AssetSrc> }> =
+  Object.fromEntries(
+    FURNITURE_METAS.map((meta) => [
+      meta.id,
+      {
+        default: meta.thumbnail.light,
+        byVariation: Object.fromEntries(
+          Object.entries(meta.variantThumbnails ?? {}).map(([finish, set]) => [finish, set.light]),
+        ),
+      },
+    ]),
+  );
+
+/** The bundled picture for one item in one variation: the matching finish if this build ships it,
+ *  else the model's own thumbnail. undefined = not a built furniture, so there is no bundle. */
+function bundledArt(itemId: string, variation: string | null | undefined): AssetSrc | undefined {
+  const entry = BUNDLED[itemId];
+  if (!entry) return undefined;
+  return (variation ? entry.byVariation[variation] : undefined) ?? entry.default;
+}
 
 export interface CatalogThumbProps {
   source: ItemSource;
@@ -39,13 +62,20 @@ export function CatalogThumb({ source, itemId, variation, surface, size }: Catal
   useEffect(() => setFailed(null), [uri]);
 
   const remoteOk = uri !== null && failed !== uri;
-  const bundled = BUNDLED[itemId];
+  const bundled = bundledArt(itemId, shown);
+  // BUILT furniture prefers its BUNDLED picture over storage. Everywhere else storage wins, because
+  // a bought item or a wallpaper has no bundle to fall back on — but a built model's catalogue art
+  // ships with the app and is the picture the player has already seen on the card they built from.
+  // Storage holds older renders of the same four models, so leaving it first meant the inventory and
+  // the catalogue disagreed about what a LACK looks like.
+  const preferBundled = bundled !== undefined && !surface;
   if (!remoteOk && bundled === undefined) return null;
+  const showBundled = preferBundled || !remoteOk;
 
   // A surface IS its picture — a wallpaper or a floor is a tiling swatch with no silhouette, so it fills the frame and crops. Everything else is an object photographed against nothing, and must be contained or it loses its edges.
   return (
     <Image
-      source={remoteOk ? { uri } : bundled}
+      source={showBundled ? bundled : { uri }}
       style={surface ? styles.fill : [styles.art, { width: size, height: size }]}
       resizeMode={surface ? "cover" : "contain"}
       onError={() => setFailed(uri)}

@@ -4,7 +4,7 @@ import type { Href } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getCurrentSession } from "@/src/services/auth";
 import { createProfileIfMissing } from "@/src/services/profile";
-import { getLatestOnboardingMode } from "@/src/services/onboarding";
+import { getLatestHandedness, getLatestOnboardingMode } from "@/src/services/onboarding";
 import { useGameStore } from "@/src/game/core/store";
 import type { ProfileId } from "@/src/game/core/profile";
 import { LoadingScreen } from "@/src/game/ui/loading/LoadingScreen";
@@ -33,6 +33,9 @@ export default function LoadingScreenRoute() {
             if (latestMode && profileIds.has(latestMode as ProfileId)) {
               useGameStore.getState().applyProfile(latestMode as ProfileId);
             }
+            // AFTER applyProfile, not before — that call replaces the settings object wholesale, and while handedness deliberately lives outside it (see the store), ordering it second means the two can never fight if that ever changes.
+            const hand = await getLatestHandedness(user.id);
+            if (hand) useGameStore.getState().setHandedness(hand);
             targetRoute.current = mainRoute;
           }
         }

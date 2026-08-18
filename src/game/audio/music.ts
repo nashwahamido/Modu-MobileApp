@@ -26,8 +26,10 @@ const SOURCES: Record<MusicTrackId, number> = {
 const MUSIC_CEILING = 0.45;
 
 const players: Partial<Record<MusicTrackId, AudioPlayer>> = {};
-let level = 0.5;
-let enabled = true;
+// PER TRACK, not global: assembly music is set in the build's own settings and ambient music in the
+// General tab, and a player who silences one usually means only that one.
+const levels: Record<MusicTrackId, number> = { assembly: 0.5, ambient: 0.5 };
+const enabled: Record<MusicTrackId, boolean> = { assembly: true, ambient: true };
 let current: MusicTrackId | null = null;
 
 function playerFor(id: MusicTrackId): AudioPlayer | null {
@@ -36,7 +38,7 @@ function playerFor(id: MusicTrackId): AudioPlayer | null {
   try {
     const p = createAudioPlayer(SOURCES[id]);
     p.loop = true;
-    p.volume = level * MUSIC_CEILING;
+    p.volume = levels[id] * MUSIC_CEILING;
     players[id] = p;
     return p;
   } catch {
@@ -48,12 +50,12 @@ function playerFor(id: MusicTrackId): AudioPlayer | null {
 function apply() {
   for (const id of Object.keys(SOURCES) as MusicTrackId[]) {
     const p = players[id];
-    const shouldPlay = enabled && current === id;
+    const shouldPlay = enabled[id] && current === id;
     if (shouldPlay) {
       const target = playerFor(id);
       if (target) {
         try {
-          target.volume = level * MUSIC_CEILING;
+          target.volume = levels[id] * MUSIC_CEILING;
           if (!target.playing) target.play();
         } catch {
           /* ignore */
@@ -78,21 +80,22 @@ export function setMusicTrack(track: MusicTrackId | null) {
   apply();
 }
 
-/** The on/off setting. Zero volume counts as off — see the settings meter. */
-export function setMusicEnabled(on: boolean) {
-  enabled = on;
+/** The on/off setting for ONE track. Zero volume counts as off — see the settings meter. */
+export function setMusicEnabled(track: MusicTrackId, on: boolean) {
+  enabled[track] = on;
   apply();
 }
 
-/** Set the level (0-1) live: a change should be audible while the finger is still on the control.
+/** Set ONE track's level (0-1) live: a change should be audible while the finger is still on the
+ *  control.
  *
- *  GUARDED against a non-finite value: a settings object written before musicVolume existed hands
+ *  GUARDED against a non-finite value: a settings object written before these fields existed hands
  *  in `undefined`, Math.max turns that into NaN, and a NaN volume plays SILENTLY while every other
  *  signal — the toggle, the route, the player — still looks correct. Falling back to the default
  *  means an old profile plays rather than mysteriously not. */
-export function setMusicVolume(next: number) {
+export function setMusicVolume(track: MusicTrackId, next: number) {
   const safe = Number.isFinite(next) ? next : 0.5;
-  level = Math.min(1, Math.max(0, safe));
+  levels[track] = Math.min(1, Math.max(0, safe));
   apply();
 }
 

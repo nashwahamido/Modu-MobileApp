@@ -11,6 +11,7 @@ import {
 import type { ISharedValue } from "react-native-worklets-core";
 import { useGameStore } from "@/src/game/core/store";
 import type { PartId } from "@/src/game/core/type";
+import { useThemeId } from "@/src/game/ui/system/theme";
 import { CombineCarry, type CarryOffset } from "./CombineCarry";
 import { OrbitDrive, type PanOffset, type StickDeflection } from "./OrbitDrive";
 import { stageOffsetMap } from "@/src/game/core/model/staging";
@@ -71,7 +72,11 @@ export function AssemblyScene({
   );
   const manualTools = useGameStore((s) => s.settings.manualTools);
   const lightingPreset = useGameStore((s) => s.settings.lightingPreset);
-  const dark = useGameStore((s) => s.theme) === "dark";
+  // The SCOPED theme, not the app's: this scene renders under the assembly's ThemeScope, so
+  // "Assemble in Dark Mode" reaches the light rig the same way it reaches the chrome. Read from
+  // s.theme it would never darken at all, now that dark is a build setting rather than an app one —
+  // the HUD would go dark around a scene that stayed lit.
+  const dark = useThemeId() === "dark";
   const rig = getLightRig(renderStyle, dark, lightingPreset);
 
   /**

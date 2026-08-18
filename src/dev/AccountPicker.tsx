@@ -13,6 +13,10 @@ import { Button } from "@/src/game/ui/system/Button";
 import { RADIUS, SPACE, Theme, TYPE, useFixedStyles } from "@/src/game/ui/system/theme";
 import { ENABLED_ROSTERS } from "./rosters";
 import { personaFor } from "./showcase";
+import { getCurrentSession } from "@/src/services/auth";
+import { getLatestOnboardingMode } from "@/src/services/onboarding";
+import { useGameStore } from "@/src/game/core/store";
+import type { ProfileId } from "@/src/game/core/profile";
 import { avatarCardForProfile } from "@/src/components/avatarAssets";
 
 // The level badges, drawn in a card's top-right corner — the app's OWN level stars (ui/icons),
@@ -97,6 +101,25 @@ function ShowcaseCard({
   );
 }
 
+/** The account's own mode, from its latest questionnaire answer. Silent on failure: a missing or
+ *  unreadable answer leaves the profile at its default, which is what happened before this existed —
+ *  never a sign-in that fails because a cosmetic lookup did. */
+async function applySignedInProfile(): Promise<void> {
+  try {
+    const session = await getCurrentSession();
+    const userId = session?.user?.id;
+    if (!userId) return;
+    const mode = await getLatestOnboardingMode(userId);
+    if (mode && PROFILE_IDS.has(mode as ProfileId)) {
+      useGameStore.getState().applyProfile(mode as ProfileId);
+    }
+  } catch {
+    /* leave the default */
+  }
+}
+
+const PROFILE_IDS = new Set<ProfileId>(["visual", "momentum", "clearPath", "control"]);
+
 export function AccountPicker() {
   const styles = useFixedStyles(makeStyles);
   const [busy, setBusy] = useState<string | null>(null);
@@ -110,6 +133,14 @@ export function AccountPicker() {
     setError(null);
     try {
       await action();
+      // Restore the signed-in account's HELPING MODE before leaving this screen.
+      //
+      // /loading does this for a normal launch, but a showcase sign-in goes straight to /room and
+      // never passes through it — so the store kept its default ("control"), and every demo account
+      // wore Felix in the loading ring, the tutorial portrait and the hint toast regardless of who
+      // they were. Read here rather than in signInToAccount so the dev roster gets it too, and so a
+      // failure to read the mode cannot fail the sign-in itself.
+      await applySignedInProfile();
       router.replace(destination);
     } catch (err) {
       setError((err as Error).message);

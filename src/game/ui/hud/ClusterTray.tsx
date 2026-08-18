@@ -10,6 +10,7 @@ import {
 } from "@/src/game/core/evaluation/clusters";
 import { clusterParkInfo } from "@/src/game/core/evaluation/clusterCombine";
 import type { ParkInfo } from "@/src/game/core/evaluation/engagement";
+import { clusterThumbSet } from "@/src/game/core/presentation/finish";
 import { pickThumb } from "@/src/game/core/presentation/labels";
 import { useGameStore } from "@/src/game/core/store";
 import { Theme, useFixedStyles } from "@/src/game/ui/system/theme";
@@ -34,6 +35,7 @@ export function ClusterTray({ clusterDriver, clusterGestureFor }: Props) {
   const furniture = useGameStore((s) => s.furniture);
   const completed = useGameStore((s) => s.completed);
   const combiningCluster = useGameStore((s) => s.combiningCluster);
+  const renderStyle = useGameStore((s) => s.renderStyle);
   const scheme = useColorScheme();
 
   const done = useMemo(() => new Set(completed), [completed]);
@@ -78,7 +80,8 @@ export function ClusterTray({ clusterDriver, clusterGestureFor }: Props) {
   return (
     <View style={styles.container} pointerEvents="box-none">
       {cards.map((c) => {
-        const set = furniture.clusterThumbs?.[c];
+        // The same resolution the build map uses, so a card in the tray and its circle on the map are never two different finishes of one sub-assembly.
+        const set = clusterThumbSet(furniture, c, renderStyle);
         const thumb = set ? pickThumb(set, theme) : undefined;
         const g = gestures.get(c);
         const dragging = combiningCluster === c;

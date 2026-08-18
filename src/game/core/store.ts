@@ -24,6 +24,7 @@ import {
   ClusterId,
   Furniture,
   GroupId,
+  Handedness,
   PartId,
   RenderStyleId,
   ThemeId,
@@ -107,6 +108,8 @@ interface GameState {
   roomTimeOfDay: TimeOfDayId;
   /** Display theme (backdrop + thumbnails): light | dark | high_contrast. */
   theme: ThemeId;
+  /** Which hand drives the build — it MIRRORS the HUD, so the joystick, the trays, the button column and every task control move to the other side. Answered in onboarding's first question and read back at the loading gate (src/app/(onboarding)/loading.tsx). Deliberately out of `settings`: applyProfile replaces that object wholesale, so it would reset on every avatar change. */
+  handedness: Handedness;
   /** "Assemble in dark mode": the BUILD screens render dark while the rest of the app stays as it
    *  is. Deliberately separate from `theme` — that one is the whole app's, and a player who wants a
    *  dark workbench is not asking for a dark shop. */
@@ -126,6 +129,7 @@ interface GameState {
   setBackdrop: (backdrop: BackdropId) => void;
   setRoomTimeOfDay: (time: TimeOfDayId) => void;
   setTheme: (theme: ThemeId) => void;
+  setHandedness: (handedness: Handedness) => void;
   setAssembleDark: (on: boolean) => void;
 
   completeAction: (id: ActionId) => void;
@@ -230,6 +234,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
   roomTimeOfDay: "afternoon",
   // Light by default. The palette (ui/theme.ts) was designed against the dark reference, but light is the safer default for a study: it survives a bright room, a projector, and a participant's own phone brightness, none of which we control. Dark and high-contrast are the SAME product in different light — same three accent hues, same meanings — so switching costs nothing but the setting.
   theme: "light",
+  // RIGHT by default, because the HUD was authored right-handed and that is what every screenshot, spotlight offset and tuned margin in the build assumes. A left-hander gets the mirror from their own answer to onboarding's first question; nobody gets it by accident.
+  handedness: "right",
   assembleDark: false,
 
   loadFurniture: (f) =>
@@ -523,6 +529,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
   setCombiningCluster: (cluster) => set({ combiningCluster: cluster }),
 
   setSettings: (patch) => set({ settings: { ...get().settings, ...patch } }),
+  setHandedness: (handedness) => set({ handedness }),
   applyProfile: (profile) =>
     set({
       profile,

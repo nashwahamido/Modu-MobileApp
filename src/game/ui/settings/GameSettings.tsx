@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { useSafeInsets } from "@/src/hooks/use-safe-insets";
 import { ELEVATION, RADIUS, Theme, useFixedStyles, FONT } from "@/src/game/ui/system/theme";
+import { useMirror } from "@/src/game/ui/system/handedness";
 import {
   SettingsControls,
   type SettingsFocusTarget,
@@ -42,6 +43,7 @@ export function GameSettings({
   onTutorialTargetActivated,
 }: GameSettingsProps = {}) {
   const styles = useFixedStyles(makeStyles);
+  const m = useMirror();
   const settingsIcon = useHudIcon("settings");
   const [open, setOpen] = useState(false);
   const [tutorialTargetY, setTutorialTargetY] = useState<number | null>(null);
@@ -87,7 +89,7 @@ export function GameSettings({
     <>
       {/* Settings icon — rounded-square chip with a minimalist sliders glyph. subject to change*/}
       <Pressable
-        style={({ pressed }) => [styles.gear, pressed && { opacity: 0.6 }]}
+        style={({ pressed }) => [m(styles.gear), pressed && { opacity: 0.6 }]}
         onPress={() => {
           if (tutorialTarget) {
             tutorialWasOpen.current = true;

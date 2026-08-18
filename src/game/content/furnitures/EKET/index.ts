@@ -10,6 +10,7 @@ import { BEATS, CLUSTERS, COMPONENTS, GATES, LABELS, PUSH_OPEN, STRUCTURE } from
 import { ACTIONS, EKET_META } from "./meta";
 import { PARTS } from "./parts.gen";
 import { clusterThumbs, thumbs } from "./thumbs.gen";
+import { CLUSTER_VARIANT_THUMBS } from "./clusterVariants";
 
 const PARTS_WITH_STRUCTURE = applyStructure(PARTS, STRUCTURE);
 const LIAISONS = buildLiaisons(PARTS_WITH_STRUCTURE);
@@ -48,6 +49,7 @@ export const EKET: Furniture = {
   clusters: CLUSTERS,
   thumbs,
   clusterThumbs,
+  clusterVariantThumbs: CLUSTER_VARIANT_THUMBS,
   tools: toolsUsed(ACTIONS),
   instructions: INSTRUCTIONS,
   labels: LABELS_ALL,

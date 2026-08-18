@@ -7,6 +7,7 @@ import { useGameStore } from "@/src/game/core/store";
 import { AssemblyAction, Vec3 } from "@/src/game/core/type";
 import type { ParkInfo } from "@/src/game/core/evaluation/engagement";
 import type { OffsetSink } from "../../scene/combineDriver";
+import { useMirror } from "@/src/game/ui/system/handedness";
 
 const TRACK = 220;
 
@@ -20,6 +21,7 @@ interface Props {
 
 /** Slide control: drag the thumb along the track to GLIDE the parked part into its groove. Linear counterpart of RotateControl's dial — a slider doesn't turn, it travels, so the gesture is a straight drag and the part follows 1:1. Progress is normalized 0..1 (store.advanceDrive); at 1 the placement commits. */
 export function SlideControl({ action, driver, park }: Props) {
+  const m = useMirror();
   const progress = useGameStore((s) => s.driveProgress[action.actionId] ?? 0);
   const parked = useRef<Vec3 | null>(null);
   const lastY = useRef<number | null>(null);
@@ -76,7 +78,7 @@ export function SlideControl({ action, driver, park }: Props) {
     });
 
   return (
-    <View style={styles.wrap} pointerEvents="box-none">
+    <View style={m(styles.wrap)} pointerEvents="box-none">
       <GestureDetector gesture={pan}>
         <View style={styles.track}>
           {/* The fill IS the indicator now — it grows from the top as you drag down, no

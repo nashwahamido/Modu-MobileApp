@@ -2,6 +2,7 @@
 import { Link } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Image, StyleSheet, View } from "react-native";
+import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
 
 import { Button } from "@/src/game/ui/system/Button";
 import { useAuth } from "@/src/hooks/useAuth";
@@ -10,6 +11,11 @@ import { SPACE, Theme, TYPE, useStyles } from "@/src/game/ui/system/theme";
 import { useSafeInsets } from "@/src/hooks/use-safe-insets";
 
 // The home screen sits outside a build, so it doesn't read the store's theme — it IS the
+
+/** The landing art. Rendered through SceneBackdrop — an ImageBackground as the screen ROOT — because
+ *  a bare <Image absoluteFill> scales differently and zooms the art (the bug this component exists
+ *  to prevent). Cut to the app's 1.95:1 window so it covers with no crop. */
+const backdrop = require("@/src/assets/ui/landing-backdrop.jpg");
 
 const wordmark = require("@/src/assets/ui/brand/logo-modu.png");
 /** The art's aspect (600x133 after trimming), so the height follows the width instead of being a
@@ -24,7 +30,10 @@ export default function App() {
   // useSessionGate would bounce a signed-out Home tap anyway, but only AFTER the room mounts and fires its first query. Pointing the link straight at sign-in means that wasted round-trip never happens.
   const homeRoute = SESSION_REQUIRED && !user ? SIGN_IN_ROUTE : "/room";
   return (
-    <View style={[styles.container, { paddingLeft: safe.left, paddingRight: safe.right }]}>
+    <SceneBackdrop
+      source={backdrop}
+      style={[styles.container, { paddingLeft: safe.left, paddingRight: safe.right }]}
+    >
       <Image source={wordmark} style={styles.wordmark} resizeMode="contain" />
 
       <View style={styles.actions}>
@@ -37,8 +46,10 @@ export default function App() {
         </Link>
       </View>
 
-      <StatusBar style="light" />
-    </View>
+      {/* DARK icons now: the backdrop is a pale wash (luminance ~220), and light status icons on it
+          were invisible. */}
+      <StatusBar style="dark" />
+    </SceneBackdrop>
   );
 }
 
@@ -46,6 +57,8 @@ const makeStyles = (t: Theme) =>
   StyleSheet.create({
   container: {
     flex: 1,
+    // Still set, and still the theme's: it is what shows for the instant before the image decodes,
+    // and behind it if the asset ever fails to load.
     backgroundColor: t.bg,
     alignItems: "center",
     justifyContent: "center",

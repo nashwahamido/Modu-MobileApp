@@ -58,10 +58,8 @@ const STYLES: { value: RenderStyleId; label: string }[] = [
   { value: "realistic", label: "Realistic" },
   { value: "cozy", label: "Cozy" },
   { value: "cartoon", label: "Cartoon" },
-  // "toon" retired from the offering (the RenderStyleId and its material survive in scene/shaders,
-  // so a profile saved on it still renders — it just can't be chosen anew).
-  // "Wooden" is what the ink pass produces on this catalogue; the id stays `illustrated`, which is
-  // the shader's name in scene/shaders and in saved settings.
+  // "toon" retired from the offering (the RenderStyleId and its material survive in scene/shaders).
+  // "Wooden" is what the ink pass produces on this catalogue; the id stays `illustrated`.
   { value: "illustrated", label: "Wooden" },
 ];
 // Built from the room's own backdrop table, so a photo added there appears here with no edit.
@@ -203,8 +201,7 @@ export function BuildDisplaySection({
   return (
     <>
       <SectionHeader>Display</SectionHeader>
-      {/* Scoped to the BUILD, and named for it: the room, catalogue and shop are unaffected — a dark
-          workbench is a working preference, not a request for a dark app. */}
+      {/* Scoped to the BUILD, and named for it: the room, catalogue and shop are unaffected. */}
       <Row
         label="Assemble in Dark Mode"
         desc="Dark background while you build. The rest of the app is unchanged."
@@ -313,18 +310,89 @@ export function GuidanceSection({
  *  handful of presets. */
 const MUSIC_STEPS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
 
-export function AudioSection() {
+/**
+ * One meter, used by BOTH music rows.
+ *
+ * The ambient track is set in the General tab and the build track in the assembly settings — two
+ * places, two store fields, one control. Written once so they cannot drift into behaving
+ * differently, which is the usual fate of a duplicated slider.
+ *
+ * Zero IS off: a player taking the music down to nothing has already said what they want, and making
+ * them find a separate toggle to finish the thought is the app arguing with them.
+ */
+function MusicMeter({
+  label,
+  playingDesc,
+  level,
+  onChange,
+}: {
+  label: string;
+  playingDesc: string;
+  level: number;
+  onChange: (next: number) => void;
+}) {
   const styles = useFixedStyles(makeSettingsStyles);
+  const step = (delta: number) =>
+    onChange(Math.min(1, Math.max(0, +((level ?? 0) + delta).toFixed(2))));
+  return (
+    <View style={styles.switchRow}>
+      <View style={styles.rowText}>
+        <Text style={styles.rowLabel}>{label}</Text>
+        <Text style={styles.rowDesc}>{level > 0 ? playingDesc : "Off — raise it to play"}</Text>
+      </View>
+      <View style={styles.meterRow}>
+        <Pressable style={styles.fontBtn} onPress={() => step(-0.1)} hitSlop={6}>
+          <Text style={styles.arrowText}>–</Text>
+        </Pressable>
+        <View style={styles.meter}>
+          {MUSIC_STEPS.map((s) => (
+            <View key={s} style={[styles.meterBar, level >= s && styles.meterBarOn]} />
+          ))}
+        </View>
+        <Pressable style={styles.fontBtn} onPress={() => step(0.1)} hitSlop={6}>
+          <Text style={styles.arrowText}>+</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+/**
+ * AMBIENT music — the General tab.
+ *
+ * On its own, with no effects beside it: this is the track that plays in the room, the catalogue and
+ * the profile, which is everywhere the assembly's effects and spoken steps do not exist.
+ */
+export function AudioSection() {
   const settings = useGameStore((s) => s.settings);
   const setSettings = useGameStore((s) => s.setSettings);
-  const changeMusicVolume = (delta: number) => {
-    const next = Math.min(1, Math.max(0, +(settings.musicVolume + delta).toFixed(2)));
-    // `music` stays in the settings as the on/off FACT other code reads — derived from the level now
-    // rather than set by hand, so the two can never disagree.
-    setSettings({ musicVolume: next, music: next > 0 });
-    setMusicVolume(next);
-    setMusicEnabled(next > 0);
-  };
+  return (
+    <>
+      <SectionHeader>Audio</SectionHeader>
+      <MusicMeter
+        label="Music"
+        playingDesc="Background music in your room and the catalogue"
+        level={settings.musicVolume ?? 0}
+        onChange={(next) => {
+          setSettings({ musicVolume: next, music: next > 0 });
+          setMusicVolume("ambient", next);
+          setMusicEnabled("ambient", next > 0);
+        }}
+      />
+    </>
+  );
+}
+
+/**
+ * The BUILD's audio — the assembly settings.
+ *
+ * Everything that only exists while assembling: the spoken step clips, the effects, and the build's
+ * own music. Its music is a SEPARATE setting from the ambient one above, because wanting the
+ * workshop quiet while you concentrate says nothing about wanting your room quiet.
+ */
+export function BuildAudioSection() {
+  const settings = useGameStore((s) => s.settings);
+  const setSettings = useGameStore((s) => s.setSettings);
   return (
     <>
       <SectionHeader>Audio</SectionHeader>
@@ -340,38 +408,20 @@ export function AudioSection() {
         value={settings.soundEffects}
         onValueChange={(v) => setSettings({ soundEffects: v })}
       />
-      {/* ONE control, not a switch plus a slider. Zero IS off — a player taking the music down to
-          nothing has already said what they want, and making them find a separate toggle to finish
-          the thought is the app arguing with them. The meter shows level and state at once. */}
-      <View style={styles.switchRow}>
-        <View style={styles.rowText}>
-          <Text style={styles.rowLabel}>Music</Text>
-          <Text style={styles.rowDesc}>
-            {settings.musicVolume > 0 ? "Background music while you build" : "Off — raise it to play"}
-          </Text>
-        </View>
-        <View style={styles.meterRow}>
-          <Pressable style={styles.fontBtn} onPress={() => changeMusicVolume(-0.1)} hitSlop={6}>
-            <Text style={styles.arrowText}>–</Text>
-          </Pressable>
-          <View style={styles.meter}>
-            {MUSIC_STEPS.map((step) => (
-              <View
-                key={step}
-                style={[styles.meterBar, settings.musicVolume >= step && styles.meterBarOn]}
-              />
-            ))}
-          </View>
-          <Pressable style={styles.fontBtn} onPress={() => changeMusicVolume(0.1)} hitSlop={6}>
-            <Text style={styles.arrowText}>+</Text>
-          </Pressable>
-        </View>
-      </View>
+      <MusicMeter
+        label="Music"
+        playingDesc="Background music while you build"
+        level={settings.buildMusicVolume ?? 0}
+        onChange={(next) => {
+          setSettings({ buildMusicVolume: next, buildMusic: next > 0 });
+          setMusicVolume("assembly", next);
+          setMusicEnabled("assembly", next > 0);
+        }}
+      />
     </>
   );
 }
 
-/** App chrome, not build chrome: these follow the player across the room, the catalogue and an assembly alike, which is why they sit in the general tab and not with the build settings. */
 export function AppDisplaySection() {
   const styles = useFixedStyles(makeSettingsStyles);
   const settings = useGameStore((s) => s.settings);
