@@ -12,8 +12,8 @@ import { FURNITURE_METAS } from "@/src/game/content/furnitures/furnitures";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import type { FriendRequest, Profile } from "@/src/data";
 import type { Theme } from "@/src/game/ui/system/theme";
+import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
 
-import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 // The "/N" denominator for items assembled: the same buildable set the catalogue counts.
 const TOTAL_BUILDS = FURNITURE_METAS.length;
 
@@ -26,8 +26,13 @@ function titleCase(s: string): string {
 }
 
 /** The avatar recommendation's backdrop, so the two "who you are" screens share a look. */
-const BG_FROM = "#E8D48C";
-const BG_TO = "#A9BFD9";
+/** Shared with the avatar recommendation screen — the two are the same moment either side of
+ *  onboarding ("this is who you are"), so they wear the same art rather than each tuning a ramp. */
+const backdrop = require("@/src/assets/ui/profile-backdrop.jpg");
+
+/** What shows for the frame before the artwork decodes, and behind it if the asset ever fails to
+ *  load. Sampled from the art's own open area so the swap is invisible rather than a flash. */
+const BG_FALLBACK = "#E9E6DF";
 
 /** The screen's own margins, before any device inset is added on top. */
 const GUTTER_H = 28;
@@ -209,20 +214,12 @@ export default function ProfileScreen() {
   }
 
   return (
-    // The gradient owns an UNPADDED layer of its own. Absolute children are inset by their parent's
-    // padding, so drawing it inside the padded root leaves a border of flat colour all round — which
-    // reads as a frame rather than as the background.
-    <View style={styles.screen}>
-      {/* Diagonal, so neither end of the ramp sits flat behind a whole column of content. */}
-      <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
-        <Defs>
-          <LinearGradient id="profileBg" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor={BG_FROM} />
-            <Stop offset="1" stopColor={BG_TO} />
-          </LinearGradient>
-        </Defs>
-        <Rect x="0" y="0" width="100%" height="100%" fill="url(#profileBg)" />
-      </Svg>
+    // The artwork is the screen ROOT, through SceneBackdrop — an ImageBackground, never an
+    // <Image absoluteFill>, which scales the same file differently and renders it zoomed (see the
+    // note at the top of SceneBackdrop.tsx). It also keeps the art UNPADDED: an absolute child is
+    // inset by its parent's padding, so drawing the background inside the padded root below would
+    // leave a border of flat colour all round and read as a frame rather than as the background.
+    <SceneBackdrop source={backdrop} style={styles.screen}>
       <View
       style={[
         styles.root,
@@ -434,7 +431,7 @@ export default function ProfileScreen() {
         </View>
         </View>
       </View>
-    </View>
+    </SceneBackdrop>
   );
 }
 
@@ -442,7 +439,7 @@ const makeStyles = (t: Theme) =>
   StyleSheet.create({
     // Full bleed, never padded: this is what the gradient measures against, and its colour is the
     // gradient's first stop so the frame before the SVG paints is a settling rather than a flash.
-    screen: { flex: 1, backgroundColor: BG_FROM },
+    screen: { flex: 1, backgroundColor: BG_FALLBACK },
     root: { flex: 1 },
     center: { alignItems: "center", justifyContent: "center", gap: SPACE.md },
     errorText: { ...TYPE.body, color: t.textFaint, textAlign: "center", padding: SPACE.lg },
