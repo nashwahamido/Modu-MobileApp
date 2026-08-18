@@ -39,10 +39,10 @@ import {
   resolveHost,
   rotatedFootprint,
   floorCellToRoom,
-  surfaceKey,
   topCellToRoom,
   topPlacementBox,
   wallCellToRoom,
+  wallPlacementBox,
   windowCellNamesFor,
   type GridPlacement,
 } from "../core/grid";
@@ -73,7 +73,6 @@ import {
   pointsAtSurface,
   roomPointToScreen,
   screenPointToFloorCell,
-  screenPointToWallCell,
   type PickBox,
   type TopTarget,
 } from "../input/picking";
@@ -1255,27 +1254,13 @@ export function RoomScene({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, [onRotationChange, onZoomChange, orbit]);
 
-  // Long-press a committed piece to pick it back up for editing: floor first (pieces stand in front of walls from this camera), then each wall's plane.
+  // Long-press a committed piece to pick it back up for editing. Every surface a piece can stand on now contributes a real pick VOLUME to one shared pool, and pickBoxAt returns whichever the ray enters nearest — nearest-wins across floor, furniture-top AND wall alike, not "floor wins outright, then the first wall hit". A chair standing in front of a wall painting is genuinely nearer the camera than the painting, so that is the more correct rule; it is also a behaviour change from the old floor-first precedence, exercised by the "floor piece in front of a wall piece still wins" case in picking.test.ts.
   const pickUpAt = useCallback(
     (px: number, py: number) => {
       const state = usePlacementStore.getState();
       // `viewing` too: this searches state.layout — the player's OWN room — so in a friend's room it would raycast against pieces that are not on screen and buzz for a piece nobody can see. editPlacement refuses as well; this is the cheap pre-check that keeps the work and the haptic from happening at all.
       if (state.activeEdit || state.viewing) return;
-      const hits = (
-        surface: GridPlacement["surface"],
-        pointed: { x: number; y: number } | null,
-      ) =>
-        pointed
-          ? state.layout.find((p) => {
-              const def = getRoomItemDef(p.itemId);
-              if (!def || surfaceKey(p.surface) !== surfaceKey(surface))
-                return false;
-              return cellsFor(p, def).some(
-                (c) => c.x === pointed.x && c.y === pointed.y,
-              );
-            })
-          : undefined;
-      // Floor pieces are picked against their VOLUME, not the floor plane under the finger: a piece stands up out of its cells, so the ray through its visible body meets the floor one to three cells BEHIND it (one per 20 cm of height at the rest camera). Plane-picking therefore left only a ~52 x 26 px sliver at a piece's base live, which is what made the long-press feel broken — and, when the cell behind was occupied, picked up the wrong piece.
+      // Floor and wall pieces alike are picked against their VOLUME, not a plane under the finger: a piece stands up out of its cells (or out of the wall), so the ray through its visible body meets the plane one to three cells BEHIND it (one per 20 cm of height/depth at the rest camera). Plane-picking therefore left only a thin sliver at a piece's base — or, for a wall item with real depth like eket-cabinet, nothing at all — live, which is what made the long-press feel broken.
       const boxes: { placement: GridPlacement; box: PickBox }[] = [];
       for (const p of state.layout) {
         const item = getRoomItem(p.itemId);
@@ -1304,36 +1289,23 @@ export function RoomScene({
               item.size.y * fitScale(item),
             ),
           });
+        } else {
+          // Only walls the camera can actually SEE — picking a hidden wall would hand the player a piece they cannot look at.
+          if (wallAlpha(p.surface.wall, orbit.value.smoothed.theta) <= 0.5) continue;
+          boxes.push({
+            placement: p,
+            box: wallPlacementBox(p.surface.wall, p, item.def, item.size.z * fitScale(item)),
+          });
         }
       }
-      const onFloor = pickBoxAt(
+      const picked = pickBoxAt(
         px,
         py,
         viewportRef.current,
         orbit.value.smoothed,
         boxes.map((b) => b.box),
       );
-      // Then every wall the camera can actually see — picking a HIDDEN wall would hand the player a piece they cannot look at. Wall items hang flat ON the plane this tests, so they need no volume of their own; the floor pass runs first because pieces stand in front of walls.
-      const visible = SHELL_WALL_IDS.filter(
-        (w) => wallAlpha(w, orbit.value.smoothed.theta) > 0.5,
-      );
-      const under =
-        (onFloor !== null ? boxes[onFloor].placement : undefined) ??
-        visible.reduce<GridPlacement | undefined>(
-          (found, wall) =>
-            found ??
-            hits(
-              { kind: "wall", wall },
-              screenPointToWallCell(
-                px,
-                py,
-                viewportRef.current,
-                orbit.value.smoothed,
-                wall,
-              ),
-            ),
-          undefined,
-        );
+      const under = picked !== null ? boxes[picked].placement : undefined;
       if (!under) return;
       // The hold has no other confirmation — no ghost appears until the store updates a frame later — so the pick-up announces itself the way every other grab in the app does.
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
