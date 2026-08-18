@@ -1218,10 +1218,10 @@ const makeStyles = (t: Theme) =>
     optionCard: {
       // width, NOT flex. The card now sits inside ScaleOnSelect's wrapper, which is a column — so `flex: 1` there meant "fill the available HEIGHT" and quietly beat the height below. The wrapper carries the row's flex; the card just fills it.
       width: "100%",
-      // 152 is what the contents actually need at full size: 14 padding + 66 circle + 10 gap + three 16pt lines + 14 padding. The old 176 was that plus a 44pt gutter for an audio button that now hangs on the rim, so the card loses the gutter and keeps everything else.
-      height: 152,
+      // What the contents actually need at full size: 14 padding + 72 face + 10 gap + three 16pt lines + 14 padding = 158, plus a little slack. It was 152 when the face was a 66 disc and never moved when the new art made it 72 — so the tallest caption overflowed by 6, which centring hid by splitting it three above and three below. Top-aligned there is nowhere to hide it, so the number is corrected rather than the symptom.
+      height: 160,
       alignItems: "center",
-      // TOP-ALIGNED, not centred. Centring treated face + gap + caption as one block and centred the whole block, so a two-line caption sat its face higher than a three-line one and the row of faces stepped up and down across the three cards. Pinned to the top, every face lands at the same y whatever its caption does — and the caption below is given the leftover height (see optionText) so nothing is stranded on the floor, which is what centring was there to prevent.
+      // TOP-ALIGNED, not centred. Centring treated face + gap + caption as one block and centred the whole block, so a one-line caption sat its face LOWER than a three-line one — measured at 74, 117 and 87pt from the card top across one row. Pinned to the top, every face lands at the same y whatever its caption does. The height above is what keeps this from stranding the caption on the floor: it fits the tallest caption with two points to spare, so there is no slack for the old centring to have been distributing.
       justifyContent: "flex-start",
       // NO stroke. The card is lifted off the backdrop instead of outlined on it — see CARD_SHADOW.
       borderRadius: 24,
@@ -1276,8 +1276,6 @@ const makeStyles = (t: Theme) =>
     // Left-aligned inside a full-width block: centred captions of different lengths gave three cards three different silhouettes, and the eye reads a common left edge faster.
     optionText: {
       width: "100%",
-      // Takes whatever height the face and its gap leave over, so the card is still filled top to bottom without the layout deciding where the face sits.
-      flex: 1,
       color: t.textDim,
       fontFamily: FONT, fontSize: 12,
       fontWeight: "700",
