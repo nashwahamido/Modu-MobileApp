@@ -4,6 +4,7 @@
 import { Alert, Pressable, Text, View, type LayoutChangeEvent } from "react-native";
 import { router } from "expo-router";
 import { useGameStore } from "@/src/game/core/store";
+import { setMusicEnabled, setMusicVolume } from "@/src/game/audio/music";
 import { useFixedStyles } from "@/src/game/ui/system/theme";
 import { signOut } from "@/src/services/auth";
 import { SIGN_IN_ROUTE } from "@/src/hooks/useSessionGate";
@@ -57,8 +58,11 @@ const STYLES: { value: RenderStyleId; label: string }[] = [
   { value: "realistic", label: "Realistic" },
   { value: "cozy", label: "Cozy" },
   { value: "cartoon", label: "Cartoon" },
-  { value: "toon", label: "Toon" },
-  { value: "illustrated", label: "Illustrated" },
+  // "toon" retired from the offering (the RenderStyleId and its material survive in scene/shaders,
+  // so a profile saved on it still renders — it just can't be chosen anew).
+  // "Wooden" is what the ink pass produces on this catalogue; the id stays `illustrated`, which is
+  // the shader's name in scene/shaders and in saved settings.
+  { value: "illustrated", label: "Wooden" },
 ];
 // Built from the room's own backdrop table, so a photo added there appears here with no edit.
 const BACKDROPS: { value: BackdropId; label: string }[] = [
@@ -192,11 +196,21 @@ export function BuildDisplaySection({
   const setSettings = useGameStore((s) => s.setSettings);
   const setRenderStyle = useGameStore((s) => s.setRenderStyle);
   const setBackdrop = useGameStore((s) => s.setBackdrop);
+  const assembleDark = useGameStore((s) => s.assembleDark);
+  const setAssembleDark = useGameStore((s) => s.setAssembleDark);
   const { targetLayout, targetActivated } = useFocusHandlers(focus);
   // A FRAGMENT, not a View: the walkthrough scrolls to a row by the `y` its onLayout reports, and that y is relative to the immediate parent. Wrapping a section in its own container would measure the target against the section instead of against the scrolled list, and the panel would scroll to the wrong row.
   return (
     <>
       <SectionHeader>Display</SectionHeader>
+      {/* Scoped to the BUILD, and named for it: the room, catalogue and shop are unaffected — a dark
+          workbench is a working preference, not a request for a dark app. */}
+      <Row
+        label="Assemble in Dark Mode"
+        desc="Dark background while you build. The rest of the app is unchanged."
+        value={assembleDark}
+        onValueChange={setAssembleDark}
+      />
       <Choice
         label="Model look"
         desc="How the furniture is rendered"
@@ -206,7 +220,7 @@ export function BuildDisplaySection({
       />
       <View onLayout={targetLayout("backdrop")}>
         <Choice
-          label="Build background"
+          label="Background"
           desc="Assembly scene backdrop, separate from the model"
           value={backdrop}
           options={BACKDROPS}
@@ -295,9 +309,22 @@ export function GuidanceSection({
   );
 }
 
+/** The music meter's rungs: ten, so a tap moves 10% and the bar reads as a level rather than as a
+ *  handful of presets. */
+const MUSIC_STEPS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
+
 export function AudioSection() {
+  const styles = useFixedStyles(makeSettingsStyles);
   const settings = useGameStore((s) => s.settings);
   const setSettings = useGameStore((s) => s.setSettings);
+  const changeMusicVolume = (delta: number) => {
+    const next = Math.min(1, Math.max(0, +(settings.musicVolume + delta).toFixed(2)));
+    // `music` stays in the settings as the on/off FACT other code reads — derived from the level now
+    // rather than set by hand, so the two can never disagree.
+    setSettings({ musicVolume: next, music: next > 0 });
+    setMusicVolume(next);
+    setMusicEnabled(next > 0);
+  };
   return (
     <>
       <SectionHeader>Audio</SectionHeader>
@@ -313,6 +340,33 @@ export function AudioSection() {
         value={settings.soundEffects}
         onValueChange={(v) => setSettings({ soundEffects: v })}
       />
+      {/* ONE control, not a switch plus a slider. Zero IS off — a player taking the music down to
+          nothing has already said what they want, and making them find a separate toggle to finish
+          the thought is the app arguing with them. The meter shows level and state at once. */}
+      <View style={styles.switchRow}>
+        <View style={styles.rowText}>
+          <Text style={styles.rowLabel}>Music</Text>
+          <Text style={styles.rowDesc}>
+            {settings.musicVolume > 0 ? "Background music while you build" : "Off — raise it to play"}
+          </Text>
+        </View>
+        <View style={styles.meterRow}>
+          <Pressable style={styles.fontBtn} onPress={() => changeMusicVolume(-0.1)} hitSlop={6}>
+            <Text style={styles.arrowText}>–</Text>
+          </Pressable>
+          <View style={styles.meter}>
+            {MUSIC_STEPS.map((step) => (
+              <View
+                key={step}
+                style={[styles.meterBar, settings.musicVolume >= step && styles.meterBarOn]}
+              />
+            ))}
+          </View>
+          <Pressable style={styles.fontBtn} onPress={() => changeMusicVolume(0.1)} hitSlop={6}>
+            <Text style={styles.arrowText}>+</Text>
+          </Pressable>
+        </View>
+      </View>
     </>
   );
 }
@@ -321,9 +375,7 @@ export function AudioSection() {
 export function AppDisplaySection() {
   const styles = useFixedStyles(makeSettingsStyles);
   const settings = useGameStore((s) => s.settings);
-  const theme = useGameStore((s) => s.theme);
   const setSettings = useGameStore((s) => s.setSettings);
-  const setTheme = useGameStore((s) => s.setTheme);
   const changeFont = (delta: number) =>
     setSettings({
       fontScale: Math.min(1.5, Math.max(0.9, +(settings.fontScale + delta).toFixed(2))),
@@ -331,12 +383,8 @@ export function AppDisplaySection() {
   return (
     <>
       <SectionHeader>Display</SectionHeader>
-      <Row
-        label="Dark mode"
-        desc="Use the dark background theme"
-        value={theme === "dark"}
-        onValueChange={(v) => setTheme(v ? "dark" : "light")}
-      />
+      {/* The app-wide dark switch is gone: dark is a BUILD preference now ("Assemble in Dark Mode",
+          in the build's own Display section). One switch, in the place it applies. */}
       <View style={styles.switchRow}>
         <View style={styles.rowText}>
           <Text style={styles.rowLabel}>Text size</Text>

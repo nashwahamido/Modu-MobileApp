@@ -376,7 +376,9 @@ const makeStyles = (t: Theme) =>
 
     redoBtn: {
       position: "absolute",
-      top: 24,
+      // Higher on the card: at 24 it sat level with the title block rather than up in the corner
+      // where a secondary control belongs.
+      top: 12,
       left: 14,
       width: 30,
       height: 30,

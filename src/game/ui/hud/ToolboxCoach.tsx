@@ -21,27 +21,38 @@ import Animated, {
 } from "react-native-reanimated";
 import { avatarForProfile } from "@/src/components/avatarAssets";
 import { useGameStore } from "@/src/game/core/store";
+import { useCurrentUserId } from "@/src/data";
 import { Button } from "@/src/game/ui/system/Button";
 import { ELEVATION, FONT, RADIUS, SPACE, useFixedStyles } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 import type { ToolId } from "@/src/game/core/type";
 
-/** Once per player, not per build: the toolbox works the same way in every furniture that has one. */
-const SEEN_KEY = "modu.toolbox-coach-seen.v1";
+/**
+ * Once per ACCOUNT per FURNITURE.
+ *
+ * v1 was a single device-wide key, which broke twice over: switching accounts on one device meant
+ * the second player never saw it (the first had spent the flag), and a player who met the toolbox on
+ * EKET got nothing when a differently-toolled build came along. Both are the same mistake — the flag
+ * described the device rather than the person and the thing they were building.
+ */
+const seenKey = (userId: string, furnitureId: string) =>
+  `modu.toolbox-coach-seen.v2:${userId}:${furnitureId}`;
 
 export function ToolboxCoach({ neededTool }: { neededTool: ToolId | null }) {
   const styles = useFixedStyles(makeStyles);
   const profile = useGameStore((s) => s.profile);
   const selectedTool = useGameStore((s) => s.selectedTool);
+  const furnitureId = useGameStore((s) => s.furniture?.meta.id ?? null);
+  const userId = useCurrentUserId();
   const [eligible, setEligible] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
   // The read is gated on a tool ACTUALLY being needed, so a player who never reaches a tool step
   // does not spend the once-only flag on a card that was never shown.
   useEffect(() => {
-    if (!neededTool || dismissed) return;
+    if (!neededTool || dismissed || !furnitureId || !userId) return;
     let alive = true;
-    AsyncStorage.getItem(SEEN_KEY)
+    AsyncStorage.getItem(seenKey(userId, furnitureId))
       .then((seen) => {
         if (alive && !seen) setEligible(true);
       })
@@ -49,12 +60,13 @@ export function ToolboxCoach({ neededTool }: { neededTool: ToolId | null }) {
     return () => {
       alive = false;
     };
-  }, [dismissed, neededTool]);
+  }, [dismissed, neededTool, furnitureId, userId]);
 
   const close = () => {
     setDismissed(true);
     setEligible(false);
-    AsyncStorage.setItem(SEEN_KEY, "1").catch((err) =>
+    if (!userId || !furnitureId) return;
+    AsyncStorage.setItem(seenKey(userId, furnitureId), "1").catch((err) =>
       console.warn("[toolbox-coach] seen-flag save failed", err),
     );
   };
@@ -89,6 +101,12 @@ export function ToolboxCoach({ neededTool }: { neededTool: ToolId | null }) {
     if (eligible && neededTool && selectedTool === neededTool) close();
   }, [eligible, neededTool, selectedTool]);
 
+  // A different build is a different lesson: clearing `dismissed` lets the next furniture ask again.
+  useEffect(() => {
+    setDismissed(false);
+    setEligible(false);
+  }, [furnitureId]);
+
   if (!eligible || !neededTool) return null;
   return (
     <>
@@ -97,7 +115,7 @@ export function ToolboxCoach({ neededTool }: { neededTool: ToolId | null }) {
       <Animated.View style={[styles.card, card]}>
         <Image source={avatarForProfile(profile)} style={styles.avatar} resizeMode="contain" />
         <View style={styles.copy}>
-          <Text style={styles.title}>This one needs a tool</Text>
+          <Text style={styles.title}>Pick a Tool</Text>
           <Text style={styles.body}>
             Open the toolbox below and choose the right tool, then turn to tighten.
           </Text>
@@ -131,7 +149,9 @@ const makeStyles = (t: Theme) =>
     },
     avatar: { width: 54, height: 54 },
     copy: { flex: 1, gap: 2 },
-    title: { color: t.text, fontFamily: FONT, fontSize: 14, fontWeight: "900" },
+    // The ACCENT, not the ink: the card is bordered in it and this is the line that names the task,
+    // so the two read as one call to action instead of a dark heading inside a coloured frame.
+    title: { color: t.accent, fontFamily: FONT, fontSize: 15, fontWeight: "900" },
     body: { color: t.textDim, fontFamily: FONT, fontSize: 12, fontWeight: "700", lineHeight: 15 },
     cta: { alignSelf: "flex-start", marginTop: SPACE.sm },
     halo: {

@@ -1,7 +1,8 @@
 import { Image, StyleSheet, View } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
 import { Button } from "@/src/game/ui/system/Button";
-import { SPACE } from "@/src/game/ui/system/theme";
+import { SPACE, useThemeId } from "@/src/game/ui/system/theme";
+import { hudIcon } from "@/src/game/ui/hud/hudIcons";
 /** The two in-scene toggles. A chip that is ON takes the ACCENT — the same fill as a
  *  pressed button — because "on" and "pressed" are the same idea in this language: the
  *  control is lifted and live. It is deliberately not the success green: green means the
@@ -17,11 +18,18 @@ export function ToggleChips() {
 export function FocusToggleButton() {
   const focusMode = useGameStore((s) => s.settings.focusMode);
   const setSettings = useGameStore((s) => s.setSettings);
+  const dark = useThemeId() !== "light";
+  // The icon INVERTS when the chip is on. An active chip takes the accent fill, so the glyph that
+  // reads on the resting chip is the wrong one on the lit one: in light mode the chip goes dark, so
+  // it needs the cream icon; in dark mode the chip lifts, so it needs the dark icon. Same reason the
+  // label colour flips — the art is following the fill, not the theme.
+  const focusIcon = hudIcon("focus", focusMode ? !dark : dark);
   return (
     <Button
+      label="Focus"
       icon={
         <Image
-          source={require("@/src/assets/ui/icons/icon-focus.png")}
+          source={focusIcon}
           style={styles.focusIcon}
           resizeMode="contain"
         />

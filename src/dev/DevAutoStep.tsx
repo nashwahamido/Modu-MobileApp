@@ -6,6 +6,7 @@ import { targetPositionForAction } from "@/src/game/core/scene/targets";
 import { HOVER_LIFT_M, looseDelta, spawnDelta } from "@/src/game/core/geometry/staging";
 import { TIGHTEN_TOTAL_DEG, useGameStore } from "@/src/game/core/store";
 import { animateDriver, OffsetDriver } from "@/src/game/scene/offsetDriver";
+import { useHudIcon } from "@/src/game/ui/hud/hudIcons";
 import type { Theme } from "@/src/game/ui/system/theme";
 
 interface Props {
@@ -16,6 +17,9 @@ interface Props {
 /** DEV-only: performs the next assembly action through the real store/scene pipeline (pickup → glide → snap, or tighten). Lets the whole game be stepped through on an emulator where touch-gesture injection is flaky; also doubles as a demo mode. Ported from the on-release engine; `snapPart` → game's `placePart`, and the done set is passed to game's targetPositionForAction. Parts that need a follow-up (screw park / slide-press drive) complete on the NEXT press, since their tighten/drive is a separate available action. */
 export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
   const styles = useFixedStyles(makeStyles);
+  // Read with the other hooks: this component returns null outside __DEV__, so the icon cannot be
+  // looked up down in the render.
+  const playIcon = useHudIcon("play");
   const step = () => {
     const store = useGameStore.getState();
     const furniture = store.furniture;
@@ -157,7 +161,7 @@ export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
           icon-play.png rather than the ▶ text character, so it renders in the UI font/weight. */}
       <View style={styles.content}>
         <Image
-          source={require("@/src/assets/ui/icons/icon-play.png")}
+          source={playIcon}
           style={styles.icon}
           resizeMode="contain"
         />

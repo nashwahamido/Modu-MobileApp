@@ -17,7 +17,7 @@ import { CheckIcon, StarIcon } from "@/src/components/Icons";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import type { Theme } from "@/src/game/ui/system/theme";
 
-import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
+import Svg, { Defs, LinearGradient, RadialGradient, Rect, Stop } from "react-native-svg";
 import Reanimated, {
   Easing,
   useAnimatedStyle,
@@ -180,6 +180,9 @@ const styles_halo = {
   borderColor: ACCENT_LIGHT,
 };
 
+/** The rim colour of the avatar circle — the gradient's outer stop, so the disc and the corners it
+ *  cannot reach agree. */
+const AVATAR_CIRCLE = "#EFE6D6";
 const BG_FROM = "#E8D48C";
 const BG_TO = "#A9BFD9";
 
@@ -370,11 +373,31 @@ export default function AvatarRecommendationScreen() {
             competing to be the thing you look at. */}
         <View style={styles.modeColumn}>
           <PopIn delay={STAGE.avatar} big animate={introPlaying}>
-            <View style={[styles.avatarCircle, { backgroundColor: selectedMode.color }]}>
+            {/* ONE circle colour for every mode. Per-mode tints made the four cards read as four
+                different components, and the avatars — which now carry their own colour — had to
+                sit on whatever hue the mode happened to own. Control's light lavender is the one
+                that worked against all four characters. */}
+            <View style={styles.avatarCircle}>
+              {/* White at the centre falling to cream at the rim, matching the tutorial portrait and
+                  the hint toast — one backing for a character wherever it appears. */}
+              <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+                <Defs>
+                  {/* The SAME three stops as the auth screen's character cards (dev/AccountPicker):
+                      a character sits on one backing wherever it is chosen. */}
+                  <RadialGradient id="avatarglow" cx="50%" cy="40%" r="62%">
+                    <Stop offset="0" stopColor="#FFFFFF" />
+                    <Stop offset="0.55" stopColor="#F7F1E6" />
+                    <Stop offset="1" stopColor="#DCCFB8" />
+                  </RadialGradient>
+                </Defs>
+                <Rect x="0" y="0" width="100%" height="100%" fill="url(#avatarglow)" />
+              </Svg>
               <Image
                 source={selectedMode.image}
                 style={styles.avatarImage}
-                resizeMode="cover"
+                // contain: these are FULL BODY portraits, and cropping them to fill the circle cut
+                // heads off — the head tiles elsewhere are cover because a head has no such problem.
+                resizeMode="contain"
               />
             </View>
             {/* Outside the circle's overflow:hidden, so the glints can sit ON its rim. */}
@@ -567,11 +590,14 @@ const makeStyles = (t: Theme, k = 1) =>
       justifyContent: "center",
       borderRadius: Math.round(105 * k),
       overflow: "hidden",
+      // The gradient above paints the disc; this is only what shows outside its bounds.
+      backgroundColor: AVATAR_CIRCLE,
     },
+    // Sized INSIDE the circle now (was 232 in a 210 circle, which relied on the crop). With contain
+    // the art fits the box, so the box has to sit within the rim or the character floats in a gap.
     avatarImage: {
-      width: Math.round(232 * k),
-      height: Math.round(232 * k),
-      borderRadius: Math.round(116 * k),
+      width: Math.round(196 * k),
+      height: Math.round(196 * k),
     },
     // Straddling the circle's top edge. alignSelf centre plus a negative top pulls it back over the rim, so it reads as pinned to the avatar rather than floating above it.
     recommendedBadge: {

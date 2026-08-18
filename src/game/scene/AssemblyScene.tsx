@@ -19,7 +19,6 @@ import { CEL_IBL_INTENSITY, getLightRig, IBL_INTENSITY } from "./lighting";
 import type { ClusterDriver, DriverRegistry, OffsetDriver } from "./offsetDriver";
 import { PartModel } from "./PartModel";
 import { buildPushDriverMap } from "./pushOpen";
-import { ShadowPlane } from "./ShadowPlane";
 import { ToolModel } from "./ToolModel";
 import { SceneState } from "./useSceneState";
 import { ShaderAssetsProvider, useShaderStyle } from "./shaders";
@@ -73,8 +72,6 @@ export function AssemblyScene({
   const manualTools = useGameStore((s) => s.settings.manualTools);
   const lightingPreset = useGameStore((s) => s.settings.lightingPreset);
   const dark = useGameStore((s) => s.theme) === "dark";
-  // The blob shadow only reads correctly on the plain ("clear") backdrop — on the illustrated backdrops it sits on artwork it doesn't belong to.
-  const backdrop = useGameStore((s) => s.backdrop);
   const rig = getLightRig(renderStyle, dark, lightingPreset);
 
   /**
@@ -111,9 +108,6 @@ export function AssemblyScene({
   const driveAction = driveActionId
     ? furniture.actions.find((a) => a.actionId === driveActionId) ?? null
     : null;
-  const anySeated = Object.values(modes).some(
-    (m) => m === "flush" || m === "loose",
-  );
   // "hand" is always equipped: hand steps run without a toolbar pick even in manual mode.
   const toolEquipped = (tool?: string | null) =>
     !manualTools || !tool || tool === "hand" || selectedTool === tool;
@@ -151,9 +145,9 @@ export function AssemblyScene({
           />
         </>
       )}
-      {furniture.shadow && anySeated && backdrop === "clear" ? (
-        <ShadowPlane source={furniture.shadow} />
-      ) : null}
+      {/* The blob shadow is retired: with the "clear" backdrop now a flat warm beige rather than the
+          theme surface, the baked shadow read as a grey stain under the model instead of grounding
+          it. No backdrop shows it any more — the model sits on the colour, unanchored on purpose. */}
       <CombineCarry model={model} carryShared={carryShared} />
       <OrbitDrive
         manipulator={cameraManipulator}
