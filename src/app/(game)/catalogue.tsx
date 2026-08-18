@@ -582,7 +582,18 @@ function FurnitureCard({
         </View>
         <View style={styles.cardCopy}>
           <View style={styles.nameRow}>
-            <Text style={styles.name} numberOfLines={2}>{row?.name ?? "…"}</Text>
+            {/* adjustsFontSizeToFit with a floor: "BEKVÄM Step Stool" is the longest name in the
+                catalogue and sits right on the wrap boundary, so it flips between one and two lines
+                on the smallest width change. Letting it shrink a hair keeps every card's copy block
+                the same height instead of one of them being a line taller than the rest. */}
+            <Text
+              style={styles.name}
+              numberOfLines={2}
+              adjustsFontSizeToFit
+              minimumFontScale={0.85}
+            >
+              {row?.name ?? "…"}
+            </Text>
             {brand ? (
               <Image source={brand.logo} style={styles.brandLogo} resizeMode="contain" />
             ) : null}
@@ -754,7 +765,15 @@ const makeStyles = (t: Theme) =>
     cardPressed: { backgroundColor: t.surfaceRaised },
     burstClip: { ...StyleSheet.absoluteFillObject, borderRadius: RADIUS.panel, overflow: "hidden" },
     // The colour comes from PILL_STYLE at the call site, so the outline and the button always agree about which state the card is in — one signal in two places, never two signals.
-    cardSelected: { borderWidth: 3 },
+    // The selected outline is 3pt where the resting one is a hairline, so selecting a card USED TO
+    // narrow its content box by ~4pt. Every card shifted a little; BEKVÄM's title sits right at the
+    // wrap boundary, so those few points tipped it onto a second line and shoved the stage pill,
+    // duration and logo down with it. Giving the padding back keeps the inner width identical in
+    // both states, so nothing reflows on selection.
+    cardSelected: {
+      borderWidth: 3,
+      padding: SPACE.lg - (3 - StyleSheet.hairlineWidth * 2),
+    },
     cardBody: { flexDirection: "row", gap: SPACE.md },
     thumbWrap: {
       width: 118,

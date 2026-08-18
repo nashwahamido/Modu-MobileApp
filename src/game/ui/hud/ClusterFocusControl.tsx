@@ -24,7 +24,7 @@ import {
 } from "@/src/game/core/evaluation/clusters";
 import { useGameStore } from "@/src/game/core/store";
 import Svg, { Circle as SvgCircle, Defs, RadialGradient, Stop } from "react-native-svg";
-import { Theme, useFixedStyles, useTheme, FONT, RADIUS, SIZE } from "@/src/game/ui/system/theme";
+import { Theme, useFixedStyles, FONT, RADIUS, SIZE } from "@/src/game/ui/system/theme";
 import { useRepos } from "@/src/data";
 import { useCatalogRow } from "@/src/data/catalog/buildStore";
 import { HUD_SIDE_MARGIN, HUD_VERTICAL_MARGIN } from "@/src/hooks/use-safe-insets";
@@ -117,11 +117,11 @@ interface BuildMapProps {
 
 export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
   const styles = useFixedStyles(makeStyles);
-  const t = useTheme();
   const router = useRouter();
   const furniture = useGameStore((s) => s.furniture);
   const completed = useGameStore((s) => s.completed);
   const activeCluster = useGameStore((s) => s.activeCluster);
+  const renderStyle = useGameStore((s) => s.renderStyle);
   const mapOpen = useGameStore((s) => s.mapOpen);
   const mapSeen = useGameStore((s) => s.mapSeen);
   const repos = useRepos();
@@ -145,6 +145,16 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
   }, [furnitureId, repos]);
 
   if (!furniture) return null;
+
+  // The MODEL's art in the finish being built. Per-cluster art (clusterThumbs) has no finish
+  // variants — a sub-assembly is only ever drawn one way — so this applies to the whole-build and
+  // combine nodes, which are the two that picture the finished piece.
+  const finishKey: string | undefined = STYLE_FINISH[renderStyle];
+  const styledThumb =
+    (finishKey === undefined
+      ? undefined
+      : furniture.meta.variantThumbnails?.[finishKey]?.light) ??
+    furniture.meta.thumbnail.light;
 
   const done = new Set(completed);
   const clusters = focusableClusterIds(furniture);
@@ -208,7 +218,7 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
       label: clusterLabel(furniture, (Object.keys(furniture.clusters ?? {})[0] ?? "") as ClusterId),
       actions: [...furniture.actions],
       doneCount: furniture.actions.filter((a) => done.has(a.actionId)).length,
-      thumb: furniture.meta.thumbnail.light,
+      thumb: styledThumb,
       finished: done.size >= furniture.actions.length,
       enabled: true,
       onPress: closeMap,
@@ -224,7 +234,7 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
         label: "Combine",
         actions: combineActions,
         doneCount: combineDone,
-        thumb: furniture.meta.thumbnail.light,
+        thumb: styledThumb,
         finished: combineActions.length > 0 && combineDone === combineActions.length,
         enabled: combineEnabled,
         onPress: () =>
@@ -235,6 +245,20 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
     // The card GROWS with the stage count rather than squeezing the nodes: two stages (LACK) sit in
     // a compact card, DALFRED's three want more room, and EKET's four need enough that every circle
     // keeps its natural width instead of shrinking until the labels inside them stop fitting.
+    // WHICH labels stack one-word-per-line. Not "every multi-word name": a name breaks only when
+    // ANOTHER stage in the same row shares a word with it — "Top Drawer" and "Bottom Drawer" are a
+    // matched pair and must be set identically, so both stack. "Step Stool" has no counterpart, so
+    // forcing it onto two lines only made it smaller for no gain. Derived rather than listed, so a
+    // future model's pairs behave without another exception here.
+    const words = (label: string) => label.toLowerCase().split(" ");
+    const stacksLabel = (label: string) => {
+      const mine = words(label);
+      if (mine.length < 2) return false;
+      return nodes.some(
+        (other) => other.label !== label && words(other.label).some((w) => mine.includes(w)),
+      );
+    };
+
     const cardMax = nodes.length >= 4 ? 620 : nodes.length === 3 ? 520 : 460;
     const INNER = cardMax - 60;
     const nodeWidth = Math.min(116, (INNER - (nodes.length - 1) * 24) / nodes.length);
@@ -279,7 +303,7 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
             <View style={styles.overviewHero} pointerEvents="none">
               <View style={styles.overviewHalo}>
                 <Image
-                  source={furniture.meta.thumbnail.light}
+                  source={styledThumb}
                   style={styles.overviewImage}
                   resizeMode="contain"
                 />
@@ -395,12 +419,10 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                         style={[styles.nodeLabel, !n.enabled && !n.finished && styles.nodeLabelLocked]}
                         numberOfLines={2}
                       >
-                        {/* ONE WORD PER LINE inside the circle. Left to wrap naturally, "Top Drawer"
-                            fitted on one line while "Bottom Drawer" broke onto two, so two stages in
-                            the same row were set differently. Breaking on the space makes every
-                            multi-word stage stack the same way — and the box below centres whatever
-                            comes out, so one- and two-line names still share a midline. */}
-                        {n.label.split(" ").join("\n")}
+                        {/* Stacked one word per line only where a MATCHED PAIR needs it — see
+                            stacksLabel above. The box centres whatever comes out, so a one-line and
+                            a two-line name still share a midline. */}
+                        {stacksLabel(n.label) ? n.label.split(" ").join("\n") : n.label}
                       </Text>
                     </View>
                   </View>
@@ -598,6 +620,20 @@ export function ClusterFocusControl() {
   );
 }
 
+/**
+ * renderStyle → the catalogue finish whose ARTWORK matches it.
+ *
+ * The inverse of catalogue.tsx's FINISH_STYLE: the player picked a finish from the carousel, that
+ * set the render style, and the map should show the model they are actually building rather than
+ * the default art. Anything not listed falls back to the meta's own thumbnail, which is the plain
+ * model — the right answer for "realistic".
+ */
+const STYLE_FINISH: Record<string, string> = {
+  cozy: "cozy",
+  cartoon: "cartoon",
+  illustrated: "wooden",
+};
+
 /** Every text on this modal, per the wireframe. */
 const INK = "#231F20";
 
@@ -781,10 +817,11 @@ const makeStyles = (t: Theme) =>
     // row — the box gives both the same midline, whatever they wrap to.
     nodeLabelBox: {
       position: "absolute",
-      // Narrow on purpose: with the per-word break above this is belt and braces, but it also means
-      // a long single word cannot run to the circle's rim.
-      left: 16,
-      right: 16,
+      // Full width inside the circle: the per-word break is decided by stacksLabel above, so this
+      // no longer needs to force wrapping — and at 16 it was squeezing "Step Stool" onto two lines
+      // regardless of that decision.
+      left: 4,
+      right: 4,
       bottom: 12,
       height: 28,
       alignItems: "center",
