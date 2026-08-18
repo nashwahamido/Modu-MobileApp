@@ -5,6 +5,7 @@ import { StyleSheet, Pressable, ScrollView, Text, View } from "react-native";
 
 import { CatalogThumb } from "../../components/CatalogThumb";
 import { useItemVariants } from "../../data/catalog/variantStore";
+import { variationLabel } from "../../data/catalog/variantLabel";
 import { RADIUS, SPACE, TYPE, useFixedStyles } from "@/src/game/ui/system/theme";
 import { roomItemSource } from "../core/placeableItems";
 import { usePlacementStore } from "../core/placement";
@@ -33,7 +34,7 @@ export function ColourPicker({ highlighted = false, onSelect }: ColourPickerProp
           return (
             <Pressable
               key={variant.variation ?? "default"}
-              accessibilityLabel={`Colour ${variant.variation ?? "default"}`}
+              accessibilityLabel={`Colour ${variationLabel(variant.variation)}`}
               accessibilityState={{ selected: active }}
               style={({ pressed }) => [s.swatch, active && s.swatchActive, pressed && s.swatchPressed]}
               onPress={() => {
@@ -48,7 +49,7 @@ export function ColourPicker({ highlighted = false, onSelect }: ColourPickerProp
                 size={38}
               />
               <Text style={[s.label, active && s.labelActive]} numberOfLines={1}>
-                {variant.variation ?? "default"}
+                {variationLabel(variant.variation)}
               </Text>
             </Pressable>
           );
