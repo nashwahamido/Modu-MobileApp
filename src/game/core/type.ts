@@ -272,6 +272,11 @@ export interface Furniture {
   clusters?: Record<ClusterId, ClusterDef>;
   thumbs: ThumbMap;
   clusterThumbs?: ClusterThumbMap;
+  /** Sub-assembly art per finish, keyed exactly like `meta.variantThumbnails` — finish first, then
+   *  cluster. Hand-authored, so it lives beside the model rather than in the generated thumbs file.
+   *  A missing finish, or a finish missing one cluster, falls back to `clusterThumbs` for that
+   *  cluster alone (see presentation/finish.ts), so art can ship one stage at a time. */
+  clusterVariantThumbs?: Record<string, ClusterThumbMap>;
   audio?: AudioMap;
   styles?: StyleSet;
   styleModels?: Partial<Record<RenderStyleId, AssetSrc>>;

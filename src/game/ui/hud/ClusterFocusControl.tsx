@@ -23,6 +23,7 @@ import {
   requiresClusterFocus,
 } from "@/src/game/core/evaluation/clusters";
 import { useGameStore } from "@/src/game/core/store";
+import { clusterThumbSet, modelThumbSet } from "@/src/game/core/presentation/finish";
 import Svg, { Circle as SvgCircle, Defs, RadialGradient, Stop } from "react-native-svg";
 import { Theme, useFixedStyles, FONT, RADIUS, SIZE } from "@/src/game/ui/system/theme";
 import { useRepos } from "@/src/data";
@@ -146,15 +147,11 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
 
   if (!furniture) return null;
 
-  // The MODEL's art in the finish being built. Per-cluster art (clusterThumbs) has no finish
-  // variants — a sub-assembly is only ever drawn one way — so this applies to the whole-build and
-  // combine nodes, which are the two that picture the finished piece.
-  const finishKey: string | undefined = STYLE_FINISH[renderStyle];
-  const styledThumb =
-    (finishKey === undefined
-      ? undefined
-      : furniture.meta.variantThumbnails?.[finishKey]?.light) ??
-    furniture.meta.thumbnail.light;
+  // The MODEL's art in the finish being built — the whole-build and combine nodes, which are the two
+  // that picture the finished piece. The finish is resolved from renderStyle against THIS model's own
+  // finishes (presentation/finish.ts), so "realistic" lands on white for EKET and black for DALFRED
+  // rather than falling through to the plain thumbnail as it did while the table lived here.
+  const styledThumb = modelThumbSet(furniture, renderStyle).light;
 
   const done = new Set(completed);
   const clusters = focusableClusterIds(furniture);
@@ -194,8 +191,10 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
         label: clusterLabel(furniture, clusterId),
         actions,
         doneCount: actions.filter((a) => done.has(a.actionId)).length,
-        // Proper per-cluster artwork — the sub-assembly itself, not a stand-in part.
-        thumb: furniture.clusterThumbs?.[clusterId]?.light,
+        // Proper per-cluster artwork — the sub-assembly itself, not a stand-in part — and in the
+        // finish being built, so a cozy EKET's stages are the cozy cabinet and drawers. Falls back
+        // per cluster to the plain generated render when a finish ships no art for that stage.
+        thumb: clusterThumbSet(furniture, clusterId, renderStyle)?.light,
         finished: clusterComplete(furniture, clusterId, done),
         enabled: clusterPrereqsMet(furniture, clusterId, done),
         onPress: () => selectCluster(clusterId),
@@ -619,20 +618,6 @@ export function ClusterFocusControl() {
     </View>
   );
 }
-
-/**
- * renderStyle → the catalogue finish whose ARTWORK matches it.
- *
- * The inverse of catalogue.tsx's FINISH_STYLE: the player picked a finish from the carousel, that
- * set the render style, and the map should show the model they are actually building rather than
- * the default art. Anything not listed falls back to the meta's own thumbnail, which is the plain
- * model — the right answer for "realistic".
- */
-const STYLE_FINISH: Record<string, string> = {
-  cozy: "cozy",
-  cartoon: "cartoon",
-  illustrated: "wooden",
-};
 
 /** Every text on this modal, per the wireframe. */
 const INK = "#231F20";

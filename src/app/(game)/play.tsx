@@ -146,7 +146,11 @@ function GameScreen() {
     setLoaderVisible(true);
     loadFurnitureById(target)
       .then((f) => useGameStore.getState().loadFurniture(f))
-      .catch(() => setLoadError(true));
+      // LOG the reason as well as showing the error state. A bundled furniture is composed and validated at module-eval time, so anything wrong with its authored data — or with an asset it require()s — surfaces here as a rejected import and nowhere else. Discarding the error left "Couldn't load this furniture" as the only symptom of a dozen different causes.
+      .catch((err) => {
+        console.error(`[play] furniture "${target}" failed to load`, err);
+        setLoadError(true);
+      });
     // RECIPE LANE — the row is read here IMPERATIVELY off useCatalogStore.getState() rather than through the useCatalogRow hook, and that is the whole point: it keeps this effect's deps free of the row's object identity, which changes on every catalog refresh/auth event and would otherwise re-run the effect after a completed load and strand the overlay. Keep the early bail above when restoring.
     // const row = useCatalogStore.getState().rows[target];
     // loadPlayableFurniture(target, row)
