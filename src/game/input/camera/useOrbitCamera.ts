@@ -9,7 +9,7 @@ import { useSharedValue as useWorkletSharedValue } from "react-native-worklets-c
 import type { ISharedValue } from "react-native-worklets-core";
 import type { StickDeflection } from "@/src/game/scene/OrbitDrive";
 
-import { FOV_Y_DEG } from "@/src/game/scene/cameraConfig";
+import { blocksZoomIn, FOV_Y_DEG } from "@/src/game/scene/cameraConfig";
 /** Drop-in replacement for the library's useCameraManipulator that fixes its swap race. On a pivot change the library hook sets its state to undefined and releases the old native manipulator while the replacement is still arriving via a promise — the Camera's render-thread callback can execute the already-released pointer in between ("Pointer ManipulatorWrapper has already been manually released!"). Here the hook keeps returning the OLD manipulator until the replacement is created (synchronously) and committed; the old wrapper's release is deferred until well after the commit that hands the render callback its replacement. */
 function useStableOrbitManipulator(
   eye: readonly [number, number, number],
@@ -284,7 +284,18 @@ export function useOrbitCamera(
 
   const onZoomDelta = useCallback(
     (scaleDelta: number) => {
-      manipulator?.scroll(0, 0, -scaleDelta * ZOOM_RATE);
+      if (!manipulator) return;
+      // Floor the dolly: Filament's ORBIT scroll has no minimum distance, and past ~0.28× home the eye passes UNDER a high work plane (DALFRED's seat) — every finger ray then aims up at a plane the camera is beneath and the held part is flung to the leash. See MIN_ORBIT_DISTANCE_M.
+      const la = manipulator.getLookAt();
+      if (la) {
+        const d = Math.hypot(
+          la[0][0] - la[1][0],
+          la[0][1] - la[1][1],
+          la[0][2] - la[1][2],
+        );
+        if (blocksZoomIn(scaleDelta, d)) return;
+      }
+      manipulator.scroll(0, 0, -scaleDelta * ZOOM_RATE);
       captureEye();
     },
     [manipulator, captureEye],

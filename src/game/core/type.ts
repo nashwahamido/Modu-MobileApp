@@ -92,6 +92,8 @@ export interface StructuralFields {
   lockTravel?: number;
   /** Force a plain snap placement even when a press/screw partner is already placed — the part just clicks home at drop with no drive gesture (EKET's suspension cover pushes over its bracket in the same motion that places it). */
   dropOn?: boolean;
+  /** Authored override for this part's drag hold/aim anchor, world-space at baked pose. Replaces the part's RESOLVED anchor outright (the value the multi-joint centroid would produce), not any individual frame — authoring is per-part while frames are per-liaison. None authored today: all four shipped furnitures derive cleanly. */
+  jointAnchor?: Vec3;
 }
 export interface FastenerFields {
   fastenerKind?: FastenerKind;
@@ -106,6 +108,22 @@ export interface FastenerFields {
   insertProud?: number;
 }
 export interface PartDef extends PartCore, StructuralFields, FastenerFields {}
+
+/** A part's world-space axis-aligned bounds at its BAKED pose. Harvested from Filament at model load; the unit the joint derivation works in. */
+export interface PartBox {
+  min: Vec3;
+  max: Vec3;
+}
+
+/** Where two parts actually meet, derived per liaison at baked pose. `anchor` is the shared world contact point; the per-endpoint offsets are what the drag uses as hold/aim points, each clamped into its own part's bounds. */
+export interface JointFrame {
+  liaison: LiaisonId;
+  anchor: Vec3;
+  offsetA: Vec3;
+  offsetB: Vec3;
+  /** How the anchor was found: a direct box overlap, or via a fastener bridging an air gap. */
+  via: "direct" | "bridge";
+}
 
 export type RawPartDef = Omit<
   PartDef,

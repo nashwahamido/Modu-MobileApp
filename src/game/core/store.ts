@@ -24,6 +24,7 @@ import {
   ClusterId,
   Furniture,
   GroupId,
+  PartBox,
   PartId,
   RenderStyleId,
   ThemeId,
@@ -53,6 +54,8 @@ export type ExamineTarget =
 interface GameState {
   /** The furniture currently being assembled (loaded when chosen). */
   furniture: Furniture | null;
+  /** Per-part world bounds at baked pose, harvested from Filament once the model loads (AssemblyScene). Empty until then — every consumer falls back, so a drag before the harvest simply behaves as it did before joint frames. */
+  partBoxes: Record<PartId, PartBox>;
   /** Completed action ids — the source of truth for progress. */
   completed: ActionId[];
   /** Part picked up for ASSEMBLY via long-press (the drag flow). */
@@ -179,6 +182,7 @@ interface GameState {
 
   setActiveCluster: (cluster: ClusterId | null) => void;
   setCombiningCluster: (cluster: ClusterId | null) => void;
+  setPartBoxes: (boxes: Record<PartId, PartBox>) => void;
 
   setSettings: (patch: Partial<AccessibilitySettings>) => void;
   /** Reset settings to a profile's defaults (onboarding / avatar change). */
@@ -204,6 +208,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
   ...CLEARED,
   activeCluster: null,
   combiningCluster: null,
+  partBoxes: {},
   mapOpen: false,
   mapSeen: false,
   doneDismissed: false,
@@ -243,6 +248,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
       driveKind: null,
       driveProgress: {},
       selectedTool: null,
+      // Cleared HERE only: part ids collide across furnitures (`leg_1` is both a LACK leg and a DALFRED leg), so a stale map would hand the drag the previous model's geometry until the next harvest lands. The other reset paths keep the same loaded model, where the boxes are still valid and dropping them would disable the feature mid-session for nothing.
+      partBoxes: {},
       ...CLEARED,
     }),
   reset: () =>
@@ -514,6 +521,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
   setCompleteConfirmed: (v) => set({ completeConfirmed: v }),
   setActiveCluster: (cluster) => set({ activeCluster: cluster }),
   setCombiningCluster: (cluster) => set({ combiningCluster: cluster }),
+  setPartBoxes: (boxes) => set({ partBoxes: boxes }),
 
   setSettings: (patch) => set({ settings: { ...get().settings, ...patch } }),
   applyProfile: (profile) =>

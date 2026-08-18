@@ -27,6 +27,11 @@ export function quatFromAxisAngle(axis: Vec3, rad: number): Quat {
   ];
 }
 
+/** Conjugate = inverse for the unit quaternions all poses here use. */
+export function quatConjugate(q: Quat): Quat {
+  return [-q[0], -q[1], -q[2], q[3]];
+}
+
 export function quatMultiply(a: Quat, b: Quat): Quat {
   const [ax, ay, az, aw] = a;
   const [bx, by, bz, bw] = b;

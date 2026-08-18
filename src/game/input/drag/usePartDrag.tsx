@@ -13,9 +13,11 @@ import Animated, {
 
 import {
   groupCandidates,
+  holdOffsetFor,
   targetPositionForAction,
 } from "@/src/game/core/scene/targets";
 import type { GroupCandidate } from "@/src/game/core/scene/targets";
+import { deriveJointFrames, partAnchorOffsets } from "@/src/game/core/model/jointFrames";
 import { actionCluster, actionsForClusterFocus, clusterStarted } from "@/src/game/core/evaluation/clusters";
 import { clusterDriveKind } from "@/src/game/core/evaluation/clusterCombine";
 import {
@@ -30,10 +32,10 @@ import type { OffsetSink } from "../../scene/combineDriver";
 import type { CarryOffset } from "../../scene/CombineCarry";
 import { computeFit, APPROACH_FACTOR } from "@/src/game/core/geometry/fit";
 import { isStaged } from "@/src/game/core/model/staging";
-import { isPickupType } from "@/src/game/core/ids";
-import { quatSlerp } from "@/src/game/core/geometry/math";
-import { dragPlanePoint, leashToBench } from "./dragPlane";
-import { ActionId, AssemblyAction, Furniture, PartDef, PartId, Quat, Vec3 } from "@/src/game/core/type";
+import { isPickupType, placeId } from "@/src/game/core/ids";
+import { quatConjugate, quatMultiply, quatRotateVec3, quatSlerp, screenRay } from "@/src/game/core/geometry/math";
+import { aimBandScale, clusterCarryAnchor, dragPlanePoint, dragRayPoint, holdReachFrom, leashAlongRay, pointToSegmentPx, rayPointNearest, segmentInFrame } from "./dragPlane";
+import { ActionId, AssemblyAction, Furniture, PartBox, PartDef, PartId, Quat, Vec3 } from "@/src/game/core/type";
 import { selectFirstDrop, useGameStore } from "@/src/game/core/store";
 import type { OrbitManipulator } from "../../scene/AssemblyScene";
 import { FOV_Y_DEG } from "../../scene/cameraConfig";
@@ -50,6 +52,11 @@ const TARGET_RING = 92;
 
 type Float3 = [number, number, number];
 
+// Timestamp gate for the DEV drag probe below — module scope so it survives gesture rebuilds.
+let lastDragLog = 0;
+// One-shot gate for the DEV rotation probe: log once per matched-target change, not per frame.
+let lastRotLogId: ActionId | null = null;
+
 const PICKUP_MS = 450;
 /** The held part rides just above the fingertip so the finger doesn't cover it. */
 const FINGER_LIFT_DP = 22;
@@ -58,11 +65,18 @@ const APPROACH_RADIUS_M = 0.3;
 /** Magnetic POSITION pull band, decoupled from rotation: rotation eases in over the whole approach (0.3m), but position stays under the finger until this close and is fully seated at POS_PULL_FULL_M — capping finger→part drift at ~3cm (it used to reach snapDist, 14–19cm, which felt uncontrollable). */
 const POS_PULL_START_M = 0.09;
 const POS_PULL_FULL_M = 0.025;
+/** Per-frame ease for the socket-depth blend, and the weight below which it is treated as fully out. Lower = more lag between the aim and the depth, which is what stops the depth racing the finger; 0.12 is roughly a 130 ms time constant at 60 fps, against the ~90 ms the finger spends crossing the band at a typical drag speed. Device-tunable: raise it toward the 0.25 the work plane uses if delivery starts to feel sluggish, lower it if the part still swings. */
+const DEPTH_BLEND_EASE = 0.12;
+const DEPTH_BLEND_EPS = 0.002;
+/** Master switch for the socket-depth blend. OFF while we A/B the drag: with it off the part holds its carry depth right up until the position magnet takes over, so delivery is posT's job alone. Flip to true to restore the eased approach. */
+const DEPTH_BLEND_ENABLED = false;
 /** Prevent target flicker when hovering between equivalent sockets — expressed in SCREEN pixels because candidate matching is done on the projected screen positions (the finger's aim is 2D; depth must never hide a socket). */
 const SWITCH_MARGIN_PX = 14;
 /** Snap ACCEPTANCE radius comes from settings.snapDistance (per-profile, default 0.14); clamped here so no profile can exceed the geometry-safe cap. APPROACH/SWITCH_MARGIN above stay constants — they own anti-jumping. */
 const SNAP_DIST_MIN = 0.06;
 const SNAP_DIST_MAX = 0.2;
+/** How far past the screen edge an ALREADY-matched socket keeps its match. Acquisition needs the socket in frame (a snap must not be earnable against a hole the player can't see); release is this much more lenient so a mid-drag orbit that nudges the socket over the edge doesn't pop the magnet mid-pull. */
+const HOLD_OFFSCREEN_MARGIN_PX = 96;
 
 /** True when dragging `partId` carries other bodies with it on slideDriver (PartModel's "riding" mode / useSceneState's riding set): the LEAD of a multi-body component, or the carrier of a staged sub-assembly bringing its fitted hardware home. One predicate for both, so a part that is somehow both needs no extra case. */
 function hasRidingBodies(furniture: Furniture | null | undefined, partId: PartId | null | undefined): boolean {
@@ -90,9 +104,9 @@ interface DragSession {
   base: Float3;
   /** Interchangeable sockets the held part may snap to (same part group). */
   /** matchVisual is where the fit is MEASURED — the park pose for a part that enters along an axis,
-   *  the seated visual centre for everything else. GroupCandidate's own position stays what the
+   *  the seated hold point for everything else. GroupCandidate's own position stays what the
    *  release path places at. */
-  candidates: (GroupCandidate & { matchVisual: Vec3 })[];
+  candidates: (GroupCandidate & { matchVisual: Vec3; seatVisual: Vec3 })[];
   /** Live sockets outside the group, for wrong-target detection. */
   otherSockets: Vec3[];
   bakedPos: Vec3;
@@ -117,8 +131,16 @@ interface DragSession {
   matchedActionId: ActionId | null;
   /** Current hover lift (m) applied to the held part — eased in as it nears a  socket; subtracted back out when computing the true pose for fit. */
   hoverLift: number;
+  /** Time-eased socket-depth blend: 0 = the plain carry depth, 1 = fully at the matched socket's depth. Eased rather than recomputed from the aim each frame — see the blend site for why the instantaneous form dragged the part backwards. */
+  depthBlend: number;
+  /** The socket point the depth blend is easing toward. Held after a match is lost so the blend can ease back OUT instead of snapping, and cleared once it reaches zero. */
+  depthTarget: Vec3 | null;
   startX: number;
   startY: number;
+  /** EXPERIMENT (drag-no-plane): assembly bounding radius around the pivot at pickup — sets the ray-carry depth "just in front of the model". */
+  modelR: number;
+  /** How far this part reaches from the point the finger controls — what the carry must clear so no end of it crosses the lens. Captured at pickup because the bounds and the hold point are both fixed for the drag. */
+  holdReach: number;
 }
 
 /** Tray-item drag: long-press a tray card (progress ring) to take the part in hand — it materializes at the spawn point on the work plane — then keep the finger down to pan it; release snaps or returns it to the tray. */
@@ -138,6 +160,8 @@ export function usePartDrag({
     ref: Float3;
     planeY: number;
     lastO: Float3;
+    // Camera-plane anchor for a vertically-parking cluster (see clusterCarryAnchor); null keeps the horizontal glide.
+    anchor: Float3 | null;
   } | null>(null);
 
   const ringX = useSharedValue(0);
@@ -192,7 +216,7 @@ export function usePartDrag({
           right[2] * ndcX * tanH * dist +
           camUp[2] * ndcY * tanV * dist,
       ];
-      return leashToBench(eye, center, p);
+      return leashAlongRay(eye, center, eye as Float3, p);
     },
     [manipulator, winW, winH],
   );
@@ -212,6 +236,43 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
   if (!dir || !back) return [0, 0, 0];
   return [-dir[0] * back, -dir[1] * back, -dir[2] * back];
 }
+
+  /** EXPERIMENT (drag-no-plane): the finger's point with no plane — on the ray, just in front of the model's near boundary (see dragRayPoint). The adaptive default; level mode keeps fingerOnPlane. */
+  const fingerOnRay = useCallback(
+    (absX: number, absY: number, modelRadius: number, holdReach = 0): Float3 | null => {
+      const la = manipulator?.getLookAt();
+      if (!la) return null;
+      return dragRayPoint(
+        { eye: la[0], center: la[1], up: la[2] },
+        FOV_Y_DEG,
+        winW,
+        winH,
+        absX,
+        absY - FINGER_LIFT_DP,
+        modelRadius,
+        holdReach,
+      );
+    },
+    [manipulator, winW, winH],
+  );
+
+  /** Bounding radius of the assembly around the current orbit pivot, from the baked poses — what "in front of the model" measures against. Baked poses are the finished-furniture layout, so the radius is stable for the whole drag. */
+  const assemblyRadius = useCallback(
+    (furniture: Furniture): number => {
+      const piv = getFocusPoint();
+      let r2 = 0;
+      for (const pt of Object.values(furniture.parts)) {
+        const off = pt.visualCenterOffset ?? [0, 0, 0];
+        const dx = pt.pose.position[0] + off[0] - piv[0];
+        const dy = pt.pose.position[1] + off[1] - piv[1];
+        const dz = pt.pose.position[2] + off[2] - piv[2];
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 > r2) r2 = d2;
+      }
+      return Math.sqrt(r2) + 0.05;
+    },
+    [getFocusPoint],
+  );
 
   /** World point on the work plane under (just above) the finger. Null only when there is no camera yet — a finger aimed past the horizon is answered by the limit, not by a miss (see dragPlanePoint). */
   const fingerOnPlane = useCallback(
@@ -275,7 +336,7 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
         anchor[1] + right[1] * dx - camUp[1] * dy,
         anchor[2] + right[2] * dx - camUp[2] * dy,
       ];
-      return leashToBench(eye, center, p);
+      return leashAlongRay(eye, center, eye as Float3, p);
     },
     [manipulator, winH],
   );
@@ -317,6 +378,15 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
   // from gesture-handler's event path, and reaching into the store from there was throwing on a
   // snapshot that had not resolved — a subscription here is resolved before any gesture can fire.
   const dragPlaneSetting = useGameStore((s) => s.settings.dragPlane);
+  const partBoxes = useGameStore((s) => s.partBoxes);
+  const furnitureForAnchors = useGameStore((s) => s.furniture);
+  // Derived once per (furniture, boxes) rather than per drag frame: anchors are baked-pose geometry and cannot change while a furniture is loaded. Empty until the scene's harvest lands, and every consumer falls back to the visual-center clamp until it does.
+  const jointAnchors = useMemo(() => {
+    if (!furnitureForAnchors || !Object.keys(partBoxes).length) return {};
+    const liaisons = furnitureForAnchors.liaisons ?? {};
+    const frames = deriveJointFrames(furnitureForAnchors.parts, liaisons, partBoxes);
+    return partAnchorOffsets(furnitureForAnchors.parts, liaisons, frames);
+  }, [furnitureForAnchors, partBoxes]);
 
   /** A part is "floating": float releaseBehavior is ON (the canvas re-grab has no separate toggle — it comes with float mode), the part is held with no live drag session, and it isn't in a post-release park/snap phase that owns the driver (this also keeps re-grab out of auto-return's recover animation window). */
   const isFloating = useCallback(() => {
@@ -397,8 +467,9 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
           // Drag plane at the action's OWN target height (her model): on-screen overlap with a socket then means genuine 3D proximity — a finger on a 2D screen cannot steer depth.
           const doneSet0 = new Set(store.completed);
           const ownTarget = targetPositionForAction(action, furniture.parts, doneSet0);
-          const grabOffset = part.visualCenterOffset ?? [0, 0, 0];
-          // The plane pins the part's VISUAL CENTER (what the finger holds), so anchor it at the socket's visual-center height — origin height alone left tall parts (DALFRED legs: +0.27m center offset) vertically unreachable in level mode.
+          // The finger owns the part's HOLD POINT — the visual center for compact parts, clamped near the snap origin for lengthy ones (a DALFRED leg is steered by its foot, not mid-shaft; see holdOffsetFor).
+          const grabOffset = holdOffsetFor(part, jointAnchors);
+          // The plane pins the hold point (what the finger holds), so anchor it at the socket's hold-point height — a plane whose height disagrees with the pinned point left tall parts (DALFRED legs: +0.27m center offset) vertically unreachable in level mode.
           // The plane sits at the PARK height for a part that enters along an axis, so the pin can
           // actually hover over its hole instead of being held at the depth it ends up at.
           const ownPark = parkShiftFor(part);
@@ -434,9 +505,19 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
           // spawned it close to the lens and jumped just as badly.) fingerOnPlane takes the horizon
           // limit itself now, so the part starts under the finger and stays there.
           const socketStart: Float3 = [ownTarget[0], planeY, ownTarget[2]];
+          // EXPERIMENT (drag-no-plane): adaptive spawns on the ray just in front of the model instead of on the work plane; level keeps the plane as the comparison engine.
+          const modelR = assemblyRadius(furniture);
+          // What the carry has to clear so no end of this part crosses the lens. Measured from the HOLD point, which since joint anchors is the part's joint at one END of it: a LACK leg held at its top reaches its full 0.40 m downward, and at the 0.65 m zoom floor the other carry floors land near 0.29 m — which put that foot end behind the camera.
+          const holdReach = holdReachFrom(useGameStore.getState().partBoxes[action.partId], [
+            part.pose.position[0] + grabOffset[0],
+            part.pose.position[1] + grabOffset[1],
+            part.pose.position[2] + grabOffset[2],
+          ]);
           const visualStart = uprightAnchor
             ? (fingerOnCameraPlaneAt(e.absoluteX, e.absoluteY, uprightAnchor) ?? socketStart)
-            : (fingerOnPlane(e.absoluteX, e.absoluteY, planeY) ?? socketStart);
+            : dragPlaneSetting === "level"
+              ? (fingerOnPlane(e.absoluteX, e.absoluteY, planeY) ?? socketStart)
+              : (fingerOnRay(e.absoluteX, e.absoluteY, modelR, holdReach) ?? socketStart);
           const base: Float3 = [
             visualStart[0] - grabOffset[0] - part.pose.position[0],
             visualStart[1] - grabOffset[1] - part.pose.position[1],
@@ -469,6 +550,7 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
             action,
             furniture.parts,
             doneSet,
+            jointAnchors,
           );
           const rawCandidates = selectFirstDrop(nextStore)
             ? allCandidates.filter((c) => c.action.actionId === action.actionId)
@@ -483,21 +565,40 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
             const cPart = furniture.parts[c.action.partId!];
             const dir = cPart?.placeDir;
             const back = cPart?.parkBackoff ?? 0;
-            // matchVisual only — position and visualPosition stay AS AUTHORED. The release path
+            // seatVisual is the candidate's FLUSH pose — the hole the player can actually see. For inserts, position/holdPosition are already the loose pose proud of the hole, so without this the whole match segment floats out along the screw axis and zoomed in it projects off-screen while the hole sits centered (measured: aim stuck at 0.167 with the finger dead on the hole).
+            // The joint anchor IS the visible hole, so it replaces the visual center here as well as in holdPosition — a segment measured anchor-to-visual-center would not describe any real approach line.
+            const off = (cPart && jointAnchors[cPart.partId]) ?? cPart?.visualCenterOffset ?? [0, 0, 0];
+            const seatVisual: Vec3 = cPart
+              ? [
+                  cPart.pose.position[0] + off[0],
+                  cPart.pose.position[1] + off[1],
+                  cPart.pose.position[2] + off[2],
+                ]
+              : c.holdPosition;
+            // matchVisual only — position and holdPosition stay AS AUTHORED. The release path
             // applies the park offset itself, so shifting the real position here parked the part
             // twice: the pin jumped a further 12cm up on release and had to be slid all the way back
             // down. Matching and placing are two different questions about the same socket.
-            if (!dir || !back) return { ...c, matchVisual: c.visualPosition };
+            if (!dir || !back) return { ...c, matchVisual: c.holdPosition, seatVisual };
             const shift: Vec3 = [-dir[0] * back, -dir[1] * back, -dir[2] * back];
             return {
               ...c,
               matchVisual: [
-                c.visualPosition[0] + shift[0],
-                c.visualPosition[1] + shift[1],
-                c.visualPosition[2] + shift[2],
+                c.holdPosition[0] + shift[0],
+                c.holdPosition[1] + shift[1],
+                c.holdPosition[2] + shift[2],
               ] as Vec3,
+              seatVisual,
             };
           });
+          // DEV pickup probe: one line per pickup with the first candidate's WORLD anchors, to catch an anchor landing in the wrong space (a seat that projects fine can still sit centimetres from the LENS — band collapse, unmatched drags).
+          if (__DEV__ && candidates[0]) {
+            const c0 = candidates[0];
+            const j = jointAnchors[c0.action.partId!];
+            console.log(
+              `[pickup] ${c0.action.actionId} pos=${c0.position.map((v) => v.toFixed(3)).join(",")} hold=${c0.holdPosition.map((v) => v.toFixed(3)).join(",")} seat=${c0.seatVisual.map((v) => v.toFixed(3)).join(",")} match=${c0.matchVisual.map((v) => v.toFixed(3)).join(",")} anchor=${j ? j.map((v) => v.toFixed(3)).join(",") : "none"} BUILD=noplane6`,
+            );
+          }
           const groupIds = new Set(candidates.map((c) => c.action.actionId));
           const otherSockets = avail
             .filter(
@@ -516,8 +617,12 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
             uprightAnchor,
             matchedActionId: null,
             hoverLift: 0,
+            depthBlend: 0,
+            depthTarget: null,
             startX: e.absoluteX,
             startY: e.absoluteY,
+            modelR,
+            holdReach,
           };
         })
         .onUpdate((e) => {
@@ -531,14 +636,33 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
           if (!s || !furniture || store.heldActionId !== action.actionId)
             return;
           // Exact per-frame projection onto the (dynamic) horizontal drag plane — absolute mapping, so the part cannot drift from the finger. The camera-plane delta math is no longer the horizon's fallback (fingerOnPlane takes that limit itself); what is left for it is the upright path's own miss, an anchor gone behind the lens.
-          const p = s.uprightAnchor
+          // EXPERIMENT (drag-no-plane): adaptive rides the ray at cap depth every frame — no plane, no grazing pathologies; the socket blend below still owns delivery depth. Level keeps the plane.
+          let p = s.uprightAnchor
             ? (fingerOnCameraPlaneAt(e.absoluteX, e.absoluteY, s.uprightAnchor) ??
               fingerOnCameraPlane(e.absoluteX, e.absoluteY, s))
-            : (fingerOnPlane(e.absoluteX, e.absoluteY, s.planeY) ??
-              fingerOnCameraPlane(e.absoluteX, e.absoluteY, s));
+            : store.settings.dragPlane === "level"
+              ? (fingerOnPlane(e.absoluteX, e.absoluteY, s.planeY) ??
+                fingerOnCameraPlane(e.absoluteX, e.absoluteY, s))
+              : (fingerOnRay(e.absoluteX, e.absoluteY, s.modelR, s.holdReach) ??
+                fingerOnCameraPlane(e.absoluteX, e.absoluteY, s));
           let nearest = s.candidates[0];
           let bestD = Infinity;
-          let target: GroupCandidate | null = null;
+          let target: (GroupCandidate & { matchVisual: Vec3 }) | null = null;
+          // Socket-depth policy staging: the matched socket's nearest point on the finger's ray, plus the aim distance the blend weight rides on (set in the adaptive branch below, applied once snapDist is known).
+          let depthAim: { d: number } | null = null;
+          // The finger's ray this frame, kept so the depth blend can recompute its socket point on the CURRENT ray even on frames where nothing is matched and the blend is easing back out.
+          let frameRay: { eye: Vec3; dir: Vec3 } | null = null;
+          // Pixel cap on the whole aim-band family (see aimBandScale): 1 at bench range, shrinking zoomed-in so match/magnet/snap never span a third of the screen. Level mode keeps 1 — its bands are true 3D distances, part of the demo contract.
+          let band = 1;
+          // The slerp-rotated grab anchor of this frame, for the probe: with hold-point pinning the visual center rides at grabOffset only while unrotated.
+          let probeAnchor: Vec3 | null = null;
+          // Per-profile acceptance radius; also the magnet's full-strength point so "looks seated" and "is accepted" stay the same distance. Read before the matcher because the crowding cap below is expressed against it.
+          const snapDist = Math.min(
+            SNAP_DIST_MAX,
+            Math.max(SNAP_DIST_MIN, store.settings.snapDistance),
+          );
+          // Aim distance to the matched socket's PARK POINT — what the visible magnet ramps ride on. Defaults to bestD (level mode measures true 3D distance and keeps it).
+          let pullD = Infinity;
           if (store.settings.dragPlane === "level") {
             // "level" — the on-release engine's mechanism, kept for comparison/demo: plane FIXED at the session target's height, candidates matched by TRUE 3D distance, no hysteresis. Depth can hide a socket here — the multi-height blind spot (wool stool two-height legs, DALFRED screw105251) is intentional to demonstrate.
             s.planeY = s.basePlaneY;
@@ -562,18 +686,39 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
           } else {
             // "adaptive" — candidate matching in SCREEN space: the finger's aim is 2D, so depth must never hide a socket. Distances are converted back to world meters at the candidate's depth so the approach/snap radii keep their meaning.
             const fingerPx = { x: e.absoluteX, y: e.absoluteY - FINGER_LIFT_DP };
-            const distPx = (c: GroupCandidate & { matchVisual: Vec3 }) => {
-              const sp = worldToScreen(c.matchVisual);
-              if (!sp) return { px: Infinity, mPerPx: 1 };
+            // Aim is measured to the SEGMENT hole→park, not the park point alone: zoomed in, the park hover pose can project off-screen while the hole is visibly centered — the player aims at what they can see, so any point on the approach line counts (pointToSegmentPx's rationale).
+            const distPx = (c: GroupCandidate & { matchVisual: Vec3; seatVisual?: Vec3 }) => {
+              const spA = worldToScreen(c.seatVisual ?? c.holdPosition);
+              const spB = worldToScreen(c.matchVisual);
+              const one = spA ?? spB;
+              if (!one) return { px: Infinity, mPerPx: 1, inFrame: false, nearFrame: false };
+              const a = spA ?? one;
+              const b = spB ?? one;
+              const inFrame = segmentInFrame(a.x, a.y, b.x, b.y, winW, winH, 0);
+              const nearFrame = inFrame || segmentInFrame(a.x, a.y, b.x, b.y, winW, winH, HOLD_OFFSCREEN_MARGIN_PX);
+              if (!spA || !spB) {
+                return {
+                  px: Math.hypot(fingerPx.x - one.x, fingerPx.y - one.y),
+                  mPerPx: (2 * one.depth * Math.tan((FOV_Y_DEG * Math.PI) / 360)) / winH,
+                  inFrame,
+                  nearFrame,
+                };
+              }
+              const seg = pointToSegmentPx(fingerPx.x, fingerPx.y, spA.x, spA.y, spB.x, spB.y);
+              const depth = spA.depth + (spB.depth - spA.depth) * seg.u;
               return {
-                px: Math.hypot(fingerPx.x - sp.x, fingerPx.y - sp.y),
-                mPerPx: (2 * sp.depth * Math.tan((FOV_Y_DEG * Math.PI) / 360)) / winH,
+                px: seg.px,
+                mPerPx: (2 * depth * Math.tan((FOV_Y_DEG * Math.PI) / 360)) / winH,
+                inFrame,
+                nearFrame,
               };
             };
             let nearestPx = Infinity;
             let nearestMPerPx = 1;
             for (const c of s.candidates) {
               const d = distPx(c);
+              // A socket the player cannot SEE cannot be aimed at — off-frame candidates are skipped for acquisition (a snap must never be earned against an invisible hole; measured: a seat at y=-88 was still inside the capture band near the top edge). The CURRENT match is not acquired here either — it is held through the more generous nearFrame test below, so a mid-drag orbit that nudges the socket just past the edge does not pop the magnet.
+              if (!d.inFrame) continue;
               if (d.px < nearestPx) {
                 nearestPx = d.px;
                 nearestMPerPx = d.mPerPx;
@@ -581,18 +726,52 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
               }
             }
             bestD = nearestPx * nearestMPerPx; // world-equivalent aim distance
+            band = aimBandScale(nearestMPerPx, APPROACH_RADIUS_M);
+            // Crowding cap, measured in WORLD metres. Its job: the acceptance radius must never span two sibling sockets, or a near-miss seats into the wrong hole ("I can only snap on the two at the back", measured on DALFRED at the zoom floor). The first cut measured the gap in PIXELS, which is azimuth-dependent: from the home framing two of DALFRED's four leg anchors project nearly on top of each other (depth-aligned pair, ~12 px apart while 15 cm apart in world), so the band was crushed to 0.13 at any zoom and nothing could match or seat at all — the "totally not work" regression. Pixel-coincident-but-depth-separated siblings are exactly what screen-space matching plus hysteresis already tolerate; the seating hazard the cap exists for lives in world space, so the gap is measured there.
+            if (nearest && snapDist > 0) {
+              let gapM = Infinity;
+              for (const c of s.candidates) {
+                if (c.action.actionId === nearest.action.actionId) continue;
+                const g = Math.hypot(
+                  c.matchVisual[0] - nearest.matchVisual[0],
+                  c.matchVisual[1] - nearest.matchVisual[1],
+                  c.matchVisual[2] - nearest.matchVisual[2],
+                );
+                if (g < gapM) gapM = g;
+              }
+              if (Number.isFinite(gapM)) {
+                band = Math.min(band, gapM / (2 * snapDist));
+              }
+            }
 
             const current = s.candidates.find(
               (c) => c.action.actionId === s.matchedActionId,
             );
-            const currentPx = current ? distPx(current).px : Infinity;
-            if (current && currentPx * nearestMPerPx <= APPROACH_RADIUS_M) {
+            // The hold test runs on the current match's OWN scale and band: when the only in-approach socket is the held one and every rival is off-frame, the loop above never set nearestMPerPx, and judging the hold by a defaulted scale would drop a perfectly on-screen match.
+            const currentD = current ? distPx(current) : null;
+            const currentPx = currentD?.nearFrame ? currentD.px : Infinity;
+            const currentBand = currentD
+              ? aimBandScale(currentD.mPerPx, APPROACH_RADIUS_M)
+              : band;
+            if (
+              current &&
+              currentD &&
+              currentPx * currentD.mPerPx <= APPROACH_RADIUS_M * currentBand
+            ) {
               target = nearestPx + SWITCH_MARGIN_PX < currentPx ? nearest : current;
-            } else if (nearest && bestD <= APPROACH_RADIUS_M) {
+            } else if (nearest && bestD <= APPROACH_RADIUS_M * band) {
               target = nearest;
             }
             s.matchedActionId = target?.action.actionId ?? null;
-            // Ease the drag plane toward the matched socket's height (multi-height groups); slides the part ALONG the finger's view ray, so it is invisible on screen. Same visual-center anchoring as the session plane.
+            // The SEGMENT distance owns matching only. The VISIBLE pulls (magnet position, rotation ease, fit) measure to the park point itself: on-device, letting the magnet feed on the segment turned the whole hole→park corridor into a capture zone — the screw leapt to the socket the moment the finger crossed the corridor and stayed there while the finger travelled ("it does not ride my finger", phone screenshot with Drop it! stuck on). Screen-invisible consumers (depth blend) keep the segment aim.
+            if (target) {
+              const spT = worldToScreen(target.matchVisual);
+              pullD = spT
+                ? Math.hypot(fingerPx.x - spT.x, fingerPx.y - spT.y) *
+                  ((2 * spT.depth * Math.tan((FOV_Y_DEG * Math.PI) / 360)) / winH)
+                : Infinity;
+            }
+            // Ease the drag plane toward the matched socket's height (multi-height groups); slides the part ALONG the finger's view ray, so it is invisible on screen. Same hold-point anchoring as the session plane.
             const wantY = target
               ? target.position[1] +
                 s.grabOffset[1] +
@@ -601,20 +780,54 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
             // Only the horizontal plane has a height to ease. On the upright plane the finger owns
             // world-Y directly, and moving the plane under it would fight the drag.
             if (!s.uprightAnchor) s.planeY += (wantY - s.planeY) * 0.25;
+            // Socket-depth policy — the second half of the on-ray contract: the plane owns depth only while it is trustworthy. Near a matched socket the depth eases to the point on the finger's RAY nearest that socket — screen-invisible (movement along the ray never moves the part on screen), but it swaps a grazing plane's metres-per-pixel runaway for the socket's own depth, so the snap window is pixels of AIM rather than pixels of tremor. The aim distance is recomputed for the CHOSEN target (hysteresis can keep `current` while bestD measured the rival). Upright parts skip it: their anchor already pins depth.
+            if (!s.uprightAnchor) {
+              const la = manipulator?.getLookAt();
+              if (la) {
+                frameRay = screenRay(
+                  { eye: la[0], center: la[1], up: la[2] },
+                  FOV_Y_DEG,
+                  winW,
+                  winH,
+                  e.absoluteX,
+                  e.absoluteY - FINGER_LIFT_DP,
+                );
+              }
+              if (target) {
+                const dT = distPx(target);
+                depthAim = { d: dT.px * dT.mPerPx };
+                s.depthTarget = target.matchVisual;
+              }
+            }
           }
 
-          // Per-profile acceptance radius; also the magnet's full-strength point so "looks seated" and "is accepted" stay the same distance.
-          const snapDist = Math.min(
-            SNAP_DIST_MAX,
-            Math.max(SNAP_DIST_MIN, store.settings.snapDistance),
-          );
+          // Level mode (and any path that didn't set a park-point pull) keeps the classic single distance for the ramps.
+          if (!Number.isFinite(pullD)) pullD = bestD;
           if (p) {
-            const fingerW: Vec3 = [
-              p[0] - s.grabOffset[0],
-              p[1] - s.grabOffset[1],
-              p[2] - s.grabOffset[2],
-            ];
-
+            // The depth blend eases over TIME toward the aim-derived weight instead of taking it outright each frame. Taking it outright made depth a direct function of where the finger IS, and near a socket that function is steep and non-monotonic — measured on a zoomed DALFRED leg the depth ran 0.120 -> 0.462 -> 0.120 m as the aim crossed the socket band. Since the part's body hangs off the carry point by a fixed WORLD offset (a leg's whole length, now that the hold point is its real joint) and its screen offset is that over depth, a depth moving that fast moved the body faster than the finger — and backwards on the way out of the band, at a measured gain of -0.30. Easing decouples depth from the aim's moment-to-moment value, so it can no longer race the finger.
+            const wantBlend = DEPTH_BLEND_ENABLED && depthAim
+              ? Math.max(
+                  0,
+                  Math.min(
+                    1,
+                    (APPROACH_RADIUS_M * band - depthAim.d) /
+                      ((APPROACH_RADIUS_M - snapDist) * band),
+                  ),
+                )
+              : 0;
+            s.depthBlend += (wantBlend - s.depthBlend) * DEPTH_BLEND_EASE;
+            if (s.depthBlend <= DEPTH_BLEND_EPS) {
+              s.depthBlend = 0;
+              s.depthTarget = null;
+            } else if (s.depthTarget && frameRay) {
+              // The socket point is recomputed on THIS frame's ray, never remembered from the last one: a stale point belongs to the ray the finger was on a frame ago, and blending toward it would slide the part off the finger — the one invariant the whole on-ray design exists to hold.
+              const q = rayPointNearest(frameRay.eye, frameRay.dir, s.depthTarget);
+              p = [
+                p[0] + (q[0] - p[0]) * s.depthBlend,
+                p[1] + (q[1] - p[1]) * s.depthBlend,
+                p[2] + (q[2] - p[2]) * s.depthBlend,
+              ];
+            }
             // Magnetic snap: once a socket is matched, the part eases toward it as it approaches (no match = it stays pinned under the finger, t = 0). Fit feedback (color states) is independent of the pull.
             const magnetic = !!target;
             // Rotation factor: eases over the whole approach band (the gradual turn toward the socket's orientation).
@@ -623,7 +836,8 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
                   0,
                   Math.min(
                     1,
-                    (APPROACH_RADIUS_M - bestD) / (APPROACH_RADIUS_M - snapDist),
+                    (APPROACH_RADIUS_M * band - pullD) /
+                      ((APPROACH_RADIUS_M - snapDist) * band),
                   ),
                 )
               : 0;
@@ -633,21 +847,43 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
                   0,
                   Math.min(
                     1,
-                    (POS_PULL_START_M - bestD) /
-                      (POS_PULL_START_M - POS_PULL_FULL_M),
+                    (POS_PULL_START_M * band - pullD) /
+                      ((POS_PULL_START_M - POS_PULL_FULL_M) * band),
                   ),
                 )
               : 0;
-            const sock = target?.position ?? fingerW;
+            // DEV rotation probe (one-shot per target change): whether there is any rotation to magnetize AT ALL — flat-node GLBs bake identity on every part, making the slerp a structural no-op.
+            if (__DEV__ && target && s.matchedActionId !== lastRotLogId) {
+              lastRotLogId = s.matchedActionId;
+              console.log(
+                `[rot] tgt=${target.action.actionId} rotT=${rotT.toFixed(2)} bakedRot=${s.bakedRot.map((v) => v.toFixed(3)).join(",")} targetRot=${target.rotation.map((v) => v.toFixed(3)).join(",")}`,
+              );
+            }
             // No hover-lift: the part eases straight to the socket so there's no vertical "drop" on release — it just moves to where it should rest (the loose state for screws/legs is still applied on release).
             s.hoverLift = 0;
+            // Hold-point-pinned rotation. The driver composes T·R about the NODE ORIGIN (native updateTransform is new*current), and the node origin is not the hold point — a DALFRED leg's origin is its FOOT, 0.43 m from the held joint. Rotating about the origin swept the joint and the whole body away from the finger in an arc, which read as "the part is not magnetic to the rotation" while the probe swore gapPx=0 (it measures intent, not the entity). Pinning: the magnet pulls the JOINT toward the socket's holdPosition, and the node position is re-aimed through the slerp-rotated anchor so the joint stays exactly where the drag put it at every rotT. At rotT=0 the delta is identity and this is byte-for-byte the old translation.
+            const rotQ = target
+              ? quatSlerp(s.bakedRot, target.rotation, rotT)
+              : s.bakedRot;
+            const gRot = quatRotateVec3(
+              quatMultiply(rotQ, quatConjugate(s.bakedRot)),
+              s.grabOffset,
+            );
+            const holdT: Vec3 = target
+              ? [
+                  p[0] + (target.holdPosition[0] - p[0]) * posT,
+                  p[1] + (target.holdPosition[1] - p[1]) * posT,
+                  p[2] + (target.holdPosition[2] - p[2]) * posT,
+                ]
+              : p;
+            probeAnchor = gRot;
             heldDriver.setPose(
               [
-                fingerW[0] + (sock[0] - fingerW[0]) * posT - s.bakedPos[0],
-                fingerW[1] + (sock[1] - fingerW[1]) * posT - s.bakedPos[1],
-                fingerW[2] + (sock[2] - fingerW[2]) * posT - s.bakedPos[2],
+                holdT[0] - gRot[0] - s.bakedPos[0],
+                holdT[1] - gRot[1] - s.bakedPos[1],
+                holdT[2] - gRot[2] - s.bakedPos[2],
               ],
-              target ? quatSlerp(s.bakedRot, target.rotation, rotT) : s.bakedRot,
+              rotQ,
             );
             // Mirror the held lead's live world-space offset onto its riding siblings every drag frame, so the whole slide moves as one object in hand.
             if (hasRidingBodies(furniture, action.partId)) slideDriver.set(heldDriver.value);
@@ -658,20 +894,60 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
             s.bakedPos[1] + off[1] - s.hoverLift,
             s.bakedPos[2] + off[2],
           ];
-          const fs = target
-            ? computeFit(
-                held,
-                target.rotation,
-                { position: target.position, rotation: target.rotation },
-                s.otherSockets,
-                { distance: snapDist, angleDeg: 25 },
-              )
-            : "held";
+          // Acceptance under the no-plane carry measures the PLAYER's error — 2D aim to the delivery point — not the transient world distance. The depth glide is SYSTEM-owned and finishes on its own clock; judging fit on the world gap meant a release with the finger dead on the socket bounced back to the tray purely because the glide had frames left (emulator run: 3 px of aim, 0.3 m of unfinished depth, fit stuck at held). Level mode and upright parts keep computeFit: their held depth is real, not a glide in progress.
+          const fs =
+            target && depthAim
+              ? pullD <= snapDist * band
+                ? "nearCorrect"
+                : pullD <= snapDist * band * APPROACH_FACTOR
+                  ? "approaching"
+                  : "held"
+              : target
+                ? computeFit(
+                    held,
+                    target.rotation,
+                    { position: target.position, rotation: target.rotation },
+                    s.otherSockets,
+                    { distance: snapDist * band, angleDeg: 25 },
+                  )
+                : "held";
           if (
             fs !== store.fitState ||
             s.matchedActionId !== store.matchedActionId
           )
             store.setDragFit(fs, s.matchedActionId);
+          // DEV drag probe (throttled): one line per ~quarter second into the Metro console, enough to reconstruct which mechanism owns the part when it separates from the finger. gapPx is the user-facing invariant — the held part's visual center vs the touch, on screen.
+          if (__DEV__ && Date.now() - lastDragLog > 250) {
+            lastDragLog = Date.now();
+            const pa = probeAnchor ?? s.grabOffset;
+            const heldVisual: Vec3 = [
+              held[0] + pa[0],
+              held[1] + pa[1],
+              held[2] + pa[2],
+            ];
+            const hp = worldToScreen(heldVisual);
+            const gapPx = hp
+              ? Math.hypot(hp.x - e.absoluteX, hp.y - (e.absoluteY - FINGER_LIFT_DP)).toFixed(0)
+              : "offscreen";
+            // Zoom and carry depth, so an on-device report says WHICH zoom it happened at instead of leaving it to be guessed — the clearance floor is a function of both, and the last round of reports could not be reproduced without them.
+            const la2 = manipulator?.getLookAt();
+            const camDist = la2
+              ? Math.hypot(la2[1][0] - la2[0][0], la2[1][1] - la2[0][1], la2[1][2] - la2[0][2])
+              : 0;
+            const carryDepth =
+              la2 && p
+                ? (() => {
+                    const fx = la2[1][0] - la2[0][0], fy = la2[1][1] - la2[0][1], fz = la2[1][2] - la2[0][2];
+                    const fl = Math.hypot(fx, fy, fz) || 1;
+                    return (((p[0] - la2[0][0]) * fx + (p[1] - la2[0][1]) * fy + (p[2] - la2[0][2]) * fz) / fl).toFixed(3);
+                  })()
+                : "?";
+            const nSeat = nearest?.seatVisual ? worldToScreen(nearest.seatVisual) : null;
+            const nPark = nearest?.matchVisual ? worldToScreen(nearest.matchVisual) : null;
+            console.log(
+              `[drag] f=(${e.absoluteX.toFixed(0)},${e.absoluteY.toFixed(0)}) part=(${hp ? `${hp.x.toFixed(0)},${hp.y.toFixed(0)}` : "?"}) gapPx=${gapPx} p=${p ? p.map((v) => v.toFixed(2)).join(",") : "null"} plane=${s.planeY.toFixed(2)} upright=${!!s.uprightAnchor} aim=${Number.isFinite(bestD) ? bestD.toFixed(3) : "inf"} pull=${Number.isFinite(pullD) ? pullD.toFixed(3) : "inf"} band=${band.toFixed(2)} cam=${camDist.toFixed(3)} reach=${s.holdReach.toFixed(3)} carry=${carryDepth} blend=${s.depthBlend.toFixed(2)} tgt=${s.matchedActionId ?? "-"} near=${nearest?.action.actionId ?? "-"} seat=(${nSeat ? `${nSeat.x.toFixed(0)},${nSeat.y.toFixed(0)}` : "?"}) park=(${nPark ? `${nPark.x.toFixed(0)},${nPark.y.toFixed(0)}` : "?"}) fit=${fs} BUILD=noplane6`,
+            );
+          }
         })
         .onFinalize(() => {
           if (canvas) {
@@ -783,6 +1059,8 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
       getFocusPoint,
       fingerOnCameraPlaneAt,
       fingerOnPlane,
+      fingerOnRay,
+      assemblyRadius,
       fingerOnCameraPlane,
       worldToScreen,
       ringX,
@@ -794,6 +1072,7 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
       onPanEnd,
       // The gesture closure captures this, so a settings change has to rebuild it.
       dragPlaneSetting,
+      jointAnchors,
     ],
   );
 
@@ -855,11 +1134,15 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
             c[2] += p.pose.position[2] / members.length;
           }
           const planeY = c[1];
-          const p =
-            fingerOnPlane(e.absoluteX, e.absoluteY, planeY) ??
-            fingerOnCameraPlaneAt(e.absoluteX, e.absoluteY, getFocusPoint());
+          // A vertically-parking cluster rides the camera-facing plane through its park pose instead of the horizontal glide: its glide plane hangs at the TOP of the assembly where a level orbit sees it edge-on and the finger's ray lands metres out, so the in-plane snap was unreachable from most of the screen (DALFRED's seat, measured at every zoom).
+          const anchor = clusterCarryAnchor(c, target);
+          const p = anchor
+            ? (fingerOnCameraPlaneAt(e.absoluteX, e.absoluteY, anchor) ??
+              fingerOnPlane(e.absoluteX, e.absoluteY, planeY))
+            : (fingerOnPlane(e.absoluteX, e.absoluteY, planeY) ??
+              fingerOnCameraPlaneAt(e.absoluteX, e.absoluteY, getFocusPoint()));
           const lastO: Float3 = p ? [p[0] - c[0], 0, p[2] - c[2]] : target;
-          clusterSession.current = { ref: c, planeY, lastO };
+          clusterSession.current = { ref: c, planeY, lastO, anchor };
           store.setCombiningCluster(action.cluster);
           store.setDragFit("held", null);
           // pin the target marker where the release must land: the centroid shifted by the park offset (or the seat itself for the seed)
@@ -874,10 +1157,12 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
         .onUpdate((e) => {
           const s = clusterSession.current;
           if (!s) return;
-          // Same camera-plane fallback onStart uses: when the horizontal-plane projection misses (a low/side orbit puts the plane at the cluster's height edge-on or above the horizon) fingerOnPlane returns null, so without the fallback the carry stops tracking. Anchor matches onStart (getFocusPoint) so the first drag frame doesn't jump.
-          const p =
-            fingerOnPlane(e.absoluteX, e.absoluteY, s.planeY) ??
-            fingerOnCameraPlaneAt(e.absoluteX, e.absoluteY, getFocusPoint());
+          // Same plane choice as onStart, per frame: the anchored camera plane for a vertical park, the horizontal glide otherwise. The getFocusPoint fallback survives for the glide's true misses (anchor behind the lens / no camera yet), though dragPlanePoint answers the horizon itself now.
+          const p = s.anchor
+            ? (fingerOnCameraPlaneAt(e.absoluteX, e.absoluteY, s.anchor) ??
+              fingerOnPlane(e.absoluteX, e.absoluteY, s.planeY))
+            : (fingerOnPlane(e.absoluteX, e.absoluteY, s.planeY) ??
+              fingerOnCameraPlaneAt(e.absoluteX, e.absoluteY, getFocusPoint()));
           if (!p) return;
           const o: Float3 = [p[0] - s.ref[0], 0, p[2] - s.ref[2]];
           s.lastO = o;

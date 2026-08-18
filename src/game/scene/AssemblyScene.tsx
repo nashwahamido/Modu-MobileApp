@@ -6,11 +6,12 @@ import {
   FilamentView,
   Light,
   useCameraManipulator,
+  useFilamentContext,
   useModel,
 } from "react-native-filament";
 import type { ISharedValue } from "react-native-worklets-core";
 import { useGameStore } from "@/src/game/core/store";
-import type { PartId } from "@/src/game/core/type";
+import type { PartBox, PartId } from "@/src/game/core/type";
 import { CombineCarry, type CarryOffset } from "./CombineCarry";
 import { OrbitDrive, type PanOffset, type StickDeflection } from "./OrbitDrive";
 import { stageOffsetMap } from "@/src/game/core/model/staging";
@@ -70,6 +71,7 @@ export function AssemblyScene({
     furniture?.styleModels?.[renderStyle] ?? furniture?.model ?? 0,
     { instanceCount: 2, addToScene: false },
   );
+  const { renderableManager, transformManager } = useFilamentContext();
   const manualTools = useGameStore((s) => s.settings.manualTools);
   const lightingPreset = useGameStore((s) => s.settings.lightingPreset);
   const dark = useGameStore((s) => s.theme) === "dark";
@@ -107,6 +109,58 @@ export function AssemblyScene({
   useEffect(() => {
     if (model.state === "loaded") onModelReady?.();
   }, [model.state, onModelReady]);
+
+  // Deliberately NOT keyed on onModelReady: the parent passes a fresh inline closure every render, so including it would re-run this whole per-part native-bridge loop on any unrelated parent re-render — the harvest must happen once per model load. model.asset is read from the closure inside, since useModel returns a fresh object identity every render and depending on it would have the same effect.
+  useEffect(() => {
+    if (model.state !== "loaded" || !furniture) return;
+    // Harvest each part's world bounds ONCE — the joint derivation's only input from the renderer. Filament hands back the renderable's OBJECT-space box, so each is pushed through the node's world transform below; the tolerance check that follows is what proves the result really is in the space the derivation assumes, because a box left in the wrong space would shift every anchor by the node's translation and the drag would just feel subtly wrong instead of failing.
+    const boxes: Record<PartId, PartBox> = {};
+    let mismatches = 0;
+    let worst = { partId: "", mm: 0 };
+    for (const p of Object.values(furniture.parts)) {
+      const entity = model.asset.getFirstEntityByName(p.meshName);
+      if (!entity) continue;
+      const b = renderableManager.getAxisAlignedBoundingBox(entity);
+      // Filament hands back the renderable's box in OBJECT space; every mesh node in these GLBs carries a translation and most carry a rotation, so the box must be pushed through the node's world transform before it means anything to the derivation. All EIGHT corners are swept and re-bounded — transforming only the centre would keep a rotated part's extent wrong, and the extent is what decides whether two parts overlap at all.
+      const m = transformManager.getWorldTransform(entity).data;
+      const min: [number, number, number] = [Infinity, Infinity, Infinity];
+      const max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+      for (let c = 0; c < 8; c++) {
+        const lx = b.center[0] + (c & 1 ? b.halfExtent[0] : -b.halfExtent[0]);
+        const ly = b.center[1] + (c & 2 ? b.halfExtent[1] : -b.halfExtent[1]);
+        const lz = b.center[2] + (c & 4 ? b.halfExtent[2] : -b.halfExtent[2]);
+        // `data` is filament's mat4f::asArray() — COLUMN-major, so the basis columns are m[0..2]/m[4..6]/m[8..10] and the translation is m[12..14] (matching the wrapper's own `translation` getter, which reads _matrix[3]).
+        const w: [number, number, number] = [
+          m[0] * lx + m[4] * ly + m[8] * lz + m[12],
+          m[1] * lx + m[5] * ly + m[9] * lz + m[13],
+          m[2] * lx + m[6] * ly + m[10] * lz + m[14],
+        ];
+        for (let k = 0; k < 3; k++) {
+          if (w[k] < min[k]) min[k] = w[k];
+          if (w[k] > max[k]) max[k] = w[k];
+        }
+      }
+      boxes[p.partId] = { min, max };
+      const vco = p.visualCenterOffset ?? [0, 0, 0];
+      const dx = (min[0] + max[0]) / 2 - (p.pose.position[0] + vco[0]);
+      const dy = (min[1] + max[1]) / 2 - (p.pose.position[1] + vco[1]);
+      const dz = (min[2] + max[2]) / 2 - (p.pose.position[2] + vco[2]);
+      const mm = Math.hypot(dx, dy, dz) * 1000;
+      if (mm > 2) {
+        mismatches++;
+        if (mm > worst.mm) worst = { partId: p.partId, mm };
+      }
+    }
+    // Publishing UNVALIDATED boxes is strictly worse than publishing none: an empty map makes every consumer fall back to the previous visual-centre clamp, which is merely approximate, whereas a box in the wrong space yields a confidently wrong hold point that the drag trusts completely — so the tolerance check is a GATE, not a diagnostic, and one bad part disables the whole feature for the session.
+    if (mismatches > 0) {
+      if (__DEV__) console.warn(`[jointFrames] ${mismatches}/${Object.keys(boxes).length} part boxes are >2mm from pose+visualCenterOffset (worst: ${worst.partId} at ${worst.mm.toFixed(1)}mm). Publishing NO boxes — the drag falls back to the visual-centre clamp.`);
+      useGameStore.getState().setPartBoxes({});
+      return;
+    }
+    useGameStore.getState().setPartBoxes(boxes);
+    // model is a fresh object identity every render (useModel returns a new literal once loaded — see PartModel.tsx's modelEqual/useInstanceEntity for the same caveat), so depending on the whole object would re-run this harvest on every render instead of once per load; model.state is the stable signal that actually changes on load/unload.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model.state, furniture, renderableManager, transformManager]);
   if (!furniture) return null;
   const driveAction = driveActionId
     ? furniture.actions.find((a) => a.actionId === driveActionId) ?? null
