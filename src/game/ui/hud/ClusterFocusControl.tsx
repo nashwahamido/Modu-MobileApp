@@ -253,18 +253,9 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
     return (
       <View style={styles.scrim}>
         <View style={[styles.card, { maxWidth: cardMax }]}>
-          <Pressable
-            style={styles.close}
-            // Paused mid-build → resume. Nothing chosen yet → there is nothing to resume to, so the only way out is back to the catalogue.
-            onPress={() =>
-              mustChoose ? router.dismissTo("/catalogue") : closeMap()
-            }
-            hitSlop={10}
-            accessibilityLabel={mustChoose ? "Leave this build" : "Start building"}
-          >
-            <Text style={styles.closeGlyph}>✕</Text>
-          </Pressable>
-
+          {/* NO close button. Every stage's Start/Resume closes the map by opening that stage, and
+              Home leaves the build entirely — an ✕ on the corner was a third exit that did the same
+              thing as the first two, and on a card this size it read as the loudest control on it. */}
           <Pressable
             style={({ pressed }) => [styles.home, pressed && { opacity: 0.6 }]}
             onPress={() => router.dismissTo("/room")}
@@ -651,24 +642,9 @@ const makeStyles = (t: Theme) =>
       shadowOffset: { width: 0, height: 10 },
       elevation: 12,
     },
-    // Matched to the INVENTORY's close button: a larger dark disc with no cream ring, sitting on
-    // the card's corner. One close affordance across the room and the build.
-    close: {
-      position: "absolute",
-      top: -14,
-      right: -14,
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      backgroundColor: "#4A4441",
-      alignItems: "center",
-      justifyContent: "center",
-      zIndex: 2,
-      elevation: 2,
-    },
-    closeGlyph: { color: "#FBF8F3", fontFamily: FONT, fontSize: 20, fontWeight: "700", lineHeight: 23 },
-
-    // Top-left of the card, opposite the close button. Absolute so it cannot push the centred title off centre.
+    // Top-left of the card. Absolute so it cannot push the centred title off centre. (It used to be
+    // described as "opposite the close button"; the close button is gone, this is the only corner
+    // control now.)
     home: {
       position: "absolute",
       top: 12,
@@ -805,8 +781,10 @@ const makeStyles = (t: Theme) =>
     // row — the box gives both the same midline, whatever they wrap to.
     nodeLabelBox: {
       position: "absolute",
-      left: 4,
-      right: 4,
+      // Narrow on purpose: with the per-word break above this is belt and braces, but it also means
+      // a long single word cannot run to the circle's rim.
+      left: 16,
+      right: 16,
       bottom: 12,
       height: 28,
       alignItems: "center",
