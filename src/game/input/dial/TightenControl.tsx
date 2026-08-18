@@ -6,6 +6,7 @@ import { AssemblyAction } from "@/src/game/core/type";
 import { TIGHTEN_TOTAL_DEG, useGameStore } from "@/src/game/core/store";
 import { Dial, useDialTurn } from "@/src/game/input/dial/DialGauge";
 import type { OffsetDriver } from "../../scene/offsetDriver";
+import { useMirror } from "@/src/game/ui/system/handedness";
 
 interface Props {
   action: AssemblyAction;
@@ -20,6 +21,7 @@ interface Props {
  * The gauge itself and the turn gesture are shared with the other three dial controls — see ./DialGauge.
  */
 export function TightenControl({ action, sinkDriver }: Props) {
+  const m = useMirror();
   const deg = useGameStore((s) => s.tightenDeg[action.actionId] ?? 0);
 
   const pan = useDialTurn({
@@ -44,7 +46,7 @@ export function TightenControl({ action, sinkDriver }: Props) {
   });
 
   return (
-    <View style={styles.wrap} pointerEvents="box-none">
+    <View style={m(styles.wrap)} pointerEvents="box-none">
       <Dial progress={Math.min(1, deg / TIGHTEN_TOTAL_DEG)} gesture={pan} />
     </View>
   );

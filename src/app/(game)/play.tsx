@@ -69,8 +69,8 @@ import { ObjectiveBar } from "@/src/game/ui/hud/ObjectiveBar";
 import {
   HintButton,
   RecenterButton,
-  hudControlStyles as hudControls,
-  hudChrome as styles,
+  useHudChrome,
+  useHudControlStyles,
 } from "@/src/game/ui/hud/hudChrome";
 import { ThemeScope, useTheme } from "@/src/game/ui/system/theme";
 import {
@@ -123,6 +123,9 @@ function GameScreen() {
 
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
+  // The HUD's placements, mirrored when the player is left-handed — the joystick and the toggles row swap edges, and the whole button column crosses with them.
+  const styles = useHudChrome();
+  const hudControls = useHudControlStyles();
   // Loading screen: covers the scene from target change until data + model are ready. retryKey remounts AssemblyScene to restart a failed GLB load.
   const [modelReady, setModelReady] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -201,7 +204,8 @@ function GameScreen() {
       // surface that follows the theme — and the dark variant read as mud against the dark chrome.
       { backgroundColor: backdrop === "clear" ? "#DACAAE" : t.bg },
     ],
-    [t, backdrop, theme],
+    // styles.root is a dependency now that `styles` comes from useHudChrome rather than a module constant — it changes identity when the player's hand does. `theme` stays because t is derived from it.
+    [styles.root, t, backdrop, theme],
   );
   const firstAvailable = useMemo(
     () =>

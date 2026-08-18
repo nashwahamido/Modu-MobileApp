@@ -4,6 +4,7 @@ import { AssemblyAction } from "@/src/game/core/type";
 import type { ParkInfo } from "@/src/game/core/evaluation/engagement";
 import { Dial, useDialTurn } from "@/src/game/input/dial/DialGauge";
 import type { ClusterDriver } from "../../scene/offsetDriver";
+import { useMirror } from "@/src/game/ui/system/handedness";
 
 /** Dial degrees for the full drive — 720 = two turns, so the parked cluster's pre-spin orientation is visually identical to its baked one (2 whole revolutions) and the drive can start without an orientation pop. */
 const SCREW_TOTAL_DEG = 720;
@@ -18,6 +19,7 @@ interface Props {
 
 /** Screw drive for a threaded cluster combine (DALFRED's seat threading onto its base): the parked cluster is spun home with the same clockwise dial as a fastener tighten — each degree of dial travel sinks it along the park axis while the WHOLE cluster turns about that axis, and at two full turns the placement commits through the store's normal drive completion. */
 export function ScrewControl({ action, driver, park }: Props) {
+  const m = useMirror();
   const progress = useGameStore((s) => s.driveProgress[action.actionId] ?? 0);
 
   const pan = useDialTurn({
@@ -41,7 +43,7 @@ export function ScrewControl({ action, driver, park }: Props) {
   });
 
   return (
-    <View style={styles.wrap} pointerEvents="box-none">
+    <View style={m(styles.wrap)} pointerEvents="box-none">
       <Dial progress={progress} gesture={pan} />
       <Text style={styles.hint}>Screw it in · {Math.round(progress * 100)}%</Text>
     </View>

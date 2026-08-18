@@ -6,6 +6,7 @@ import { SCREW_SPIN_DEG, screwSpinInfo } from "@/src/game/core/evaluation/engage
 import { quatFromAxisAngle, quatMultiply } from "@/src/game/core/geometry/math";
 import { Dial, useDialTurn } from "@/src/game/input/dial/DialGauge";
 import type { OffsetDriver } from "../../scene/offsetDriver";
+import { useMirror } from "@/src/game/ui/system/handedness";
 
 interface Props {
   action: AssemblyAction;
@@ -17,6 +18,7 @@ interface Props {
 
 /** Orientation correction panel. The part is parked at the target socket; tracing the circle gives the player a second, deliberate step before the snap commits. For a threaded engagement the part is parked BACKED OFF and sinks home with the rotation — the screwing motion, same staging as a loose fastener. */
 export function RotateControl({ action, driver, sinkDelta }: Props) {
+  const m = useMirror();
   const deg = useGameStore((s) => s.orientationDeg[action.actionId] ?? 0);
   const furniture = useGameStore((s) => s.furniture);
   const completed = useGameStore((s) => s.completed);
@@ -62,7 +64,7 @@ export function RotateControl({ action, driver, sinkDelta }: Props) {
   });
 
   return (
-    <View style={styles.wrap} pointerEvents="box-none">
+    <View style={m(styles.wrap)} pointerEvents="box-none">
       <Dial progress={Math.min(1, deg / ORIENTATION_TOTAL_DEG)} gesture={pan} />
       {screwing ? null : (
         <Pressable

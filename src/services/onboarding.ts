@@ -81,6 +81,29 @@ export async function saveSelectedAvatarMode(modeId: ModeId) {
   return { skipped: false as const };
 }
 
+/**
+ * The hand the player answered with, from their most recent questionnaire run.
+ *
+ * Read from `answers` rather than a column of its own: the jsonb is where saveOnboardingResults
+ * puts it (see migration 006), and the shape is not guaranteed — an older row, or a run where the
+ * question was skipped, has no handedness at all. Anything that is not exactly "left" or "right"
+ * reads as null and the caller keeps the right-handed default, which is what every row written
+ * before this feature existed should mean.
+ */
+export async function getLatestHandedness(userId: string): Promise<Handedness | null> {
+  const { data, error } = await supabase
+    .from("questionnaire")
+    .select("answers")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  const value = (data?.answers as { handedness?: unknown } | null)?.handedness;
+  return value === "left" || value === "right" ? value : null;
+}
+
 export async function getLatestOnboardingMode(userId: string) {
   const { data, error } = await supabase
     .from("questionnaire")

@@ -26,6 +26,7 @@ import { useGameStore } from "@/src/game/core/store";
 import { clusterThumbSet, modelThumbSet } from "@/src/game/core/presentation/finish";
 import Svg, { Circle as SvgCircle, Defs, RadialGradient, Stop } from "react-native-svg";
 import { Theme, useFixedStyles, FONT, RADIUS, SIZE } from "@/src/game/ui/system/theme";
+import { useMirror } from "@/src/game/ui/system/handedness";
 import { useRepos } from "@/src/data";
 import { useCatalogRow } from "@/src/data/catalog/buildStore";
 import { HUD_SIDE_MARGIN, HUD_VERTICAL_MARGIN } from "@/src/hooks/use-safe-insets";
@@ -525,11 +526,13 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
  */
 export function MapButton() {
   const styles = useFixedStyles(makeStyles);
+  // ONLY the button's slot mirrors. The map card itself is centred on the screen and its stage circles read left-to-right in reading order — flipping either would be mirroring content, not ergonomics.
+  const m = useMirror();
   const furniture = useGameStore((s) => s.furniture);
   const setMapOpen = useGameStore((s) => s.setMapOpen);
   if (!furniture) return null;
   return (
-    <View style={styles.mapSlot}>
+    <View style={m(styles.mapSlot)}>
       <Pressable
         style={({ pressed }) => [styles.mapButton, pressed && styles.mapButtonPressed]}
         onPress={() => {
@@ -927,6 +930,7 @@ const makeStyles = (t: Theme) =>
   // TOP-RIGHT corner. top:8 is the HUD's grid line — the settings gear, the hint and the pause row
   // all sit on it — and right:14 is the parts tray's own margin, so the button lines up with the
   // tray column beneath it and with the left-hand controls across from it.
+  // Mirrored at the call site, so in left-hand mode this sits opposite the parts rail exactly as it does here.
   mapSlot: { position: "absolute", right: 14, top: 8, zIndex: 20 },
   // The same 36pt chip height the settings gear, hint and undo sit on, and the PARTS TRAY's width
   // (86) so the button and the column beneath it read as one right-hand rail rather than two
