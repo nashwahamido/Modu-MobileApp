@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { toPlaceableRoomRow, workshopDraftToPlaceableRoomRow, workshopModelDraftsToPlaceableRoomRows, type PlaceableRoomRowInput, type WorkshopDraftRow } from "./repos";
+import { defaultVariation } from "../catalog/assets";
+import { toPlaceableRoomRow, workshopDraftsToItemVariants, workshopDraftToPlaceableRoomRow, workshopModelDraftsToPlaceableRoomRows, type PlaceableRoomRowInput, type WorkshopDraftRow } from "./repos";
 
 // A full, valid row — every test below overrides only the field(s) it cares about, so a mapper that
 // silently drops a field shows up as a specific, narrow assertion failure rather than a crash.
@@ -215,4 +216,62 @@ test("toPlaceableRoomRow treats absent contact columns as no contact size, not a
 test("toPlaceableRoomRow rejects a half-set contact pair rather than inventing the missing axis", () => {
   assert.equal(toPlaceableRoomRow({ ...baseRow, contact_size_x: 0.236 }).contactSize, undefined);
   assert.equal(toPlaceableRoomRow({ ...baseRow, contact_size_z: 0.356 }).contactSize, undefined);
+});
+
+// --- workshop draft variants -------------------------------------------------
+// The app learns an item's colour axis from item_variants, which the publish RPC writes. A draft has no
+// rows there, so before this mapper the app saw an empty variant list for every testing draft — and an
+// empty list resolves to the literal 'default' path segment (defaultVariation -> null -> seg()). A draft
+// whose variations are NAMED (white/grey/wooden) therefore had every asset URL point at default.glb and
+// default.png, which do not exist: both 404s fail silently, so the item rendered as nothing at all with
+// no colour picker. That is the bug this mapper closes.
+
+test("workshopDraftsToItemVariants turns a draft's variants array into ItemVariant rows", () => {
+  const rows = workshopDraftsToItemVariants([
+    {
+      ...baseDraft,
+      id: "yyyy",
+      variants: [
+        { variation: "white", is_default: true },
+        { variation: "grey", is_default: false },
+        { variation: "wooden", is_default: false },
+      ],
+    },
+  ]);
+  assert.deepEqual(rows, [
+    { itemId: "yyyy", variation: "white", isDefault: true },
+    { itemId: "yyyy", variation: "grey", isDefault: false },
+    { itemId: "yyyy", variation: "wooden", isDefault: false },
+  ]);
+});
+
+// The whole point: defaultVariation over the mapped rows must resolve to the NAMED default, so asset
+// paths become white.glb / white.png rather than the nonexistent default.*.
+test("the mapped rows resolve to the named default variation, not the 'default' segment", () => {
+  const rows = workshopDraftsToItemVariants([
+    { ...baseDraft, id: "yyyy", variants: [{ variation: "grey", is_default: false }, { variation: "white", is_default: true }] },
+  ]);
+  assert.equal(defaultVariation(rows.map((r) => ({ variation: r.variation, isDefault: r.isDefault }))), "white");
+});
+
+// A surface draft (floor/wall) carries zero variants by DB constraint (workshop_drafts_kind_shape), and a
+// model draft written before the column existed arrives absent under `select *`. Neither may throw.
+test("workshopDraftsToItemVariants yields nothing for an empty, absent or null variants field", () => {
+  assert.deepEqual(workshopDraftsToItemVariants([{ ...baseDraft, id: "a", variants: [] }]), []);
+  assert.deepEqual(workshopDraftsToItemVariants([{ ...baseDraft, id: "b" }]), []);
+  assert.deepEqual(workshopDraftsToItemVariants([{ ...baseDraft, id: "c", variants: null }]), []);
+});
+
+// An unnamed single variant is the shape that already worked by accident, because null lands on the
+// 'default' segment. It must keep working rather than becoming the string "default".
+test("workshopDraftsToItemVariants preserves a null variation rather than stringifying it", () => {
+  const rows = workshopDraftsToItemVariants([{ ...baseDraft, id: "d", variants: [{ variation: null, is_default: true }] }]);
+  assert.deepEqual(rows, [{ itemId: "d", variation: null, isDefault: true }]);
+});
+
+// is_default is absent on a hand-written or older row; it must read as false, never undefined, or the
+// picker's default-first sort compares against a non-boolean.
+test("workshopDraftsToItemVariants defaults a missing is_default to false", () => {
+  const rows = workshopDraftsToItemVariants([{ ...baseDraft, id: "e", variants: [{ variation: "oak" }] }]);
+  assert.deepEqual(rows, [{ itemId: "e", variation: "oak", isDefault: false }]);
 });

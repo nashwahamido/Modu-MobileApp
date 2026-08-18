@@ -152,6 +152,7 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
                     price={item.price}
                     width={tileWidth}
                     surface={isSurfaceCategory(item.category)}
+                    source={item.source}
                     owned={owned.has(item.id)}
                     lockLevel={level < item.minLevel ? item.minLevel : undefined}
                     onPress={() => requestBuy(item)}
