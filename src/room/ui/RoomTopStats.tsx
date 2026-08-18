@@ -2,7 +2,7 @@
 import { router } from 'expo-router';
 import type { Href } from 'expo-router';
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
-import { CREAM, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
+import { CARD_CHROME, CREAM, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 import { COIN_ICON, STAR_ICON, XP_ICON, levelIcon } from '../../components/iconAssets';
 import { levelProgressFraction } from '../../data/player/levels';
@@ -16,16 +16,9 @@ const COIN_COVER = 16;
 const XP_BADGE_INSET = 1.5;
 const XP_BADGE_SIZE = BAR_HEIGHT - XP_BADGE_INSET * 2;
 
-const BAR_SKIN = {
-  borderWidth: 0.8,
-  borderColor: '#544F4B',
-  boxShadow: '0px 5px 4px rgba(0,0,0,0.22)',
-  shadowColor: '#000',
-  shadowOpacity: 0.45,
-  shadowRadius: 2,
-  shadowOffset: { width: 0, height: 4 },
-  elevation: 6,
-} as const;
+// The edge and shadow both bars share. Taken from the catalogue cards, so the room's chrome and the
+// build screen's tiles read as the same material.
+const BAR_SKIN = CARD_CHROME;
 
 export function RoomTopStats() {
   const s = useFixedStyles(makeStyles);

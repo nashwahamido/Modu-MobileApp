@@ -2,7 +2,14 @@
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 
 import { COIN_ICON } from "@/src/components/iconAssets";
-import { FRAME_RADIUS, FRAME_STROKE, FRAME_STROKE_WIDTH } from "@/src/components/ItemTileFrame";
+import {
+  FRAME_FILL,
+  FRAME_RADIUS,
+  FRAME_STROKE,
+  FRAME_STROKE_WIDTH,
+} from "@/src/components/ItemTileFrame";
+import { CatalogThumb } from "@/src/components/CatalogThumb";
+import { ItemSpinPreview } from "./ItemSpinPreview";
 import { CREAM, CREAM_LIFT, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 
@@ -14,18 +21,25 @@ const NO_BORDER = "#393837";
 const PANEL_STROKE = "#544F4B";
 const PANEL_STROKE_WIDTH = 1.2;
 const BUTTON_HEIGHT = 34;
+// Shared with the surface fallback, which sizes its picture from the frame
+const WELL_SIZE = { width: 200, height: 158 };
 const COIN_SIZE = 34;
 const PILL_HEIGHT = 22;
 const PRICE_TUCK = 22;
 
 export function PurchaseConfirmPopup({
+  itemId,
   name,
   price,
+  surface,
   onConfirm,
   onClose,
 }: {
+  itemId: string;
   name: string;
   price: number;
+  /** A wallpaper or a floor: it has no model to turn, so it shows its tile picture instead */
+  surface?: boolean;
   onConfirm: () => void;
   onClose: () => void;
 }) {
@@ -35,7 +49,14 @@ export function PurchaseConfirmPopup({
    
       <Pressable style={s.scrim} onPress={onClose} />
       <View style={s.card} accessibilityViewIsModal accessibilityRole="alert">
-        <View style={s.well} />
+        {/* A surface has no model to turn, so it shows the same picture the grid tile does */}
+        {surface ? (
+          <View style={s.well}>
+            <CatalogThumb source="bought" itemId={itemId} surface size={WELL_SIZE.height} />
+          </View>
+        ) : (
+          <ItemSpinPreview itemId={itemId} size={WELL_SIZE.height} style={s.well} />
+        )}
         <View style={s.question}>
           <Text style={s.ask}>Purchase </Text>
           <Text style={[s.ask, s.askName]}>{name}</Text>
@@ -98,10 +119,13 @@ const makeStyles = (t: Theme) =>
       ...CREAM_LIFT.card,
     },
     well: {
-      width: 200,
-      height: 158,
+      ...WELL_SIZE,
+      alignItems: "center",
+      justifyContent: "center",
+      // Clips the turning model to the frame's rounded corners
+      overflow: "hidden",
       borderRadius: FRAME_RADIUS,
-      backgroundColor: "#FFFFFF",
+      backgroundColor: FRAME_FILL,
       borderWidth: FRAME_STROKE_WIDTH,
       borderColor: FRAME_STROKE,
     },
@@ -151,7 +175,7 @@ const makeStyles = (t: Theme) =>
     actions: {
       marginTop: 20,
       flexDirection: "row",
-      gap: 22,
+      gap: 40,
     },
     button: {
       minWidth: 76,

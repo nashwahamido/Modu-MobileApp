@@ -7,6 +7,8 @@ export const ASSEMBLE_ICON: ImageSourcePropType = require("@/src/assets/ui/icons
 
 export const SHOP_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/Shop-icon.png");
 export const INVENTORY_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/Inventory-icon.png");
+// The room, as a destination — the purchase popup's "place it now" choice.
+export const HOME_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/icon-home.png");
 export const VISIT_FRIENDS_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/VisitFriends-icon.png");
 export const YOU_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/You-icon.png");
 // Distinct from the older icon-settings.png, which the in-game HUD still uses.

@@ -18,6 +18,22 @@ const BOARD_OVERHANG_X = 21;
 // The PNG's real proportions (4589x688). Height follows width by this, so the wood is never
 // squashed or stretched. Re-measure if the artwork is re-exported
 const BOARD_ASPECT = 4589 / 688;
+// The label's outline. textShadow was tried first and is not enough here: Android draws it as a soft
+// shadow LAYER, which at this size dissolves into the wood instead of edging the letters. So the
+// outline is drawn the only way RN text can really do it — the same word repeated behind itself, once
+// per direction, in the outline colour.
+const OUTLINE_COLOUR = "#FAF7F2";
+const OUTLINE_WIDTH = 0.6;
+const OUTLINE_OFFSETS: { width: number; height: number }[] = [
+  { width: -OUTLINE_WIDTH, height: 0 },
+  { width: OUTLINE_WIDTH, height: 0 },
+  { width: 0, height: -OUTLINE_WIDTH },
+  { width: 0, height: OUTLINE_WIDTH },
+  { width: -OUTLINE_WIDTH, height: -OUTLINE_WIDTH },
+  { width: OUTLINE_WIDTH, height: -OUTLINE_WIDTH },
+  { width: -OUTLINE_WIDTH, height: OUTLINE_WIDTH },
+  { width: OUTLINE_WIDTH, height: OUTLINE_WIDTH },
+];
 
 export function CategoryBoardTabs({
   category,
@@ -81,9 +97,27 @@ export function CategoryBoardTabs({
               <View style={[s.iconWrap, active && s.iconWrapActive]}>
                 <IconPlaceholder size={38} />
               </View>
-              <Text style={s.label} numberOfLines={1}>
-                {CATEGORY_LABELS[id]}
-              </Text>
+              <View>
+                {/* The copies are absolute so they take no space: the real word below sets the box */}
+                {OUTLINE_OFFSETS.map((o) => (
+                  <Text
+                    key={`${o.width},${o.height}`}
+                    style={[
+                      s.label,
+                      s.labelOutline,
+                      { transform: [{ translateX: o.width }, { translateY: o.height }] },
+                    ]}
+                    numberOfLines={1}
+                    accessibilityElementsHidden
+                    importantForAccessibility="no-hide-descendants"
+                  >
+                    {CATEGORY_LABELS[id]}
+                  </Text>
+                ))}
+                <Text style={s.label} numberOfLines={1}>
+                  {CATEGORY_LABELS[id]}
+                </Text>
+              </View>
             </Pressable>
           );
         })}
@@ -144,8 +178,12 @@ const makeStyles = (t: Theme) =>
       lineHeight: 16,
       color: CREAM.ink,
       textAlign: "center",
-      textShadowColor: "#FAF7F2",
-      textShadowOffset: { width: 0, height: 0 },
-      textShadowRadius: 3,
+    },
+    // One of the eight copies behind the word. Absolute, so they stack on the real one without moving it
+    labelOutline: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      color: OUTLINE_COLOUR,
     },
   });

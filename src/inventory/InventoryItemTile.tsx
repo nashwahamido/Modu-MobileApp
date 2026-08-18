@@ -2,6 +2,7 @@
 import { StyleSheet, Image, Pressable, View } from "react-native";
 
 import {
+  FRAME_FILL,
   FRAME_RADIUS,
   FRAME_STROKE,
   FRAME_STROKE_WIDTH,
@@ -72,7 +73,10 @@ export function InventoryItemTile({
         <View style={[s.well, { width, height: wellHeight }]} />
 
         {/* Over the well and under the brand mark, which must stay readable on top of the picture. Not interactive: the whole tile is the one control. */}
-        <View style={[s.art, { height: wellHeight }]} pointerEvents="none">
+        <View
+          style={[s.art, { height: wellHeight - FRAME_STROKE_WIDTH * 2 }]}
+          pointerEvents="none"
+        >
           <CatalogThumb source={source} itemId={itemId} surface={surface} size={wellHeight} />
         </View>
 
@@ -105,16 +109,19 @@ const makeStyles = () =>
     },
     well: {
       borderRadius: FRAME_RADIUS,
-      backgroundColor: "#FFFFFF",
+      backgroundColor: FRAME_FILL,
       borderWidth: FRAME_STROKE_WIDTH,
       borderColor: FRAME_STROKE,
     },
     // Spans the well and centres the art in it; the height is the well's, passed inline
     art: {
       position: "absolute",
-      top: WELL_TOP_PAD,
-      left: 0,
-      right: 0,
+      // Inset by the stroke, so a surface's picture fills the frame right up to its outline without painting over it
+      top: WELL_TOP_PAD + FRAME_STROKE_WIDTH,
+      left: FRAME_STROKE_WIDTH,
+      right: FRAME_STROKE_WIDTH,
+      borderRadius: FRAME_RADIUS - FRAME_STROKE_WIDTH,
+      overflow: "hidden",
       alignItems: "center",
       justifyContent: "center",
     },

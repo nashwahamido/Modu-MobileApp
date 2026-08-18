@@ -7,25 +7,19 @@ import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanim
 import Svg, { Circle, Path } from "react-native-svg";
 import { ChevronIcon } from '../../components/Icons';
 import { ASSEMBLE_ICON, INVENTORY_ICON, SHOP_ICON, VISIT_FRIENDS_ICON, YOU_ICON } from '../../components/iconAssets';
-import { CREAM, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
+import { CARD_CHROME, CREAM, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 import { useScreenInsets } from '../../hooks/use-safe-insets';
 
 
-//  bar's outline shared with assemble collar and the chevron so the three read as one continuous edge
-const BAR_STROKE= '#544F4B';
-const BAR_STROKE_WIDTH = 0.6;
+//  bar's outline shared with assemble collar and the chevron so the three read as one continuous edge.
+//  Taken from the catalogue cards, so the room's chrome and the build screen's tiles share a material.
+const BAR_STROKE = CARD_CHROME.borderColor;
+const BAR_STROKE_WIDTH = CARD_CHROME.borderWidth;
 const BAR_FILL = '#FBFAF3';
 const BAR_HEIGHT = 58;
 
-const BAR_SHADOW = {
-  boxShadow: "0px 5px 4px rgba(0,0,0,0.22)",
-  shadowColor: "#000",
-  shadowOpacity: 0.45,
-  shadowRadius: 2,
-  shadowOffset: { width: 0, height: 4 },
-  elevation: 6,
-} as const;
+const BAR_SHADOW = CARD_CHROME;
 
 // animation on shrink down
 const BAR_LAYOUT= LinearTransition.duration(220);
@@ -244,8 +238,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     height: BAR_HEIGHT,
     paddingHorizontal: 24,
     borderRadius: 32,
-    borderWidth: BAR_STROKE_WIDTH,
-    borderColor: BAR_STROKE,
     backgroundColor: BAR_FILL,
     gap: BAR_GAP,
     ...BAR_SHADOW,
@@ -280,7 +272,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     justifyContent: 'center',
   },
   barLabel: {
-    ...LEXEND.regular,
+    ...LEXEND.medium,
     fontSize: 10.5,
     lineHeight: BAR_LABEL_LINE_HEIGHT,
     color: CREAM.ink,
@@ -359,8 +351,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     height: ASSEMBLE_COLLAR_SIZE,
     borderRadius: ASSEMBLE_COLLAR_SIZE / 2,
     backgroundColor: BAR_FILL,
-    borderWidth: BAR_STROKE_WIDTH,
-    borderColor: BAR_STROKE,
     ...BAR_SHADOW,
   },
 });

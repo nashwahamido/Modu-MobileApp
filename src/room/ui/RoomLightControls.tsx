@@ -1,17 +1,98 @@
 // The room's own lighting controls: the ceiling light's switch, and the hour that sets the sun behind it. Both live on the room HUD rather than in Settings because they are things you do TO THE ROOM while looking at it — a control whose whole point is the change you see has no business two screens away. See docs/superpowers/specs/2026-08-04-room-ceiling-light-design.md section 6. NOTHING here relates to settings.lightingPreset, which rigs the ASSEMBLY scene; "light" in this file means the room's ceiling fitting and nothing else. Props only, no store: RoomExperience owns the switch's override state and positions this column, exactly as it does for the settings button.
 import { useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { BulbIcon, MoonIcon, SunIcon } from '../../components/Icons';
 import { TIME_OF_DAY, TIME_OF_DAY_IDS, sunPreset, type TimeOfDayId } from '../core/timeOfDay';
-import { ELEVATION, useFixedStyles, LEXEND } from '@/src/game/ui/system/theme';
+import { CARD_CHROME, ELEVATION, useFixedStyles, LEXEND } from '@/src/game/ui/system/theme';
 import type { Theme } from '@/src/game/ui/system/theme';
 
 // Matched to the settings button above it, so the column reads as one run of controls down the left edge rather than as two unrelated widgets.
 const BUTTON = 42;
+// The catalogue cards' edge, the same one the bottom bar and the HUD bars carry
+const BUTTON_STROKE = CARD_CHROME.borderColor;
+const BUTTON_STROKE_WIDTH = CARD_CHROME.borderWidth;
 
+// The hour buttons' artwork, one PNG per preset. Each file has its own canvas and its own margins, so
+// every one is CROPPED to its drawing rather than contained: morning.png in particular is a small
+// picture in the corner of a 2026x2000 canvas, which `contain` would render as a speck.
+//
+// The blocks are measured off each file's alpha channel at a THRESHOLD (alpha > 140), not at its full
+// bounds: these drawings carry a wide soft glow, and cropping to that leaves a ring of near-invisible
+// halo that reads as a gap between the artwork and the button's stroke.
+const HOUR_ART_SOURCE: Record<TimeOfDayId, ArtSource> = {
+  morning: {
+    src: require('@/src/assets/ui/icons/morning.png'),
+    canvas: { w: 2026, h: 2000 },
+    block: { x: 41, y: 1052, w: 172, h: 168 },
+  },
+  midday: {
+    src: require('@/src/assets/ui/icons/midday.png'),
+    canvas: { w: 189, h: 188 },
+    block: { x: 8, y: 20, w: 172, h: 168 },
+  },
+  afternoon: {
+    src: require('@/src/assets/ui/icons/afternoon.png'),
+    canvas: { w: 189, h: 188 },
+    block: { x: 8, y: 20, w: 172, h: 168 },
+  },
+  sunset: {
+    src: require('@/src/assets/ui/icons/sunset.png'),
+    canvas: { w: 228, h: 211 },
+    block: { x: 27, y: 7, w: 172, h: 168 },
+  },
+  night: {
+    src: require('@/src/assets/ui/icons/night.png'),
+    canvas: { w: 172, h: 168 },
+    block: { x: 0, y: 0, w: 172, h: 168 },
+  },
+};
+
+// A touch over 1, so a drawing bleeds to the stroke instead of stopping a hair short of it; the button clips the remainder.
+const HOUR_ART_OVERSCAN = 1.06;
+const HOUR_ART_WIDTH = (BUTTON - BUTTON_STROKE_WIDTH * 2) * HOUR_ART_OVERSCAN;
+
+type ArtSource = {
+  src: number;
+  canvas: { w: number; h: number };
+  block: { x: number; y: number; w: number; h: number };
+};
+
+// The window's size, and the oversized image's offset inside it. Solved once per drawing.
+function solveArt({ src, canvas, block }: ArtSource) {
+  const scale = HOUR_ART_WIDTH / block.w;
+  return {
+    src,
+    window: { width: HOUR_ART_WIDTH, height: block.h * scale },
+    image: {
+      left: -block.x * scale,
+      top: -block.y * scale,
+      width: canvas.w * scale,
+      height: canvas.h * scale,
+    },
+  };
+}
+
+// The ceiling light's switch, drawn the same way the hours are: the picture IS the button's face, and
+// it carries the state — which is why the button no longer tints itself when lit.
+const LIGHT_ART = {
+  on: solveArt({
+    src: require('@/src/assets/ui/icons/light-on.png'),
+    canvas: { w: 212, h: 208 },
+    block: { x: 16, y: 20, w: 176, h: 172 },
+  }),
+  off: solveArt({
+    src: require('@/src/assets/ui/icons/light-off.png'),
+    canvas: { w: 227, h: 223 },
+    block: { x: 23, y: 27, w: 176, h: 172 },
+  }),
+};
+
+// Solved once per preset: the window's size, and the oversized image's offset inside it.
+const HOUR_ART = Object.fromEntries(
+  (Object.keys(HOUR_ART_SOURCE) as TimeOfDayId[]).map((id) => [id, solveArt(HOUR_ART_SOURCE[id])]),
+) as Record<TimeOfDayId, ReturnType<typeof solveArt>>;
 // The hour slider's geometry. TRACK is the distance the KNOB'S CENTRE travels, so the strip is TRACK + KNOB wide overall and a stop sits on each end rather than inset from it.
 const KNOB = 20;
 const TRACK = 168;
@@ -43,7 +124,9 @@ export function RoomLightControls({
   // Through sunPreset, not TIME_OF_DAY[hour], so an id this component does not recognise falls back to a real preset instead of throwing on `.label` — the guarantee that module advertises and its tests pin.
   const preset = sunPreset(hour);
   // The ONE place the backdrop legitimately drives lighting UI, against the rule section 4 of the spec sets out: this glyph depicts THE SKY, so the photo outside the window is genuinely the right source for it — unlike the light's own behaviour, which must never be inferred from the wallpaper.
-  const dark = preset.backdrop === 'night';
+  // Falls back like sunPreset does, so an id this component does not recognise still renders a face
+  const art = HOUR_ART[hour] ?? HOUR_ART.morning;
+  const light = lightOn ? LIGHT_ART.on : LIGHT_ART.off;
   const index = TIME_OF_DAY_IDS.indexOf(hour);
 
   // What the slider last asked for. Re-synced to the prop on every render so an hour changed from anywhere else still lands here, and read inside the gesture so a drag does not re-emit the stop it is already sitting on — the gesture is memoized and would otherwise close over the hour the drag STARTED at.
@@ -75,10 +158,12 @@ export function RoomLightControls({
         accessibilityLabel="Ceiling light"
         accessibilityState={{ checked: lightOn }}
         hitSlop={8}
-        style={[s.button, lightOn && s.buttonOn]}
+        style={[s.button, s.buttonArtwork]}
         onPress={onToggleLight}
       >
-        <BulbIcon size={22} on={lightOn} color={lightOn ? '#8a6b1f' : '#807277'} />
+        <View style={[s.hourArtWindow, light.window]}>
+          <Image source={light.src} style={[s.hourArtImage, light.image]} resizeMode="stretch" />
+        </View>
       </Pressable>
 
       <Pressable
@@ -86,10 +171,12 @@ export function RoomLightControls({
         accessibilityLabel={`Time of day: ${preset.label}`}
         accessibilityState={{ expanded: hoursOpen }}
         hitSlop={8}
-        style={s.button}
+        style={[s.button, s.buttonArtwork]}
         onPress={() => setHoursOpen((open) => !open)}
       >
-        {dark ? <MoonIcon size={22} /> : <SunIcon size={22} />}
+        <View style={[s.hourArtWindow, art.window]}>
+          <Image source={art.src} style={[s.hourArtImage, art.image]} resizeMode="stretch" />
+        </View>
       </Pressable>
 
       {hoursOpen ? (
@@ -131,7 +218,7 @@ const ACCESSIBILITY_ACTIONS = [{ name: 'increment' }, { name: 'decrement' }] as 
 const makeStyles = (t: Theme) => StyleSheet.create({
   column: {
     alignItems: 'flex-start',
-    gap: 8,
+    gap: 16,
   },
   button: {
     width: BUTTON,
@@ -140,13 +227,29 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: t.surface,
+    borderWidth: BUTTON_STROKE_WIDTH,
+    borderColor: BUTTON_STROKE,
+    // Clips the morning artwork, which is drawn wider than the disc on purpose
+    overflow: 'hidden',
     ...ELEVATION.card,
     shadowOpacity: 0.18,
     shadowRadius: 8,
   },
-  // Lit reads as warm, not as "selected": the button is a lamp, so its on-state should look like one.
-  buttonOn: {
-    backgroundColor: '#f6e6b8',
+  // An artwork button is its OWN face: no cream disc under it and no lift, because the drawing already
+  // fills the circle and a plate behind it would only show as a rim. The stroke stays — it is what
+  // makes the picture read as a button.
+  buttonArtwork: {
+    backgroundColor: 'transparent',
+    ...CARD_CHROME,
+    borderRadius: BUTTON / 2,
+  },
+  // The window onto the artwork; the image inside it is larger and offset so only the drawing shows.
+  // Both take their numbers from HOUR_ART, which solves them per preset.
+  hourArtWindow: {
+    overflow: 'hidden',
+  },
+  hourArtImage: {
+    position: 'absolute',
   },
   panel: {
     marginTop: 2,

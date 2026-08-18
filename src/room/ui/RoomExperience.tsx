@@ -198,7 +198,7 @@ export function RoomExperience() {
           s.settingsButton,
           {
             top: 12 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
-            left: 22 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+            left: 18 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
           },
         ]}
         onPress={() => router.push("/settings" as Href)}
@@ -216,10 +216,7 @@ export function RoomExperience() {
           onToggleLight={() => setLightOverride({ hour, on: !ceilingLight })}
           style={[
             s.lightControls,
-            {
-              top: 12 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN) + 50,
-              left: 22 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
-            },
+            { left: 18 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN) },
           ]}
         />
       )}
@@ -344,9 +341,14 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     width: 48,
     height: 48,
   },
+  // Spans the full height and centres its own contents, rather than being pinned under the settings
+  // button: the column is the room's lighting control and belongs at eye level, not tucked in a corner.
   lightControls: {
     position: 'absolute',
     zIndex: 12,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
   },
   comingSoonTitle: {
     ...LEXEND.black,

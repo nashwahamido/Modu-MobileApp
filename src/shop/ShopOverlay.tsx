@@ -17,12 +17,17 @@ import { ShopItemTile } from "./ShopItemTile";
 import type { PurchaseBlock } from "./purchaseBlock";
 import { PurchaseConfirmPopup } from "./PurchaseConfirmPopup";
 import { PurchaseNoticePopup } from "./PurchaseNoticePopup";
+import { PurchasedPopup } from "./PurchasedPopup";
+import { usePlacementStore } from "@/src/room/core/placement";
+import { warmItemModel } from "./ItemSpinPreview";
 
 // Fixed four columns; the tile width is solved from the measured row width
 const GRID_COLUMNS = 4;
 const GRID_GAP = 22;
 // Side breathing room, subtracted before the columns are solved so tiles really do shrink
 const GRID_EDGE = 22;
+// How long a transient message stays up
+const NOTE_MS = 2400;
 
 export function ShopOverlay({ onClose }: { onClose: () => void }) {
   const s = useFixedStyles(makeStyles);
@@ -45,6 +50,8 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
   const [note, setNote] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ item: ShopItem; block: PurchaseBlock } | null>(null);
   const [confirm, setConfirm] = useState<ShopItem | null>(null);
+  // The just-bought item, while the player chooses where it goes
+  const [purchased, setPurchased] = useState<ShopItem | null>(null);
   const [gridWidth, setGridWidth] = useState(0);
   const tileWidth = Math.floor(
     (gridWidth - GRID_EDGE * 2 - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS,
@@ -56,6 +63,11 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
 
   // Sorted by name
   const visible = useMemo(() => viewCatalogue(items, category, "name"), [items, category]);
+
+  // Probe the models of whatever is on screen, so the purchase preview does not spend a round trip discovering the URL after the popup is already up. One HEAD per item per session; the answer is cached at module scope.
+  useEffect(() => {
+    for (const item of visible) warmItemModel(item.id);
+  }, [visible]);
 
   const requestBuy = (item: ShopItem) => {
     if (owned.has(item.id) || busyId) return;
@@ -74,7 +86,7 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
       if (res.ok) {
         useShopStore.getState().markOwned(item.id);
         useProfileStore.getState().setCoins(res.coinsRemaining);
-        setNote(`Bought ${item.name}`);
+        setPurchased(item);
       } else if (res.reason === "level_locked" || res.reason === "insufficient_coins") {
         setNotice({ item, block: res.reason === "level_locked" ? "level" : "coins" });
       } else {
@@ -87,6 +99,28 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
     } finally {
       setBusyId(null);
     }
+  };
+
+  // Every message this screen shows is transient — it reports what just happened and then gets out of the way, rather than pushing the grid down for as long as the popup stays open.
+  useEffect(() => {
+    if (note === null) return;
+    const t = setTimeout(() => setNote(null), NOTE_MS);
+    return () => clearTimeout(t);
+  }, [note]);
+
+  // Leaves the shop and starts placing. startPlacing refuses an item with no room model, in which case the piece simply stays in the inventory and the player is told so.
+  const placeInRoom = (item: ShopItem) => {
+    setPurchased(null);
+    if (usePlacementStore.getState().startPlacing(item.id)) {
+      requestClose();
+      return;
+    }
+    setNote(`${item.name} is in your inventory`);
+  };
+
+  const keepInInventory = (item: ShopItem) => {
+    setPurchased(null);
+    setNote(`${item.name} is in your inventory`);
   };
 
   const padTop = 18 + safe.top;
@@ -104,8 +138,6 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
         style={[s.panel, { top: padTop, bottom: padBottom, left: padSide, right: padSide }, sheetStyle]}
       >
         <CategoryBoardTabs category={category} onCategory={setCategory} />
-
-        {note ? <Text style={s.note}>{note}</Text> : null}
 
         {loading ? (
           <View style={s.center}>
@@ -165,6 +197,8 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
 
       {notice ? (
         <PurchaseNoticePopup
+          itemId={notice.item.id}
+          surface={isSurfaceCategory(notice.item.category)}
           name={notice.item.name}
           price={notice.item.price}
           minLevel={notice.item.minLevel}
@@ -172,8 +206,24 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
           onClose={() => setNotice(null)}
         />
       ) : null}
+      {purchased ? (
+        <PurchasedPopup
+          name={purchased.name}
+          onRoom={() => placeInRoom(purchased)}
+          onInventory={() => keepInInventory(purchased)}
+          onClose={() => keepInInventory(purchased)}
+        />
+      ) : null}
+      {/* Floating, and over everything: it has to be readable after a popup closes, and it must not move the grid */}
+      {note ? (
+        <View style={s.noteWrap} pointerEvents="none">
+          <Text style={s.note}>{note}</Text>
+        </View>
+      ) : null}
       {confirm ? (
         <PurchaseConfirmPopup
+          itemId={confirm.id}
+          surface={isSurfaceCategory(confirm.category)}
           name={confirm.name}
           price={confirm.price}
           onConfirm={() => buy(confirm)}
@@ -227,11 +277,24 @@ const makeStyles = (t: Theme) =>
       color: t.textDim,
       textAlign: "center",
     },
+    noteWrap: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 46,
+      zIndex: 70,
+      alignItems: "center",
+    },
+    // A dark chip, not ink on cream: it floats over a cream panel and has to be found without being hunted for
     note: {
-      marginBottom: 8,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 16,
+      overflow: "hidden",
+      backgroundColor: CREAM.darkChip,
       ...LEXEND.regular,
       fontSize: 13,
-      color: CREAM.ink,
+      color: CREAM.card,
     },
     // The animated wrapper
     close: {

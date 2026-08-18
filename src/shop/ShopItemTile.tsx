@@ -2,11 +2,13 @@
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 
 import { CatalogThumb } from "@/src/components/CatalogThumb";
-import { COIN_ICON, STAR_ICON } from "@/src/components/iconAssets";
+import { COIN_ICON, STAR_ICON, levelIcon } from "@/src/components/iconAssets";
 import {
+  FRAME_FILL,
   FRAME_RADIUS,
   FRAME_STROKE,
   FRAME_STROKE_WIDTH,
+  LockWash,
   TILE_ROW_GAP,
   ItemNameTab,
   WELL_ASPECT,
@@ -53,6 +55,7 @@ export function ShopItemTile({
 }) {
   const s = useFixedStyles(makeStyles);
   const locked = lockLevel !== undefined;
+  const lockStar = lockLevel === undefined ? null : levelIcon(lockLevel);
   const wellHeight = Math.round(width * WELL_ASPECT);
   return (
     <Pressable
@@ -71,16 +74,25 @@ export function ShopItemTile({
         <View style={[s.well, { width, height: wellHeight }]} />
 
         {/* Directly over the well and under everything else, so the veil dims a locked item's picture and the price badge stays on top of it. Not interactive: the whole tile is the one control. */}
-        <View style={[s.art, { height: wellHeight }]} pointerEvents="none">
+        <View
+          style={[s.art, { height: wellHeight - FRAME_STROKE_WIDTH * 2 }]}
+          pointerEvents="none"
+        >
           <CatalogThumb source="bought" itemId={itemId} surface={surface} size={wellHeight} />
         </View>
 
         {/* A tint, not a blur — RN has no blur without a native module */}
-        {locked ? <View style={s.veil} pointerEvents="none" /> : null}
+        {/* The same wash the "reach level N" popup uses, so a locked tile and the popup it opens are one picture */}
+        {locked ? (
+          <View style={s.veil} pointerEvents="none">
+            <LockWash />
+          </View>
+        ) : null}
         {locked ? (
           <View style={s.lockBadge} pointerEvents="none">
-            <Image source={STAR_ICON} style={s.lockStar} resizeMode="contain" />
-            <Text style={s.lockLevel}>{lockLevel}</Text>
+            {/* The numbered artwork where it exists; past it, the blank star carries the level as text */}
+            <Image source={lockStar ?? STAR_ICON} style={s.lockStar} resizeMode="contain" />
+            {lockStar ? null : <Text style={s.lockLevel}>{lockLevel}</Text>}
           </View>
         ) : null}
 
@@ -116,25 +128,32 @@ const makeStyles = (_t: Theme) =>
     },
     well: {
       borderRadius: FRAME_RADIUS,
-      backgroundColor: "#FFFFFF",
+      backgroundColor: FRAME_FILL,
       borderWidth: FRAME_STROKE_WIDTH,
       borderColor: FRAME_STROKE,
     },
     // Spans the well and centres the art in it; the height is the well's, passed inline
     art: {
       position: "absolute",
-      top: WELL_TOP_PAD,
-      left: 0,
-      right: 0,
+      // Inset by the stroke, so a surface's picture fills the frame right up to its outline without painting over it
+      top: WELL_TOP_PAD + FRAME_STROKE_WIDTH,
+      left: FRAME_STROKE_WIDTH,
+      right: FRAME_STROKE_WIDTH,
+      borderRadius: FRAME_RADIUS - FRAME_STROKE_WIDTH,
+      overflow: "hidden",
       alignItems: "center",
       justifyContent: "center",
     },
+    // Geometry only: the wash inside paints the colour, and this box is what clips it to the frame.
+    // Inset by the stroke, like the art box — painted over its own outline, the frame reads as blurred.
     veil: {
-      ...StyleSheet.absoluteFillObject,
-      top: WELL_TOP_PAD,
-      borderRadius: FRAME_RADIUS,
-      backgroundColor: "#DFD7CA",
-      opacity: 0.72,
+      position: "absolute",
+      top: WELL_TOP_PAD + FRAME_STROKE_WIDTH,
+      left: FRAME_STROKE_WIDTH,
+      right: FRAME_STROKE_WIDTH,
+      bottom: FRAME_STROKE_WIDTH,
+      borderRadius: FRAME_RADIUS - FRAME_STROKE_WIDTH,
+      overflow: "hidden",
     },
     lockBadge: {
       ...StyleSheet.absoluteFillObject,
