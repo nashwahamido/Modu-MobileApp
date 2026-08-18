@@ -14,6 +14,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { useGameStore } from "@/src/game/core/store";
+import { modelThumbSet } from "@/src/game/core/presentation/finish";
 import { useFixedStyles, FONT } from "@/src/game/ui/system/theme";
 import { useRepos } from "@/src/data";
 import { usePlacementStore } from "@/src/room/core/placement";
@@ -169,6 +170,8 @@ export function BuildComplete() {
   const router = useRouter();
   const repos = useRepos();
   const furniture = useGameStore((s) => s.furniture);
+  // The look the build ran in — the catalogue set it when the player picked a finish, and settings can change it mid-build. It is what tells the art below which finish to wear.
+  const renderStyle = useGameStore((s) => s.renderStyle);
   const completed = useGameStore((s) => s.completed);
   const dismissed = useGameStore((s) => s.doneDismissed);
   const confirmed = useGameStore((s) => s.completeConfirmed);
@@ -249,10 +252,15 @@ export function BuildComplete() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.mainRow}>
-            {/* The finished piece — the reason the screen exists, so it gets the whole left half. */}
+            {/* The finished piece — the reason the screen exists, so it gets the whole left half.
+                In the FINISH IT WAS BUILT IN, resolved the same way the project map and the
+                catalogue resolve it (core/presentation/finish.ts). It used to take
+                meta.thumbnail.light, which is the model's default picture: a player who chose the
+                white EKET off the carousel, built it in white and watched it stand in white was
+                handed a plain grey render at the one moment the screen exists to celebrate. */}
             <PopIn delay={STAGE.piece} style={styles.pieceWrap}>
               <Image
-                source={furniture.meta.thumbnail.light}
+                source={modelThumbSet(furniture, renderStyle).light}
                 style={styles.previewImg}
                 resizeMode="contain"
               />
