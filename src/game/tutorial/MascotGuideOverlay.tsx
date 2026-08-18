@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { findNodeHandle, Image, Pressable, StyleSheet, Text, useWindowDimensions, UIManager, View, type LayoutChangeEvent } from 'react-native';
 import * as Speech from 'expo-speech';
 import {
@@ -13,7 +14,7 @@ import { useTutorialTargets, type TutorialFrame } from './targetRegistry';
 import { useTutorialAudio } from './useTutorialAudio';
 import { Button } from '@/src/game/ui/system/Button';
 import { useGameStore } from '@/src/game/core/store';
-import { avatarForProfile } from '@/src/components/avatarAssets';
+import { avatarHeadForProfile } from '@/src/components/avatarAssets';
 import { ACCENT_LIGHT, ELEVATION, RADIUS, Theme, TYPE, useFixedStyles, useReadingFont } from "@/src/game/ui/system/theme";
 import { tutorialPresentationForProfile } from './presentation';
 import { VisualLongPressCue } from './VisualLongPressCue';
@@ -66,7 +67,8 @@ export function MascotGuideOverlay({
   const currentIndex = useTutorialStore((s) => s.currentIndex);
   const profile = useGameStore((s) => s.profile);
   const mapOpen = useGameStore((s) => s.mapOpen);
-  const mascotImage = avatarForProfile(profile);
+  // HEAD art, not the full body: at 78pt the whole character was a speck.
+  const mascotImage = avatarHeadForProfile(profile);
   const presentation = tutorialPresentationForProfile(profile);
   const steps = useTutorialStore((s) => s.steps);
   const phase = useTutorialStore((s) => s.phase);
@@ -372,6 +374,18 @@ export function MascotGuideOverlay({
       <View style={[styles.bubble, bubbleStyle]} pointerEvents="box-none">
         {!presentation.showMomentumCompanion ? (
           <View style={styles.mascotPortrait}>
+            {/* White at the centre falling to cream at the rim — the same pool of light the hint
+                toast uses, so one character reads identically in both places. SVG because RN has no
+                radial gradient. */}
+            <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+              <Defs>
+                <RadialGradient id="mascotglow" cx="50%" cy="45%" r="65%">
+                  <Stop offset="0" stopColor="#FFFFFF" />
+                  <Stop offset="1" stopColor="#EADFCB" />
+                </RadialGradient>
+              </Defs>
+              <Rect x="0" y="0" width="100%" height="100%" fill="url(#mascotglow)" />
+            </Svg>
             <Image
               source={mascotImage}
               style={styles.mascotPortraitImage}
@@ -603,21 +617,20 @@ const makeStyles = (t: Theme) =>
       gap: 10,
     },
     mascotPortrait: {
-      width: 82,
-      height: 66,
-      borderRadius: 14,
+      width: 88,
+      height: 88,
+      borderRadius: 16,
       borderWidth: 3,
       borderColor: t.surface,
-      backgroundColor: t.surface,
+      // Only the corners the gradient's square Rect can't reach — matched to its OUTER stop.
+      backgroundColor: '#EADFCB',
       overflow: 'hidden',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
-    mascotPortraitImage: {
-      position: 'absolute',
-      width: 150,
-      height: 150,
-      left: -37,
-      top: -17,
-    },
+    // OVER 100%, same reason as the hint toast's tile: the head art has its own padding, so filling
+    // the frame exactly still left the face small. The overflow is cropped by the tile.
+    mascotPortraitImage: { width: '124%', height: '124%' },
     copy: {
       flex: 1,
       backgroundColor: t.surface,
@@ -629,7 +642,9 @@ const makeStyles = (t: Theme) =>
       ...ELEVATION.card,
     },
     stepText: { color: t.success, fontSize: 11, fontWeight: '800', marginBottom: 4 },
-    message: { color: t.text, fontSize: 14, lineHeight: 19, fontWeight: '700' },
+    // flex + minWidth 0: without them a long line ran out of the card in visual mode, where a demo
+    // cue shares the row.
+    message: { flex: 1, minWidth: 0, color: t.text, fontSize: 14, lineHeight: 19, fontWeight: '700' },
     messageRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -638,6 +653,7 @@ const makeStyles = (t: Theme) =>
     },
     visualMessage: {
       flex: 1,
+      minWidth: 0,
       fontSize: 15,
       lineHeight: 19,
       fontWeight: '800',

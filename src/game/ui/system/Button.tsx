@@ -7,7 +7,6 @@
 
 import { ReactNode } from "react";
 import {
-  Image,
   Pressable,
   StyleProp,
   StyleSheet,
@@ -18,33 +17,17 @@ import {
 
 import { ELEVATION, RADIUS, SIZE, SPACE, Theme, TYPE, useTheme } from "./theme";
 
-const CLAY_PATTERN = require("@/src/assets/textures/clay-pattern.png");
-/** How strong the paper grain reads over a surface's colour. The source texture is already
- *  a low-opacity dark overlay; this scales it further. One knob — dial after seeing it. */
-const GRAIN_OPACITY = 0.3;
-
 /**
- * The clay grain, laid over a surface WITHOUT changing its colour. An absolutely-filled,
- * tiling, non-interactive image clipped to the surface's own radius. Self-clipping (its own
- * borderRadius + overflow) so the parent keeps its drop shadow — putting overflow:hidden on
- * the shadowed Pressable itself would clip the shadow away.
+ * RETIRED: the clay grain is gone from every surface.
+ *
+ * This stays as a no-op rather than being deleted because 26 call sites across ten files render it,
+ * and a component that returns null removes the texture everywhere at once — where deleting it would
+ * mean touching every one of those files to say the same thing. The prop is kept so the call sites
+ * still typecheck, and restoring the look is a matter of putting the image back in here.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function GrainOverlay({ radius }: { radius: number }) {
-  return (
-    <View
-      pointerEvents="none"
-      style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: "hidden" }]}
-    >
-      <Image
-        source={CLAY_PATTERN}
-        resizeMode="cover"
-        style={[StyleSheet.absoluteFill, { opacity: GRAIN_OPACITY }]}
-      />
-      {/* Note: "cover" not "repeat" — repeat renders nothing on Android's New
-          Architecture. The texture is organic clay grain, so stretching it to cover reads
-          fine at any surface size; a regular pattern would need real tiling. */}
-    </View>
-  );
+  return null;
 }
 
 /** primary  — the ONE action that moves the build forward. At most one on screen.

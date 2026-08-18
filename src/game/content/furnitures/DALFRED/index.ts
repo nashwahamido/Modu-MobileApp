@@ -19,10 +19,21 @@ const LABELS_ALL = composeLabels(LABELS, PARTS_WITH_STRUCTURE, HARDWARE);
 const INSTRUCTIONS = buildInstructions(ACTIONS, P, LABELS_ALL, BEATS, CLUSTERS);
 
 const model = require("../../../../assets/models/furnitures/DALFRED/DALFRED.glb");
+// Per-style looks. Same node names as the base model — the scene swaps the whole model by
+// renderStyle via furniture.styleModels, and parts are keyed by node name, so the three files must
+// agree. Generated from the base by repainting its non-metal materials flat (LACK is the
+// hand-authored original of this pattern).
+const MODEL_COZY = require("../../../../assets/models/furnitures/DALFRED/DALFRED_cozy.glb");
+const MODEL_CARTOON = require("../../../../assets/models/furnitures/DALFRED/DALFRED_cartoon.glb");
 
 export const DALFRED: Furniture = {
   meta: DALFRED_META,
   model,
+  styleModels: {
+    realistic: model,
+    cozy: MODEL_COZY,
+    cartoon: MODEL_CARTOON,
+  },
   parts: PARTS_WITH_STRUCTURE,
   actions: ACTIONS,
   liaisons: LIAISONS,

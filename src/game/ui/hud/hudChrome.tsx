@@ -9,6 +9,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { ELEVATION, RADIUS, SPACE, useTheme } from "@/src/game/ui/system/theme";
+import { useHudIcon } from "@/src/game/ui/hud/hudIcons";
 import { GrainOverlay } from "@/src/game/ui/system/Button";
 import { SCENE_BACKGROUND } from "@/src/game/scene/lighting";
 
@@ -78,7 +79,7 @@ export function RecenterButton({
 }) {
   return (
     <IconButtonBare
-      source={require("@/src/assets/ui/icons/icon-recenter.png")}
+      source={useHudIcon("recenter")}
       onPress={onPress}
       disabled={!enabled}
       style={style}

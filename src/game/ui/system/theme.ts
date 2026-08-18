@@ -109,8 +109,11 @@ export interface Theme {
 
 const DARK: Theme = {
   bg: PALETTE.ink900,
-  surface: "rgba(43,37,35,0.92)",
-  surfaceRaised: PALETTE.ink600,
+  // LIGHTER than the old rgba(43,37,35,0.92) — at near-black these chips read as holes punched in
+  // the build — and effectively SOLID: what makes them work is the raised grey value, not seeing the
+  // workbench through them. The last 1% of alpha keeps the edge from looking cut out of the scene.
+  surface: "rgba(74,66,62,0.99)",
+  surfaceRaised: "rgba(96,86,80,0.99)",
   surfaceInset: "rgba(0,0,0,0.30)",
   border: "rgba(243,239,232,0.08)",
   borderStrong: "rgba(243,239,232,0.16)",
@@ -270,8 +273,28 @@ export const THEMES: Record<ThemeId, Theme> = {
 };
 
 /** The active theme. The store already owns the ThemeId; this maps it to tokens. */
+/**
+ * A theme forced on ONE subtree, regardless of the app's own.
+ *
+ * "Assemble in dark mode" is a property of the build screen, not of the app: the room, catalogue and
+ * shop stay light while the workbench goes dark. A context does that without a second palette —
+ * everything under the provider resolves through the same tokens, it just resolves a different one.
+ * null (the default) means "use the app theme", which is what every other screen gets.
+ */
+const ThemeOverride = createContext<ThemeId | null>(null);
+
+/** Wrap a subtree to pin its theme. Used by the assembly screens; nothing else should need it. */
+export const ThemeScope = ThemeOverride.Provider;
+
+/** The ThemeId in effect here — the scope's, if one is set, else the app's. */
+export function useThemeId(): ThemeId {
+  const scoped = useContext(ThemeOverride);
+  const app = useGameStore((s) => s.theme);
+  return scoped ?? app;
+}
+
 export function useTheme(): Theme {
-  return THEMES[useGameStore((s) => s.theme)];
+  return THEMES[useThemeId()];
 }
 
 /** Theme-driven styles, in one line per component:

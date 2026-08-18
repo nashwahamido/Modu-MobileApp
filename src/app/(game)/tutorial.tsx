@@ -23,8 +23,6 @@ import { PressControl } from "@/src/game/input/pad/PressControl";
 import { ObjectiveBar } from "@/src/game/ui/hud/ObjectiveBar";
 import {
   HintButton,
-  HUD_ICON,
-  IconButtonBare,
   RecenterButton,
   hudControlStyles as hudControls,
   tutorialChrome as styles,
@@ -56,13 +54,15 @@ import { GameSettings } from "@/src/game/ui/settings/GameSettings";
 import type { SettingsFocusTarget } from "@/src/game/ui/settings/SettingsControls";
 import {
   BuildMap,
-  ClusterFocusControl,
+  MapButton,
 } from "@/src/game/ui/hud/ClusterFocusControl";
 import {
   SpotButton,
   FocusToggleButton,
 } from "@/src/game/ui/hud/ToggleChips";
 import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
+import { ThemeScope } from "@/src/game/ui/system/theme";
+import type { ThemeId } from "@/src/game/core/type";
 import { backdropSource } from "@/src/game/ui/backdrop/backdrops";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 import {
@@ -333,6 +333,8 @@ function TutorialScreen() {
   const activeCluster = useGameStore((s) => s.activeCluster);
   const mode = useGameStore((s) => s.mode);
   const settings = useGameStore((s) => s.settings);
+  // The tutorial is an assembly task too, and it is the first one a player sees — starting silent
+  // here and playing in the build would read as a bug rather than as a setting.
   const focusPreviewActive =
     tutorialStepId === "hud-spot" && settings.focusMode;
   const showingUndoPreview =
@@ -357,7 +359,9 @@ function TutorialScreen() {
   const heldActionId = useGameStore((s) => s.heldActionId);
   const renderStyle = useGameStore((s) => s.renderStyle);
   const backdrop = useGameStore((s) => s.backdrop);
-  const theme = useGameStore((s) => s.theme);
+  // The BUILD's theme, not the app's: "Assemble in Dark Mode" darkens this screen only. Everything
+  // under ThemeScope below (the HUD, the settings panel, the toasts) resolves through it.
+  const theme: ThemeId = useGameStore((s) => s.assembleDark) ? "dark" : "light";
   const focus = settings.focusMode;
   // Recenter means nothing until there IS a build on the canvas — same rule as play.tsx.
   const sceneHasParts = Object.values(sceneState.modes).some(
@@ -728,12 +732,20 @@ function TutorialScreen() {
 
   // Also holds while the store still shows a PREVIOUS session's furniture: rendering that here would flash the wrong build (and its finished ObjectiveBar) until the tutorial recipe lands.
   if (!furniture || furniture.meta.id !== TUTORIAL_FURNITURE_ID)
-    return <View style={styles.root} />;
+    return <ThemeScope value={theme}><View style={styles.root} /></ThemeScope>;
 
   return (
+    <ThemeScope value={theme}>
     <SceneBackdrop
       source={backdropSource(backdrop, theme === "dark")}
-      style={[styles.root, theme === "dark" && styles.rootDark]}
+      style={[
+        styles.root,
+        theme === "dark" && styles.rootDark,
+        // "Clear" is a flat warm cream in the light theme — the same rule as play.tsx, so the
+        // tutorial and the build show the same ground for the same setting. Dark keeps its own.
+        // Same rule as play.tsx: clear is the same beige in both themes.
+        backdrop === "clear" && { backgroundColor: "#DACAAE" },
+      ]}
     >
       <GestureDetector gesture={sceneGesture}>
         <Animated.View style={[styles.sceneWrap, undoPreviewSceneStyle]}>
@@ -781,14 +793,8 @@ function TutorialScreen() {
           pointerEvents="box-none"
         >
           <MomentumCompanion />
-          {profile === "momentum" ? (
-            <IconButtonBare
-              source={require("@/src/assets/ui/icons/icon-pause.png")}
-              size={HUD_ICON}
-              onPress={() => useGameStore.getState().setMapOpen(true)}
-              accessibilityLabel="Pause and show the build map"
-            />
-          ) : null}
+          {/* Pause is gone here for the same reason as in play.tsx: it opened the map, which the Map
+              button now does, and the tutorial must teach the HUD the build actually has. */}
           <ObjectiveBar
             line={
               profile === "control"
@@ -841,7 +847,9 @@ function TutorialScreen() {
             <SpotButton />
           </TutorialTarget>
         </View>
-        {mode !== "strict" ? <ClusterFocusControl /> : null}
+        {/* One Map button where the cluster discs were — the same control, in the same slot, that the
+            build screen shows. */}
+        {mode !== "strict" ? <MapButton /> : null}
         <PartsTray
           items={tutorialTrayItems}
           gestureFor={gestureFor}
@@ -1034,6 +1042,7 @@ function TutorialScreen() {
       />
       <MomentumAttentionOverlay />
     </SceneBackdrop>
+    </ThemeScope>
   );
 }
 
