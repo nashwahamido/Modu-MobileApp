@@ -985,7 +985,6 @@ const makeStyles = (t: Theme) =>
     introPrompt: {
       color: t.text,
       fontFamily: FONT, fontSize: 18,
-      fontStyle: "italic",
       fontWeight: "800",
       textAlign: "center",
     },
@@ -1276,14 +1275,14 @@ const makeStyles = (t: Theme) =>
       width: "100%",
       height: "100%",
     },
-    // Left-aligned inside a full-width block: centred captions of different lengths gave three cards three different silhouettes, and the eye reads a common left edge faster.
+    // CENTRED under the face. The card is one column — a face with its caption beneath — so the caption reads as belonging to the art above it rather than as a list item beside it, and three cards of different caption lengths stay symmetrical about their own centres.
     optionText: {
       width: "100%",
       color: t.textDim,
       fontFamily: FONT, fontSize: 12,
       fontWeight: "700",
       lineHeight: 16,
-      textAlign: "left",
+      textAlign: "center",
     },
     compactOptionText: {
       fontFamily: FONT, fontSize: 13,
