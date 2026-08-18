@@ -28,12 +28,20 @@ function AppContent() {
   // Music lives at the ROOT, not on the screens: the track follows the route, and the setting is
   // applied here so it holds across every screen rather than only where someone remembered to wire
   // it. Zero volume is off — see the settings meter.
+  // BOTH tracks, from their own settings: ambient is set in the General tab, the build's in the
+  // assembly settings, and each is applied here so it holds wherever the route takes the player.
   const musicOn = useGameStore((s) => s.settings.music);
   const musicVolume = useGameStore((s) => s.settings.musicVolume);
+  const buildMusicOn = useGameStore((s) => s.settings.buildMusic);
+  const buildMusicVolume = useGameStore((s) => s.settings.buildMusicVolume);
   useEffect(() => {
-    setMusicVolume(musicVolume);
-    setMusicEnabled(musicOn);
+    setMusicVolume("ambient", musicVolume);
+    setMusicEnabled("ambient", musicOn);
   }, [musicOn, musicVolume]);
+  useEffect(() => {
+    setMusicVolume("assembly", buildMusicVolume);
+    setMusicEnabled("assembly", buildMusicOn);
+  }, [buildMusicOn, buildMusicVolume]);
   useRouteMusic();
 
   if (holdForDevAuth) {

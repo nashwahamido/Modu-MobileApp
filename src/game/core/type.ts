@@ -24,6 +24,8 @@ export type BrandId = "IKEA" | "Others";
 export type ToolId = "allenkey" | "mallet" | "hammer" | "screwdriver" | "hand";
 
 export type ThemeId = "light" | "dark" | "high_contrast";
+/** Which hand drives the build. NOT an accessibility SETTING: applyProfile replaces the settings object wholesale, so a handedness stored there would reset every time the player changed avatar. It sits beside theme and renderStyle as its own axis, for the same reason those do — it is a fact about the player, not a preference the profile has an opinion about. */
+export type Handedness = "left" | "right";
 /** How the furniture is rendered. Two mechanisms, one axis:
  *    realistic | cozy | cartoon   → the GLB is the look (Furniture.styleModels)
  *    toon | illustrated           → the MATERIAL is the look (scene/shaders.ts) */
@@ -272,6 +274,11 @@ export interface Furniture {
   clusters?: Record<ClusterId, ClusterDef>;
   thumbs: ThumbMap;
   clusterThumbs?: ClusterThumbMap;
+  /** Sub-assembly art per finish, keyed exactly like `meta.variantThumbnails` — finish first, then
+   *  cluster. Hand-authored, so it lives beside the model rather than in the generated thumbs file.
+   *  A missing finish, or a finish missing one cluster, falls back to `clusterThumbs` for that
+   *  cluster alone (see presentation/finish.ts), so art can ship one stage at a time. */
+  clusterVariantThumbs?: Record<string, ClusterThumbMap>;
   audio?: AudioMap;
   styles?: StyleSet;
   styleModels?: Partial<Record<RenderStyleId, AssetSrc>>;

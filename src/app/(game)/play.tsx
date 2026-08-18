@@ -69,8 +69,8 @@ import { ObjectiveBar } from "@/src/game/ui/hud/ObjectiveBar";
 import {
   HintButton,
   RecenterButton,
-  hudControlStyles as hudControls,
-  hudChrome as styles,
+  useHudChrome,
+  useHudControlStyles,
 } from "@/src/game/ui/hud/hudChrome";
 import { ThemeScope, useTheme } from "@/src/game/ui/system/theme";
 import {
@@ -123,6 +123,9 @@ function GameScreen() {
 
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
+  // The HUD's placements, mirrored when the player is left-handed — the joystick and the toggles row swap edges, and the whole button column crosses with them.
+  const styles = useHudChrome();
+  const hudControls = useHudControlStyles();
   // Loading screen: covers the scene from target change until data + model are ready. retryKey remounts AssemblyScene to restart a failed GLB load.
   const [modelReady, setModelReady] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -146,7 +149,11 @@ function GameScreen() {
     setLoaderVisible(true);
     loadFurnitureById(target)
       .then((f) => useGameStore.getState().loadFurniture(f))
-      .catch(() => setLoadError(true));
+      // LOG the reason as well as showing the error state. A bundled furniture is composed and validated at module-eval time, so anything wrong with its authored data — or with an asset it require()s — surfaces here as a rejected import and nowhere else. Discarding the error left "Couldn't load this furniture" as the only symptom of a dozen different causes.
+      .catch((err) => {
+        console.error(`[play] furniture "${target}" failed to load`, err);
+        setLoadError(true);
+      });
     // RECIPE LANE — the row is read here IMPERATIVELY off useCatalogStore.getState() rather than through the useCatalogRow hook, and that is the whole point: it keeps this effect's deps free of the row's object identity, which changes on every catalog refresh/auth event and would otherwise re-run the effect after a completed load and strand the overlay. Keep the early bail above when restoring.
     // const row = useCatalogStore.getState().rows[target];
     // loadPlayableFurniture(target, row)
@@ -197,7 +204,8 @@ function GameScreen() {
       // surface that follows the theme — and the dark variant read as mud against the dark chrome.
       { backgroundColor: backdrop === "clear" ? "#DACAAE" : t.bg },
     ],
-    [t, backdrop, theme],
+    // styles.root is a dependency now that `styles` comes from useHudChrome rather than a module constant — it changes identity when the player's hand does. `theme` stays because t is derived from it.
+    [styles.root, t, backdrop, theme],
   );
   const firstAvailable = useMemo(
     () =>

@@ -24,8 +24,8 @@ import { ObjectiveBar } from "@/src/game/ui/hud/ObjectiveBar";
 import {
   HintButton,
   RecenterButton,
-  hudControlStyles as hudControls,
-  tutorialChrome as styles,
+  useHudControlStyles,
+  useTutorialChrome,
 } from "@/src/game/ui/hud/hudChrome";
 import { Button } from "@/src/game/ui/system/Button";
 import { useStepObjective } from "@/src/game/core/presentation/useStepObjective";
@@ -92,6 +92,9 @@ const TUTORIAL_SPOT_MS = 2800;
 function TutorialScreen() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
   useTutorialHaptics();
+  // Chrome AND spotlight targets together: the targets are measured rectangles standing in for controls, so they have to cross the screen with the controls they frame or the highlight lands on nothing.
+  const styles = useTutorialChrome();
+  const hudControls = useHudControlStyles();
   const hud = useHudInsets();
   const sceneState = useSceneState();
   const {

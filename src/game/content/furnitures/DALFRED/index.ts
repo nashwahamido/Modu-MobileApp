@@ -10,6 +10,7 @@ import { BEATS, CLUSTERS, LABELS, STRUCTURE } from "./authored";
 import { ACTIONS, DALFRED_META } from "./meta";
 import { PARTS } from "./parts.gen";
 import { clusterThumbs, thumbs } from "./thumbs.gen";
+import { CLUSTER_VARIANT_THUMBS } from "./clusterVariants";
 
 const P = PARTS as Record<string, PartDef>;
 
@@ -40,6 +41,7 @@ export const DALFRED: Furniture = {
   clusters: CLUSTERS,
   thumbs,
   clusterThumbs,
+  clusterVariantThumbs: CLUSTER_VARIANT_THUMBS,
   audio,
   tools: toolsUsed(ACTIONS),
   instructions: INSTRUCTIONS,

@@ -17,7 +17,7 @@ import { CheckIcon, StarIcon } from "@/src/components/Icons";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import type { Theme } from "@/src/game/ui/system/theme";
 
-import Svg, { Defs, LinearGradient, RadialGradient, Rect, Stop } from "react-native-svg";
+import Svg, { Defs, RadialGradient, Rect, Stop } from "react-native-svg";
 import Reanimated, {
   Easing,
   useAnimatedStyle,
@@ -29,6 +29,7 @@ import Reanimated, {
 } from "react-native-reanimated";
 import type { ReactNode } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
+import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
 
 /** This screen's backdrop. Deliberately its own pair rather than a shared token: each screen can
  *  be retuned without touching the others. Keep root.backgroundColor equal to BG_FROM — that is
@@ -183,8 +184,13 @@ const styles_halo = {
 /** The rim colour of the avatar circle — the gradient's outer stop, so the disc and the corners it
  *  cannot reach agree. */
 const AVATAR_CIRCLE = "#EFE6D6";
-const BG_FROM = "#E8D48C";
-const BG_TO = "#A9BFD9";
+/** Shared with the profile screen — the two are the same moment either side of onboarding ("this is
+ *  who you are"), so they wear the same art rather than each tuning a ramp of its own. */
+const backdrop = require("@/src/assets/ui/profile-backdrop.jpg");
+
+/** What shows for the frame before the artwork decodes, and behind it if the asset ever fails to
+ *  load. Sampled from the art's own open area so the swap is invisible rather than a flash. */
+const BG_FALLBACK = "#E9E6DF";
 
 const mascot = require("../../assets/images/mascot/mascot.png");
 // The room is the post-onboarding hub now that the home tab is gone.
@@ -303,20 +309,11 @@ export default function AvatarRecommendationScreen() {
   };
 
   return (
-    <View style={styles.screen}>
-      {/* The gradient owns a FULL-BLEED wrapper of its own. It used to sit inside the padded root,
-          where absolute positioning resolves against the padding box — which left the ramp floating
-          in the middle of the screen with a flat border all round it. A wrapper with no padding is
-          the only way to be sure the backdrop is the whole backdrop. */}
-      <Svg style={StyleSheet.absoluteFill} width="100%" height="100%" pointerEvents="none">
-        <Defs>
-          <LinearGradient id="avatarBg" x1="0" y1="0" x2="1" y2="0">
-            <Stop offset="0" stopColor={BG_FROM} />
-            <Stop offset="1" stopColor={BG_TO} />
-          </LinearGradient>
-        </Defs>
-        <Rect x="0" y="0" width="100%" height="100%" fill="url(#avatarBg)" />
-      </Svg>
+    // The artwork is FULL-BLEED, as the screen's root. It cannot be an absolute child of the padded
+    // root below: absolute positioning resolves against the padding box, which is what once left the
+    // old ramp floating in the middle with a flat border all round it. SceneBackdrop rather than an
+    // <Image absoluteFill>, which scales the same file differently and renders it zoomed.
+    <SceneBackdrop source={backdrop} style={styles.screen}>
       <View
         style={[
           styles.root,
@@ -541,7 +538,7 @@ export default function AvatarRecommendationScreen() {
         </View>
       )}
       </View>
-    </View>
+    </SceneBackdrop>
   );
 }
 
@@ -550,7 +547,7 @@ export default function AvatarRecommendationScreen() {
 const makeStyles = (t: Theme, k = 1) =>
   StyleSheet.create({
     // The full-bleed layer. No padding here, ever: it is what the gradient measures against.
-    screen: { flex: 1, backgroundColor: BG_FROM },
+    screen: { flex: 1, backgroundColor: BG_FALLBACK },
     root: {
       flex: 1,
       paddingHorizontal: Math.round(38 * k),

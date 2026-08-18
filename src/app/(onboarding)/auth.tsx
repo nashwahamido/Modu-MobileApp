@@ -13,6 +13,7 @@ import { AccountPicker } from "@/src/dev/AccountPicker";
 import { FONT, SPACE, useStyles } from "@/src/game/ui/system/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import type { Theme } from "@/src/game/ui/system/theme";
+import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -24,10 +25,16 @@ import type { Theme } from "@/src/game/ui/system/theme";
 // AccountPicker still signs in on a dev build, so the app stays reachable meanwhile.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Flat, not a ramp. The brand art decides it: the mascot is white and the wordmark is dark taupe,
- *  so a cream backdrop would swallow the mascot whole (1.01:1) while the blue keeps both readable
- *  and lets the cream buttons carry the contrast instead. */
-const BG_SOLID = "#A9BFD9";
+/** The same art as the profile and avatar-recommendation screens: this is where the four characters
+ *  are chosen, so it belongs with the other two "who you are" moments rather than on a field of its own. */
+const backdrop = require("@/src/assets/ui/profile-backdrop.jpg");
+
+/** What shows for the frame before the artwork decodes, and behind it if the asset ever fails to load.
+ *
+ *  It replaces a flat #A9BFD9 that was chosen for brand art which is currently COMMENTED OUT above —
+ *  the blue was there to stop a white mascot vanishing into cream. If that block is restored and the
+ *  mascot reads faint against this art, that is the reason, and the fix is the art rather than the fallback. */
+const BG_SOLID = "#E9E6DF";
 const SLOGAN_INK = "#595551";
 
 // const mascot = require("../../assets/images/mascot/mascot.png");
@@ -39,7 +46,10 @@ export default function AuthScreen() {
   const styles = useStyles(makeStyles);
   const safe = useSafeInsets();
   return (
-    <View
+    // The artwork is the screen ROOT, through SceneBackdrop (an ImageBackground) — a bare
+    // <Image absoluteFill> scales the same file differently and renders it zoomed.
+    <SceneBackdrop
+      source={backdrop}
       style={[
         styles.root,
         {
@@ -72,7 +82,7 @@ export default function AuthScreen() {
           <AccountPicker />
         </View>
       </View>
-    </View>
+    </SceneBackdrop>
   );
 }
 

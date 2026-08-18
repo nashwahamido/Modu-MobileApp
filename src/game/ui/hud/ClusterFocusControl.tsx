@@ -23,8 +23,10 @@ import {
   requiresClusterFocus,
 } from "@/src/game/core/evaluation/clusters";
 import { useGameStore } from "@/src/game/core/store";
+import { clusterThumbSet, modelThumbSet } from "@/src/game/core/presentation/finish";
 import Svg, { Circle as SvgCircle, Defs, RadialGradient, Stop } from "react-native-svg";
 import { Theme, useFixedStyles, FONT, RADIUS, SIZE } from "@/src/game/ui/system/theme";
+import { useMirror } from "@/src/game/ui/system/handedness";
 import { useRepos } from "@/src/data";
 import { useCatalogRow } from "@/src/data/catalog/buildStore";
 import { HUD_SIDE_MARGIN, HUD_VERTICAL_MARGIN } from "@/src/hooks/use-safe-insets";
@@ -146,15 +148,11 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
 
   if (!furniture) return null;
 
-  // The MODEL's art in the finish being built. Per-cluster art (clusterThumbs) has no finish
-  // variants — a sub-assembly is only ever drawn one way — so this applies to the whole-build and
-  // combine nodes, which are the two that picture the finished piece.
-  const finishKey: string | undefined = STYLE_FINISH[renderStyle];
-  const styledThumb =
-    (finishKey === undefined
-      ? undefined
-      : furniture.meta.variantThumbnails?.[finishKey]?.light) ??
-    furniture.meta.thumbnail.light;
+  // The MODEL's art in the finish being built — the whole-build and combine nodes, which are the two
+  // that picture the finished piece. The finish is resolved from renderStyle against THIS model's own
+  // finishes (presentation/finish.ts), so "realistic" lands on white for EKET and black for DALFRED
+  // rather than falling through to the plain thumbnail as it did while the table lived here.
+  const styledThumb = modelThumbSet(furniture, renderStyle).light;
 
   const done = new Set(completed);
   const clusters = focusableClusterIds(furniture);
@@ -194,8 +192,10 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
         label: clusterLabel(furniture, clusterId),
         actions,
         doneCount: actions.filter((a) => done.has(a.actionId)).length,
-        // Proper per-cluster artwork — the sub-assembly itself, not a stand-in part.
-        thumb: furniture.clusterThumbs?.[clusterId]?.light,
+        // Proper per-cluster artwork — the sub-assembly itself, not a stand-in part — and in the
+        // finish being built, so a cozy EKET's stages are the cozy cabinet and drawers. Falls back
+        // per cluster to the plain generated render when a finish ships no art for that stage.
+        thumb: clusterThumbSet(furniture, clusterId, renderStyle)?.light,
         finished: clusterComplete(furniture, clusterId, done),
         enabled: clusterPrereqsMet(furniture, clusterId, done),
         onPress: () => selectCluster(clusterId),
@@ -526,11 +526,13 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
  */
 export function MapButton() {
   const styles = useFixedStyles(makeStyles);
+  // ONLY the button's slot mirrors. The map card itself is centred on the screen and its stage circles read left-to-right in reading order — flipping either would be mirroring content, not ergonomics.
+  const m = useMirror();
   const furniture = useGameStore((s) => s.furniture);
   const setMapOpen = useGameStore((s) => s.setMapOpen);
   if (!furniture) return null;
   return (
-    <View style={styles.mapSlot}>
+    <View style={m(styles.mapSlot)}>
       <Pressable
         style={({ pressed }) => [styles.mapButton, pressed && styles.mapButtonPressed]}
         onPress={() => {
@@ -619,20 +621,6 @@ export function ClusterFocusControl() {
     </View>
   );
 }
-
-/**
- * renderStyle → the catalogue finish whose ARTWORK matches it.
- *
- * The inverse of catalogue.tsx's FINISH_STYLE: the player picked a finish from the carousel, that
- * set the render style, and the map should show the model they are actually building rather than
- * the default art. Anything not listed falls back to the meta's own thumbnail, which is the plain
- * model — the right answer for "realistic".
- */
-const STYLE_FINISH: Record<string, string> = {
-  cozy: "cozy",
-  cartoon: "cartoon",
-  illustrated: "wooden",
-};
 
 /** Every text on this modal, per the wireframe. */
 const INK = "#231F20";
@@ -942,6 +930,7 @@ const makeStyles = (t: Theme) =>
   // TOP-RIGHT corner. top:8 is the HUD's grid line — the settings gear, the hint and the pause row
   // all sit on it — and right:14 is the parts tray's own margin, so the button lines up with the
   // tray column beneath it and with the left-hand controls across from it.
+  // Mirrored at the call site, so in left-hand mode this sits opposite the parts rail exactly as it does here.
   mapSlot: { position: "absolute", right: 14, top: 8, zIndex: 20 },
   // The same 36pt chip height the settings gear, hint and undo sit on, and the PARTS TRAY's width
   // (86) so the button and the column beneath it read as one right-hand rail rather than two

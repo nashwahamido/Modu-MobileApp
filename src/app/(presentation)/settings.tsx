@@ -9,6 +9,7 @@ import {
   AccountSection,
   AppDisplaySection,
   AudioSection,
+  BuildAudioSection,
   BuildDisplaySection,
   GuidanceSection,
   InteractionDevSection,
@@ -79,6 +80,10 @@ export default function SettingsScreen() {
         {tab === "general" ? (
           <View style={styles.list}>
             <AppDisplaySection />
+            {/* AMBIENT music only — the track that plays in the room, catalogue and profile. The
+                build's own audio lives in the assembly tab, beside the effects it shares a screen
+                with. */}
+            <AudioSection />
             <AccountSection />
           </View>
         ) : (
@@ -87,7 +92,7 @@ export default function SettingsScreen() {
             <InteractionDevSection />
             <BuildDisplaySection />
             <GuidanceSection />
-            <AudioSection />
+            <BuildAudioSection />
             {/* Last here too, matching the gear panel — see the note in SettingsControls. */}
             <RestartRow />
           </View>
