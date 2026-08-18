@@ -84,9 +84,15 @@ export function setMusicEnabled(on: boolean) {
   apply();
 }
 
-/** Set the level (0-1) live: a change should be audible while the finger is still on the control. */
+/** Set the level (0-1) live: a change should be audible while the finger is still on the control.
+ *
+ *  GUARDED against a non-finite value: a settings object written before musicVolume existed hands
+ *  in `undefined`, Math.max turns that into NaN, and a NaN volume plays SILENTLY while every other
+ *  signal — the toggle, the route, the player — still looks correct. Falling back to the default
+ *  means an old profile plays rather than mysteriously not. */
 export function setMusicVolume(next: number) {
-  level = Math.min(1, Math.max(0, next));
+  const safe = Number.isFinite(next) ? next : 0.5;
+  level = Math.min(1, Math.max(0, safe));
   apply();
 }
 

@@ -51,14 +51,14 @@ export const CLUSTERS = {
   cabinet: { id: "cabinet", label: "Cabinet", seed: true },
   drawerA: {
     id: "drawerA",
-    label: "Top drawer",
+    label: "Top Drawer",
     slideJoins: ["cabinet"],
     placeDir: [-1, 0, 0] as const,
     parkBackoff: 0.16,
   },
   drawerB: {
     id: "drawerB",
-    label: "Bottom drawer",
+    label: "Bottom Drawer",
     slideJoins: ["cabinet"],
     placeDir: [-1, 0, 0] as const,
     parkBackoff: 0.16,

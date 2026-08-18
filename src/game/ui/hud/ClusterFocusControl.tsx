@@ -24,8 +24,6 @@ import {
 } from "@/src/game/core/evaluation/clusters";
 import { useGameStore } from "@/src/game/core/store";
 import Svg, { Circle as SvgCircle, Defs, RadialGradient, Stop } from "react-native-svg";
-import { StarBadge } from "@/src/game/ui/system/Icons";
-import { CoinMedalIcon } from "@/src/components/Icons";
 import { Theme, useFixedStyles, useTheme, FONT, RADIUS, SIZE } from "@/src/game/ui/system/theme";
 import { useRepos } from "@/src/data";
 import { useCatalogRow } from "@/src/data/catalog/buildStore";
@@ -47,33 +45,18 @@ import type { ClusterId } from "@/src/game/core/type";
  * Rises into place and then breathes, native-driven on transform and opacity only — the same
  * discipline as PulseRing, because this file deliberately keeps its loops off the JS thread.
  */
-function TapCue({ label }: { label: string }) {
-  const t = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(t, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(t, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [t]);
+function TapCue({ label, resuming }: { label: string; resuming: boolean }) {
+  // STILL, not pulsing — and a plain View, not Animated: the ring around the circle already says
+  // "this one is live", and a second thing throbbing beside it competes with the first rather than
+  // reinforcing it.
+  //
+  // BLUE for resume, LAVENDER for start: blue is already the catalogue's "in progress" colour, so a
+  // stage you have opened before is marked the same way there and here. Lavender stays the invitation
+  // to begin something.
   return (
-    <Animated.View
-      pointerEvents="none"
-      style={[
-        styles_cue.wrap,
-        {
-          transform: [
-            { scale: t.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] }) },
-            { translateY: t.interpolate({ inputRange: [0, 1], outputRange: [0, -3] }) },
-          ],
-        },
-      ]}
-    >
+    <View pointerEvents="none" style={[styles_cue.wrap, resuming && styles_cue.wrapResume]}>
       <Text style={styles_cue.text}>{label}</Text>
-    </Animated.View>
+    </View>
   );
 }
 
@@ -86,6 +69,8 @@ const styles_cue = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "#8D7BA8",
   },
+  // The Continue blue, as used by the catalogue's in-progress pill.
+  wrapResume: { backgroundColor: "#6E90B8" },
   text: {
     color: "#FBF8F3",
     fontFamily: FONT,
@@ -233,8 +218,10 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
       ...clusterNodes,
       {
         key: "combine",
-        // Last word of the catalogue name ("…Cabinet"), falling back to a generic verb before the catalogue lands.
-        label: catalogRow ? `Combine ${catalogRow.name.split(" ").pop()}` : "Combine",
+        // Just "Combine". It used to append the catalogue name's last word ("Combine Cabinet"),
+        // which wrapped to two lines inside the circle and repeated a word already in the title
+        // above it.
+        label: "Combine",
         actions: combineActions,
         doneCount: combineDone,
         thumb: furniture.meta.thumbnail.light,
@@ -245,13 +232,11 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
       },
     ];
 
-    // The one stage that carries the "tap to start" tab: the first that can be opened and is not
-    // already done. -1 when the map is fully finished or nothing is unlocked yet, and the strict
-    // equality below then matches no node at all.
-    const firstOpenIndex = nodes.findIndex((n) => n.enabled && !n.finished);
-
-    // Nodes share the row, so they shrink as the count grows: EKET's three clusters plus combine is four across, which will not fit at the natural width.
-    const INNER = 520;
+    // The card GROWS with the stage count rather than squeezing the nodes: two stages (LACK) sit in
+    // a compact card, DALFRED's three want more room, and EKET's four need enough that every circle
+    // keeps its natural width instead of shrinking until the labels inside them stop fitting.
+    const cardMax = nodes.length >= 4 ? 620 : nodes.length === 3 ? 520 : 460;
+    const INNER = cardMax - 60;
     const nodeWidth = Math.min(116, (INNER - (nodes.length - 1) * 24) / nodes.length);
 
     const totalSteps = furniture.actions.length;
@@ -267,7 +252,7 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
 
     return (
       <View style={styles.scrim}>
-        <View style={styles.card}>
+        <View style={[styles.card, { maxWidth: cardMax }]}>
           <Pressable
             style={styles.close}
             // Paused mid-build → resume. Nothing chosen yet → there is nothing to resume to, so the only way out is back to the catalogue.
@@ -355,14 +340,16 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                     { width: nodeWidth },
                     i % 2 === 1 && styles.nodeLow,
                   ]}
-                  accessibilityLabel={`${n.label}, ${n.doneCount} of ${n.actions.length} steps`}
+                  accessibilityLabel={`${n.label}, ${n.doneCount} of ${n.actions.length} steps`}  /* the count lives here now: read aloud, not drawn */
                 >
                   {/* Available: pulsing. Finished: a steady outline plus the tick. Both are
                       SIBLINGS of the circle, never a border on it — the circle clips its own
                       gradient, and a bordered view with a rounded inner overlay is what made
                       Android flatten these into octagons before. */}
                   {n.enabled && !n.finished ? (
-                    <PulseRing style={styles.pulseRing} />
+                    <PulseRing
+                      style={[styles.pulseRing, n.doneCount > 0 && styles.pulseRingResume]}
+                    />
                   ) : null}
                   {n.finished ? (
                     <>
@@ -409,39 +396,24 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                         resizeMode="contain"
                       />
                     ) : null}
-                    <Text
-                      style={[
-                        styles.stepCount,
-                        !n.enabled && !n.finished && styles.dimmed,
-                      ]}
-                    >
-                      {n.doneCount}/{n.actions.length} steps
-                    </Text>
+                    {/* INSIDE the circle, under the thumbnail: the stage's name belongs to the
+                        stage, and outside it the row read as a caption floating beneath a picture.
+                        Absolutely positioned so it cannot push the thumbnail off centre. */}
+                    <View style={styles.nodeLabelBox} pointerEvents="none">
+                      <Text
+                        style={[styles.nodeLabel, !n.enabled && !n.finished && styles.nodeLabelLocked]}
+                        numberOfLines={2}
+                      >
+                        {/* ONE WORD PER LINE inside the circle. Left to wrap naturally, "Top Drawer"
+                            fitted on one line while "Bottom Drawer" broke onto two, so two stages in
+                            the same row were set differently. Breaking on the space makes every
+                            multi-word stage stack the same way — and the box below centres whatever
+                            comes out, so one- and two-line names still share a midline. */}
+                        {n.label.split(" ").join("\n")}
+                      </Text>
+                    </View>
                   </View>
 
-                  {/* RESUME, so it appears only where there is something to resume: a stage
-                      with steps behind it that is not yet finished. A play badge on an
-                      untouched stage would be claiming progress that does not exist. */}
-                  {n.doneCount > 0 && !n.finished ? (
-                    <Image
-                      source={require("@/src/assets/ui/icons/icon-resume.png")}
-                      style={styles.playBadge}
-                      resizeMode="contain"
-                    />
-                  ) : null}
-
-                  <View style={styles.starWrap} pointerEvents="none">
-                    <StarBadge size={48} color={t.accent} />
-                    <Text style={styles.starText}>
-                      {n.actions.length * furniture.xpPerStep}
-                    </Text>
-                  </View>
-
-                  <Text
-                    style={[styles.nodeLabel, !n.enabled && !n.finished && styles.nodeLabelLocked]}
-                  >
-                    {n.label}
-                  </Text>
 
                   {/* One tab, on the first stage that can be opened.
                       The pulsing ring says "this one is LIVE", which is a state. It never says the
@@ -449,7 +421,13 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                       look at without touching — so a first-time player reads the map, understands
                       it, and waits. This says what to do, in words, exactly once: more than one
                       would be a scatter of instructions rather than a next step. */}
-                  {i === firstOpenIndex ? <TapCue label={n.doneCount > 0 ? "Resume" : "Tap to start"} /> : null}
+                  {/* On EVERY stage that can be opened, not just the first: with three or four
+                      stages the player picks which to work on, and a single tab on the leftmost
+                      one implied the others were not choices. A finished stage has nothing to
+                      start; a locked one cannot be started yet. */}
+                  {n.enabled && !n.finished ? (
+                    <TapCue label={n.doneCount > 0 ? "Resume" : "Start"} resuming={n.doneCount > 0} />
+                  ) : null}
                 </Pressable>
               </Fragment>
             ))}
@@ -487,7 +465,11 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
             </View>
             <View style={styles.rewardRow}>
               <View style={styles.rewardTile}>
-                <CoinMedalIcon size={26} />
+                <Image
+                  source={require("@/src/assets/ui/icons/icon-coins.png")}
+                  style={styles.rewardIcon}
+                  resizeMode="contain"
+                />
                 <Text style={styles.rewardText}>+ {coins}</Text>
               </View>
               <View style={styles.rewardTile}>
@@ -640,7 +622,10 @@ const makeStyles = (t: Theme) =>
       justifyContent: "center",
       // The same floors the assembly HUD uses, so the modal never sits closer to the glass than the controls behind it. Immersive mode reports 0 insets, hence the constants.
       paddingHorizontal: HUD_SIDE_MARGIN,
-      paddingVertical: HUD_VERTICAL_MARGIN,
+      // A real gutter, not the HUD's floor — but only just: at +18 the card had to give back more
+      // height than the reward row could spare, so the tiles ran past its edge. 10 keeps a visible
+      // margin top and bottom while returning that room to the content.
+      paddingVertical: HUD_VERTICAL_MARGIN + 10,
       // zIndex only — NO elevation. On Android `elevation` draws a drop shadow around the view's bounds, and a full-screen dimmer does not want one: while this sat inside play.tsx's inset chrome container that shadow landed ON SCREEN as a dark band tracing the container's edges, which read as a mystery rectangle behind the card.
       zIndex: 30,
     },
@@ -649,14 +634,16 @@ const makeStyles = (t: Theme) =>
     // Sized to fit a landscape phone WITHOUT scrolling: every block below is deliberately tight, because a chooser you have to scroll hides the very options it exists to show.
     card: {
       width: "100%",
-      maxWidth: 560,
-      backgroundColor: "#FBF8F3",
+      // A CEILING, not a fixed height: the card sizes to its content but can never grow past the
+      // window minus the scrim's own padding — which is what let EKET's four stages push it to the
+      // top and bottom edges. maxWidth is set inline, per stage count.
+      maxHeight: "100%",
+      // The CELEBRATION screen's panel colour, and no outline: the accent border made the map read
+      // as an alert, where it is really the same kind of surface as the finish summary.
+      backgroundColor: "#E3DACD",
       borderRadius: 22,
-      // The purple outline: this is the one modal that blocks the whole game, so it gets the accent rather than the usual hairline.
-      borderWidth: 2,
-      borderColor: t.accent,
-      paddingTop: 12,
-      paddingBottom: 14,
+      paddingTop: 10,
+      paddingBottom: 10,
       paddingHorizontal: 20,
       shadowColor: "#000",
       shadowOpacity: 0.3,
@@ -664,22 +651,22 @@ const makeStyles = (t: Theme) =>
       shadowOffset: { width: 0, height: 10 },
       elevation: 12,
     },
+    // Matched to the INVENTORY's close button: a larger dark disc with no cream ring, sitting on
+    // the card's corner. One close affordance across the room and the build.
     close: {
       position: "absolute",
-      top: -12,
-      right: -12,
-      width: 34,
-      height: 34,
-      borderRadius: 17,
-      backgroundColor: "#595551",
-      borderWidth: 2,
-      borderColor: "#FBF8F3",
+      top: -14,
+      right: -14,
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: "#4A4441",
       alignItems: "center",
       justifyContent: "center",
       zIndex: 2,
       elevation: 2,
     },
-    closeGlyph: { color: "#FBF8F3", fontFamily: FONT, fontSize: 16, fontWeight: "800" },
+    closeGlyph: { color: "#FBF8F3", fontFamily: FONT, fontSize: 20, fontWeight: "700", lineHeight: 23 },
 
     // Top-left of the card, opposite the close button. Absolute so it cannot push the centred title off centre.
     home: {
@@ -730,7 +717,7 @@ const makeStyles = (t: Theme) =>
       flexDirection: "row",
       alignItems: "flex-start",
       justifyContent: "center",
-      marginBottom: 10,
+      marginBottom: 6,
     },
     // The connector's SLOT in the row is narrow; the line itself is longer and overflows it deliberately, running across the empty padding either side of the circles. Midpoint between the two circle centres: radius 46 + half the 34dp stagger. Pure spacer now — the bands live in connectorLayer, which paints before any node.
     connectorSlot: { width: 24 },
@@ -749,7 +736,9 @@ const makeStyles = (t: Theme) =>
     connectorUp: { transform: [{ rotate: "-13.7deg" }] },
     node: { alignItems: "center", width: 116, zIndex: 1 },
     // The dip that turns a row into a route. Matches the wireframe, where the middle stage sits below its neighbours.
-    nodeLow: { marginTop: 34 },
+    // Half the old 34: the dip still reads as a path stepping between stages, but it was adding its
+    // full height to the card — the tallest node sets the row, so the offset is paid twice over.
+    nodeLow: { marginTop: 18 },
     circle: {
       width: 92,
       height: 92,
@@ -776,7 +765,9 @@ const makeStyles = (t: Theme) =>
       height: 92,
       borderRadius: 46,
       borderWidth: 3,
-      borderColor: "#A9BFD9",
+      // The ring says the same thing its pill does, in the same colour: LAVENDER around a stage
+      // waiting to be started, BLUE around one already under way.
+      borderColor: "#8D7BA8",
       zIndex: 0,
     },
     doneRing: {
@@ -790,11 +781,12 @@ const makeStyles = (t: Theme) =>
       borderColor: "#8FA876",
       zIndex: 2,
     },
-    // Bottom-left, where the resume badge sits on an unfinished stage — a finished stage has nothing to resume, so the two never appear together and can share the spot.
+    pulseRingResume: { borderColor: "#6E90B8" },
+    // Bottom-left of the circle. It used to share this spot with the resume badge, which is now
+    // retired — a finished stage is the only thing marked here.
     doneCheck: {
       position: "absolute",
       bottom: 14,
-      // Inset a touch more than the resume badge: that PNG carries a transparent shadow margin, this one is flush to its edge, so equal boxes would read as unequal discs.
       left: 6,
       width: 28,
       height: 28,
@@ -803,47 +795,28 @@ const makeStyles = (t: Theme) =>
     // NOT opacity — see the gradient comment above.
     circleLocked: {},
     dimmed: { opacity: 0.4 },
-    nodeThumb: { width: 48, height: 48 },
-    stepCount: {
-      position: "absolute",
-      bottom: 10,
-      fontFamily: FONT, fontSize: 9,
-      fontWeight: "700",
-      color: INK,
-    },
+    // Lifted off centre so the label below has clear air — but only just: at 22 the icon sat too
+    // high in the circle, and the gap read as a gap rather than as spacing.
+    nodeThumb: { width: 46, height: 46, marginBottom: 15 },
 
-    // The badge is an SVG star with the label absolutely centred over the SAME box, so the number sits on the star's true centre — a ★ text glyph rides low in its em box and never quite lines up. Bottom-left of the circle, opposite the XP star. Standalone play icon (no chip), sitting where the resume badge was — bottom-left of the cluster tile, opposite the XP star. Soft shadow so it lifts like the HUD icons. The PNG already includes the cream disc, its rim and a drop shadow, so no chip styling here — a background or elevation behind it would double both.
-    playBadge: {
+    // Pinned to the LOWER THIRD of the circle, clear of the thumbnail above it.
+    // A FIXED box that centres whatever it holds. Bottom-anchored text grew upward as it wrapped,
+    // so a one-line name ("Top Drawer") sat lower than a two-line one ("Bottom Drawer") in the same
+    // row — the box gives both the same midline, whatever they wrap to.
+    nodeLabelBox: {
       position: "absolute",
-      bottom: 14,
-      left: 2,
-      width: 34,
-      height: 34,
-      pointerEvents: "none",
-    },
-    starWrap: {
-      position: "absolute",
-      top: -8,
-      right: 2,
-      width: 48,
-      height: 48,
-      // Above the finished outline, which would otherwise cross the star's lower arm.
-      zIndex: 4,
+      left: 4,
+      right: 4,
+      bottom: 12,
+      height: 28,
       alignItems: "center",
       justifyContent: "center",
     },
-    starText: {
-      position: "absolute",
-      fontFamily: FONT, fontSize: 9,
-      fontWeight: "800",
-      color: t.onAccent,
-      textAlign: "center",
-    },
-
     nodeLabel: {
-      marginTop: 8,
-      fontFamily: FONT, fontSize: 13,
-      fontWeight: "700",
+      fontFamily: FONT,
+      fontSize: 12,
+      lineHeight: 13,
+      fontWeight: "800",
       color: INK,
       textAlign: "center",
     },
@@ -861,8 +834,10 @@ const makeStyles = (t: Theme) =>
     },
     progressTrack: {
       flex: 1,
-      height: 13,
-      borderRadius: 7,
+      // Tall enough to CONTAIN the label: at 13 the text had no room and sat on the bottom edge,
+      // because a Text with no lineHeight is laid out from its baseline, not its box.
+      height: 22,
+      borderRadius: 11,
       backgroundColor: t.surfaceInset,
       justifyContent: "center",
       overflow: "hidden",
@@ -873,13 +848,21 @@ const makeStyles = (t: Theme) =>
       backgroundColor: "#8FA876",
       borderRadius: 7,
     },
+    // Absolutely filled and line-height-matched to the track, so the label is centred by its BOX
+    // rather than by where its baseline happens to fall.
     progressLabel: {
+      ...StyleSheet.absoluteFillObject,
       textAlign: "center",
-      fontFamily: FONT, fontSize: 10,
+      textAlignVertical: "center",
+      lineHeight: 22,
+      fontFamily: FONT,
+      fontSize: 11,
       fontWeight: "700",
       color: INK,
     },
     progressLabelOnFill: { color: t.onAccent },
+    // Sized to the drawn icon it replaces, so the reward row keeps its rhythm.
+    rewardIcon: { width: 22, height: 22 },
 
     // ── reward ────────────────────────────────────────────────────────────
     // Full width now: the banner is a ribbon across the card, with the two tiles under it. Sized to the wireframe: a ribbon a bit over half the card, not a full-width bar.
@@ -887,14 +870,14 @@ const makeStyles = (t: Theme) =>
       alignSelf: "center",
       alignItems: "stretch",
       // A hair wider now it carries three tiles rather than two.
-      width: "46%",
-      marginBottom: 8,
+      width: "44%",
+      marginBottom: 4,
     },
     // Rosette sits beside the ribbon, not over it — no part of the banner runs behind it. No gap: the rosette butts against the ribbon, as drawn.
     rewardHeaderRow: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
     rewardBanner: {
       flex: 1,
-      height: 22,
+      height: 19,
       borderRadius: 5,
       backgroundColor: "#A97480",
       alignItems: "center",
@@ -908,8 +891,8 @@ const makeStyles = (t: Theme) =>
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
-      gap: 2,
-      paddingVertical: 6,
+      gap: 1,
+      paddingVertical: 4,
       borderRadius: 6,
       backgroundColor: "#FBF8F3",
       borderWidth: 1,
@@ -931,14 +914,14 @@ const makeStyles = (t: Theme) =>
       borderColor: "rgba(35,31,32,0.12)",
     },
     itemGlyph: { fontFamily: FONT, fontSize: 14, fontWeight: "800", color: INK },
-    xpIcon: { width: 26, height: 26 },
+    xpIcon: { width: 22, height: 22 },
     rewardKicker: {
       fontFamily: FONT, fontSize: 9,
       fontWeight: "800",
       letterSpacing: 1,
       color: "#FBF8F3",
     },
-    rewardRow: { flexDirection: "row", gap: 6, alignSelf: "stretch" },
+    rewardRow: { flexDirection: "row", gap: 5, alignSelf: "stretch" },
     rewardText: { fontFamily: FONT, fontSize: 10, fontWeight: "700", color: INK },
 
   // TOP-RIGHT corner. top:8 is the HUD's grid line — the settings gear, the hint and the pause row
