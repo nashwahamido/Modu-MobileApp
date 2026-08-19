@@ -630,22 +630,30 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
             // FASTENER visibility is measured against the seated part's own GEOMETRY (the user's rule): sample the fastener's baked box surface, discard samples buried inside placed geometry, and per frame require >=30% of the exposed remainder to have a clear line of sight. Face heuristics were falsified twice on EKET's cam lock — arrival direction (-engageDir) points along the panel and blocked legitimate views of the bore face; nearest-receiver-face picked the interior face and allowed assembling the rear cam THROUGH the panel from the front. Sampling makes the receiver a legitimate occluder of the fastener's buried side, which is the physical truth both heuristics missed. Structural parts keep the anchor line-of-sight test.
             const cPart2 = c.action.partId ? furniture.parts[c.action.partId] : undefined;
             let visSamples: Vec3[] | null = null;
-            if (cPart2?.type === "fastener") {
-              const fb = partBoxes[cPart2.partId];
-              if (fb) {
-                const inside = (pt: Vec3, bx: { min: Vec3; max: Vec3 }) =>
-                  pt[0] >= bx.min[0] && pt[0] <= bx.max[0] &&
-                  pt[1] >= bx.min[1] && pt[1] <= bx.max[1] &&
-                  pt[2] >= bx.min[2] && pt[2] <= bx.max[2];
-                const exposed = boxSurfaceSamples(fb).filter((pt) => {
+            {
+              // Structural parts sample a HALO around the seat anchor (the socket neighborhood — "the target pos geometry"); fasteners sample their own seated box, which is the same idea at their scale. No receiver exemptions anywhere in sampling: burial replaces them — samples inside placed geometry drop at pickup, and the receiver hiding its own socket is then honest occlusion of the exposed remainder (a plate DOES hide its underside leg sockets from above; the old exempt-the-receiver line-of-sight said it couldn't, which let legs snap through plates and screws through panels).
+              const H = 0.025;
+              const halo: PartBox = {
+                min: [c.seatVisual[0] - H, c.seatVisual[1] - H, c.seatVisual[2] - H],
+                max: [c.seatVisual[0] + H, c.seatVisual[1] + H, c.seatVisual[2] + H],
+              };
+              const inside = (pt: Vec3, bx: { min: Vec3; max: Vec3 }) =>
+                pt[0] >= bx.min[0] && pt[0] <= bx.max[0] &&
+                pt[1] >= bx.min[1] && pt[1] <= bx.max[1] &&
+                pt[2] >= bx.min[2] && pt[2] <= bx.max[2];
+              const exposedOf = (bx: PartBox) =>
+                boxSurfaceSamples(bx).filter((pt) => {
                   for (const pid of placedSet) {
-                    const bx = partBoxes[pid];
-                    if (bx && inside(pt, bx)) return false;
+                    const ob = partBoxes[pid];
+                    if (ob && inside(pt, ob)) return false;
                   }
                   return true;
                 });
-                visSamples = exposed.length ? exposed : null;
-              }
+              // Fasteners sample their seated box — but a FLUSH/countersunk fastener's box is fully inside its receiver, every sample buries, and a null here used to fall back to the exemption-based test whose transparent receivers were the very hole (user: "the screw still snaps when hidden"). The anchor halo is the retry: a countersunk head's halo still pokes out of the entry face.
+              const fb = cPart2?.type === "fastener" ? partBoxes[cPart2.partId] : null;
+              let exposed = fb ? exposedOf(fb) : [];
+              if (!exposed.length) exposed = exposedOf(halo);
+              visSamples = exposed.length ? exposed : null;
             }
             return {
               ...c,
@@ -658,7 +666,7 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
             const c0 = candidates[0];
             const j = jointAnchors[c0.action.partId!];
             console.log(
-              `[pickup] ${c0.action.actionId} pos=${c0.position.map((v) => v.toFixed(3)).join(",")} hold=${c0.holdPosition.map((v) => v.toFixed(3)).join(",")} seat=${c0.seatVisual.map((v) => v.toFixed(3)).join(",")} match=${c0.matchVisual.map((v) => v.toFixed(3)).join(",")} anchor=${j ? j.map((v) => v.toFixed(3)).join(",") : "none"} BUILD=noplane15`,
+              `[pickup] ${c0.action.actionId} pos=${c0.position.map((v) => v.toFixed(3)).join(",")} hold=${c0.holdPosition.map((v) => v.toFixed(3)).join(",")} seat=${c0.seatVisual.map((v) => v.toFixed(3)).join(",")} match=${c0.matchVisual.map((v) => v.toFixed(3)).join(",")} anchor=${j ? j.map((v) => v.toFixed(3)).join(",") : "none"} BUILD=noplane17`,
             );
           }
           const groupIds = new Set(candidates.map((c) => c.action.actionId));
@@ -724,6 +732,8 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
           let aimBlockedNow = false;
           // Which placed part's box blocked the nearest skipped candidate — probe-only, names the occluder in one log line.
           let blockedBy: PartId | null = null;
+          // Visible/total sample count of the winning candidate — probe-only, so an "arms while hidden" report carries its own numbers.
+          let nearestVis = "-";
           // Per-profile acceptance radius; also the magnet's full-strength point so "looks seated" and "is accepted" stay the same distance. Read before the matcher because the crowding cap below is expressed against it.
           const snapDist = Math.min(
             SNAP_DIST_MAX,
@@ -808,7 +818,8 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
               const d = distPx(c);
               // A socket the player cannot SEE cannot be aimed at — off-frame candidates are skipped for acquisition (a snap must never be earned against an invisible hole; measured: a seat at y=-88 was still inside the capture band near the top edge). The CURRENT match is not acquired here either — it is held through the more generous nearFrame test below, so a mid-drag orbit that nudges the socket just past the edge does not pop the magnet.
               if (!d.inFrame) continue;
-              // Fastener visibility gate: >=30% of the exposed seated-geometry samples must be in clear sight.
+              // Visibility gate: >=30% of the exposed seated-geometry samples must be in clear sight.
+              let visStat: string | null = null;
               if (c.visSamples && laF) {
                 let vis = 0;
                 let blocker: PartId | null = null;
@@ -826,6 +837,7 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
                   if (hit) blocker = hit;
                   else vis++;
                 }
+                visStat = `${vis}/${c.visSamples.length}`;
                 if (vis / c.visSamples.length < VIS_FRACTION_MIN) {
                   if (d.px < blockedPx) {
                     blockedPx = d.px;
@@ -848,6 +860,7 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
                 nearestPx = d.px;
                 nearestMPerPx = d.mPerPx;
                 nearest = c;
+                nearestVis = visStat ?? "-";
               }
             }
             bestD = nearestPx * nearestMPerPx; // world-equivalent aim distance
@@ -1077,7 +1090,7 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
             const nSeat = nearest?.seatVisual ? worldToScreen(nearest.seatVisual) : null;
             const nPark = nearest?.matchVisual ? worldToScreen(nearest.matchVisual) : null;
             console.log(
-              `[drag] f=(${e.absoluteX.toFixed(0)},${e.absoluteY.toFixed(0)}) part=(${hp ? `${hp.x.toFixed(0)},${hp.y.toFixed(0)}` : "?"}) gapPx=${gapPx} p=${p ? p.map((v) => v.toFixed(2)).join(",") : "null"} plane=${s.planeY.toFixed(2)} upright=${!!s.uprightAnchor} aim=${Number.isFinite(bestD) ? bestD.toFixed(3) : "inf"} pull=${Number.isFinite(pullD) ? pullD.toFixed(3) : "inf"} band=${band.toFixed(2)} cam=${camDist.toFixed(3)} reach=${s.holdReach.toFixed(3)} carry=${carryDepth} blend=${s.depthBlend.toFixed(2)} tgt=${s.matchedActionId ?? "-"} blk=${aimBlockedNow ? 1 : 0} occ=${blockedBy ?? "-"} near=${nearest?.action.actionId ?? "-"} seat=(${nSeat ? `${nSeat.x.toFixed(0)},${nSeat.y.toFixed(0)}` : "?"}) park=(${nPark ? `${nPark.x.toFixed(0)},${nPark.y.toFixed(0)}` : "?"}) fit=${fs} BUILD=noplane15`,
+              `[drag] f=(${e.absoluteX.toFixed(0)},${e.absoluteY.toFixed(0)}) part=(${hp ? `${hp.x.toFixed(0)},${hp.y.toFixed(0)}` : "?"}) gapPx=${gapPx} p=${p ? p.map((v) => v.toFixed(2)).join(",") : "null"} plane=${s.planeY.toFixed(2)} upright=${!!s.uprightAnchor} aim=${Number.isFinite(bestD) ? bestD.toFixed(3) : "inf"} pull=${Number.isFinite(pullD) ? pullD.toFixed(3) : "inf"} band=${band.toFixed(2)} cam=${camDist.toFixed(3)} reach=${s.holdReach.toFixed(3)} carry=${carryDepth} blend=${s.depthBlend.toFixed(2)} tgt=${s.matchedActionId ?? "-"} blk=${aimBlockedNow ? 1 : 0} occ=${blockedBy ?? "-"} vis=${nearestVis} near=${nearest?.action.actionId ?? "-"} seat=(${nSeat ? `${nSeat.x.toFixed(0)},${nSeat.y.toFixed(0)}` : "?"}) park=(${nPark ? `${nPark.x.toFixed(0)},${nPark.y.toFixed(0)}` : "?"}) fit=${fs} BUILD=noplane17`,
             );
           }
         })

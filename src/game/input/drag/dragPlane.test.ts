@@ -394,3 +394,28 @@ test("fastener visibility sampling: the cam lock is seen from behind the panel, 
   // From BEHIND the cabinet: the exposed surface is in plain sight.
   assert.ok(frac([0.2, 0.3, 1.0]) >= 0.3, `rear view saw ${(frac([0.2, 0.3, 1.0]) * 100).toFixed(0)}%`);
 });
+
+test("structural halo sampling: a plate hides its own underside leg socket from above", () => {
+  // Leg-socket anchor at the plate's underside rim; the halo around it pokes below the plate. From
+  // above, the plate itself blocks every exposed sample — the receiver is NOT exempt in sampling,
+  // which is what closed the "leg snaps through the plate" hole the exemption-based test had.
+  const plate = { min: [-0.16, 0.49, -0.16] as Vec3, max: [0.16, 0.55, 0.16] as Vec3 };
+  const anchor: Vec3 = [0.13, 0.49, 0];
+  const H = 0.025;
+  const halo = { min: [anchor[0] - H, anchor[1] - H, anchor[2] - H] as Vec3, max: [anchor[0] + H, anchor[1] + H, anchor[2] + H] as Vec3 };
+  const inside = (pt: Vec3) =>
+    pt[0] >= plate.min[0] && pt[0] <= plate.max[0] &&
+    pt[1] >= plate.min[1] && pt[1] <= plate.max[1] &&
+    pt[2] >= plate.min[2] && pt[2] <= plate.max[2];
+  const exposed = boxSurfaceSamples(halo).filter((pt) => !inside(pt));
+  assert.ok(exposed.length >= 4, `halo should poke out below the plate, got ${exposed.length}`);
+  const frac = (eye: Vec3) =>
+    exposed.filter((pt) => {
+      const l = Math.hypot(pt[0] - eye[0], pt[1] - eye[1], pt[2] - eye[2]);
+      return !segmentHitsBox(eye, pt, plate, 0.008 / l);
+    }).length / exposed.length;
+  // Steep above: the plate stands between the eye and the under-rim halo.
+  assert.ok(frac([0, 1.6, 0.2]) < 0.3, `top view saw ${(frac([0, 1.6, 0.2]) * 100).toFixed(0)}%`);
+  // From below/side, the socket region is in plain sight.
+  assert.ok(frac([0.5, 0.1, 0.3]) >= 0.3, `low view saw ${(frac([0.5, 0.1, 0.3]) * 100).toFixed(0)}%`);
+});
