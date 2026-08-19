@@ -1,4 +1,3 @@
-import * as Haptics from "expo-haptics";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useRouter } from "expo-router";
 import {
@@ -31,6 +30,7 @@ import { useRepos } from "@/src/data";
 import { useCatalogRow } from "@/src/data/catalog/buildStore";
 import { HUD_SIDE_MARGIN, HUD_VERTICAL_MARGIN } from "@/src/hooks/use-safe-insets";
 import type { ClusterId } from "@/src/game/core/type";
+import * as Haptics from "expo-haptics";
 
 /**
  * A ring that swells and fades out of an available stage, over and over. It marks what the
@@ -278,21 +278,26 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
       <View style={styles.scrim}>
         <View style={[styles.card, { maxWidth: cardMax }]}>
           {/* NO close button. Every stage's Start/Resume closes the map by opening that stage, and
-              Home leaves the build entirely — an ✕ on the corner was a third exit that did the same
-              thing as the first two, and on a card this size it read as the loudest control on it. */}
+              this leaves the build entirely — an ✕ on the corner was a third exit that did the same
+              thing as the first two, and on a card this size it read as the loudest control on it.
+
+              dismissTo, not push: the catalogue is what opened this build, so it is already sitting
+              below in the stack and popping back to it never remounts. If it somehow is not there —
+              a build reached from the tutorial or a deep link — dismissTo replaces the current
+              screen with it instead, so the exit works from anywhere. */}
           <Pressable
             style={({ pressed }) => [styles.home, pressed && { opacity: 0.6 }]}
-            onPress={() => router.dismissTo("/room")}
+            onPress={() => router.dismissTo("/catalogue")}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel="Back to your room"
+            accessibilityLabel="Back to the catalogue"
           >
             <Image
-              source={require("@/src/assets/ui/icons/icon-home.png")}
+              source={require("@/src/assets/ui/icons/Assemble-icon.png")}
               style={styles.homeIcon}
               resizeMode="contain"
             />
-            <Text style={styles.homeText}>Home</Text>
+            <Text style={styles.homeText}>Catalogue</Text>
           </Pressable>
 
           <View style={styles.titleRow}>
@@ -678,7 +683,11 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       gap: 6,
     },
-    homeIcon: { width: 26, height: 26 },
+    // 40, not the house's 26. The two assets are framed differently: the house fills 94% of its
+    // 1024 canvas where the assemble glyph fills 62%, so at a matched BOX the glyph would draw
+    // about a third smaller than the icon it replaced. Sized so the INK matches instead — 40 x 0.62
+    // lands on the same ~25pt of drawn mark the house had at 26.
+    homeIcon: { width: 40, height: 40 },
     homeText: { fontFamily: FONT, fontSize: 13, fontWeight: "700", color: INK },
     titleRow: {
       flexDirection: "row",
