@@ -9,7 +9,7 @@ import { quatConjugate, quatMultiply, quatRotateVec3, quatSlerp, screenRay } fro
 import { FOV_Y_DEG } from "@/src/game/scene/cameraConfig";
 import { projectToScreen } from "@/src/game/scene/projectToScreen";
 import type { Vec3 } from "@/src/game/core/type";
-import { AIM_BAND_MAX_PX, aimBandScale, CARRY_CLEARANCE_ENABLED, CARRY_NEAR_MARGIN_M, clusterCarryAnchor, holdReachFrom, dragPlanePoint, dragRayPoint, DRIFT_CAP_FACTOR, RAY_CARRY_MIN_FRACTION, RAY_CARRY_MIN_M, rayPointNearest, segmentInFrame } from "./dragPlane";
+import { AIM_BAND_MAX_PX, aimBandScale, CARRY_CLEARANCE_ENABLED, CARRY_NEAR_MARGIN_M, clusterCarryAnchor, holdReachFrom, dragPlanePoint, dragRayPoint, DRIFT_CAP_FACTOR, RAY_CARRY_MIN_FRACTION, RAY_CARRY_MIN_M, boxSurfaceSamples, rayPointNearest, segmentHitsBox, segmentInFrame } from "./dragPlane";
 import { MIN_ORBIT_DISTANCE_M } from "@/src/game/scene/cameraConfig";
 
 // Landscape, the only orientation the game runs in (app.json).
@@ -342,4 +342,55 @@ test("hold-point pinning: the slerp-rotated anchor keeps the joint where the dra
   // And at t=1 the delta equals rotating by b then un-rotating by a applied to the anchor — a genuinely different vector (the visible turn).
   const d1 = quatRotateVec3(quatMultiply(b, quatConjugate(a)), anchor);
   assert.ok(Math.hypot(d1[0] - anchor[0], d1[1] - anchor[1], d1[2] - anchor[2]) > 0.1);
+});
+
+test("segmentHitsBox: blocks through interposed geometry, clears clean sightlines, receiver is excluded by the CALLER", () => {
+  const plate = { min: [-0.16, 0.49, -0.16] as Vec3, max: [0.16, 0.555, 0.16] as Vec3 };
+  const backAnchor: Vec3 = [0, 0.5, -0.15];
+  // Low front camera aiming at the far-rim anchor: the sightline passes through the plate body — blocked. In the hook the plate is the RECEIVER and exempt, but any OTHER part on this line blocks the same way.
+  assert.equal(segmentHitsBox([0, 0.52, 1.2], backAnchor, plate), true);
+  // Even a steep camera crosses the receiver's own top face to reach an anchor clamped inside its slab — which is WHY the receiver must be excluded by the caller, not by margin luck.
+  assert.equal(segmentHitsBox([0, 1.6, 0.9], backAnchor, plate), true);
+  // A clean sightline past a box that sits off the line.
+  assert.equal(segmentHitsBox([0, 1.6, 0.9], [0.5, 0.1, 0.5], plate), false);
+  // A box fully behind the endpoint never blocks.
+  assert.equal(segmentHitsBox([0, 0.52, 1.2], backAnchor, { min: [-0.1, 0, -0.9] as Vec3, max: [0.1, 0.3, -0.7] as Vec3 }), false);
+});
+
+test("occlusion exemption: a box containing the sightline's endpoint is the destination, not an obstacle", () => {
+  // EKET's stabilizer rod: the bridge anchor IS the dowel's box center, so the segment always ends inside that box — it must never read as blocked by it. The helper itself still reports the geometric hit; the CALLER exempts by containment, which this pins as the required contract.
+  const dowel = { min: [-0.02, 0.3, -0.02] as Vec3, max: [0.02, 0.36, 0.02] as Vec3 };
+  const anchor: Vec3 = [0, 0.33, 0];
+  // From afar the fractional end margin already swallows a tiny box; the exemption matters ZOOMED IN, where the margin shrinks below the box and the geometric hit is real.
+  assert.equal(segmentHitsBox([0.15, 0.45, 0.15], anchor, dowel), true);
+  const inBox =
+    anchor[0] >= dowel.min[0] - 0.005 && anchor[0] <= dowel.max[0] + 0.005 &&
+    anchor[1] >= dowel.min[1] - 0.005 && anchor[1] <= dowel.max[1] + 0.005 &&
+    anchor[2] >= dowel.min[2] - 0.005 && anchor[2] <= dowel.max[2] + 0.005;
+  assert.equal(inBox, true);
+});
+
+test("fastener visibility sampling: the cam lock is seen from behind the panel, not through it", () => {
+  // Back panel thin in z; the cam's box sits in/behind it, its exposed surface on the +z (rear) side.
+  const panel = { min: [-0.3, 0.0, 0.35] as Vec3, max: [0.3, 0.6, 0.365] as Vec3 };
+  const cam = { min: [0.18, 0.28, 0.358] as Vec3, max: [0.22, 0.32, 0.372] as Vec3 };
+  const samples = boxSurfaceSamples(cam);
+  assert.equal(samples.length, 14);
+  // Exposure filter: samples buried inside the panel drop out; the rear-side ones survive.
+  const inside = (pt: Vec3) =>
+    pt[0] >= panel.min[0] && pt[0] <= panel.max[0] &&
+    pt[1] >= panel.min[1] && pt[1] <= panel.max[1] &&
+    pt[2] >= panel.min[2] && pt[2] <= panel.max[2];
+  const exposed = samples.filter((pt) => !inside(pt));
+  assert.ok(exposed.length >= 4, `expected rear samples to survive, got ${exposed.length}`);
+  // Absolute end margin, as the gate uses: samples are pushed clear of geometry, so only ~8mm of surface contact is forgiven — a fractional margin would swallow the very panel a rear sample hides 1cm behind.
+  const frac = (eye: Vec3) =>
+    exposed.filter((pt) => {
+      const l = Math.hypot(pt[0] - eye[0], pt[1] - eye[1], pt[2] - eye[2]);
+      return !segmentHitsBox(eye, pt, panel, 0.008 / l);
+    }).length / exposed.length;
+  // From the FRONT (interior side): the panel stands between the eye and every exposed rear sample.
+  assert.ok(frac([0, 0.3, -0.6]) < 0.3, `front view saw ${(frac([0, 0.3, -0.6]) * 100).toFixed(0)}%`);
+  // From BEHIND the cabinet: the exposed surface is in plain sight.
+  assert.ok(frac([0.2, 0.3, 1.0]) >= 0.3, `rear view saw ${(frac([0.2, 0.3, 1.0]) * 100).toFixed(0)}%`);
 });

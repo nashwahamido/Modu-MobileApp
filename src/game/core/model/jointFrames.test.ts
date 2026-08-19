@@ -185,3 +185,20 @@ test("partAnchorOffsets omits parts with no frames at all", () => {
   const off = partAnchorOffsets(parts as never, {} as LiaisonMap, {});
   assert.equal(off["lonely" as never], undefined);
 });
+
+test("facingA: thin axis of the contact slab, signed from A toward B; bridge falls back to the center line", () => {
+  const parts = {
+    plate: part("plate"),
+    leg: part("leg"),
+  } as never;
+  const liaisons = {
+    L1: { id: "L1", a: "plate", b: "leg" },
+  } as never;
+  // Leg meets the plate's UNDERSIDE: overlap slab is thin in y, leg centre below → plate's socket faces DOWN.
+  const boxes = {
+    plate: box([-0.2, 0.5, -0.2], [0.2, 0.56, 0.2]),
+    leg: box([0.05, 0.1, 0.05], [0.15, 0.505, 0.15]),
+  } as never;
+  const frames = deriveJointFrames(parts, liaisons, boxes, 0.01);
+  assert.deepEqual(frames["L1" as never].facingA, [0, -1, 0]);
+});

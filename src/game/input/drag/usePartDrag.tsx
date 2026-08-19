@@ -34,7 +34,7 @@ import { computeFit, APPROACH_FACTOR } from "@/src/game/core/geometry/fit";
 import { isStaged } from "@/src/game/core/model/staging";
 import { isPickupType, placeId } from "@/src/game/core/ids";
 import { quatConjugate, quatMultiply, quatRotateVec3, quatSlerp, screenRay } from "@/src/game/core/geometry/math";
-import { aimBandScale, clusterCarryAnchor, dragPlanePoint, dragRayPoint, holdReachFrom, leashAlongRay, pointToSegmentPx, rayPointNearest, segmentInFrame } from "./dragPlane";
+import { AIM_BAND_MAX_PX, aimBandScale, clusterCarryAnchor, dragPlanePoint, dragRayPoint, holdReachFrom, leashAlongRay, boxSurfaceSamples, pointToSegmentPx, rayPointNearest, segmentHitsBox, segmentInFrame } from "./dragPlane";
 import { ActionId, AssemblyAction, Furniture, PartBox, PartDef, PartId, Quat, Vec3 } from "@/src/game/core/type";
 import { selectFirstDrop, useGameStore } from "@/src/game/core/store";
 import type { OrbitManipulator } from "../../scene/AssemblyScene";
@@ -77,6 +77,10 @@ const SNAP_DIST_MIN = 0.06;
 const SNAP_DIST_MAX = 0.2;
 /** How far past the screen edge an ALREADY-matched socket keeps its match. Acquisition needs the socket in frame (a snap must not be earnable against a hole the player can't see); release is this much more lenient so a mid-drag orbit that nudges the socket over the edge doesn't pop the magnet mid-pull. */
 const HOLD_OFFSCREEN_MARGIN_PX = 96;
+/** Minimum visible fraction of a fastener's exposed seated-geometry samples for it to be assemblable — the user's ">=30% of the target geometry in sight" rule. */
+const VIS_FRACTION_MIN = 0.3;
+/** Absolute end margin (m) for sample sightlines. The default fractional margin exists for anchor tests where the endpoint sits INSIDE geometry; samples are already pushed clear of all geometry, so their margin only absorbs surface contact — and a fractional margin at bench distance (4% of 1m = 4cm) swallows the very panel a rear sample hides behind. */
+const SAMPLE_HIT_MARGIN_M = 0.008;
 
 /** True when dragging `partId` carries other bodies with it on slideDriver (PartModel's "riding" mode / useSceneState's riding set): the LEAD of a multi-body component, or the carrier of a staged sub-assembly bringing its fitted hardware home. One predicate for both, so a part that is somehow both needs no extra case. */
 function hasRidingBodies(furniture: Furniture | null | undefined, partId: PartId | null | undefined): boolean {
@@ -106,7 +110,7 @@ interface DragSession {
   /** matchVisual is where the fit is MEASURED — the park pose for a part that enters along an axis,
    *  the seated hold point for everything else. GroupCandidate's own position stays what the
    *  release path places at. */
-  candidates: (GroupCandidate & { matchVisual: Vec3; seatVisual: Vec3 })[];
+  candidates: (GroupCandidate & { matchVisual: Vec3; seatVisual: Vec3; visSamples: Vec3[] | null; receiverIds: Set<PartId> })[];
   /** Live sockets outside the group, for wrong-target detection. */
   otherSockets: Vec3[];
   bakedPos: Vec3;
@@ -137,8 +141,12 @@ interface DragSession {
   depthTarget: Vec3 | null;
   startX: number;
   startY: number;
+  /** Last time the aim sat on a blocked socket — the chip's debounce clock: showing is instant, clearing waits, so grazing sightlines and the 160px rim don't strobe the label. */
+  blockedStamp: number;
   /** EXPERIMENT (drag-no-plane): assembly bounding radius around the pivot at pickup — sets the ray-carry depth "just in front of the model". */
   modelR: number;
+  /** Parts placed at pickup time — the occluder set for the socket line-of-sight gate. */
+  placedIds: Set<PartId>;
   /** How far this part reaches from the point the finger controls — what the carry must clear so no end of it crosses the lens. Captured at pickup because the bounds and the hold point are both fixed for the drag. */
   holdReach: number;
 }
@@ -380,13 +388,15 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
   const dragPlaneSetting = useGameStore((s) => s.settings.dragPlane);
   const partBoxes = useGameStore((s) => s.partBoxes);
   const furnitureForAnchors = useGameStore((s) => s.furniture);
-  // Derived once per (furniture, boxes) rather than per drag frame: anchors are baked-pose geometry and cannot change while a furniture is loaded. Empty until the scene's harvest lands, and every consumer falls back to the visual-center clamp until it does.
-  const jointAnchors = useMemo(() => {
-    if (!furnitureForAnchors || !Object.keys(partBoxes).length) return {};
+  // Derived once per (furniture, boxes) rather than per drag frame: anchors are baked-pose geometry and cannot change while a furniture is loaded. Empty until the scene's harvest lands, and every consumer falls back to the visual-center clamp until it does. Frames ride along for the pickup-time facing derivation, which additionally depends on what is PLACED and so cannot be memoized here.
+  const jointGeom = useMemo(() => {
+    if (!furnitureForAnchors || !Object.keys(partBoxes).length)
+      return { anchors: {} as Record<PartId, Vec3>, frames: null, liaisons: null };
     const liaisons = furnitureForAnchors.liaisons ?? {};
     const frames = deriveJointFrames(furnitureForAnchors.parts, liaisons, partBoxes);
-    return partAnchorOffsets(furnitureForAnchors.parts, liaisons, frames);
+    return { anchors: partAnchorOffsets(furnitureForAnchors.parts, liaisons, frames), frames, liaisons };
   }, [furnitureForAnchors, partBoxes]);
+  const jointAnchors = jointGeom.anchors;
 
   /** A part is "floating": float releaseBehavior is ON (the canvas re-grab has no separate toggle — it comes with float mode), the part is held with no live drag session, and it isn't in a post-release park/snap phase that owns the driver (this also keeps re-grab out of auto-return's recover animation window). */
   const isFloating = useCallback(() => {
@@ -591,12 +601,64 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
               seatVisual,
             };
           });
+          // Facing gate data (layer 1 of socket visibility): the direction each candidate's bench contact looks out of, from the joint frames and what is currently placed. A socket facing away from the camera is hidden by its own receiver — DALFRED's back-leg spots from a front view — and must not be acquirable however close the aim gets in pixels.
+          // Occluders must be parts actually STANDING at their baked pose. A placed part whose cluster is not yet combined renders stashed off to the side, but its harvested box sits at the assembled pose — on EKET that put a phantom drawerFront across the cabinet's open face and blocked the stabilizer rod from the very view that plainly shows its spot (probe: occ=drawerFront_1 with the cabinet visibly open). Un-combined cluster parts are therefore not occluders; seed-cluster and cluster-less parts are. Known residual gap, same family: hardware fitted onto a STAGED carrier renders at the stage offset while its box stays baked — accept until it bites, the staged window is short.
+          const combinedClusters = new Set(
+            furniture.actions
+              .filter((a) => a.type === "combineClusters" && a.cluster && doneSet.has(a.actionId))
+              .map((a) => a.cluster!),
+          );
+          const atBakedPose = (pid: PartId): boolean => {
+            const cl = furniture.parts[pid]?.cluster;
+            if (!cl) return true;
+            return !!furniture.clusters?.[cl]?.seed || combinedClusters.has(cl);
+          };
+          const placedSet = new Set<PartId>(
+            furniture.actions
+              .filter((a) => a.type === "placePart" && a.partId && doneSet.has(a.actionId))
+              .map((a) => a.partId!)
+              .filter(atBakedPose),
+          );
+          const liaisonMap = furniture.liaisons ?? {};
+          const candidatesWithFacing = candidates.map((c) => {
+            // The candidate's RECEIVERS (liaison partners) are exempt from the occlusion gate: the seat anchor is clamped INTO the receiver's box, so every legitimate sightline ends inside it — treating the receiver as an occluder blocks all its own sockets from any angle (measured: the steep-camera approach crosses 5.5cm of DALFRED's plate to reach a rim anchor).
+            const receiverIds = new Set<PartId>();
+            for (const l of Object.values(liaisonMap)) {
+              if (l.a === c.action.partId) receiverIds.add(l.b);
+              if (l.b === c.action.partId) receiverIds.add(l.a);
+            }
+            // FASTENER visibility is measured against the seated part's own GEOMETRY (the user's rule): sample the fastener's baked box surface, discard samples buried inside placed geometry, and per frame require >=30% of the exposed remainder to have a clear line of sight. Face heuristics were falsified twice on EKET's cam lock — arrival direction (-engageDir) points along the panel and blocked legitimate views of the bore face; nearest-receiver-face picked the interior face and allowed assembling the rear cam THROUGH the panel from the front. Sampling makes the receiver a legitimate occluder of the fastener's buried side, which is the physical truth both heuristics missed. Structural parts keep the anchor line-of-sight test.
+            const cPart2 = c.action.partId ? furniture.parts[c.action.partId] : undefined;
+            let visSamples: Vec3[] | null = null;
+            if (cPart2?.type === "fastener") {
+              const fb = partBoxes[cPart2.partId];
+              if (fb) {
+                const inside = (pt: Vec3, bx: { min: Vec3; max: Vec3 }) =>
+                  pt[0] >= bx.min[0] && pt[0] <= bx.max[0] &&
+                  pt[1] >= bx.min[1] && pt[1] <= bx.max[1] &&
+                  pt[2] >= bx.min[2] && pt[2] <= bx.max[2];
+                const exposed = boxSurfaceSamples(fb).filter((pt) => {
+                  for (const pid of placedSet) {
+                    const bx = partBoxes[pid];
+                    if (bx && inside(pt, bx)) return false;
+                  }
+                  return true;
+                });
+                visSamples = exposed.length ? exposed : null;
+              }
+            }
+            return {
+              ...c,
+              visSamples,
+              receiverIds,
+            };
+          });
           // DEV pickup probe: one line per pickup with the first candidate's WORLD anchors, to catch an anchor landing in the wrong space (a seat that projects fine can still sit centimetres from the LENS — band collapse, unmatched drags).
           if (__DEV__ && candidates[0]) {
             const c0 = candidates[0];
             const j = jointAnchors[c0.action.partId!];
             console.log(
-              `[pickup] ${c0.action.actionId} pos=${c0.position.map((v) => v.toFixed(3)).join(",")} hold=${c0.holdPosition.map((v) => v.toFixed(3)).join(",")} seat=${c0.seatVisual.map((v) => v.toFixed(3)).join(",")} match=${c0.matchVisual.map((v) => v.toFixed(3)).join(",")} anchor=${j ? j.map((v) => v.toFixed(3)).join(",") : "none"} BUILD=noplane6`,
+              `[pickup] ${c0.action.actionId} pos=${c0.position.map((v) => v.toFixed(3)).join(",")} hold=${c0.holdPosition.map((v) => v.toFixed(3)).join(",")} seat=${c0.seatVisual.map((v) => v.toFixed(3)).join(",")} match=${c0.matchVisual.map((v) => v.toFixed(3)).join(",")} anchor=${j ? j.map((v) => v.toFixed(3)).join(",") : "none"} BUILD=noplane15`,
             );
           }
           const groupIds = new Set(candidates.map((c) => c.action.actionId));
@@ -607,7 +669,7 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
             .map((a) => targetPositionForAction(a, furniture.parts, doneSet));
           session.current = {
             base,
-            candidates,
+            candidates: candidatesWithFacing,
             otherSockets,
             bakedPos: part.pose.position,
             bakedRot: part.pose.rotation,
@@ -621,8 +683,10 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
             depthTarget: null,
             startX: e.absoluteX,
             startY: e.absoluteY,
+            blockedStamp: 0,
             modelR,
             holdReach,
+            placedIds: placedSet,
           };
         })
         .onUpdate((e) => {
@@ -656,6 +720,10 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
           let band = 1;
           // The slerp-rotated grab anchor of this frame, for the probe: with hold-point pinning the visual center rides at grabOffset only while unrotated.
           let probeAnchor: Vec3 | null = null;
+          // Whether the aim is parked on a facing-blocked socket with nothing matchable — drives the "Try turning the camera" chip.
+          let aimBlockedNow = false;
+          // Which placed part's box blocked the nearest skipped candidate — probe-only, names the occluder in one log line.
+          let blockedBy: PartId | null = null;
           // Per-profile acceptance radius; also the magnet's full-strength point so "looks seated" and "is accepted" stay the same distance. Read before the matcher because the crowding cap below is expressed against it.
           const snapDist = Math.min(
             SNAP_DIST_MAX,
@@ -715,10 +783,67 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
             };
             let nearestPx = Infinity;
             let nearestMPerPx = 1;
+            // Occlusion gate (layer 1 of socket visibility): a socket whose line of sight from the camera passes through another PLACED part's box is hidden — DALFRED's back-leg spots behind the plate from a front view — and is skipped for acquisition exactly like an off-frame one. The receiver excludes itself for free: the anchor is clamped INTO the receiver's box, so its own slab never spans the segment interior past the margin. The nearest skipped-px is remembered so the chip can say WHY nothing matches ("Try turning the camera") instead of hunting silently — the off-frame gate shipped silent and read as a bug.
+            const laF = manipulator?.getLookAt();
+            const occludedOf = (c: (typeof s.candidates)[number]): PartId | null => {
+              if (!laF) return null;
+              for (const pid of s.placedIds) {
+                if (pid === c.action.partId || c.receiverIds.has(pid)) continue;
+                const bx = partBoxes[pid];
+                if (!bx) continue;
+                // A box CONTAINING the seat anchor is the destination's home, not an obstacle — EKET's stabilizer rod anchors AT its bridging dowel's box center, so without this the placed dowel self-occludes the rod from every camera and the part is unplaceable.
+                const e2 = 0.005;
+                if (
+                  c.seatVisual[0] >= bx.min[0] - e2 && c.seatVisual[0] <= bx.max[0] + e2 &&
+                  c.seatVisual[1] >= bx.min[1] - e2 && c.seatVisual[1] <= bx.max[1] + e2 &&
+                  c.seatVisual[2] >= bx.min[2] - e2 && c.seatVisual[2] <= bx.max[2] + e2
+                )
+                  continue;
+                if (segmentHitsBox(laF[0], c.seatVisual, bx)) return pid;
+              }
+              return null;
+            };
+            let blockedPx = Infinity;
             for (const c of s.candidates) {
               const d = distPx(c);
               // A socket the player cannot SEE cannot be aimed at — off-frame candidates are skipped for acquisition (a snap must never be earned against an invisible hole; measured: a seat at y=-88 was still inside the capture band near the top edge). The CURRENT match is not acquired here either — it is held through the more generous nearFrame test below, so a mid-drag orbit that nudges the socket just past the edge does not pop the magnet.
               if (!d.inFrame) continue;
+              // Fastener visibility gate: >=30% of the exposed seated-geometry samples must be in clear sight.
+              if (c.visSamples && laF) {
+                let vis = 0;
+                let blocker: PartId | null = null;
+                for (const pt of c.visSamples) {
+                  let hit: PartId | null = null;
+                  for (const pid of s.placedIds) {
+                    if (pid === c.action.partId) continue;
+                    const bx = partBoxes[pid];
+                    const segLen = Math.hypot(pt[0] - laF[0][0], pt[1] - laF[0][1], pt[2] - laF[0][2]) || 1;
+                    if (bx && segmentHitsBox(laF[0], pt, bx, SAMPLE_HIT_MARGIN_M / segLen)) {
+                      hit = pid;
+                      break;
+                    }
+                  }
+                  if (hit) blocker = hit;
+                  else vis++;
+                }
+                if (vis / c.visSamples.length < VIS_FRACTION_MIN) {
+                  if (d.px < blockedPx) {
+                    blockedPx = d.px;
+                    blockedBy = blocker ?? c.action.partId ?? null;
+                  }
+                  continue;
+                }
+                // Sampling answered visibility outright; the anchor line-of-sight test in the other branch is for structural parts.
+              } else {
+                const occ = occludedOf(c);
+                if (occ) {
+                  if (d.px < blockedPx) {
+                    blockedPx = d.px;
+                    blockedBy = occ;
+                  }
+                  continue;
+                }
+              }
               if (d.px < nearestPx) {
                 nearestPx = d.px;
                 nearestMPerPx = d.mPerPx;
@@ -748,6 +873,7 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
               (c) => c.action.actionId === s.matchedActionId,
             );
             // The hold test runs on the current match's OWN scale and band: when the only in-approach socket is the held one and every rival is off-frame, the loop above never set nearestMPerPx, and judging the hold by a defaulted scale would drop a perfectly on-screen match.
+            // The current match keeps its own laxer facing threshold: acquisition needs the socket clearly presented, but a match already in hand survives a grazing angle so an orbit through edge-on does not strobe the magnet.
             const currentD = current ? distPx(current) : null;
             const currentPx = currentD?.nearFrame ? currentD.px : Infinity;
             const currentBand = currentD
@@ -763,6 +889,10 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
               target = nearest;
             }
             s.matchedActionId = target?.action.actionId ?? null;
+            // The chip's "turn the camera" case: nothing matched, and the closest thing to the finger was a blocked socket within chip-worthy aim range. Debounced asymmetrically — ON immediately, OFF only after 300ms clear of every trigger — because the raw condition rides three sharp edges (the 160px rim, match acquisition, grazing sightlines) and read as flicker on device. A real match still silences it the same frame: fit language outranks coaching.
+            const rawBlocked = !target && blockedPx <= AIM_BAND_MAX_PX;
+            if (rawBlocked) s.blockedStamp = Date.now();
+            aimBlockedNow = !target && (rawBlocked || Date.now() - s.blockedStamp < 300);
             // The SEGMENT distance owns matching only. The VISIBLE pulls (magnet position, rotation ease, fit) measure to the park point itself: on-device, letting the magnet feed on the segment turned the whole hole→park corridor into a capture zone — the screw leapt to the socket the moment the finger crossed the corridor and stayed there while the finger travelled ("it does not ride my finger", phone screenshot with Drop it! stuck on). Screen-invisible consumers (depth blend) keep the segment aim.
             if (target) {
               const spT = worldToScreen(target.matchVisual);
@@ -897,9 +1027,10 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
           // Acceptance under the no-plane carry measures the PLAYER's error — 2D aim to the delivery point — not the transient world distance. The depth glide is SYSTEM-owned and finishes on its own clock; judging fit on the world gap meant a release with the finger dead on the socket bounced back to the tray purely because the glide had frames left (emulator run: 3 px of aim, 0.3 m of unfinished depth, fit stuck at held). Level mode and upright parts keep computeFit: their held depth is real, not a glide in progress.
           const fs =
             target && depthAim
-              ? pullD <= snapDist * band
+              ? // Acceptance arms on the SEGMENT aim (depthAim.d): the player aims at the HOLE they can see, and the park/stage delivery pose sits a fixed world offset from it along the part's axis — measuring the green to the delivery point (pullD) made that offset the required aim error, negligible zoomed out and 100+px zoomed in ("must aim lower than the target to snap"). The MAGNET stays on pullD: position pull keyed to the segment is the corridor-capture regression; a state flag keyed to it is not, and the release animation carries the part in from wherever it visually hovers.
+                depthAim.d <= snapDist * band
                 ? "nearCorrect"
-                : pullD <= snapDist * band * APPROACH_FACTOR
+                : depthAim.d <= snapDist * band * APPROACH_FACTOR
                   ? "approaching"
                   : "held"
               : target
@@ -916,6 +1047,7 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
             s.matchedActionId !== store.matchedActionId
           )
             store.setDragFit(fs, s.matchedActionId);
+          if (aimBlockedNow !== store.aimBlocked) store.setAimBlocked(aimBlockedNow);
           // DEV drag probe (throttled): one line per ~quarter second into the Metro console, enough to reconstruct which mechanism owns the part when it separates from the finger. gapPx is the user-facing invariant — the held part's visual center vs the touch, on screen.
           if (__DEV__ && Date.now() - lastDragLog > 250) {
             lastDragLog = Date.now();
@@ -945,7 +1077,7 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
             const nSeat = nearest?.seatVisual ? worldToScreen(nearest.seatVisual) : null;
             const nPark = nearest?.matchVisual ? worldToScreen(nearest.matchVisual) : null;
             console.log(
-              `[drag] f=(${e.absoluteX.toFixed(0)},${e.absoluteY.toFixed(0)}) part=(${hp ? `${hp.x.toFixed(0)},${hp.y.toFixed(0)}` : "?"}) gapPx=${gapPx} p=${p ? p.map((v) => v.toFixed(2)).join(",") : "null"} plane=${s.planeY.toFixed(2)} upright=${!!s.uprightAnchor} aim=${Number.isFinite(bestD) ? bestD.toFixed(3) : "inf"} pull=${Number.isFinite(pullD) ? pullD.toFixed(3) : "inf"} band=${band.toFixed(2)} cam=${camDist.toFixed(3)} reach=${s.holdReach.toFixed(3)} carry=${carryDepth} blend=${s.depthBlend.toFixed(2)} tgt=${s.matchedActionId ?? "-"} near=${nearest?.action.actionId ?? "-"} seat=(${nSeat ? `${nSeat.x.toFixed(0)},${nSeat.y.toFixed(0)}` : "?"}) park=(${nPark ? `${nPark.x.toFixed(0)},${nPark.y.toFixed(0)}` : "?"}) fit=${fs} BUILD=noplane6`,
+              `[drag] f=(${e.absoluteX.toFixed(0)},${e.absoluteY.toFixed(0)}) part=(${hp ? `${hp.x.toFixed(0)},${hp.y.toFixed(0)}` : "?"}) gapPx=${gapPx} p=${p ? p.map((v) => v.toFixed(2)).join(",") : "null"} plane=${s.planeY.toFixed(2)} upright=${!!s.uprightAnchor} aim=${Number.isFinite(bestD) ? bestD.toFixed(3) : "inf"} pull=${Number.isFinite(pullD) ? pullD.toFixed(3) : "inf"} band=${band.toFixed(2)} cam=${camDist.toFixed(3)} reach=${s.holdReach.toFixed(3)} carry=${carryDepth} blend=${s.depthBlend.toFixed(2)} tgt=${s.matchedActionId ?? "-"} blk=${aimBlockedNow ? 1 : 0} occ=${blockedBy ?? "-"} near=${nearest?.action.actionId ?? "-"} seat=(${nSeat ? `${nSeat.x.toFixed(0)},${nSeat.y.toFixed(0)}` : "?"}) park=(${nPark ? `${nPark.x.toFixed(0)},${nPark.y.toFixed(0)}` : "?"}) fit=${fs} BUILD=noplane15`,
             );
           }
         })

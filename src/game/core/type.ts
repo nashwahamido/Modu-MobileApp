@@ -125,6 +125,8 @@ export interface JointFrame {
   offsetB: Vec3;
   /** How the anchor was found: a direct box overlap, or via a fastener bridging an air gap. */
   via: "direct" | "bridge";
+  /** Unit direction the contact FACES, from part A's surface toward part B — the thin axis of the direct overlap slab (a contact is a thin sheet, and its normal is the slab's smallest dimension), or the center-to-center line for a bridged joint. Facing is what visibility gating needs: a socket whose facing points away from the camera is on the far side of its own part, invisible no matter what occludes it. */
+  facingA: Vec3;
 }
 
 export type RawPartDef = Omit<

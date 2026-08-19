@@ -69,6 +69,8 @@ interface GameState {
   combiningCluster: ClusterId | null;
   /** Live snap feedback while dragging a held part. */
   fitState: FitState;
+  /** The aim is parked on a socket whose contact faces away from the camera (facing gate) — the chip coaches a camera turn instead of hunting silently. */
+  aimBlocked: boolean;
   /** Nearest interchangeable socket the held part would snap to. */
   matchedActionId: ActionId | null;
   /** FREE-mode soft hint shown when reaching for a not-yet-available part. */
@@ -165,6 +167,7 @@ interface GameState {
 
   beginPickup: (actionId: ActionId) => void;
   setDragFit: (fitState: FitState, matchedActionId: ActionId | null) => void;
+  setAimBlocked: (aimBlocked: boolean) => void;
   releaseHeld: () => "snap" | "recover";
   cancelHeld: () => void;
 
@@ -202,6 +205,7 @@ const CLEARED = {
   heldActionId: null,
   examine: null,
   fitState: "idle" as FitState,
+  aimBlocked: false,
   matchedActionId: null,
   hint: null,
   hintTone: "info" as const,
@@ -505,6 +509,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
     set({ ...CLEARED, heldActionId: actionId, fitState: "held" });
   },
   setDragFit: (fitState, matchedActionId) => set({ fitState, matchedActionId }),
+  setAimBlocked: (aimBlocked) => set({ aimBlocked }),
   releaseHeld: () => {
     const { heldActionId, fitState, matchedActionId } = get();
     if (!heldActionId) return "recover";

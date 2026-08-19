@@ -46,9 +46,19 @@ export function deriveJointFrames(
     if (!A || !B) continue;
     let anchor: Vec3 | null = null;
     let via: "direct" | "bridge" = "direct";
+    let facingA: Vec3 | null = null;
     const ov = boxOverlap(A, B, expansion);
     if (ov) {
       anchor = boxCenter(ov);
+      // The contact is a thin slab; its normal is the slab's SMALLEST extent axis. Signed from A toward B by the box centers, so facingA is the direction A's socket surface looks out of.
+      const ext = [ov.max[0] - ov.min[0], ov.max[1] - ov.min[1], ov.max[2] - ov.min[2]];
+      let k = 0;
+      if (ext[1] < ext[k]) k = 1;
+      if (ext[2] < ext[k]) k = 2;
+      const s = boxCenter(B)[k] >= boxCenter(A)[k] ? 1 : -1;
+      const f: [number, number, number] = [0, 0, 0];
+      f[k] = s;
+      facingA = f;
     } else {
       const bridge = partList.find(
         (p) => p.type === "fastener" && p.attached?.includes(l.a as never) && p.attached?.includes(l.b as never) && boxes[p.partId],
@@ -56,16 +66,61 @@ export function deriveJointFrames(
       if (bridge) {
         anchor = boxCenter(boxes[bridge.partId]);
         via = "bridge";
+        // No contact slab across an air gap: the best available facing is the line between the parts.
+        const d = sub3(boxCenter(B), boxCenter(A));
+        const dl = Math.hypot(d[0], d[1], d[2]) || 1;
+        facingA = [d[0] / dl, d[1] / dl, d[2] / dl];
       }
     }
-    if (!anchor) continue;
+    if (!anchor || !facingA) continue;
     out[l.id] = {
       liaison: l.id,
       anchor,
       offsetA: sub3(clampIntoBox(anchor, A), parts[l.a].pose.position),
       offsetB: sub3(clampIntoBox(anchor, B), parts[l.b].pose.position),
       via,
+      facingA,
     };
+  }
+  return out;
+}
+
+/**
+ * The world direction each part's BENCH CONTACT faces — what visibility gating tests against the
+ * camera. For a candidate part, the surface that matters is on its already-placed partner: the spot
+ * the part will land on. That spot looks outward FROM the partner TOWARD the arriving part, which is
+ * facingA when the partner is the liaison's A side and -facingA when it is B. Averaged over every
+ * placed partner (a leg meeting two plates gets the blend), normalized; parts with no placed-partner
+ * frame are absent and the consumer skips the test — no frame means no evidence, and gating on no
+ * evidence would block legitimate snaps.
+ */
+export function partFacingDirs(
+  parts: Record<PartId, PartDef>,
+  liaisons: LiaisonMap,
+  frames: Record<LiaisonId, JointFrame>,
+  isPlaced: (partId: PartId) => boolean,
+): Record<PartId, Vec3> {
+  const acc: Record<string, Vec3[]> = {};
+  for (const f of Object.values(frames)) {
+    const l = liaisons[f.liaison];
+    if (!l) continue;
+    if (isPlaced(l.a) && !isPlaced(l.b)) (acc[l.b] ??= []).push(f.facingA);
+    if (isPlaced(l.b) && !isPlaced(l.a))
+      (acc[l.a] ??= []).push([-f.facingA[0], -f.facingA[1], -f.facingA[2]]);
+  }
+  const out: Record<PartId, Vec3> = {};
+  for (const p of Object.values(parts)) {
+    const list = acc[p.partId];
+    if (!list?.length) continue;
+    const v: Vec3 = [
+      list.reduce((s, w) => s + w[0], 0),
+      list.reduce((s, w) => s + w[1], 0),
+      list.reduce((s, w) => s + w[2], 0),
+    ];
+    const vl = Math.hypot(v[0], v[1], v[2]);
+    // Opposed facings cancel (a part sandwiched between two placed partners): no single visible side exists, so no gate.
+    if (vl < 0.5) continue;
+    out[p.partId] = [v[0] / vl, v[1] / vl, v[2] / vl];
   }
   return out;
 }

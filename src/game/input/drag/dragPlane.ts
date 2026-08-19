@@ -239,6 +239,58 @@ export function segmentInFrame(
   return inF(ax, ay) || inF(bx, by) || inF((ax + bx) / 2, (ay + by) / 2);
 }
 
+/** Whether the SEGMENT from `from` to `to` passes through `box` — the socket-visibility line-of-sight test, slab method. The interior margin keeps the segment's own endpoints from counting: `to` sits ON the receiver (the anchor is clamped into its box), and grazing the last centimetres into the socket is arrival, not occlusion. Facing normals were tried for this job first and rejected: a DALFRED leg's contact slab faces DOWN (leg top meets the plate underside), so a facing gate blocks all four legs from any normal elevated camera — line-of-sight is the fact the player's eye actually experiences. */
+export function segmentHitsBox(
+  from: Vec3,
+  to: Vec3,
+  box: { min: Vec3; max: Vec3 },
+  margin = 0.04,
+): boolean {
+  let t0 = 0;
+  let t1 = 1;
+  for (let k = 0; k < 3; k++) {
+    const d = to[k] - from[k];
+    if (Math.abs(d) < 1e-9) {
+      if (from[k] < box.min[k] || from[k] > box.max[k]) return false;
+      continue;
+    }
+    let a = (box.min[k] - from[k]) / d;
+    let b = (box.max[k] - from[k]) / d;
+    if (a > b) [a, b] = [b, a];
+    if (a > t0) t0 = a;
+    if (b < t1) t1 = b;
+    if (t0 > t1) return false;
+  }
+  // The overlap [t0,t1] must include a stretch genuinely BETWEEN the endpoints, past the margins.
+  const lo = Math.max(t0, margin);
+  const hi = Math.min(t1, 1 - margin);
+  return hi > lo;
+}
+
+/** Sample points over a box's surface — 8 corners and 6 face centers, each pushed `push` metres outward from the box center so a sample seated flush against neighbouring geometry escapes it. These are the fastener-visibility probes: the fraction of them with a clear line of sight IS "how much of the seated fastener the camera can see". The rule is the user's: a fastener is assemblable when >=30% of its target-position geometry is visible — face heuristics (arrival direction, nearest face) were both falsified on EKET's cam lock, whose bore orientation encodes nothing about which side of the panel it is reached from. */
+export function boxSurfaceSamples(
+  box: { min: Vec3; max: Vec3 },
+  push = 0.004,
+): Vec3[] {
+  const c: Vec3 = [
+    (box.min[0] + box.max[0]) / 2,
+    (box.min[1] + box.max[1]) / 2,
+    (box.min[2] + box.max[2]) / 2,
+  ];
+  const pts: Vec3[] = [];
+  for (const x of [box.min[0], box.max[0]])
+    for (const y of [box.min[1], box.max[1]])
+      for (const z of [box.min[2], box.max[2]]) pts.push([x, y, z]);
+  pts.push([c[0], c[1], box.min[2]], [c[0], c[1], box.max[2]]);
+  pts.push([c[0], box.min[1], c[2]], [c[0], box.max[1], c[2]]);
+  pts.push([box.min[0], c[1], c[2]], [box.max[0], c[1], c[2]]);
+  return pts.map((p) => {
+    const d: Vec3 = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
+    const l = Math.hypot(d[0], d[1], d[2]) || 1;
+    return [p[0] + (d[0] / l) * push, p[1] + (d[1] / l) * push, p[2] + (d[2] / l) * push];
+  });
+}
+
 /** The point on the finger's ray nearest `socket` — the socket-depth policy's target: on the ray, so exactly under the finger on screen, at the depth where vertical finger tremor costs nothing (a grazing work plane turns the same tremor into metres). `t` is floored at 0 so a socket behind the camera degrades to the eye rather than a point behind it. */
 export function rayPointNearest(eye: Vec3, dir: Vec3, socket: Vec3): Float3 {
   const dd = dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2] || 1;
