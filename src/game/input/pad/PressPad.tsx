@@ -101,7 +101,7 @@ export function PressPad({
   );
 }
 
-/** The frame the five controls share: where the cluster sits, and the caption under it. */
+/** The frame the five controls share: where the cluster sits, and the caption under it. `wrap` is MIRRORED BY EACH CONTROL at its own render site (useMirror), not here — this is a plain StyleSheet with no hook to hang it on, and the controls are the things that know they are on screen. */
 export const pressPadStyles = StyleSheet.create({
   wrap: {
     position: "absolute",

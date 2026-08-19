@@ -28,15 +28,21 @@ import type { Theme } from "@/src/game/ui/system/theme";
 export function SkipTutorialButton({ onPress }: { onPress: () => void }) {
   const styles = useFixedStyles(makeStyles);
   return (
-    <Pressable
-      style={({ pressed }) => [styles.skip, pressed && styles.skipPressed]}
-      onPress={onPress}
-      hitSlop={10}
-      accessibilityRole="button"
-      accessibilityLabel="Skip the tutorial"
-    >
-      <Text style={styles.skipText}>Skip tutorial</Text>
-    </Pressable>
+    // A full-width SLOT that centres the link, rather than an absolutely-positioned Pressable with
+    // alignSelf: an absolute box with no left/right has no row to align itself in, which is why the
+    // link stayed where its old top/right put it. The slot spans the screen and does the centring;
+    // the Pressable inside it is just the button.
+    <View style={styles.skipSlot} pointerEvents="box-none">
+      <Pressable
+        style={({ pressed }) => [styles.skip, pressed && styles.skipPressed]}
+        onPress={onPress}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel="Skip the tutorial"
+      >
+        <Text style={styles.skipText}>Skip tutorial</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -81,10 +87,20 @@ export function SkipTutorialConfirm({
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
     // Bottom-centre, away from the joystick and the tray — the two places a thumb already lives.
-    skip: {
+    // The slot: bottom of the screen, full width, centring its child.
+    //
+    // 24, not 16: the chips sit at bottom:16 and are 36 tall, so their CENTRE line is 34 up. This
+    // link is ~22 tall with its padding, so 24 puts its own centre on that same line — matching the
+    // chips' baseline instead left it sitting low against them.
+    skipSlot: {
       position: "absolute",
-      bottom: 6,
-      alignSelf: "center",
+      left: 0,
+      right: 0,
+      bottom: 24,
+      alignItems: "center",
+      zIndex: 40,
+    },
+    skip: {
       paddingHorizontal: SPACE.md,
       paddingVertical: SPACE.xs,
       borderRadius: RADIUS.pill,

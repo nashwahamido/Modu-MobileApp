@@ -15,6 +15,9 @@ export interface Roster {
   startFresh: () => Promise<void>;
   // Named so an empty roster tells you which variable to fill, rather than just that it is empty.
   envVar: string;
+  /** Presented as CHARACTERS (avatar cards) rather than a list of buttons. True for the demo roster
+   *  only: an attendee picks a player, where a developer picks an account. */
+  showcase?: boolean;
 }
 
 const DEV_ROSTER: Roster = {
@@ -28,11 +31,12 @@ const DEV_ROSTER: Roster = {
 
 const SHOWCASE_ROSTER: Roster = {
   title: "Showcase accounts",
-  pickerLabel: "or try a demo account",
+  pickerLabel: "Try a Demo Account",
   accounts: SHOWCASE_ACCOUNTS,
   signIn: signInToShowcaseAccount,
   startFresh: startFreshShowcaseAccount,
   envVar: "EXPO_PUBLIC_SHOWCASE_ACCOUNTS",
+  showcase: true,
 };
 
 export const ENABLED_ROSTERS: Roster[] = [

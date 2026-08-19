@@ -28,7 +28,7 @@ export const LABELS = {
 } as LabelMap;
 
 export const CLUSTERS = {
-  whole: { id: "whole", label: "Step stool" },
+  whole: { id: "whole", label: "Step Stool" },
 } as Record<ClusterId, ClusterDef>;
 
 export const STRUCTURE = {

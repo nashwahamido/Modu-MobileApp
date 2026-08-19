@@ -1,10 +1,12 @@
 import { router } from "expo-router";
 import type { Href } from "expo-router";
 import * as Speech from "@/src/onboarding/speech";
+import { introPath, optionPath, promptPath } from "@/src/onboarding/voiceAssets";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Image,
+  ImageBackground,
   Pressable,
   StyleSheet,
   Text,
@@ -26,6 +28,7 @@ import { Button } from "@/src/game/ui/system/Button";
 import { ACCENT_LIGHT, ELEVATION, FONT, SPACE, TYPE, useStyles, useUiScale, useReadingFont } from "@/src/game/ui/system/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import { saveOnboardingResults } from "@/src/services/onboarding";
+import { useGameStore } from "@/src/game/core/store";
 import type { Theme } from "@/src/game/ui/system/theme";
 
 import Reanimated, {
@@ -39,22 +42,73 @@ import Reanimated, {
 } from "react-native-reanimated";
 import type { ReactNode } from "react";
 import type { PressableProps, StyleProp, ViewProps, ViewStyle } from "react-native";
+import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
 
-/** Flat, not a ramp — the intro is one card on an empty field and a gradient behind it only pulled
- *  the eye off the thing being read. */
-const BG_SOLID = "#A9BFD9";
+/** What shows for the frame before the backdrop image decodes, and behind it if the asset ever fails to load. Sampled from the artwork's centre so the swap is invisible rather than a blue flash.
+ *  Was a flat #A9BFD9 when this screen painted its own field; the art is the field now. */
+const BG_SOLID = "#F3BBA9";
 /** The card's rim. Lavender at 3pt, matching the catalogue's selected-card treatment. */
 const BUBBLE_RIM = ACCENT_LIGHT;
 /** One source for the bubble's width: the reveal animates a clip to exactly this, and the card
  *  inside is pinned to it so nothing squeezes as the clip opens. */
+/** The drawn bubble is an IMAGE now, and these three numbers are measured off it (see speech-bubble.png, trimmed to its alpha bounds) rather than eyeballed — the art is stretched to the box, so every offset inside has to be a FRACTION of the box or it drifts the moment the box changes size.
+ *
+ *  BODY_LEFT   where the rounded body starts. Everything left of it is the tail, which must stay clear of text.
+ *  ASPECT      the art's own ratio, kept only as a note: the box is content-sized, so the art stretches to it. */
+const BUBBLE = {
+  BODY_LEFT: 0.1092,
+  ASPECT: 1.9608,
+  /** How far down the box the tail points, as a fraction of the height. NOT 0.5 — the art puts it a little below centre, so the mascot is nudged down by the difference to meet it (see mascotOffset at the call site). A tail aimed past the character's shoulder is the kind of thing that reads as wrong without being obviously wrong. */
+  TAIL_CENTRE: 0.5407,
+} as const;
+
+/** THE ART CARRIES ITS OWN SHADOW — the darker band along the bottom edge, which follows the corners exactly because it was drawn with them.
+ *
+ *  A drawn one was tried first, a view behind the image wearing the catalogue's SHADOW. It could never line up: the art is stretched unevenly to a content-sized box, so its corners render as ELLIPSES (about 19pt across and 24pt down at the resting size) while a view's borderRadius is always a circle. Whatever radius the view took, it showed past the art at all four corners. Nothing to reconcile once the art's own shadow is simply left in place.
+ *
+ *  BAND is how deep that shadow runs, as a fraction of the height — the text's bottom padding has to clear it or the last line sits on the dark strip. */
+const BUBBLE_BAND = 0.0485;
+
+/** Extra room in the reveal's clip so nothing is sliced at the right edge as it opens. */
+const SHADOW_ROOM = 12;
+
+/** The option cards' lift, lifted from the catalogue's own local SHADOW (src/app/(game)/catalogue.tsx) — chrome on this screen's art should read the same as chrome on the catalogue's watercolour, and the global ELEVATION scale is tuned for the dark HUD instead.
+ *
+ *  RN 0.81 + the new architecture support `boxShadow`, which renders on ANDROID with a real colour and alpha — unlike `elevation`, which ignores shadowColor/shadowOpacity and draws its own soft grey ramp regardless. The rest of the keys are the iOS fallback for the old architecture and are harmless where boxShadow works. Darker: raise the alpha. Sharper: lower the blur (the third length).
+ *
+ *  RAISED is the SELECTED card. With the strokes gone, "chosen" is carried by the fill, the accent text, ScaleOnSelect's 5.5% pop — and this: a card you have picked sits higher off the page than the two you have not. */
+const CARD_SHADOW = {
+  boxShadow: "0px 5px 4px rgba(0,0,0,0.40)",
+  shadowColor: "#000",
+  shadowOpacity: 0.8,
+  shadowRadius: 2,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 6,
+} as const;
+
+const CARD_SHADOW_RAISED = {
+  boxShadow: "0px 8px 7px rgba(0,0,0,0.42)",
+  shadowColor: "#000",
+  shadowOpacity: 0.8,
+  shadowRadius: 3.5,
+  shadowOffset: { width: 0, height: 7 },
+  elevation: 10,
+} as const;
+
+// The mascot carries NO shadow. Three versions were tried and none earned its place: a filled pill and a stack of ellipses both read as a grey object lying behind him (React Native has no blur primitive for a view, so a soft edge cannot be drawn), and a baked silhouette — under him, then behind him — was either too present or invisible. He sits on the backdrop unshadowed, which is also what every other character art in the app does. Only the BUBBLE is lifted off the page, and one shadowed thing in the row is what makes it read as the thing being said.
+
 /** The bubble's width ON A PHONE. Anything wider computes it from the screen instead — see bubbleW
  *  at the call site. A fixed width plus a UI scale overflows a tablet, because the scale grows
  *  faster than the extra screen it is there to fill: 640pt of row at 1.75 is 1120pt against 1280pt
  *  of tablet, before padding. */
 const BUBBLE_W = 470;
-/** What the mascot and its gap take beside the bubble, in phone points. */
-const MASCOT_W = 150;
-const ROW_GAP = 20;
+/** What the mascot and its gap take beside the bubble, in phone points. Grew from 150 when the circle came off: inside a frame the art was cropped and scaled 1.55, so it filled a 150 square; standing bare at its own 1.3:1 it only made 150x116 and read smaller than before. */
+const MASCOT_W = 260;
+const ROW_GAP = 14;
+/** The mascot's own ratio, measured off the trimmed sprite. Its box follows this, so `contain` never letterboxes and the shadow below always meets the feet. */
+const MASCOT_ASPECT = 1.2982;
+/** Row slack: what the intro leaves for the root's own gutters once the mascot, the gap and the bubble have taken theirs. It is 88pt of root padding (44 a side) plus whatever air is left over, so trimming it is what pays for the mascot's growth without taking the whole cost out of the bubble. At 92 the row runs 657 of the 661pt the padding leaves — four points of air, which is as tight as this can safely go. */
+const ROW_SLACK = 92;
 
 /** The intro entrance, as one block: the mascot arrives, then its speech bubble, then what it says,
  *  then the thing you press. Every value is the moment that element starts. */
@@ -82,6 +136,8 @@ function PopIn({ delay, style, children }: { delay: number; style?: StyleProp<Vi
 /** The bubble UNROLLS left to right: an outer clip whose width animates from zero, with the card
  *  held at full width inside it so nothing squeezes as the clip opens. A scale-up read as a card
  *  appearing; a wipe reads as speech arriving from the character's side. */
+const BUBBLE_WIPE_MS = 460;
+
 function BubbleReveal({
   delay,
   width,
@@ -94,16 +150,30 @@ function BubbleReveal({
   children: ReactNode;
 }) {
   const on = useSharedValue(0);
+  // The clip is for the WIPE and nothing else, so it is RELEASED the moment the wipe ends.
+  //
+  // Leaving it on is what cut the bubble off at the bottom. `overflow: hidden` clips on BOTH axes, and this view is a flex child of a row with a fixed height — so anything the bubble needed past the height that row granted it was sliced away, permanently and invisibly. It got worse as the text grew, which is why it survived three different versions of the artwork and why the missing strip always looked like a short asset rather than a clip.
+  const [wiped, setWiped] = useState(false);
   useEffect(() => {
-    on.value = withDelay(delay, withTiming(1, { duration: 460, easing: Easing.out(Easing.cubic) }));
+    on.value = withDelay(delay, withTiming(1, { duration: BUBBLE_WIPE_MS, easing: Easing.out(Easing.cubic) }));
+    const t = setTimeout(() => setWiped(true), delay + BUBBLE_WIPE_MS + 60);
+    return () => clearTimeout(t);
   }, [delay, on]);
-  const clip = useAnimatedStyle(() => ({ width: width * on.value }));
+  // Clip runs SHADOW_ROOM past the card so the drop shadow has somewhere to fall; the card itself is still pinned to `width` below.
+  const clip = useAnimatedStyle(() => ({ width: (width + SHADOW_ROOM) * on.value }));
   return (
-    <Reanimated.View style={[{ overflow: "hidden" }, clip]}>
+    <Reanimated.View style={[wiped ? styles_reveal.done : styles_reveal.wiping, !wiped && clip]}>
       <View style={[style, { width }]}>{children}</View>
     </Reanimated.View>
   );
 }
+
+const styles_reveal = StyleSheet.create({
+  // During the wipe: clipped, and its width driven by the animation.
+  wiping: { overflow: "hidden" },
+  // After it: no clip at all, and the width pinned so releasing the animated style cannot resize it.
+  done: { overflow: "visible", flexShrink: 0 },
+});
 
 
 /** Opens from small. The pinch gesture wraps this, so it has to be a plain animated View that
@@ -204,34 +274,33 @@ const HALO = {
  *  so a lavender bar on a lavender backdrop had almost nothing to read against. */
 const PROGRESS_FILL = "#8FA876";
 
-const mascot = require("../../assets/images/questionnaire/whole.png");
+const backdrop = require("../../assets/ui/onboarding-backdrop.png");
+const bubbleArt = require("../../assets/images/questionnaire/speech-bubble.png");
+// The brand mascot, trimmed to its own silhouette so the image box IS the character — which is what lets the contact shadow below sit at its feet rather than at the corner of a padded canvas. Replaces questionnaire/whole.png, which was drawn to sit inside a circle.
+const mascot = require("../../assets/images/mascot/modu-mascot.png");
 const q3ManualReference = require("../../assets/images/questionnaire/q3-manual-reference.png");
+// Modu's face, one per answer. All six are authored on ONE canvas with the head at an identical size and position, so they need no per-file framing here — the shared frame is also where the flourishes that sit outside the head live (Excited's motion lines, Awkward's sweat drops), which is why the tile below does not clip.
+const FACE = {
+  excited: require("../../assets/images/questionnaire/faces/excited.png"),
+  calm: require("../../assets/images/questionnaire/faces/calm.png"),
+  sad: require("../../assets/images/questionnaire/faces/sad.png"),
+  overwhelmed: require("../../assets/images/questionnaire/faces/overwhelmed.png"),
+  happy: require("../../assets/images/questionnaire/faces/happy.png"),
+  awkward: require("../../assets/images/questionnaire/faces/awkward.png"),
+};
+
+// Row order matches `questions`, and within a row the order matches that question's `options` — the answer's own index is what picks the face, so these two lists have to stay in step.
 const questionOptionImages = [
-  [
-    require("../../assets/images/questionnaire/cry.png"),
-    require("../../assets/images/questionnaire/starteye.png"),
-    require("../../assets/images/questionnaire/calm.png"),
-  ],
-  [
-    require("../../assets/images/questionnaire/cry.png"),
-    require("../../assets/images/questionnaire/curious.png"),
-    require("../../assets/images/questionnaire/happy.png"),
-  ],
-  [
-    require("../../assets/images/questionnaire/cry.png"),
-    require("../../assets/images/questionnaire/curious.png"),
-    require("../../assets/images/questionnaire/happy.png"),
-  ],
-  [
-    require("../../assets/images/questionnaire/starteye.png"),
-    require("../../assets/images/questionnaire/calm.png"),
-    require("../../assets/images/questionnaire/happy.png"),
-  ],
-  [
-    require("../../assets/images/questionnaire/cry.png"),
-    require("../../assets/images/questionnaire/curious.png"),
-    require("../../assets/images/questionnaire/starteye.png"),
-  ],
+  // "scattered screws" / "dismiss the manual and start" / "calm if guidance is detailed"
+  [FACE.overwhelmed, FACE.excited, FACE.calm],
+  // "lose track of the part" / "review the step again" / "pick up right where I left off"
+  [FACE.sad, FACE.awkward, FACE.happy],
+  // "the lines bleed together" / "hard to tell front from back" / "totally clear"
+  [FACE.overwhelmed, FACE.awkward, FACE.happy],
+  // "sound effects and rewards" / "clean, quiet, guided" / "a balance of both"
+  [FACE.excited, FACE.calm, FACE.happy],
+  // "spatially disoriented" / "takes me a second" / "rotate and size up easily"
+  [FACE.overwhelmed, FACE.awkward, FACE.excited],
 ];
 
 export default function QuestionnaireScreen() {
@@ -248,10 +317,12 @@ export default function QuestionnaireScreen() {
       // A line of text past ~62 characters is hard to track back to the next line, so the bubble
       // stops growing well before the screen does.
       BUBBLE_W * uiScale,
-      win.width - (MASCOT_W + ROW_GAP) * uiScale - 140 * uiScale,
+      win.width - (MASCOT_W + ROW_GAP) * uiScale - ROW_SLACK * uiScale,
     ),
   );
   const safe = useSafeInsets();
+  // The art is STRETCHED to the box, so its corner radius is a fraction of whatever height the text ends up needing — measured here rather than guessed, because the shadow behind it has to bend on exactly the same curve. Until the first layout lands, the resting height is the best estimate.
+  const [bubbleH, setBubbleH] = useState(Math.round(bubbleW / BUBBLE.ASPECT));
   const [introComplete, setIntroComplete] = useState(false);
   const [handedness, setHandedness] = useState<Handedness | null>(null);
   const [index, setIndex] = useState(0);
@@ -367,25 +438,24 @@ export default function QuestionnaireScreen() {
     }, 650);
   };
 
-  const speak = (text: string) => {
-    Speech.stop();
-    Speech.speak(text, {
-      language: "en-US",
-      pitch: 1.08,
-      rate: 0.92,
-    });
-  };
+  // Every voice button plays the RECORDED clip for its line, falling back to synthesis if the clip
+  // is missing or the device is offline (see onboarding/speech.ts). The pitch and rate below only
+  // ever reach the fallback — a recording already sounds however it was performed.
+  const VOICE = { language: "en-US", pitch: 1.08, rate: 0.92 };
 
   const speakIntro = () => {
-    speak(questionnaireIntroVoiceText);
+    Speech.speakLine(introPath(), questionnaireIntroVoiceText, VOICE);
   };
 
   const speakCurrentQuestion = () => {
-    speak(question.prompt);
+    Speech.speakLine(promptPath(index), question.prompt, VOICE);
   };
 
-  const speakAnswer = (answer: string) => {
-    speak(answer);
+  // Takes the option's INDEX as well as its text: the clip is identified by position (Q3-Opt2.mp3),
+  // and matching on the text instead would break the moment a line was reworded — silently, and
+  // only for the players using the voice button.
+  const speakAnswer = (answer: string, optionIndex: number) => {
+    Speech.speakLine(optionPath(index, optionIndex), answer, VOICE);
   };
 
   const goBack = () => {
@@ -493,7 +563,8 @@ export default function QuestionnaireScreen() {
 
   if (!introComplete) {
     return (
-      <View
+      <SceneBackdrop
+        source={backdrop}
         style={[
           styles.root,
           {
@@ -505,8 +576,17 @@ export default function QuestionnaireScreen() {
         ]}
       >
         <View style={styles.introStage}>
-          <PopIn delay={INTRO_STAGE.mascot} style={styles.mascotCircle}>
-            <Image source={mascot} style={styles.introMascot} />
+          {/* Dropped by however far the art's tail sits below the box's centre, so the tail lands on the character rather than above his shoulder. Derived from the MEASURED bubble height, so it stays right when the text reflows. */}
+          <PopIn
+            delay={INTRO_STAGE.mascot}
+            style={[
+              styles.mascotWrap,
+              {
+                marginTop: Math.round(bubbleH * (BUBBLE.TAIL_CENTRE - 0.5)),
+              },
+            ]}
+          >
+            <Image source={mascot} style={styles.introMascot} resizeMode="contain" />
           </PopIn>
           {/* The button is a SIBLING of the reveal, not a child of it: the wipe needs overflow
               hidden, and anything hanging over the bubble's edge gets clipped by that same rule. */}
@@ -514,7 +594,21 @@ export default function QuestionnaireScreen() {
             <BubbleReveal
               delay={INTRO_STAGE.bubble}
               width={bubbleW}
-              style={[styles.speechBubble, { width: bubbleW }]}
+              style={{ width: bubbleW }}
+            >
+            <ImageBackground
+              source={bubbleArt}
+              // STRETCH, not contain: the box is sized by the text inside it, so the art has to follow the box. The corners take a little vertical squash at the extremes, which is why the padding below is fractional — it keeps the text off the rim whatever the box does.
+              resizeMode="stretch"
+              onLayout={(e) => setBubbleH(e.nativeEvent.layout.height)}
+              style={[
+                styles.speechBubble,
+                {
+                  width: bubbleW,
+                  paddingLeft: Math.round(bubbleW * BUBBLE.BODY_LEFT) + 16,
+                  paddingBottom: 26 + Math.round(bubbleH * BUBBLE_BAND),
+                },
+              ]}
             >
             <SlideInDown delay={INTRO_STAGE.text}>
               <Text style={[styles.introText, { fontFamily: readingFont }]}>{questionnaireIntroText}</Text>
@@ -544,6 +638,7 @@ export default function QuestionnaireScreen() {
                 <Text style={styles.handText}>right</Text>
               </Pressable>
             </SlideInDown>
+            </ImageBackground>
             </BubbleReveal>
             <VoiceButton onPress={speakIntro} style={styles.bubbleVoice} />
           </View>
@@ -570,6 +665,8 @@ export default function QuestionnaireScreen() {
           disabled={!handedness}
           onPress={() => {
             Speech.stop();
+            // Apply the hand HERE, not only where it is saved. A first run goes questionnaire -> avatar -> room without passing the loading gate again, so a left-hander who waited for the gate to read it back would build their whole first session right-handed. The DB write still happens at the end of the questionnaire; this is the same answer reaching the session it was given in.
+            if (handedness) useGameStore.getState().setHandedness(handedness);
             setIntroComplete(true);
             setActiveHint("voice");
           }}
@@ -577,12 +674,13 @@ export default function QuestionnaireScreen() {
         />
         </PopIn>
         ) : null}
-      </View>
+      </SceneBackdrop>
     );
   }
 
   return (
-    <View
+    <SceneBackdrop
+      source={backdrop}
       style={[
         styles.root,
         {
@@ -740,7 +838,7 @@ export default function QuestionnaireScreen() {
               <VoiceButton
                 onPress={(event) => {
                   event.stopPropagation();
-                  speakAnswer(option);
+                  speakAnswer(option, optionIndex);
                 }}
                 style={styles.optionAudioButton}
                 size="small"
@@ -764,6 +862,7 @@ export default function QuestionnaireScreen() {
                       styles.optionMascot,
                       showManualReference && styles.compactOptionMascot,
                     ]}
+                    resizeMode="contain"
                   />
                 </View>
               </View>
@@ -822,7 +921,7 @@ export default function QuestionnaireScreen() {
           </GestureDetector>
         </View>
       )}
-    </View>
+    </SceneBackdrop>
   );
 }
 
@@ -830,6 +929,7 @@ const makeStyles = (t: Theme) =>
   StyleSheet.create({
     root: {
       flex: 1,
+      // Only what shows before the backdrop art decodes — SceneBackdrop is the root element now, so the image covers this.
       backgroundColor: BG_SOLID,
       // Padding is applied inline (base + safe inset) so the questionnaire clears the cutout and the immersive-hidden bars the same way every other screen does.
     },
@@ -838,45 +938,43 @@ const makeStyles = (t: Theme) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
+      // Nothing in this row may be clipped by it: the bubble is the tallest thing on the screen and is allowed to use the padding below if the text runs long.
+      overflow: "visible",
       gap: 20,
       // Room at the foot for the Next button and its halo, so the bubble clears it — but modest:
-      // too much and the row is pushed into the top margin instead. Trimmed from 58 and paired
-      // with a top pad, which together sit the whole mascot+bubble row a step LOWER on screen.
-      paddingTop: 22,
-      paddingBottom: 36,
+      // too much and the row is pushed into the top margin instead. Trimmed again (36 -> 20) when the
+      // bubble grew: the button is ABSOLUTELY positioned off the root's own insets, so this padding
+      // only reserves visual air, and reserving air the bubble then has to overflow into is worse
+      // than not reserving it.
+      paddingTop: 16,
+      paddingBottom: 20,
     },
-    mascotCircle: {
-      width: 150,
-      height: 150,
-      alignItems: "center",
-      justifyContent: "center",
-      overflow: "hidden",
-      borderColor: t.border,
-      borderRadius: 95,
-      borderWidth: 2,
-      backgroundColor: t.surface,
+    // NO circle, no rim, no fill: the mascot stands on the backdrop. Wider than the old 150 square because the sprite is 1.3:1 — a square box would letterbox it and shrink the character to fit a frame that is no longer drawn.
+    // The box IS the sprite — trimmed to its silhouette, so there is nothing to align or pad around.
+    mascotWrap: {
+      width: MASCOT_W,
+      height: Math.round(MASCOT_W / MASCOT_ASPECT),
     },
+    // contain: the sprite is trimmed to its silhouette, so the box IS the character and cropping it would cut a limb.
     introMascot: {
       width: "100%",
-      height: "100%",
-      transform: [{ scale: 1.55 }],
+      height: Math.round(MASCOT_W / MASCOT_ASPECT),
     },
     introMascotModel: {
       ...StyleSheet.absoluteFillObject,
     },
+    // The bubble is ARTWORK now: no fill, no rim, no radius of its own — the PNG carries all three. What stays here is only the box the art stretches to and the room the text needs inside it. paddingLeft is set at the call site, because it has to clear the tail and the tail's width is a fraction of a width this sheet cannot see.
     speechBubble: {
-      // Width is set at the call site: it depends on the window, which a static sheet cannot see.
       minHeight: 190,
-      borderRadius: 36,
-      backgroundColor: t.surface,
-      borderWidth: 3,
-      borderColor: BUBBLE_RIM,
-      paddingHorizontal: 32,
-      paddingVertical: 24,
+      paddingRight: 24,
+      paddingTop: 26,
+      // Deeper than the top by the art's own shadow band, so the last line clears the dark strip along the bottom edge rather than sitting on it.
+      paddingBottom: 26,
       gap: 14,
+      justifyContent: "center",
     },
     // Straddling the top-left corner of the rim. Absolute, so it contributes no height — in the flow it was pushing every line of the message down by its own 44pt.
-    bubbleWrap: { position: "relative" },
+    bubbleWrap: { position: "relative", flexShrink: 0, overflow: "visible" },
     bubbleVoice: { position: "absolute", top: -20, left: 22, zIndex: 3 },
     introText: {
       color: t.text,
@@ -887,7 +985,6 @@ const makeStyles = (t: Theme) =>
     introPrompt: {
       color: t.text,
       fontFamily: FONT, fontSize: 18,
-      fontStyle: "italic",
       fontWeight: "800",
       textAlign: "center",
     },
@@ -1123,15 +1220,15 @@ const makeStyles = (t: Theme) =>
     optionCard: {
       // width, NOT flex. The card now sits inside ScaleOnSelect's wrapper, which is a column — so `flex: 1` there meant "fill the available HEIGHT" and quietly beat the height below. The wrapper carries the row's flex; the card just fills it.
       width: "100%",
-      // 152 is what the contents actually need at full size: 14 padding + 66 circle + 10 gap + three 16pt lines + 14 padding. The old 176 was that plus a 44pt gutter for an audio button that now hangs on the rim, so the card loses the gutter and keeps everything else.
-      height: 152,
+      // What the contents actually need at full size: 14 padding + 72 face + 10 gap + three 16pt lines + 14 padding = 158, plus a little slack. It was 152 when the face was a 66 disc and never moved when the new art made it 72 — so the tallest caption overflowed by 6, which centring hid by splitting it three above and three below. Top-aligned there is nowhere to hide it, so the number is corrected rather than the symptom.
+      height: 160,
       alignItems: "center",
-      // The card is art then words, with the space shared between them rather than pooled at the bottom — "flex-start" left the picture stranded at the top and the caption on the floor.
-      justifyContent: "center",
-      borderColor: t.border,
+      // TOP-ALIGNED, not centred. Centring treated face + gap + caption as one block and centred the whole block, so a one-line caption sat its face LOWER than a three-line one — measured at 74, 117 and 87pt from the card top across one row. Pinned to the top, every face lands at the same y whatever its caption does. The height above is what keeps this from stranding the caption on the floor: it fits the tallest caption with two points to spare, so there is no slack for the old centring to have been distributing.
+      justifyContent: "flex-start",
+      // NO stroke. The card is lifted off the backdrop instead of outlined on it — see CARD_SHADOW.
       borderRadius: 24,
-      borderWidth: 2,
       backgroundColor: t.surface,
+      ...CARD_SHADOW,
       paddingHorizontal: 16,
       // No top gutter for the audio button any more: it hangs on the rim, so the card is sized by its contents and the caption gets the room the gutter used to take.
       paddingTop: 14,
@@ -1140,59 +1237,52 @@ const makeStyles = (t: Theme) =>
     },
     compactOptionCard: {
       height: 196,
-      justifyContent: "center",
       paddingHorizontal: 14,
       paddingTop: 14,
       paddingBottom: 14,
     },
     selectedOptionCard: {
-      borderColor: t.accent,
       backgroundColor: t.surfaceRaised,
+      ...CARD_SHADOW_RAISED,
     },
+    // A plain box, not a disc: the face art carries its own cream fill and gold rim, so a second one behind it would only show as a halo. 72 rather than 66 because the head is 91.75% of its canvas — the rest is the room the flourishes need — so this renders the head itself at the same 66pt it always was.
     expressionCircle: {
-      width: 66,
-      height: 66,
+      width: 72,
+      height: 72,
       alignItems: "center",
       justifyContent: "center",
-      overflow: "hidden",
-      borderColor: t.gold,
-      borderRadius: 33,
-      borderWidth: 1,
-      backgroundColor: t.surface,
     },
     expressionSlot: {
-      height: 66,
+      height: 72,
       alignItems: "center",
       justifyContent: "center",
     },
     compactExpressionSlot: {
-      height: 76,
+      height: 84,
     },
     compactExpressionCircle: {
-      width: 74,
-      height: 74,
-      borderRadius: 37,
+      width: 80,
+      height: 80,
     },
-    selectedExpressionCircle: {
-      borderColor: t.accent,
-    },
+    // Nothing to change on the chosen card: the face is art with its own rim, and the card already lifts, brightens and pops when it is picked. Kept as a named no-op so the call site's three conditional styles stay parallel and the next person can hang something here.
+    selectedExpressionCircle: {},
+    // No scale: the old art was a FULL BODY drawing that had to be blown up and cropped by the disc to read as a head. These are heads, framed as they should sit.
     optionMascot: {
       width: "100%",
       height: "100%",
-      transform: [{ scale: 1.55 }],
     },
     compactOptionMascot: {
       width: "100%",
       height: "100%",
     },
-    // Left-aligned inside a full-width block: centred captions of different lengths gave three cards three different silhouettes, and the eye reads a common left edge faster.
+    // CENTRED under the face. The card is one column — a face with its caption beneath — so the caption reads as belonging to the art above it rather than as a list item beside it, and three cards of different caption lengths stay symmetrical about their own centres.
     optionText: {
       width: "100%",
       color: t.textDim,
       fontFamily: FONT, fontSize: 12,
       fontWeight: "700",
       lineHeight: 16,
-      textAlign: "left",
+      textAlign: "center",
     },
     compactOptionText: {
       fontFamily: FONT, fontSize: 13,

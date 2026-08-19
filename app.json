@@ -11,9 +11,9 @@
     "android": {
       "package": "com.modu.app",
       "adaptiveIcon": {
-        "foregroundImage": "./src/assets/ui/icons/Modu_Icon.png",
-        "backgroundColor": "#ffffff",
-        "monochromeImage": "./src/assets/ui/icons/Modu_Icon.png"
+        "foregroundImage": "./src/assets/ui/icons/Modu_Icon_Foreground.png",
+        "backgroundColor": "#595551",
+        "monochromeImage": "./src/assets/ui/icons/Modu_Icon_Monochrome.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -25,7 +25,14 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.modu.app",
-      "appleTeamId": "373HG67P3T"
+      "appleTeamId": "373HG67P3T",
+      "requireFullScreen": true,
+      "infoPlist": {
+        "UISupportedInterfaceOrientations~ipad": [
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ]
+      }
     },
     "plugins": [
       "expo-router",

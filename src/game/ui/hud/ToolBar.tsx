@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { useHudIcon } from "@/src/game/ui/hud/hudIcons";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
-import { ELEVATION, RADIUS, Theme, useFixedStyles } from "@/src/game/ui/system/theme";
+import { ELEVATION, RADIUS, SPACE, Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 import { GrainOverlay } from "@/src/game/ui/system/Button";
 import { toolList } from "@/src/game/content/tools";
 import { pickThumb } from "@/src/game/core/presentation/labels";
@@ -21,6 +22,10 @@ export function ToolBar({
   const manualTools = useGameStore((s) => s.settings.manualTools);
   const selectedTool = useGameStore((s) => s.selectedTool);
   const setSelectedTool = useGameStore((s) => s.setSelectedTool);
+  // Read with the other hooks, ABOVE the early returns below: this component bails out when manual
+  // tools are off or the build has none, so a hook called down at the icon would run on some
+  // renders and not others.
+  const toolsIcon = useHudIcon("tools");
   if ((!manualTools && !forceVisible) || !furniture) return null;
 
   const tools = toolList(furniture);
@@ -42,7 +47,7 @@ export function ToolBar({
   return (
     <View style={styles.bar} pointerEvents="box-none">
       {needsAttention && !open ? (
-        <Text style={styles.prompt}>pick a tool</Text>
+        <Text style={styles.prompt}>Pick a Tool</Text>
       ) : null}
       {open
         ? tools.map((t) => {
@@ -81,7 +86,7 @@ export function ToolBar({
       >
         <GrainOverlay radius={RADIUS.control} />
         <Image
-          source={require("@/src/assets/ui/icons/icon-tools.png")}
+          source={toolsIcon}
           style={styles.toolboxIcon}
           resizeMode="contain"
         />
@@ -130,5 +135,19 @@ const makeStyles = (t: Theme) =>
   slotWanted: { borderColor: t.accent },
   icon: { width: 26, height: 26 },
   toolboxIcon: { width: 24, height: 24 },
-  prompt: { fontSize: 11, fontWeight: "700", color: t.textDim, marginRight: 2 },
+  // On its own ACCENT pill rather than as loose text: this prompt floats over the 3D scene, where a
+  // dim ink line disappeared against a light backdrop and a light one would vanish against a dark
+  // model. Light ink on the accent reads in both, and it is the same "act on this" colour the
+  // toolbox coach uses for the same instruction.
+  prompt: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: t.onAccent,
+    backgroundColor: t.accent,
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: SPACE.md,
+    paddingVertical: 3,
+    marginRight: SPACE.xs,
+    overflow: "hidden",
+  },
   });

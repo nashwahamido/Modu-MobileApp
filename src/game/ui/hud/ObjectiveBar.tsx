@@ -138,7 +138,10 @@ const makeStyles = (t: Theme) =>
     objectiveText: {
       ...TYPE.body,
       flex: 1,
-      color: t.text,
+      // INK, not t.text: the pill behind it is OBJECTIVE_WASH, a fixed light blue in BOTH themes,
+      // so a theme-following colour turned the instruction near-white on pale blue in dark mode.
+      // The text has to answer to what it sits on, not to the app theme.
+      color: "#231F20",
       fontWeight: "800",
       textAlign: "left",
     },
@@ -146,7 +149,8 @@ const makeStyles = (t: Theme) =>
     structuredProgressGap: { marginTop: 3 },
 
     // The XP badge sits INSIDE the bar, on the progress track's left — a star that overlaps the track's start, with the running total beside it. (There is no level system in the data — just xpPerStep — so this shows the honest running total, not a fake N/500.)
-    progressRow: { flexDirection: "row", alignItems: "center", gap: SPACE.sm },
+    // gap xs, not sm: the row's width is fixed, so every point of gap is a point the track loses.
+    progressRow: { flexDirection: "row", alignItems: "center", gap: SPACE.xs },
     xpBadge: {
       width: 24,
       height: 24,
@@ -155,8 +159,16 @@ const makeStyles = (t: Theme) =>
       marginRight: -2,
     },
     xpTrack: { flex: 1 },
-    // minWidth on both flanks: without it the track resizes every time a number gains a digit, which is the same jitter one level down.
-    xpLabel: { ...TYPE.numeric, color: t.gold, minWidth: 26 },
-    // minWidth for the same reason as xpLabel: "9%" -> "10%" -> "100%" must not resize the track.
-    stepPct: { ...TYPE.numeric, color: t.text, minWidth: 44, textAlign: "right" },
+    // minWidth on both flanks: without it the track resizes every time a number gains a digit, which
+    // is the same jitter one level down. The two flanks are the SAME width so the track sits centred
+    // between them — 26 vs 44 put a visible hole between the bar and the percentage while the XP
+    // side sat tight against it. 40 fits the widest content either flank can hold ("100%").
+    // The XP number sits TIGHT against its badge — the two are one fact — so it takes its natural
+    // width with no reserved box: a minWidth here parks empty space between the number and the
+    // track, which is what pushed the track off centre.
+    xpLabel: { ...TYPE.numeric, color: t.gold },
+    // The percentage keeps a fixed box (so the track can't resize as 9% → 100%) but its text hugs
+    // the track, putting that reserved space on the OUTSIDE. With the XP tight on the left and the
+    // percentage tight on the right, the track has an equal gap on each side.
+    stepPct: { ...TYPE.numeric, color: t.text, minWidth: 34, textAlign: "left" },
   });
