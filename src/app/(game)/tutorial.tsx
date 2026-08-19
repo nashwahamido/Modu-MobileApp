@@ -935,14 +935,10 @@ function TutorialScreen() {
               style={styles.beatControlTarget}
               pointerEvents="none"
             />
-            <BeatControl
-              action={sceneState.activeBeat}
-              onSwipeStart={
-                sceneState.activeBeat.actionId === "finishing_checks"
-                  ? resetCamera
-                  : undefined
-              }
-            />
+            {/* No onSwipeStart. It used to recentre the camera for `finishing_checks`, which was
+                removed with the ceremonial beat — the tutorial's furniture has no beat left, and
+                this control only stands for the push-open drawer tests on EKET now. */}
+            <BeatControl action={sceneState.activeBeat} />
           </>
         ) : null}
         <TutorialTarget id="joystick" style={styles.joystickZone}>

@@ -108,21 +108,17 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     shortLabel: "Tighten the bolt",
     event: "connector_tightened",
   },
+  // THE LAST STEP. The tutorial used to close on a "stand-table-upright" beat, which was a swipe
+  // card for an action that moved nothing — removed 2026-08-19 along with `finishing_checks` on
+  // every furniture. Installing the fourth leg finishes the table, so it finishes the tutorial too,
+  // and the copy says so rather than pointing at a next thing that no longer exists.
   {
     id: "install-four-legs",
     targetId: "partsTray",
     message:
-      "Install the leg onto the bolt. Repeat the bolt and leg steps for all four legs.",
+      "Install the leg onto the bolt. Repeat the bolt and leg steps for all four legs to finish the table.",
     shortLabel: "Install all four legs",
     event: "all_legs_installed",
-  },
-  {
-    id: "stand-table-upright",
-    targetId: "beatControl",
-    message:
-      "All four legs are installed. Swipe down on the orange card to stand the table upright and finish.",
-    shortLabel: "Stand the table upright",
-    event: "assembly_reoriented",
   },
 ];
 

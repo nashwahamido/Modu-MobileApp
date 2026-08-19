@@ -92,7 +92,9 @@ export const AUTHORED_ACTIONS: DraftAction[] = [
   // ── combine: seat the base (seed drop), then lower the seat onto it; finish. combine_seat's dependence on combine_base is DERIVED from the CLUSTERS slideJoins overlay — do not hand-write it here. ──
   action({ actionId: "combine_base", type: "combineClusters", stage: 4, cluster: "base", requires: [] }),
   action({ actionId: "combine_seat", type: "combineClusters", stage: 4, cluster: "seat", requires: [] }),
-  action({ actionId: "finishing_checks", type: "reorient", stage: 4, requires: ["combine_seat"] }),
+  // The ceremonial `finishing_checks` beat was REMOVED 2026-08-19 — it moved no part, so it was a
+  // swipe card standing between the player and a finished build. The last real assembly step is
+  // the last step now.
 ];
 
 export const BEATS = {
@@ -103,9 +105,5 @@ export const BEATS = {
   combine_seat: {
     text: "Set the seat's pole into the base and screw it clockwise until it sits tight.",
     simpleText: "Screw the seat onto the base.",
-  },
-  finishing_checks: {
-    text: "Give the seat a spin and a gentle press to check it feels solid.",
-    simpleText: "Check the stool feels solid.",
   },
 } as InstructionSet;

@@ -1,7 +1,6 @@
 import {
   action,
   FastenerRule,
-  tightenActionIds,
 } from "@/src/game/core/composition/composeActions";
 import { StructureOverlay } from "@/src/game/core/model/liaisons";
 import { groupParts } from "@/src/game/core/scene/targets";
@@ -49,17 +48,10 @@ export const AUTHORED_ACTIONS: DraftAction[] = [
   ...LEG_IDS.map((leg) =>
     action({ type: "placePart", stage: 1, partId: leg, requires: [] }),
   ),
-  action({
-    actionId: "finishing_checks",
-    type: "reorient",
-    stage: 2,
-    requires: tightenActionIds(P, asGroupId("bolt115980")),
-  }),
-];
+]; 
 
-export const BEATS = {
-  finishing_checks: {
-    text: "Turn the table the right way up and check it stands level.",
-    simpleText: "Stand the table up.",
-  },
-} as InstructionSet;
+// The ceremonial `finishing_checks` beat was REMOVED 2026-08-19. It moved no part — the pieces
+// were already at their baked poses and the free camera makes a literal flip unnecessary — so it
+// was a swipe card standing between the player and a finished build. The last real assembly step
+// is the last step now. Its instruction copy went with it.
+export const BEATS = {} as InstructionSet;
