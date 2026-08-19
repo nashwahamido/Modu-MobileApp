@@ -23,6 +23,7 @@ import { projectToScreen, type LookAt } from "@/src/game/scene/projectToScreen";
 import { ELEVATION, FONT, RADIUS, SPACE, useFixedStyles } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 import type { Vec3 } from "@/src/game/core/type";
+import { useMirror } from "@/src/game/ui/system/handedness";
 
 /** Re-checked at ~10fps, not per frame: this answers a yes/no question that only changes when the
  *  camera moves a long way, and the cue itself has to be stable enough to read. */
@@ -36,6 +37,7 @@ export function SpotOrbitCue({
 }: {
   manipulator: { getLookAt: () => LookAt | null } | null | undefined;
 }) {
+  const m = useMirror();
   const styles = useFixedStyles(makeStyles);
   const hintPartId = useGameStore((s) => s.hintPartId);
   const parts = useGameStore((s) => s.furniture?.parts);
@@ -93,7 +95,7 @@ export function SpotOrbitCue({
 
   if (!offScreen) return null;
   return (
-    <View style={styles.wrap} pointerEvents="none">
+    <View style={m(styles.wrap)} pointerEvents="none">
       <Animated.View style={rockStyle}>
         <Image
           source={require("@/src/assets/ui/icons/icon-focus.png")}

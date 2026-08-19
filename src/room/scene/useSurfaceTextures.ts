@@ -60,6 +60,13 @@ export function useSurfaceTextures(
           // probeRemote answers from its own session cache when the URL has already settled, so this awaits a real request only the first time — and null (not in storage, or offline) drops just this map, leaving the shell's own texture in that slot.
           const versioned = await probeRemote(url);
           if (versioned === null) return null;
+          // GUARDED. FilamentProxy is the native module's JSI proxy, and it is undefined until the
+          // native side has installed it — on a dev client older than the current
+          // react-native-filament it never appears at all. Unguarded, this threw an uncaught
+          // TypeError per map on every room mount, which is noise rather than a symptom: a missing
+          // map is already a supported outcome (null drops just this one, leaving the shell's own
+          // texture), so an unavailable proxy takes exactly that path instead of rejecting.
+          if (!FilamentProxy?.loadAsset) return null;
           const buffer = await FilamentProxy.loadAsset(versioned);
           return { map, buffer };
         }),

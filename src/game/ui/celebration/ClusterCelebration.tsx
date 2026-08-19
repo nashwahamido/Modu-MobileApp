@@ -1,6 +1,13 @@
 import * as Haptics from "expo-haptics";
 import { useEffect, useRef, useState } from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
+import { ConfettiRain } from "@/src/game/ui/celebration/Confetti";
 import {
   clusterComplete,
   clusterLabel,
@@ -14,6 +21,7 @@ import type { ClusterId } from "@/src/game/core/type";
 /** Fires the moment a cluster's last action lands: names what was finished and offers the one move that follows — the next unfinished cluster, or the combine stage when they are all done. The full-screen "choose a section" moment stays with BuildMap at game start; this popup owns the mid-build transitions so a finished cluster never has to become a card while you build the next one. */
 export function ClusterCelebration() {
   const styles = useFixedStyles(makeStyles);
+  const win = useWindowDimensions();
   const furniture = useGameStore((s) => s.furniture);
   const completed = useGameStore((s) => s.completed);
   const [shown, setShown] = useState<ClusterId | null>(null);
@@ -48,6 +56,30 @@ export function ClusterCelebration() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [furniture, completed.length]);
 
+  // POP, not a fade: a cluster finishing is the build's small win, and the card should arrive with
+  // the same energy the haptic already fires with. Keyed on `shown` so the next cluster replays it
+  // rather than the card simply swapping its text.
+  // Both properties come from SHARED VALUES only — no JS variable is read inside the worklet, and
+  // no animation is started from within useAnimatedStyle. Doing either is what left the card
+  // mounted but invisible: the worklet has no reliable access to `shown`, so the opacity it
+  // computed was never the one the component intended.
+  const pop = useSharedValue(0);
+  const fade = useSharedValue(0);
+  useEffect(() => {
+    if (!shown) {
+      pop.value = 0;
+      fade.value = 0;
+      return;
+    }
+    pop.value = 0;
+    fade.value = withTiming(1, { duration: 140 });
+    pop.value = withSpring(1, { damping: 11, stiffness: 180, mass: 0.6 });
+  }, [shown, pop, fade]);
+  const popStyle = useAnimatedStyle(() => ({
+    opacity: fade.value,
+    transform: [{ scale: 0.86 + pop.value * 0.14 }],
+  }));
+
   if (!furniture || !shown) return null;
   const allDone = unfinished.length === 0;
   const next = unfinished[0];
@@ -60,8 +92,13 @@ export function ClusterCelebration() {
   };
 
   return (
-    <View style={styles.scrim} pointerEvents="box-none">
-      <View style={styles.panel}>
+    <View style={styles.scrim} pointerEvents="auto">
+      {/* Behind the card and across the whole scrim: the confetti belongs to the MOMENT, not to the
+          panel, and boxed inside it the fall was over before it read as celebration. */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <ConfettiRain key={shown} delay={0} width={win.width} height={win.height} count={26} />
+      </View>
+      <Animated.View style={[styles.panel, popStyle]}>
         <Image
           source={require("@/src/assets/ui/icons/icon-success.png")}
           style={styles.badge}
@@ -73,7 +110,7 @@ export function ClusterCelebration() {
           variant="primary"
           onPress={onPress}
         />
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -82,25 +119,39 @@ const makeStyles = (t: Theme) =>
   StyleSheet.create({
     scrim: {
       ...StyleSheet.absoluteFillObject,
+      // The SAME dimmed backdrop the project map uses. Both panels are #E3DACD, but this one was
+      // sitting on an undimmed 3D scene — the identical cream reads warmer and lighter against a
+      // bright workbench than against the map's darkened one, which is why they looked different.
+      backgroundColor: t.scrim,
       alignItems: "center",
       justifyContent: "center",
       padding: 24,
+      // zIndex only — NO elevation. On Android `elevation` draws a drop shadow around the view's
+      // BOUNDS, and this view sits inside play.tsx's inset chrome container: that shadow landed on
+      // screen as a dark band tracing the container's edges — the ghost rectangle behind the card.
+      // ClusterFocusControl's scrim carries the same note for the same reason.
       zIndex: 22,
-      elevation: 22,
     },
     panel: {
       width: "100%",
       maxWidth: 340,
-      backgroundColor: t.surface,
+      // The PROJECT MAP's panel colour, and no outline: these two cards are the same voice — one
+      // opens a stage, the other closes it — and the green stroke made this one read as a system
+      // confirmation rather than as a small celebration.
+      backgroundColor: "#E3DACD",
       borderRadius: 20,
-      borderWidth: 2,
-      borderColor: t.success,
       paddingHorizontal: 20,
       paddingVertical: 20,
+      shadowColor: "#000",
+      shadowOpacity: 0.3,
+      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 8 },
       gap: 8,
       alignItems: "center",
     },
     // Sized to the 40pt glyph it replaced, so the card's rhythm is unchanged.
     badge: { width: 48, height: 48 },
-    title: { color: t.text, fontSize: 18, fontWeight: "800" },
+    // FIXED ink, not t.text: the panel is a fixed cream, so a theme-driven colour turns near-white
+    // on it in dark mode. Same reasoning as the objective bar's instruction line.
+    title: { color: "#231F20", fontSize: 18, fontWeight: "800" },
   });

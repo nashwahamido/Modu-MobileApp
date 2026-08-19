@@ -1,4 +1,5 @@
 import { Theme, useFixedStyles } from "@/src/game/ui/system/theme";
+import { useMirror } from "@/src/game/ui/system/handedness";
 import { GrainOverlay } from "@/src/game/ui/system/Button";
 import { useEffect, useRef, type ReactNode } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
@@ -35,6 +36,8 @@ interface Props {
 /** Inventory column (right edge): everything the current stage uses, grouped with remaining counts. Long-press an enabled card to take one in hand and drag it into the scene; locked cards are waiting on other steps. */
 export function PartsTray({ items, gestureFor, header, thumbs, highlightGroup, highlightPulse }: Props) {
   const styles = useFixedStyles(makeStyles);
+  // The rail crosses to the other edge in left-hand mode; everything INSIDE a card keeps its own layout.
+  const m = useMirror();
   const theme = useColorScheme() === "dark" ? "dark" : "light";
   const scrollRef = useRef<ScrollView>(null);
   // Card positions within the list content, the current scroll offset, and the viewport height — enough to know when a card is clipped.
@@ -66,7 +69,7 @@ export function PartsTray({ items, gestureFor, header, thumbs, highlightGroup, h
 
   if (items.length === 0 && !header) return null;
   return (
-    <View style={styles.column} pointerEvents="box-none">
+    <View style={m(styles.column)} pointerEvents="box-none">
       <ScrollView
         ref={scrollRef}
         style={styles.scroll}

@@ -15,6 +15,9 @@ import { AuthProvider } from "@/src/hooks/useAuth";
 import { useCatalogSync } from "@/src/hooks/useCatalogSync";
 import { useSessionGate } from "@/src/hooks/useSessionGate";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
+import { useGameStore } from "@/src/game/core/store";
+import { setMusicEnabled, setMusicVolume } from "@/src/game/audio/music";
+import { useRouteMusic } from "@/src/game/audio/useRouteMusic";
 
 // The gated app tree. Lives INSIDE AuthProvider so useDevAutoSignIn reads the one shared session. While the dev session is coming up it holds render, so no screen mounts (and queries the DB) until a real user id is available — everything under here reads the same auth state in the same commit.
 function AppContent() {
@@ -22,6 +25,24 @@ function AppContent() {
   // Called before the early return below: hooks cannot be conditional.
   useSessionGate();
   useCatalogSync();
+  // Music lives at the ROOT, not on the screens: the track follows the route, and the setting is
+  // applied here so it holds across every screen rather than only where someone remembered to wire
+  // it. Zero volume is off — see the settings meter.
+  // BOTH tracks, from their own settings: ambient is set in the General tab, the build's in the
+  // assembly settings, and each is applied here so it holds wherever the route takes the player.
+  const musicOn = useGameStore((s) => s.settings.music);
+  const musicVolume = useGameStore((s) => s.settings.musicVolume);
+  const buildMusicOn = useGameStore((s) => s.settings.buildMusic);
+  const buildMusicVolume = useGameStore((s) => s.settings.buildMusicVolume);
+  useEffect(() => {
+    setMusicVolume("ambient", musicVolume);
+    setMusicEnabled("ambient", musicOn);
+  }, [musicOn, musicVolume]);
+  useEffect(() => {
+    setMusicVolume("assembly", buildMusicVolume);
+    setMusicEnabled("assembly", buildMusicOn);
+  }, [buildMusicOn, buildMusicVolume]);
+  useRouteMusic();
 
   if (holdForDevAuth) {
     return (

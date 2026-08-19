@@ -25,10 +25,16 @@ const BACKDROPS: Record<string, { light: number; dark: number }> = {
 };
 
 // The image source for a backdrop, or undefined for "clear" (no image — the scene root shows through). Unknown keys fall back to grid, which also covers a profile saved with one of the retired ids.
+//
+// ONLY GRID HAS A DARK VARIANT. The scenery backdrops are artwork a player CHOSE: a garden is a
+// garden whatever the chrome is doing, and its dark cut was really just the same picture dimmed,
+// which made the choice look worse rather than different. Grid is the exception because it is not
+// scenery — it is a work surface, and a work surface has to follow the room's light.
 export function backdropSource(
   backdrop: BackdropId,
   dark: boolean,
 ): number | undefined {
   if (backdrop === "clear") return undefined;
-  return (BACKDROPS[backdrop] ?? BACKDROPS.grid)[dark ? "dark" : "light"];
+  const set = BACKDROPS[backdrop] ?? BACKDROPS.grid;
+  return dark && set === BACKDROPS.grid ? set.dark : set.light;
 }

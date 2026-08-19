@@ -62,25 +62,23 @@ import { ClusterCelebration } from "@/src/game/ui/celebration/ClusterCelebration
 import { UndoButton } from "@/src/game/ui/hud/UndoButton";
 import { GameSettings } from "@/src/game/ui/settings/GameSettings";
 import { ToggleChips } from "@/src/game/ui/hud/ToggleChips";
-import { BuildMap, ClusterFocusControl } from "@/src/game/ui/hud/ClusterFocusControl";
+import { BuildMap, MapButton } from "@/src/game/ui/hud/ClusterFocusControl";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 import { Button } from "@/src/game/ui/system/Button";
 import { ObjectiveBar } from "@/src/game/ui/hud/ObjectiveBar";
 import {
   HintButton,
-  HUD_ICON,
-  IconButtonBare,
   RecenterButton,
-  hudControlStyles as hudControls,
-  hudChrome as styles,
+  useHudChrome,
+  useHudControlStyles,
 } from "@/src/game/ui/hud/hudChrome";
-import { useTheme } from "@/src/game/ui/system/theme";
+import { ThemeScope, useTheme } from "@/src/game/ui/system/theme";
 import {
   combineReady,
   requiresClusterFocus,
 } from "@/src/game/core/evaluation/clusters";
 import { availableInMode } from "@/src/game/core/evaluation/availability";
-import type { FurnitureId } from "@/src/game/core/type";
+import type { FurnitureId, ThemeId } from "@/src/game/core/type";
 import { LoadingOverlay } from "@/src/game/ui/loading/LoadingOverlay";
 import type { Milestone } from "@/src/game/ui/loading/loadingProgress";
 import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
@@ -125,6 +123,9 @@ function GameScreen() {
 
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
+  // The HUD's placements, mirrored when the player is left-handed — the joystick and the toggles row swap edges, and the whole button column crosses with them.
+  const styles = useHudChrome();
+  const hudControls = useHudControlStyles();
   // Loading screen: covers the scene from target change until data + model are ready. retryKey remounts AssemblyScene to restart a failed GLB load.
   const [modelReady, setModelReady] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -148,7 +149,11 @@ function GameScreen() {
     setLoaderVisible(true);
     loadFurnitureById(target)
       .then((f) => useGameStore.getState().loadFurniture(f))
-      .catch(() => setLoadError(true));
+      // LOG the reason as well as showing the error state. A bundled furniture is composed and validated at module-eval time, so anything wrong with its authored data — or with an asset it require()s — surfaces here as a rejected import and nowhere else. Discarding the error left "Couldn't load this furniture" as the only symptom of a dozen different causes.
+      .catch((err) => {
+        console.error(`[play] furniture "${target}" failed to load`, err);
+        setLoadError(true);
+      });
     // RECIPE LANE — the row is read here IMPERATIVELY off useCatalogStore.getState() rather than through the useCatalogRow hook, and that is the whole point: it keeps this effect's deps free of the row's object identity, which changes on every catalog refresh/auth event and would otherwise re-run the effect after a completed load and strand the overlay. Keep the early bail above when restoring.
     // const row = useCatalogStore.getState().rows[target];
     // loadPlayableFurniture(target, row)
@@ -176,16 +181,32 @@ function GameScreen() {
   const activeCluster = useGameStore((s) => s.activeCluster);
   const mode = useGameStore((s) => s.mode);
   const settings = useGameStore((s) => s.settings);
+  // The music is the BUILD's, so it starts here and stops on the way out — including when the app is
+  // backgrounded, which unmounts nothing but should not leave a loop playing under someone's podcast.
 
   // Dev-setting: float mode vs auto return
   const heldActionId = useGameStore((s) => s.heldActionId);
   const renderStyle = useGameStore((s) => s.renderStyle);
   const backdrop = useGameStore((s) => s.backdrop);
-  const theme = useGameStore((s) => s.theme);
+  // The BUILD's theme, not the app's: "Assemble in Dark Mode" darkens this screen only. Everything
+  // under ThemeScope below (the HUD, the settings panel, the toasts) resolves through it.
+  const theme: ThemeId = useGameStore((s) => s.assembleDark) ? "dark" : "light";
   const focus = settings.focusMode;
   const dark = theme === "dark";
   const t = useTheme();
-  const rootStyle = useMemo(() => [styles.root, { backgroundColor: t.bg }], [t]);
+  // "Clear" is a flat warm cream, not the theme surface: the backdrop SETTING chose a colour, so it
+  // should look chosen, not like the app behind the scene. Dark theme keeps its own dark ground —
+  // a cream flood in dark mode would be a torch.
+  const rootStyle = useMemo(
+    () => [
+      styles.root,
+      // "Clear" is the SAME flat beige in both themes. It is a backdrop the player picked, not a
+      // surface that follows the theme — and the dark variant read as mud against the dark chrome.
+      { backgroundColor: backdrop === "clear" ? "#DACAAE" : t.bg },
+    ],
+    // styles.root is a dependency now that `styles` comes from useHudChrome rather than a module constant — it changes identity when the player's hand does. `theme` stays because t is derived from it.
+    [styles.root, t, backdrop, theme],
+  );
   const firstAvailable = useMemo(
     () =>
       furniture
@@ -365,9 +386,10 @@ function GameScreen() {
     />
   ) : null;
 
-  if (!furniture) return <View style={rootStyle}>{loadingOverlay}</View>;
+  if (!furniture) return <ThemeScope value={theme}><View style={rootStyle}>{loadingOverlay}</View></ThemeScope>;
 
   return (
+    <ThemeScope value={theme}>
     <SceneBackdrop
       source={backdropSource(backdrop, theme === "dark")}
       style={rootStyle}
@@ -404,15 +426,9 @@ function GameScreen() {
         ]}
         pointerEvents="box-none"
       >
-        {/* Pause sits to the LEFT of the progress bar, grouped with it so the pair stays
-            centred together whatever width the bar takes. */}
+        {/* Pause is gone: it was a second door to the same map the Map button opens, and a control
+            named "pause" that actually navigates was the wrong promise anyway. */}
         <View style={styles.topRow} pointerEvents="box-none">
-          <IconButtonBare
-            source={require("@/src/assets/ui/icons/icon-pause.png")}
-            size={HUD_ICON}
-            onPress={() => useGameStore.getState().setMapOpen(true)}
-            accessibilityLabel="Pause and show the build map"
-          />
           {/* Instructions hidden → only the progress bar stays (slim pill). */}
           <ObjectiveBar
             // The sentence only. The step count rides on the progress row inside the bar — keeping it out of here is what stops the line's length changing with the count.
@@ -444,7 +460,9 @@ function GameScreen() {
           {focus ? null : <DevMenu />}
           <ToggleChips />
         </View>
-        {!focus && mode !== "strict" ? <ClusterFocusControl /> : null}
+        {/* One Map button where the cluster discs were. Same visibility rule they had: hidden in
+            focus mode and in strict, where the step is chosen for you. */}
+        {!focus && mode !== "strict" ? <MapButton /> : null}
         <PartsTray
           items={sceneState.trayItems}
           gestureFor={gestureFor}
@@ -600,6 +618,7 @@ function GameScreen() {
       <BuildComplete />
       {loadingOverlay}
     </SceneBackdrop>
+    </ThemeScope>
   );
 }
 
