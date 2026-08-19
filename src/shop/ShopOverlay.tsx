@@ -11,7 +11,7 @@ import { isSurfaceCategory, useCurrentUserId, useRepos, viewCatalogue } from "@/
 import type { ShopCategory, ShopItem, ShopItemId } from "@/src/data";
 import { useProfileStore } from "@/src/data/player/profileStore";
 import { useShopStore } from "@/src/data/shop/store";
-import { useScreenInsets } from '@/src/hooks/use-safe-insets';
+import { GRID_EDGE, usePopupInsets } from '@/src/components/popupInsets';
 import { CategoryBoardTabs } from "@/src/components/CategoryBoardTabs";
 import { ShopItemTile } from "./ShopItemTile";
 import type { PurchaseBlock } from "./purchaseBlock";
@@ -25,14 +25,12 @@ import { warmItemModel } from "./ItemSpinPreview";
 const GRID_COLUMNS = 4;
 const GRID_GAP = 22;
 // Side breathing room, subtracted before the columns are solved so tiles really do shrink
-const GRID_EDGE = 22;
 // How long a transient message stays up
 const NOTE_MS = 2400;
 
 export function ShopOverlay({ onClose }: { onClose: () => void }) {
   const s = useFixedStyles(makeStyles);
   const t = useTheme();
-  const safe = useScreenInsets();
   const repos = useRepos();
   const me = useCurrentUserId();
   const { sheetStyle, scrimStyle, requestClose } = useSlideUpPresentation(onClose);
@@ -123,9 +121,8 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
     setNote(`${item.name} is in your inventory`);
   };
 
-  const padTop = 18 + safe.top;
-  const padSide = 62 + safe.side;
-  const padBottom = 18 + safe.bottom;
+  // Proportional on a tablet, the authored points on a phone — see components/popupInsets.
+  const { padTop, padSide, padBottom } = usePopupInsets();
 
   return (
     <View style={s.layer}>

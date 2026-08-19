@@ -327,6 +327,22 @@ export function useStyles<T extends object>(make: (theme: Theme) => T): T {
 }
 
 /**
+ * Theme-driven styles at a scale the CALLER chooses, rather than the app-wide one.
+ *
+ * For a surface that needs to grow on a tablet but not by the shared amount — the room's HUD frames a
+ * scene rather than filling the screen, so it takes a trimmed scale of its own. Pass 1 and this is
+ * useFixedStyles; pass useUiScale() and it is useStyles.
+ *
+ * IT MUST BE THE SAME NUMBER the caller uses for anything it scales by hand. A sheet on one scale and
+ * inline offsets on another is not a smaller version of the layout, it is a broken one: the parts that
+ * happen to live in the sheet grow while the parts multiplied at the call site shrink.
+ */
+export function useScaledStyles<T extends object>(make: (theme: Theme) => T, k: number): T {
+  const theme = useTheme();
+  return useMemo(() => scaleSheet(make(theme), k), [make, theme, k]);
+}
+
+/**
  * Theme-driven styles with NO device scaling. The opt-OUT, chosen PER SCREEN.
  *
  * Scaling is not a global property of the app — it is a decision about one screen. These surfaces

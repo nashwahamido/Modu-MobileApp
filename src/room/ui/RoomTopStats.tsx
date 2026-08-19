@@ -2,7 +2,8 @@
 import { router } from 'expo-router';
 import type { Href } from 'expo-router';
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
-import { CARD_CHROME, CREAM, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
+import { CARD_CHROME, CREAM, useScaledStyles, LEXEND } from "@/src/game/ui/system/theme";
+import { useTopStatsScale } from './roomScale';
 import type { Theme } from "@/src/game/ui/system/theme";
 import { COIN_ICON, STAR_ICON, XP_ICON, levelIcon } from '../../components/iconAssets';
 import { levelProgressFraction } from '../../data/player/levels';
@@ -21,10 +22,17 @@ const XP_BADGE_SIZE = BAR_HEIGHT - XP_BADGE_INSET * 2;
 const BAR_SKIN = CARD_CHROME;
 
 export function RoomTopStats() {
-  const s = useFixedStyles(makeStyles);
+  // SCALED on tablets, 1:1 on phones. The sheet is scaled by the SAME k (useScaledStyles); anything that is NOT
+  // a style property — the absolute offsets below — has to be multiplied by hand, because the scaler
+  // skips top/left/right/bottom on purpose (they are usually safe-area insets).
+  const k = useTopStatsScale();
+  // The sheet takes the SAME k as the hand-scaled values below — see useScaledStyles.
+  const s = useScaledStyles(makeStyles, k);
   const safe = useScreenInsets();
-  const padTop = 12 + safe.top;
-  const padR = 18 + safe.right;
+  // The DESIGN offset scales; the device inset does not. An inset is a physical clearance around a
+  // cutout or a gesture bar — growing it would push the cluster inward for no reason.
+  const padTop = 12 * k + safe.top;
+  const padR = 18 * k + safe.right;
   const profile = useProfileHud();
   const levelPercent = profile
     ? Math.round(levelProgressFraction({ xpIntoLevel: profile.xpIntoLevel, xpForNextLevel: profile.xpForNextLevel }) * 100)
@@ -50,7 +58,8 @@ export function RoomTopStats() {
         <View style={s.progress}>
           <View style={[s.progressFill, { width: `${levelPercent}%` }]} />
           <Text style={s.progressText}>{xpLabel}</Text>
-          <Image source={XP_ICON} style={s.xpBadge} resizeMode="contain" />
+          {/* `right` is an absolute offset, which the scaler skips — applied here, or the badge sits deep inside a bar that grew around it */}
+          <Image source={XP_ICON} style={[s.xpBadge, { right: XP_BADGE_INSET * k }]} resizeMode="contain" />
         </View>
       </Pressable>
       <View style={s.currencyGroup}>
@@ -131,7 +140,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   },
   xpBadge: {
     position: 'absolute',
-    right: XP_BADGE_INSET,
     width: XP_BADGE_SIZE,
     height: XP_BADGE_SIZE,
   },

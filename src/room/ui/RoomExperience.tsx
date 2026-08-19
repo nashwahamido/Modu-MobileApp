@@ -17,6 +17,7 @@ import { RoomScene } from '../scene/RoomScene';
 import { FriendPickerOverlay } from './FriendPickerOverlay';
 import { RoomBottomBar } from './RoomBottomBar';
 import { LIGHT_COLUMN_GAP, RoomLightControls } from './RoomLightControls';
+import { useLeftColumnScale } from './roomScale';
 import { RoomLoadingOverlay } from './RoomLoadingOverlay';
 import { RoomFirstPlacementGuide } from './RoomFirstPlacementGuide';
 import {
@@ -32,6 +33,9 @@ import { ORBIT } from '../input/orbit';
 import type { Theme } from "@/src/game/ui/system/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from '../../hooks/use-safe-insets';
 
+// The gear's diameter, matched to the light buttons below it (RoomLightControls' BUTTON)
+const SETTINGS_DISC = 48;
+
 const ROOM_EDIT_GUIDE_KEY = 'modu.room-edit-guide-seen.v1';
 const ROOM_WELCOME_GUIDE_KEY = 'modu.room-welcome-guide-seen.v1';
 
@@ -41,6 +45,9 @@ const HEAVY_ROUTES = new Set(['play', 'tutorial', 'visit']);
 
 export function RoomExperience() {
   const s = useFixedStyles(makeStyles);
+  // This screen's sheet stays FIXED — it carries the scene's own chrome, laid out to the point. Only
+  // the left column is scaled for tablets, and by hand, so nothing else on the screen moves.
+  const k = useLeftColumnScale();
  
   const { welcome, open, firstPlacement } = useLocalSearchParams<{
     welcome?: string;
@@ -202,8 +209,11 @@ export function RoomExperience() {
             // clusters are read at different moments, and the extra drop keeps the gear clear of the
             // status area. Levelling them instead would be 12 + 3 + inset: RoomTopStats pads by the
             // same 12 and centres its 23pt bar inside a 54pt badge, against this 48pt disc.
-            top: 12 + 14 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
-            left: 18 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+            // The design offsets scale with the screen; the device insets do NOT — a cutout is a
+            // physical clearance, and multiplying it would inset the column further for no reason.
+            top: (12 + 14) * k + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
+            left: 18 * k + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+            gap: LIGHT_COLUMN_GAP * k,
           },
         ]}
         pointerEvents="box-none"
@@ -211,10 +221,14 @@ export function RoomExperience() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Settings"
-          style={s.settingsButton}
+          style={[s.settingsButton, { width: SETTINGS_DISC * k, height: SETTINGS_DISC * k, borderRadius: (SETTINGS_DISC * k) / 2 }]}
           onPress={() => router.push("/settings" as Href)}
         >
-          <Image source={SETTINGS_ICON} style={s.settingsIcon} resizeMode="contain" />
+          <Image
+            source={SETTINGS_ICON}
+            style={{ width: SETTINGS_DISC * k, height: SETTINGS_DISC * k }}
+            resizeMode="contain"
+          />
         </Pressable>
 
         {/* hidden mid-placement */}
@@ -345,17 +359,10 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   // 48pt drawing would cast a circle smaller than the thing casting it. borderWidth is zeroed because
   // the disc brings its own edge — only the shadow is wanted from CARD_CHROME.
   settingsButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
     ...CARD_CHROME,
     borderWidth: 0,
-  },
-  settingsIcon: {
-    width: 48,
-    height: 48,
   },
 
   comingSoonTitle: {

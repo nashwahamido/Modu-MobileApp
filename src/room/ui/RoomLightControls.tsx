@@ -6,7 +6,8 @@ import Animated, { withTiming } from 'react-native-reanimated';
 import type { EntryAnimationsValues, ExitAnimationsValues } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { TIME_OF_DAY_IDS, sunPreset, type TimeOfDayId } from '../core/timeOfDay';
-import { CARD_CHROME, ELEVATION, useFixedStyles, LEXEND } from '@/src/game/ui/system/theme';
+import { CARD_CHROME, ELEVATION, useScaledStyles, LEXEND } from '@/src/game/ui/system/theme';
+import { useLeftColumnScale } from './roomScale';
 import type { Theme } from '@/src/game/ui/system/theme';
 
 // Matched to the settings button above it, so the column reads as one run of controls down the left edge rather than as two unrelated widgets.
@@ -118,10 +119,25 @@ const TRACK = 140;
 // Four gaps between five stops, derived from the id list rather than written out: a sixth preset re-spaces the track instead of overflowing it.
 const STEP = TRACK / (TIME_OF_DAY_IDS.length - 1);
 const LAST = TIME_OF_DAY_IDS.length - 1;
+// Where the track's line and the knob sit inside the hit box. Applied at the call site and scaled
+// there: `top` and `left` are absolute offsets, which the sheet scaler leaves alone by design.
+const TRACK_TOP = 10;
+const KNOB_TOP = 2;
 
 // The stop nearest a touch, clamped at both ends — dragging past either end parks on that end's preset instead of running off the track. x is measured from the FIRST STOP'S CENTRE, which is why every caller subtracts the knob's radius first.
-function hourAt(x: number): TimeOfDayId {
-  return TIME_OF_DAY_IDS[Math.max(0, Math.min(LAST, Math.round(x / STEP)))];
+// `k` is the UI scale: on a tablet the track is drawn at STEP * k, so a touch on the third stop lands
+// 2 * STEP * k across. Dividing by the unscaled STEP would read a stop off a track that is not the one
+// on screen, and the drag would run ahead of the finger by the scale factor.
+function hourAt(x: number, k: number): TimeOfDayId {
+  return TIME_OF_DAY_IDS[Math.max(0, Math.min(LAST, Math.round(x / (STEP * k))))];
+}
+
+// The art crops are plain numbers, not a style sheet, so the sheet scaler never sees them.
+function scaleBox<T extends Record<string, number>>(box: T, k: number): T {
+  if (k === 1) return box;
+  const out: Record<string, number> = {};
+  for (const [prop, value] of Object.entries(box)) out[prop] = value * k;
+  return out as T;
 }
 
 export function RoomLightControls({
@@ -137,7 +153,12 @@ export function RoomLightControls({
   onToggleLight: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
-  const s = useFixedStyles(makeStyles);
+  // SCALED on tablets, 1:1 on phones: three discs and a slider, all of which are simply small targets
+  // at phone size on a big screen. The sheet is scaled by the SAME k (useScaledStyles); the artwork crops and the track's geometry
+  // are plain numbers rather than style properties, so they are multiplied by hand below.
+  const k = useLeftColumnScale();
+  // The sheet takes the SAME k as the hand-scaled values below — see useScaledStyles.
+  const s = useScaledStyles(makeStyles, k);
   // The slider is collapsed by default: a permanent scrubber is a lot of chrome over a diorama the player wants to look at, and the hour is a rare choice. The BULB is never collapsed, because flipping a light is the thing you actually do and one tap is the whole budget for it.
   const [hoursOpen, setHoursOpen] = useState(false);
   // Through sunPreset, not TIME_OF_DAY[hour], so an id this component does not recognise falls back to a real preset instead of throwing on `.label` — the guarantee that module advertises and its tests pin.
@@ -152,8 +173,12 @@ export function RoomLightControls({
   // What the slider last asked for. Re-synced to the prop on every render so an hour changed from anywhere else still lands here, and read inside the gesture so a drag does not re-emit the stop it is already sitting on — the gesture is memoized and would otherwise close over the hour the drag STARTED at.
   const emitted = useRef(hour);
   emitted.current = hour;
+  // Through a ref for the same reason `emit` is left out of the gesture's deps: capturing k directly
+  // would pin the memoized gesture to whatever scale was current when it was built.
+  const kRef = useRef(k);
+  kRef.current = k;
   const emit = (x: number) => {
-    const next = hourAt(x);
+    const next = hourAt(x, kRef.current);
     if (next === emitted.current) return;
     emitted.current = next;
     onHourChange(next);
@@ -184,8 +209,8 @@ export function RoomLightControls({
         style={[s.button, s.buttonArtwork]}
         onPress={onToggleLight}
       >
-        <View style={[s.hourArtWindow, light.window]}>
-          <Image source={light.src} style={[s.hourArtImage, light.image]} resizeMode="stretch" />
+        <View style={[s.hourArtWindow, scaleBox(light.window, k)]}>
+          <Image source={light.src} style={[s.hourArtImage, scaleBox(light.image, k)]} resizeMode="stretch" />
         </View>
       </Pressable>
 
@@ -200,15 +225,15 @@ export function RoomLightControls({
           style={[s.button, s.buttonArtwork, s.hourButton]}
           onPress={() => setHoursOpen((open) => !open)}
         >
-          <View style={[s.hourArtWindow, art.window]}>
-            <Image source={art.src} style={[s.hourArtImage, art.image]} resizeMode="stretch" />
+          <View style={[s.hourArtWindow, scaleBox(art.window, k)]}>
+            <Image source={art.src} style={[s.hourArtImage, scaleBox(art.image, k)]} resizeMode="stretch" />
           </View>
         </Pressable>
 
         {hoursOpen ? (
         <Animated.View
-          entering={SLIDE_IN}
-          exiting={SLIDE_OUT}
+          entering={slideIn(HIDDEN_WIDTH * k)}
+          exiting={slideOut(HIDDEN_WIDTH * k)}
           style={s.panel}
         >
           {/* The readout names the stop the knob is on. Labels come from TIME_OF_DAY, the same source the old Settings stepper read, so a sixth preset appears here with no edit to this file. */}
@@ -228,12 +253,17 @@ export function RoomLightControls({
                 if (next !== hour) onHourChange(next);
               }}
             >
-              <View style={s.track} />
-              <View style={[s.trackFill, { width: index * STEP, backgroundColor: hourColour }]} />
+              <View style={[s.track, { top: TRACK_TOP * k, left: (KNOB / 2) * k, right: (KNOB / 2) * k }]} />
+              <View
+                style={[
+                  s.trackFill,
+                  { top: TRACK_TOP * k, left: (KNOB / 2) * k, width: index * STEP * k, backgroundColor: hourColour },
+                ]}
+              />
               {TIME_OF_DAY_IDS.map((id, i) => (
-                <View key={id} style={[s.tick, { left: KNOB / 2 + i * STEP - 2 }]} />
+                <View key={id} style={[s.tick, { top: TRACK_TOP * k, left: (KNOB / 2 + i * STEP - 2) * k }]} />
               ))}
-              <View style={[s.knob, { left: index * STEP, borderColor: hourColour }]} />
+              <View style={[s.knob, { top: KNOB_TOP * k, left: index * STEP * k, borderColor: hourColour }]} />
             </View>
           </GestureDetector>
         </Animated.View>
@@ -251,10 +281,10 @@ export function RoomLightControls({
 const SLIDE_MS = 240;
 const HIDDEN_WIDTH = BUTTON / 2;
 
-const SLIDE_IN = (values: EntryAnimationsValues) => {
+const slideIn = (hidden: number) => (values: EntryAnimationsValues) => {
   'worklet';
   return {
-    initialValues: { width: HIDDEN_WIDTH, opacity: 0 },
+    initialValues: { width: hidden, opacity: 0 },
     animations: {
       width: withTiming(values.targetWidth, { duration: SLIDE_MS }),
       opacity: withTiming(1, { duration: SLIDE_MS / 2 }),
@@ -262,12 +292,12 @@ const SLIDE_IN = (values: EntryAnimationsValues) => {
   };
 };
 
-const SLIDE_OUT = (values: ExitAnimationsValues) => {
+const slideOut = (hidden: number) => (values: ExitAnimationsValues) => {
   'worklet';
   return {
     initialValues: { width: values.currentWidth, opacity: 1 },
     animations: {
-      width: withTiming(HIDDEN_WIDTH, { duration: SLIDE_MS * 0.7 }),
+      width: withTiming(hidden, { duration: SLIDE_MS * 0.7 }),
       opacity: withTiming(0, { duration: SLIDE_MS * 0.7 }),
     },
   };
@@ -360,9 +390,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   },
   track: {
     position: 'absolute',
-    left: KNOB / 2,
-    right: KNOB / 2,
-    top: 10,
     height: 4,
     borderRadius: 2,
     backgroundColor: t.surfaceRaised,
@@ -370,14 +397,11 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   // The travelled part. Colour comes from the hour at the call site — the fill IS the readout.
   trackFill: {
     position: 'absolute',
-    left: KNOB / 2,
-    top: 10,
     height: 4,
     borderRadius: 2,
   },
   tick: {
     position: 'absolute',
-    top: 10,
     width: 4,
     height: 4,
     borderRadius: 2,
@@ -385,7 +409,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   },
   knob: {
     position: 'absolute',
-    top: 2,
     width: KNOB,
     height: KNOB,
     borderRadius: KNOB / 2,

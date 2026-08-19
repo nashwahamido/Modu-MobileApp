@@ -11,6 +11,7 @@ import {
   LockWash,
   TILE_ROW_GAP,
   ItemNameTab,
+  useTileScale,
   WELL_ASPECT,
   WELL_TOP_PAD,
 } from "@/src/components/ItemTileFrame";
@@ -54,6 +55,9 @@ export function ShopItemTile({
   disabled?: boolean;
 }) {
   const s = useFixedStyles(makeStyles);
+  // The badges are fixed points on a tile that grows with the panel, so on a tablet they end up small
+  // against a much larger frame — and against the name tab, which scales by this same factor.
+  const k = useTileScale();
   const locked = lockLevel !== undefined;
   const lockStar = lockLevel === undefined ? null : levelIcon(lockLevel);
   const wellHeight = Math.round(width * WELL_ASPECT);
@@ -97,14 +101,41 @@ export function ShopItemTile({
         ) : null}
 
         {owned ? (
-          <View style={s.ownedBadge}>
-            <Text style={s.ownedText}>owned</Text>
+          <View
+            style={[
+              s.ownedBadge,
+              {
+                left: PILL_LEFT * k,
+                top: PILL_TOP * k,
+                width: OWNED_WIDTH * k,
+                height: PILL_HEIGHT * k,
+                borderRadius: PILL_RADIUS * k,
+              },
+            ]}
+          >
+            <Text style={[s.ownedText, { fontSize: 11 * k }]}>owned</Text>
           </View>
         ) : (
-          <View style={s.priceBadge}>
-            <Image source={COIN_ICON} style={s.priceIcon} resizeMode="contain" />
-            <View style={s.pricePill}>
-              <Text style={s.priceText}>{price}</Text>
+          <View style={[s.priceBadge, { left: BADGE_LEFT * k }]}>
+            <Image
+              source={COIN_ICON}
+              style={[s.priceIcon, { width: COIN_SIZE * k, height: COIN_SIZE * k }]}
+              resizeMode="contain"
+            />
+            <View
+              style={[
+                s.pricePill,
+                {
+                  marginLeft: -PRICE_TUCK * k,
+                  height: PILL_HEIGHT * k,
+                  borderRadius: PILL_RADIUS * k,
+                  paddingLeft: (PRICE_TUCK + PILL_PAD) * k,
+                  paddingRight: PILL_PAD * k,
+                  minWidth: 43 * k,
+                },
+              ]}
+            >
+              <Text style={[s.priceText, { fontSize: 11 * k }]}>{price}</Text>
             </View>
           </View>
         )}

@@ -1,5 +1,5 @@
 // The picture frame and name tab the shop and the inventory tiles share. Here rather than copied into both, because the two grids sit side by side in the same popup family and any drift between them reads as a bug.
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import Svg, { Defs, RadialGradient, Rect, Stop } from "react-native-svg";
 
 import { CREAM, LEXEND } from "@/src/game/ui/system/theme";
@@ -47,12 +47,73 @@ export function LockWash() {
 const NAME_TAB_HEIGHT = 22;
 const NAME_TAB_INSET = 4;
 const NAME_TAB_OVERLAP = 13;
+const NAME_FONT_SIZE = 12;
+
+// Below this short side the device is a phone; matches TABLET_MIN_SHORT_DP in game/ui/system/theme.ts
+const TABLET_MIN_SHORT_DP = 600;
+/**
+ * How much bigger the name reads on a tablet.
+ *
+ * The tiles themselves already grow there — the grid solves their width from the measured panel — but
+ * this tab is fixed points, so at phone size it ends up a thin strip of small type across a much
+ * larger frame. Everything about the tab scales together: a bigger font in an unchanged 22pt pill
+ * would put the letters through its border, and leaving the OVERLAP alone would float the tab off the
+ * frame's edge it is supposed to straddle.
+ */
+const NAME_TABLET_SCALE = 1.3;
+
+/**
+ * The same factor, for anything else on a tile that is fixed points: the shop's price badge and its
+ * owned badge. Exported so those cannot drift from the name they sit above — "about the size of the
+ * titles" is a relationship, and a second copy of 1.3 in another file would only hold by luck.
+ */
+export function useTileScale(): number {
+  const { width, height } = useWindowDimensions();
+  return Math.min(width, height) >= TABLET_MIN_SHORT_DP ? NAME_TABLET_SCALE : 1;
+}
+/**
+ * The CEILING the name is allowed to reach on a tablet, as a multiple of the scaled size.
+ *
+ * Paired with adjustsFontSizeToFit below: the text starts at this size and Android shrinks it until
+ * the whole name fits on one line. So a short name ("Arm Chair") renders at the ceiling and a long one
+ * ("Wooden Single Bed") steps down as far as it needs to — which is what "as big as it can be while
+ * still readable" actually means for a grid where the names are wildly different lengths. Fixing one
+ * size for all of them means either truncating the long ones or under-sizing the short ones.
+ */
+const NAME_MAX_BOOST = 1.45;
+/** How far the shrink may go before the name would be too small to read. */
+const NAME_MIN_SCALE = 0.62;
 
 /** Render AFTER the well, so it paints over the frame's bottom edge rather than under it. */
 export function ItemNameTab({ name }: { name: string }) {
+  const { width, height } = useWindowDimensions();
+  const k = Math.min(width, height) >= TABLET_MIN_SHORT_DP ? NAME_TABLET_SCALE : 1;
   return (
-    <View style={styles.tab}>
-      <Text style={styles.name} numberOfLines={1}>
+    <View
+      style={[
+        styles.tab,
+        k === 1
+          ? null
+          : {
+              height: NAME_TAB_HEIGHT * k,
+              borderRadius: (NAME_TAB_HEIGHT * k) / 2,
+              marginTop: -NAME_TAB_OVERLAP * k,
+              // Tighter inset and padding than the phone's: every point here is a point the name
+              // does not have to shrink by, and the tab is a pill on a frame rather than a button
+              // that needs breathing room.
+              marginHorizontal: NAME_TAB_INSET / 2,
+              paddingHorizontal: 6 * k,
+            },
+      ]}
+    >
+      {/* PHONE BEHAVIOUR IS UNCHANGED: one line at the authored size, ellipsis if it does not fit.
+          The auto-fit is tablet-only, where there is room for a much larger name to be worth having. */}
+      <Text
+        style={[styles.name, k === 1 ? null : { fontSize: NAME_FONT_SIZE * k * NAME_MAX_BOOST }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit={k !== 1}
+        minimumFontScale={k === 1 ? undefined : NAME_MIN_SCALE}
+      >
         {name}
       </Text>
     </View>
@@ -75,7 +136,7 @@ const styles = StyleSheet.create({
   },
   name: {
     ...LEXEND.semibold,
-    fontSize: 12,
+    fontSize: NAME_FONT_SIZE,
     color: CREAM.ink,
     textAlign: "center",
   },
