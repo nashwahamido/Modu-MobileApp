@@ -3,7 +3,7 @@
 // The scene is a pure function of this store; persistence is repos.rooms and nothing else. Save happens on commit (confirm/remove), never mid-drag — a half-finished ghost must not be written.
 import { create } from "zustand";
 
-import { getRepos } from "../../data";
+import { getRepos } from "../../data/registry";
 import type { PlacedFurniture, RoomLayout, UserId } from "../../data/core/types";
 import { defaultVariationOf } from "../../data/catalog/variantStore";
 import { readRoomFinishes, type RoomFinishes } from "../../data/room/layoutMigrate";
@@ -64,11 +64,18 @@ export interface ActiveEdit {
   check: PlacementCheck;
   // True only when a completed build sends the player's first furniture here — drives the mascot coach mark.
   firstPlacementGuide: boolean;
+  // True for a profile-owned fixture such as Clear Path's bed. It uses the
+  // ordinary edit controls, but confirm/cancel return it to `reserved` and
+  // never save it as the player's furniture.
+  reserved: boolean;
 }
 
 interface PlacementState {
   ownerId: UserId | null;
   layout: GridPlacement[];
+  // Profile-owned, non-persisted fixtures (currently Clear Path's bed). They
+  // render and block placement like furniture but never enter the saved room.
+  reserved: GridPlacement[];
   // The room's chosen surface items. Separate from `layout` because they are not placements — nothing occupies a cell — but persisted in the SAME row, so they ride the same save.
   finishes: RoomFinishes;
   activeEdit: ActiveEdit | null;
@@ -83,6 +90,7 @@ interface PlacementState {
   // Enter / leave a friend's room. Both synchronous: the player's own layout is never discarded, so returning shows no empty frame the way a re-hydrate would.
   startViewing: (ownerId: UserId, layout: GridPlacement[], finishes: RoomFinishes) => void;
   stopViewing: () => void;
+  setReserved: (placements: GridPlacement[]) => void;
   startPlacing: (itemId: string, opts?: { firstPlacementGuide?: boolean; variation?: string | null }) => boolean;
   // null clears the slot back to the shell as authored, which is a real choice and not an absence: "Default" is the first swatch in the picker.
   setFinish: (slot: "floor" | "wall", itemId: string | null) => void;
@@ -109,11 +117,15 @@ const nextInstanceId = (itemId: string, layout: GridPlacement[]): string => {
   return `${itemId}#${n}`;
 };
 
-const validate = (placement: GridPlacement, layout: GridPlacement[]): PlacementCheck =>
+const validate = (
+  placement: GridPlacement,
+  layout: GridPlacement[],
+  reserved: readonly GridPlacement[] = [],
+): PlacementCheck =>
   canPlace(
     placement,
     getRoomItemDef(placement.itemId),
-    buildOccupancy(layout, roomItemDefs(), placement.instanceId),
+    buildOccupancy([...layout, ...reserved], roomItemDefs(), placement.instanceId),
     // A stacked ghost's host is a COMMITTED piece, so the layout is the right place to resolve it.
     placement.surface.kind === "furniture" ? resolveHost(placement.surface.hostInstanceId, layout, roomItemDefs()) : null,
   );
@@ -137,6 +149,7 @@ const persist = (ownerId: UserId | null, layout: GridPlacement[], finishes: Room
 export const usePlacementStore = create<PlacementState>()((set, get) => ({
   ownerId: null,
   layout: [],
+  reserved: [],
   finishes: {},
   activeEdit: null,
   startNonce: 0,
@@ -146,8 +159,17 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
   async hydrate(ownerId) {
     if (get().ownerId === ownerId && get().hydrated) return;
     // A ghost started before the first hydrate (BuildComplete's "place it now") belongs to the incoming owner — keep it. Only an actual account SWITCH throws the edit away.
-    const keepEdit = get().ownerId === null || get().ownerId === ownerId;
-    set((s) => ({ ownerId, layout: [], finishes: {}, activeEdit: keepEdit ? s.activeEdit : null, hydrated: false }));
+    const previousOwnerId = get().ownerId;
+    const ownerChanged = previousOwnerId !== null && previousOwnerId !== ownerId;
+    const keepEdit = previousOwnerId === null || previousOwnerId === ownerId;
+    set((s) => ({
+      ownerId,
+      layout: [],
+      reserved: ownerChanged ? [] : s.reserved,
+      finishes: {},
+      activeEdit: keepEdit ? s.activeEdit : null,
+      hydrated: false,
+    }));
     try {
       const saved = await getRepos().rooms.get(ownerId);
       // An account switch mid-fetch must not land the old owner's rows in the new owner's room.
@@ -164,7 +186,7 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
             ...activeEdit.placement,
             instanceId: nextInstanceId(activeEdit.placement.itemId, layout),
           };
-          activeEdit = { ...activeEdit, placement, check: validate(placement, layout) };
+          activeEdit = { ...activeEdit, placement, check: validate(placement, layout, s.reserved) };
         }
         return { layout, finishes, activeEdit, hydrated: true };
       });
@@ -177,7 +199,14 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
   startViewing(ownerId, layout, finishes) {
     set((s) => ({
       // A ghost in flight belongs to the player's OWN room, and the bottom bar stays live during placement — so entering a visit puts the edited piece back exactly as cancel() would rather than carrying it into someone else's room. A never-committed ghost evaporates, which is also cancel's behaviour.
-      layout: s.activeEdit?.previous ? [...s.layout, s.activeEdit.previous] : s.layout,
+      layout:
+        s.activeEdit?.previous && !s.activeEdit.reserved
+          ? [...s.layout, s.activeEdit.previous]
+          : s.layout,
+      reserved:
+        s.activeEdit?.previous && s.activeEdit.reserved
+          ? [...s.reserved, s.activeEdit.previous]
+          : s.reserved,
       activeEdit: null,
       viewing: { ownerId, layout, finishes },
     }));
@@ -185,6 +214,34 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
 
   stopViewing() {
     set({ viewing: null });
+  },
+
+  setReserved(placements) {
+    set((s) => {
+      const unchanged =
+        s.reserved.length === placements.length &&
+        s.reserved.every((current, index) => {
+          const next = placements[index];
+          return (
+            next &&
+            current.instanceId === next.instanceId &&
+            current.itemId === next.itemId &&
+            current.cell.x === next.cell.x &&
+            current.cell.y === next.cell.y &&
+            current.rotSteps === next.rotSteps
+          );
+        });
+      if (unchanged) return s;
+      return {
+        reserved: placements,
+        activeEdit: s.activeEdit
+          ? {
+              ...s.activeEdit,
+              check: validate(s.activeEdit.placement, s.layout, placements),
+            }
+          : null,
+      };
+    });
   },
 
   startPlacing(itemId, opts) {
@@ -196,7 +253,14 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
 
     set((s) => {
       // Starting over an in-progress EDIT must not discard the edited piece: put it back first, exactly as cancel() would (a new ghost just evaporates).
-      const layout = s.activeEdit?.previous ? [...s.layout, s.activeEdit.previous] : s.layout;
+      const layout =
+        s.activeEdit?.previous && !s.activeEdit.reserved
+          ? [...s.layout, s.activeEdit.previous]
+          : s.layout;
+      const reserved =
+        s.activeEdit?.previous && s.activeEdit.reserved
+          ? [...s.reserved, s.activeEdit.previous]
+          : s.reserved;
       // The def routes the surface, and the question is genuinely two-way: migration 024 made mount REQUIRED, so every item is floor- or wall-mounted and `on_top` only ever ADDS a surface rather than replacing one. A tops-only item (mount null) briefly existed under 021 and fell through this branch onto a wall it could never be confirmed on — see 024 for why that capability was withdrawn rather than given a third branch.
       // Wall-only items (windows, frames) ghost onto a wall the camera can SEE, everything else onto the floor. This used to be hard-coded to z-max, which was fine while the camera was clamped to a 90-degree arc facing it — with a free 360 orbit it drops the ghost onto whichever wall happens to be behind the player, and the placement reads as having silently failed.
       const surface: SurfaceId = def.allowedSurfaces.includes("floor")
@@ -231,9 +295,11 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
         activeEdit: {
           placement,
           previous: null,
-          check: validate(placement, layout),
+          check: validate(placement, layout, reserved),
           firstPlacementGuide: opts?.firstPlacementGuide ?? false,
+          reserved: false,
         },
+        reserved,
         startNonce: s.startNonce + 1,
       };
     });
@@ -252,16 +318,24 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
   editPlacement(instanceId) {
     set((s) => {
       if (s.activeEdit || s.viewing) return s;
-      const existing = s.layout.find((p) => p.instanceId === instanceId);
+      const committed = s.layout.find((p) => p.instanceId === instanceId);
+      const reserved = s.reserved.find((p) => p.instanceId === instanceId);
+      const existing = committed ?? reserved;
       if (!existing) return s;
       return {
         // The piece leaves the committed layout while being edited, so it neither renders twice nor collides with its own ghost.
-        layout: s.layout.filter((p) => p.instanceId !== instanceId),
+        layout: committed
+          ? s.layout.filter((p) => p.instanceId !== instanceId)
+          : s.layout,
+        reserved: reserved
+          ? s.reserved.filter((p) => p.instanceId !== instanceId)
+          : s.reserved,
         activeEdit: {
           placement: existing,
           previous: existing,
           check: { ok: true },
           firstPlacementGuide: false,
+          reserved: reserved !== undefined,
         },
       };
     });
@@ -292,7 +366,7 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
         return s;
       }
       const placement = { ...current, surface: nextSurface, cell: clamped };
-      return { activeEdit: { ...s.activeEdit, placement, check: validate(placement, s.layout) } };
+      return { activeEdit: { ...s.activeEdit, placement, check: validate(placement, s.layout, s.reserved) } };
     });
   },
 
@@ -317,7 +391,7 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
           host ? hostTopExtent(host.def) : undefined,
         ),
       };
-      return { activeEdit: { ...s.activeEdit, placement, check: validate(placement, s.layout) } };
+      return { activeEdit: { ...s.activeEdit, placement, check: validate(placement, s.layout, s.reserved) } };
     });
   },
 
@@ -334,9 +408,13 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
 
   confirm() {
     const s = get();
+    if (!s.activeEdit || !s.activeEdit.check.ok) return;
+    if (s.activeEdit.reserved) {
+      set({ reserved: [...s.reserved, s.activeEdit.placement], activeEdit: null });
+      return;
+    }
     // Never commit before the saved room has loaded: persisting against a not-yet-hydrated (empty or failed) layout would overwrite the whole saved room with just this ghost.
     if (!s.hydrated) return;
-    if (!s.activeEdit || !s.activeEdit.check.ok) return;
     const layout = [...s.layout, s.activeEdit.placement];
     set({ layout, activeEdit: null });
     persist(s.ownerId, layout, s.finishes);
@@ -347,7 +425,14 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
       if (!s.activeEdit) return s;
       // An edited piece snaps back to where it stood; a new one evaporates (it still exists in whatever inventory offered it — nothing was committed).
       return {
-        layout: s.activeEdit.previous ? [...s.layout, s.activeEdit.previous] : s.layout,
+        layout:
+          s.activeEdit.previous && !s.activeEdit.reserved
+            ? [...s.layout, s.activeEdit.previous]
+            : s.layout,
+        reserved:
+          s.activeEdit.previous && s.activeEdit.reserved
+            ? [...s.reserved, s.activeEdit.previous]
+            : s.reserved,
         activeEdit: null,
       };
     });
@@ -355,8 +440,20 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
 
   remove() {
     const s = get();
-    if (!s.hydrated) return;
     if (!s.activeEdit) return;
+    // The Clear Path bed is part of the room profile, not owned inventory. The
+    // delete control therefore behaves like cancel: it may be moved/rotated,
+    // but cannot be permanently removed or persisted.
+    if (s.activeEdit.reserved) {
+      set({
+        reserved: s.activeEdit.previous
+          ? [...s.reserved, s.activeEdit.previous]
+          : s.reserved,
+        activeEdit: null,
+      });
+      return;
+    }
+    if (!s.hydrated) return;
     const wasCommitted = s.activeEdit.previous !== null;
     // The ghost is already out of `layout`; dropping the edit deletes the piece — and a HOST leaves with everything standing on it (eject-on-remove, spec 2026-08-05), which is one filter and one persist. Children return to inventory implicitly, like every removed piece.
     const layout = removeWithChildren(s.layout, s.activeEdit.placement.instanceId);
@@ -377,5 +474,5 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
     persist(s.ownerId, s.layout, finishes);
   },
 
-  reset: () => set({ ownerId: null, layout: [], finishes: {}, activeEdit: null, hydrated: false, viewing: null }),
+  reset: () => set({ ownerId: null, layout: [], reserved: [], finishes: {}, activeEdit: null, hydrated: false, viewing: null }),
 }));

@@ -1,5 +1,4 @@
 // The item_variants table, held in memory so any consumer can read an item's colour list SYNCHRONOUSLY — the same reason catalogStore exists. A tile renders inside a map(), and the room's placement bar renders per ghost move: neither can await a round trip, and the answer is identical for every player, so it is fetched once and cached. Load order is cache-then-network, mirroring catalogStore: hydrate() reads the last successful fetch out of AsyncStorage with no session required, refresh() replaces it from the DB once signed in (the item_variants policy is `to authenticated`).
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 
 import { defaultVariation } from "./assets";
@@ -8,6 +7,15 @@ import type { CatalogId } from "../core/types";
 
 // Versioned like the build catalogue's: a shape change must not read rows written by an older build.
 const CACHE_KEY = "modu.catalog.variants.v1";
+
+// Store actions need the synchronous default-variation lookup in Node tests,
+// but those tests cannot parse React Native's runtime entrypoint. Resolve the
+// native cache only when hydrate/refresh actually performs device I/O.
+const variantStorage = () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require("@react-native-async-storage/async-storage")
+    .default as typeof import("@react-native-async-storage/async-storage").default;
+};
 
 export type VariantStatus = "empty" | "cached" | "live" | "error";
 
@@ -35,7 +43,7 @@ export const useVariantStore = create<VariantState>()((set, get) => ({
     // Never clobber a live fetch that won the race — same rule as the build catalogue.
     if (get().status === "live") return;
     try {
-      const raw = await AsyncStorage.getItem(CACHE_KEY);
+      const raw = await variantStorage().getItem(CACHE_KEY);
       if (!raw) return;
       const rows = JSON.parse(raw) as ItemVariant[];
       if (!Array.isArray(rows) || rows.length === 0) return;
@@ -51,7 +59,7 @@ export const useVariantStore = create<VariantState>()((set, get) => ({
       const rows = await repos.variants.list();
       // An empty table is a real answer, not a failure: adopt it and drop the cache, or a legitimately-emptied item_variants can never invalidate last session's colour lists.
       set({ byItem: group(rows), status: "live" });
-      await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(rows));
+      await variantStorage().setItem(CACHE_KEY, JSON.stringify(rows));
     } catch (err) {
       console.warn("[variants] refresh failed", err);
       if (Object.keys(get().byItem).length === 0) set({ status: "error" });

@@ -7,8 +7,11 @@ test("Control mode places Felix in the room", () => {
   assert.equal(roomAvatarKindForProfile("control"), "felix");
 });
 
-test("every non-Felix recommendation places Sparky in the room", () => {
-  assert.equal(roomAvatarKindForProfile("visual"), "sparky");
+test("Visual mode places Lumi in the room", () => {
+  assert.equal(roomAvatarKindForProfile("visual"), "lumi");
+});
+
+test("Momentum and the Clear Path fallback use Sparky", () => {
   assert.equal(roomAvatarKindForProfile("momentum"), "sparky");
   assert.equal(roomAvatarKindForProfile("clearPath"), "sparky");
 });

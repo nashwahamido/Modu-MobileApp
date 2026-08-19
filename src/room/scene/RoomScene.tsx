@@ -61,6 +61,11 @@ import { applySurfaceItem } from "./applySurfaceItem";
 import { SHELL_ORIGINAL } from "./shellMaterials";
 import { useSurfaceTextures } from "./useSurfaceTextures";
 import { RoomAvatar } from "./RoomAvatar";
+import {
+  CLEAR_PATH_BED_INSTANCE_ID,
+  CLEAR_PATH_BED_ITEM_ID,
+  clearPathBedPlacement,
+} from "../character/clearPathBed";
 import { useCurrentUserId, useRepos } from "../../data";
 import { useShopStore } from "../../data/shop/store";
 import { setCameraAzimuth, usePlacementStore } from "../core/placement";
@@ -985,7 +990,8 @@ export function RoomScene({
   viewportRef.current = { width, height };
 
   // The player's own room in the hub, a friend's while visiting. Placement is refused at the store while viewing, so activeEdit below is always null on that path and every ghost, overlay and drag branch is inert without needing its own check.
-  const layout = usePlacementStore((s) => s.viewing?.layout ?? s.layout);
+  const baseLayout = usePlacementStore((s) => s.viewing?.layout ?? s.layout);
+  const viewing = usePlacementStore((s) => s.viewing !== null);
   // Is the layout above the REAL one, or the empty placeholder a hydrate that hasn't answered yet leaves behind? Nothing may be called ready against the placeholder: an empty room parses instantly and would fire onReady before the saved furniture had even been asked for. A visit is settled by construction — its layout arrives with startViewing, in one commit.
   const layoutSettled = usePlacementStore(
     (s) => s.viewing !== null || s.hydrated,
@@ -993,6 +999,41 @@ export function RoomScene({
   const activeEdit = usePlacementStore((s) => s.activeEdit);
   // Subscribed (not getState) so pieces whose item rows arrive with the catalog sync appear then.
   const roomItems = useRoomCatalogStore((s) => s.items);
+  const profile = useGameStore((s) => s.profile);
+  const reservedFixtures = usePlacementStore((s) => s.reserved);
+  const setReserved = usePlacementStore((s) => s.setReserved);
+  const initialClearPathBed = useMemo(
+    () =>
+      profile === "clearPath" && !viewing && layoutSettled
+        ? clearPathBedPlacement(
+            baseLayout,
+            roomItems[CLEAR_PATH_BED_ITEM_ID]?.def,
+            roomItemDefs(),
+          )
+        : null,
+    [baseLayout, layoutSettled, profile, roomItems, viewing],
+  );
+  useEffect(() => {
+    if (profile !== "clearPath" || viewing) {
+      if (reservedFixtures.length > 0) setReserved([]);
+      return;
+    }
+    const editingBed =
+      activeEdit?.reserved === true &&
+      activeEdit.placement.instanceId === CLEAR_PATH_BED_INSTANCE_ID;
+    // Seed the fixture once per Clear Path room session. Once moved, its store
+    // position is authoritative; recomputing from the saved layout would snap
+    // it back to a corner after every render or catalogue update.
+    if (!editingBed && reservedFixtures.length === 0 && initialClearPathBed) {
+      setReserved([initialClearPathBed]);
+    }
+  }, [activeEdit, initialClearPathBed, profile, reservedFixtures, setReserved, viewing]);
+  useEffect(() => () => setReserved([]), [setReserved]);
+  const reserved = profile === "clearPath" && !viewing ? reservedFixtures : [];
+  const layout = useMemo(
+    () => (reserved.length > 0 ? [...baseLayout, ...reserved] : baseLayout),
+    [baseLayout, reserved],
+  );
   // The ghost re-renders through the store on every cell change; committed pieces only when the layout itself changes.
   const editing = activeEdit !== null;
 
@@ -1260,14 +1301,17 @@ export function RoomScene({
   const pickUpAt = useCallback(
     (px: number, py: number) => {
       const state = usePlacementStore.getState();
-      // `viewing` too: this searches state.layout — the player's OWN room — so in a friend's room it would raycast against pieces that are not on screen and buzz for a piece nobody can see. editPlacement refuses as well; this is the cheap pre-check that keeps the work and the haptic from happening at all.
+      // `viewing` too: the editable list belongs to the player's OWN room, so
+      // in a friend's room it would raycast against pieces that are not on
+      // screen and buzz for a piece nobody can see. editPlacement refuses too.
       if (state.activeEdit || state.viewing) return;
+      const editableLayout = [...state.layout, ...state.reserved];
       const hits = (
         surface: GridPlacement["surface"],
         pointed: { x: number; y: number } | null,
       ) =>
         pointed
-          ? state.layout.find((p) => {
+          ? editableLayout.find((p) => {
               const def = getRoomItemDef(p.itemId);
               if (!def || surfaceKey(p.surface) !== surfaceKey(surface))
                 return false;
@@ -1278,7 +1322,7 @@ export function RoomScene({
           : undefined;
       // Floor pieces are picked against their VOLUME, not the floor plane under the finger: a piece stands up out of its cells, so the ray through its visible body meets the floor one to three cells BEHIND it (one per 20 cm of height at the rest camera). Plane-picking therefore left only a ~52 x 26 px sliver at a piece's base live, which is what made the long-press feel broken — and, when the cell behind was occupied, picked up the wrong piece.
       const boxes: { placement: GridPlacement; box: PickBox }[] = [];
-      for (const p of state.layout) {
+      for (const p of editableLayout) {
         const item = getRoomItem(p.itemId);
         if (!item) continue;
         if (p.surface.kind === "floor") {
@@ -1290,7 +1334,7 @@ export function RoomScene({
           // A stacked piece's box stands on its host's top, which is what lets the ray hit IT before the larger host box beneath — no priority code, just geometry.
           const host = resolveHost(
             p.surface.hostInstanceId,
-            state.layout,
+            editableLayout,
             roomItemDefs(),
           );
           const hostItem = host ? getRoomItem(host.placement.itemId) : null;
