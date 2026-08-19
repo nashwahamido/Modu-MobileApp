@@ -24,6 +24,7 @@ import {
 import { useGameStore } from "@/src/game/core/store";
 import { clusterThumbSet, modelThumbSet } from "@/src/game/core/presentation/finish";
 import Svg, { Circle as SvgCircle, Defs, RadialGradient, Stop } from "react-native-svg";
+import { COIN_ICON } from "@/src/components/iconAssets";
 import { Theme, useFixedStyles, FONT, RADIUS, SIZE } from "@/src/game/ui/system/theme";
 import { useMirror } from "@/src/game/ui/system/handedness";
 import { useRepos } from "@/src/data";
@@ -483,11 +484,7 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
             </View>
             <View style={styles.rewardRow}>
               <View style={styles.rewardTile}>
-                <Image
-                  source={require("@/src/assets/ui/icons/icon-coins.png")}
-                  style={styles.rewardIcon}
-                  resizeMode="contain"
-                />
+                <Image source={COIN_ICON} style={styles.rewardCoin} resizeMode="contain" />
                 <Text style={styles.rewardText}>+ {coins}</Text>
               </View>
               <View style={styles.rewardTile}>
@@ -933,7 +930,8 @@ const makeStyles = (t: Theme) =>
       letterSpacing: 1,
       color: "#FBF8F3",
     },
-    rewardRow: { flexDirection: "row", gap: 5, alignSelf: "stretch" },
+    rewardRow: { flexDirection: "row", gap: 6, alignSelf: "stretch" },
+    rewardCoin: { width: 26, height: 26 },
     rewardText: { fontFamily: FONT, fontSize: 10, fontWeight: "700", color: INK },
 
   // TOP-RIGHT corner. top:8 is the HUD's grid line — the settings gear, the hint and the pause row

@@ -13,6 +13,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
+import { COIN_ICON } from "@/src/components/iconAssets";
 import { useGameStore } from "@/src/game/core/store";
 import { modelThumbSet } from "@/src/game/core/presentation/finish";
 import { useFixedStyles, FONT } from "@/src/game/ui/system/theme";
@@ -272,7 +273,7 @@ export function BuildComplete() {
                 <View style={styles.rewardRow}>
                   <View style={styles.rewardItem}>
                     <Image
-                      source={require("@/src/assets/ui/icons/icon-coins.png")}
+                      source={COIN_ICON}
                       style={styles.rewardIcon}
                       resizeMode="contain"
                     />
