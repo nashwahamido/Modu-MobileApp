@@ -72,11 +72,12 @@ export function CatalogThumb({ source, itemId, variation, surface, size }: Catal
   if (!remoteOk && bundled === undefined) return null;
   const showBundled = preferBundled || !remoteOk;
 
+  // A surface IS its picture — a wallpaper or a floor is a tiling swatch with no silhouette, so it fills the frame and crops. Everything else is an object photographed against nothing, and must be contained or it loses its edges.
   return (
     <Image
       source={showBundled ? bundled : { uri }}
-      style={[styles.art, { width: size, height: size }]}
-      resizeMode="contain"
+      style={surface ? styles.fill : [styles.art, { width: size, height: size }]}
+      resizeMode={surface ? "cover" : "contain"}
       onError={() => setFailed(uri)}
     />
   );
@@ -84,4 +85,6 @@ export function CatalogThumb({ source, itemId, variation, surface, size }: Catal
 
 const styles = StyleSheet.create({
   art: { backgroundColor: "transparent" },
+  // Fills whatever box the caller gave it; cover crops the overflow rather than squashing it
+  fill: { ...StyleSheet.absoluteFillObject },
 });

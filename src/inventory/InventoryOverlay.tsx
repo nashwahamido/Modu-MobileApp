@@ -14,14 +14,13 @@ import type { ShopCategory } from "@/src/data";
 import { useScreenInsets } from '@/src/hooks/use-safe-insets';
 import { useRoomCatalogStore } from "@/src/room/core/placeableItems";
 import { usePlacementStore } from "@/src/room/core/placement";
-import { InventoryCategoryTabs } from "./InventoryCategoryTabs";
+import { CategoryBoardTabs } from "@/src/components/CategoryBoardTabs";
 import { InventoryItemTile } from "./InventoryItemTile";
 import type { OwnedItem } from "./ownedItem";
 
-// Fixed four columns; the tile width is solved from the measured row width
+
 const GRID_COLUMNS = 4;
 const GRID_GAP = 22;
-// Side breathing room, subtracted before the columns are solved so tiles really do shrink
 const GRID_EDGE = 22;
 
 export function InventoryOverlay({ onClose }: { onClose: () => void }) {
@@ -30,17 +29,12 @@ export function InventoryOverlay({ onClose }: { onClose: () => void }) {
   const safe = useScreenInsets();
   const repos = useRepos();
   const me = useCurrentUserId();
-  // Slides up over the room and dims it, the way this surface did when it was a (presentation) route. requestClose replaces every direct onClose call, so the sheet is off-screen before the parent unmounts it.
   const { sheetStyle, scrimStyle, requestClose } = useSlideUpPresentation(onClose);
   const catalogRows = useCatalogStore((c) => c.rows);
-  // SUBSCRIBED, not read through getRoomItem(): the placeable catalog is fetched at startup and lands mid-session. A non-reactive read left every tile stuck on "cannot be placed yet" until something else happened to re-render this popup.
   const roomItems = useRoomCatalogStore((r) => r.items);
-  // The purchasable catalogue and the owned-id set are shared with the shop popup (src/data/shop/store). So this popup no longer re-fetches reference data the shop already has, and a purchase there shows up here.
   const boughtCatalogue = useShopStore((c) => c.items);
   const ownedIds = useShopStore((c) => c.owned);
   const shopStatus = useShopStore((c) => c.status);
-
-  // The BUILT half is this popup's own read: it changes when a build finishes, which is not something the shop's data has any reason to know about.
   const [built, setBuilt] = useState<OwnedItem[] | null>(null);
   const [builtError, setBuiltError] = useState(false);
   const loading = built === null || shopStatus === "loading" || shopStatus === "empty";
@@ -67,11 +61,9 @@ export function InventoryOverlay({ onClose }: { onClose: () => void }) {
           items.map((i) => ({ id: i.id, name: i.name, category: i.category, source: "built" as const })),
         );
       } catch (err) {
-        // The repos throw, so this is the ordinary failure path, not an exotic one
         console.warn("[inventory] could not load the built items:", (err as Error).message);
         if (alive) {
           setBuiltError(true);
-          // Not null, or the spinner outlives the failure and the error state never renders
           setBuilt([]);
         }
       }
@@ -81,7 +73,7 @@ export function InventoryOverlay({ onClose }: { onClose: () => void }) {
     };
   }, [me, repos, reloadKey]);
 
-  // Derived, not stored: both halves are already state, and keeping a third copy in sync with them was what let two versions of this list drift apart in the first place.
+ 
   const owned = useMemo<OwnedItem[]>(() => {
     const bought: OwnedItem[] = boughtCatalogue
       .filter((i) => ownedIds.has(i.id))
@@ -99,7 +91,6 @@ export function InventoryOverlay({ onClose }: { onClose: () => void }) {
 
   const place = (id: string) => {
     if (!usePlacementStore.getState().startPlacing(id)) return;
-    // Slides away rather than vanishing, so the ghost is revealed by the sheet leaving.
     requestClose();
   };
 
@@ -109,13 +100,11 @@ export function InventoryOverlay({ onClose }: { onClose: () => void }) {
   };
 
   const padTop = 18 + safe.top;
-  // safe.side, not left or right: the panel is centred, so both edges take the LARGER inset or it sits off-centre
   const padSide = 62 + safe.side;
   const padBottom = 18 + safe.bottom;
 
   return (
     <View style={s.layer}>
-      {/* The dim fades in with the sheet. The Pressable is a child rather than the scrim itself, because an animated opacity belongs on a View. */}
       <Animated.View style={[s.scrim, scrimStyle]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={requestClose} />
       </Animated.View>
@@ -123,7 +112,7 @@ export function InventoryOverlay({ onClose }: { onClose: () => void }) {
       <Animated.View
         style={[s.panel, { top: padTop, bottom: padBottom, left: padSide, right: padSide }, sheetStyle]}
       >
-        <InventoryCategoryTabs category={category} onCategory={setCategory} rightInset={GRID_EDGE} />
+        <CategoryBoardTabs category={category} onCategory={setCategory} />
 
         {loading ? (
           <View style={s.center}>
@@ -168,7 +157,6 @@ export function InventoryOverlay({ onClose }: { onClose: () => void }) {
         )}
       </Animated.View>
 
-      {/* Outside the panel so it can straddle the corner, as in the mockup. Rides the same slide, or it would pop in against a moving sheet. */}
       <Animated.View style={[s.close, { top: padTop - 16, right: padSide - 16 }, sheetStyle]}>
         <Pressable
           accessibilityRole="button"
@@ -191,14 +179,17 @@ const makeStyles = (t: Theme) =>
       ...StyleSheet.absoluteFillObject,
       zIndex: 40,
     },
-    // t.scrim: the same shading OverlaySheet uses, so every popup dims the same way
+  
     scrim: {
       ...StyleSheet.absoluteFillObject,
       backgroundColor: t.scrim,
     },
+   
     panel: {
       position: "absolute",
       borderRadius: 28,
+      borderWidth: 1.2,
+      borderColor: "#544F4B",
       backgroundColor: CREAM.card,
       paddingTop: 18,
       paddingHorizontal: 22,
@@ -210,7 +201,6 @@ const makeStyles = (t: Theme) =>
       flexWrap: "wrap",
       gap: GRID_GAP,
       paddingHorizontal: GRID_EDGE,
-      // Inside the scroll content so it scrolls away instead of leaving a fixed band
       paddingTop: 20,
       paddingBottom: 24,
     },
@@ -226,7 +216,7 @@ const makeStyles = (t: Theme) =>
       color: t.textDim,
       textAlign: "center",
     },
-    // The animated wrapper: it carries the position, the disc and the shadow, and rides the sheet's slide.
+    // The animated wrapper
     close: {
       position: "absolute",
       width: 40,
@@ -237,7 +227,6 @@ const makeStyles = (t: Theme) =>
       backgroundColor: CREAM.darkChip,
       ...CREAM_LIFT.chip,
     },
-    // The Pressable inside it. Fills the disc so the whole circle is tappable, and re-centres the cross because the icon is now a grandchild.
     closeHit: {
       ...StyleSheet.absoluteFillObject,
       alignItems: "center",
