@@ -30,7 +30,7 @@
 //   Green = complete (you did this). Gold = earned (XP, score). If a fourth meaning shows up, it does NOT get a fourth colour — it gets a shape or a position.
 
 import { StyleSheet, useWindowDimensions } from "react-native";
-import { useMemo } from "react";
+import { createContext, useContext, useMemo } from "react";
 import type { TextStyle } from "react-native";
 import { ThemeId } from "@/src/game/core/type";
 import { useGameStore } from "@/src/game/core/store";

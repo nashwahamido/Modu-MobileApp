@@ -22,11 +22,11 @@ import { avatarCardForProfile } from "@/src/components/avatarAssets";
 // The level badges, drawn in a card's top-right corner — the app's OWN level stars (ui/icons),
 // the same art the profile and room already use, so a level reads identically everywhere.
 const LEVEL_STARS: Record<number, number> = {
-  1: require("@/src/assets/ui/icons/level-1.png"),
-  2: require("@/src/assets/ui/icons/level-2.png"),
-  3: require("@/src/assets/ui/icons/level-3.png"),
-  4: require("@/src/assets/ui/icons/level-4.png"),
-  5: require("@/src/assets/ui/icons/level-5.png"),
+  1: require("@/src/assets/ui/icons/lvl-1.png"),
+  2: require("@/src/assets/ui/icons/lvl-2.png"),
+  3: require("@/src/assets/ui/icons/lvl-3.png"),
+  4: require("@/src/assets/ui/icons/lvl-4.png"),
+  5: require("@/src/assets/ui/icons/lvl-5.png"),
 };
 
 // A prepared account drops straight into its furnished room; a fresh one starts the questionnaire so the whole onboarding → tutorial run is on show.

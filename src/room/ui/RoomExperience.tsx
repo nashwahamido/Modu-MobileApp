@@ -11,12 +11,12 @@ import { ROOM_BACKGROUND } from './roomBackdrops';
 import { ceilingLightOn, type CeilingLightOverride } from '../core/timeOfDay';
 import { useGameStore } from '../../game/core/store';
 import { avatarForProfile } from '@/src/components/avatarAssets';
-import { CREAM, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
+import { CARD_CHROME, CREAM, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
 import { useCurrentUserId } from '../../data';
 import { RoomScene } from '../scene/RoomScene';
 import { FriendPickerOverlay } from './FriendPickerOverlay';
 import { RoomBottomBar } from './RoomBottomBar';
-import { RoomLightControls } from './RoomLightControls';
+import { LIGHT_COLUMN_GAP, RoomLightControls } from './RoomLightControls';
 import { RoomLoadingOverlay } from './RoomLoadingOverlay';
 import { RoomFirstPlacementGuide } from './RoomFirstPlacementGuide';
 import {
@@ -191,35 +191,43 @@ export function RoomExperience() {
           />
         ) : null}
       </SceneBackdrop>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Settings"
+      {/* ONE column: the settings disc and the two lighting discs are the same control set, so they
+          share a stack and one gap rather than being positioned apart and hoping they line up.
+          box-none, or the column's empty height would swallow taps meant for the room behind it. */}
+      <View
         style={[
-          s.settingsButton,
+          s.leftColumn,
           {
-            top: 12 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
+            // Sits BELOW the coins and level bars opposite rather than level with them — the two
+            // clusters are read at different moments, and the extra drop keeps the gear clear of the
+            // status area. Levelling them instead would be 12 + 3 + inset: RoomTopStats pads by the
+            // same 12 and centres its 23pt bar inside a 54pt badge, against this 48pt disc.
+            top: 12 + 14 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
             left: 18 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
           },
         ]}
-        onPress={() => router.push("/settings" as Href)}
+        pointerEvents="box-none"
       >
-        <Image source={SETTINGS_ICON} style={s.settingsIcon} resizeMode="contain" />
-      </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Settings"
+          style={s.settingsButton}
+          onPress={() => router.push("/settings" as Href)}
+        >
+          <Image source={SETTINGS_ICON} style={s.settingsIcon} resizeMode="contain" />
+        </Pressable>
 
-      {/* hidden mid-placement */}
-      {editing ? null : (
-        <RoomLightControls
-          hour={hour}
-          onHourChange={setRoomTimeOfDay}
-          lightOn={ceilingLight}
-          // Stamped with the CURRENT hour
-          onToggleLight={() => setLightOverride({ hour, on: !ceilingLight })}
-          style={[
-            s.lightControls,
-            { left: 18 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN) },
-          ]}
-        />
-      )}
+        {/* hidden mid-placement */}
+        {editing ? null : (
+          <RoomLightControls
+            hour={hour}
+            onHourChange={setRoomTimeOfDay}
+            lightOn={ceilingLight}
+            // Stamped with the CURRENT hour
+            onToggleLight={() => setLightOverride({ hour, on: !ceilingLight })}
+          />
+        )}
+      </View>
 
       <RoomTopStats />
 
@@ -325,31 +333,31 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   },
   stage: StyleSheet.absoluteFillObject,
   
-  settingsButton: {
+  // Hangs from the top-left corner; its height is its contents. LIGHT_COLUMN_GAP is the ONE spacing:
+  // the light controls repeat it internally, so all three discs sit the same distance apart.
+  leftColumn: {
     position: 'absolute',
     zIndex: 12,
-    width: 42,
-    height: 42,
+    alignItems: 'flex-start',
+    gap: LIGHT_COLUMN_GAP,
+  },
+  // Sized TO the artwork, which is a disc: the shadow follows the view's box, so a 42pt box under a
+  // 48pt drawing would cast a circle smaller than the thing casting it. borderWidth is zeroed because
+  // the disc brings its own edge — only the shadow is wanted from CARD_CHROME.
+  settingsButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#50464b',
-    shadowOpacity: .17,
-    shadowRadius: 3.5,
-    shadowOffset: { width: 0, height: 2 },
+    ...CARD_CHROME,
+    borderWidth: 0,
   },
   settingsIcon: {
     width: 48,
     height: 48,
   },
-  // Spans the full height and centres its own contents, rather than being pinned under the settings
-  // button: the column is the room's lighting control and belongs at eye level, not tucked in a corner.
-  lightControls: {
-    position: 'absolute',
-    zIndex: 12,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
-  },
+
   comingSoonTitle: {
     ...LEXEND.black,
     fontSize: 22,

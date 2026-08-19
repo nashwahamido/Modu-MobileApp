@@ -17,7 +17,9 @@ import { useScreenInsets } from '../../hooks/use-safe-insets';
 const BAR_STROKE = CARD_CHROME.borderColor;
 const BAR_STROKE_WIDTH = CARD_CHROME.borderWidth;
 const BAR_FILL = '#FBFAF3';
-const BAR_HEIGHT = 58;
+// Content is ICON_SLOT + label gap + label line = 57, so this leaves ~3.5pt of air above the icons
+// and below the labels rather than letting them touch the bar's edges.
+const BAR_HEIGHT = 64;
 
 const BAR_SHADOW = CARD_CHROME;
 
@@ -27,15 +29,26 @@ const BAR_ITEM_ENTERING = FadeIn.duration(160);
 const BAR_ITEM_EXITING = FadeOut.duration(120);
 
 
-const BAR_ICON_SIZE = 34;
-const SHOP_ICON_SIZE = 42;
-const VISIT_FRIENDS_ICON_SIZE = 40;
+// The four icons are SOLVED, not picked, because equal boxes do NOT make equal-looking icons: each
+// PNG fills its own canvas differently (the cart draws 70% of its height, the avatar 75%, the cabinet
+// 86%, the friends 90%), and `contain` scales the whole canvas — margins included. So each box is
+// sized so the DRAWN part lands at the same 34pt height. Re-solve with box = 34 * max(canvasW,
+// canvasH) / drawnH if any of these files is re-exported.
+const BAR_ICON_SIZE = 40;
+const SHOP_ICON_SIZE = 49;
+const VISIT_FRIENDS_ICON_SIZE = 47;
 const ASSEMBLE_SPREAD = 12;
 const BAR_GAP= 30 - ASSEMBLE_SPREAD / 2;
-const YOU_ICON_SIZE= 34;
+const YOU_ICON_SIZE= 45;
 const SHOP_ICON_NUDGE_X = -4;
-const ICON_SLOT = 38;
-const ASSEMBLE_LIFT = 22;
+// The LABEL's anchor, not a clip: a box wider than this simply overflows it, and since the boxes above
+// carry transparent margin it is the drawing — 34pt tall, centred — that this has to leave room for.
+// Fixed, so resizing an icon never moves its label and never changes the bar's height.
+const ICON_SLOT = 44;
+// How far the button is lifted OUT of the bar. Everything else about the assemble slot is solved from
+// it — the label's offset, the wrap's height, and the collar arc's span — so lowering the circle
+// re-seats the label and re-cuts the arc without another edit.
+const ASSEMBLE_LIFT = 16;
 
 const ASSEMBLE_COLLAR_SIZE = 68;
 const ASSEMBLE_BUTTON_SIZE = 55;
@@ -44,7 +57,7 @@ const ASSEMBLE_ICON_NUDGE_Y = -7;
 const ASSEMBLE_CENTRE_OPEN = -ASSEMBLE_LIFT + ASSEMBLE_BUTTON_SIZE / 2;
 const ASSEMBLE_CENTRE_CLOSED = ASSEMBLE_BUTTON_SIZE / 2;
 const BAR_LABEL_LINE_HEIGHT = 13;
-const BAR_LABEL_GAP= 2;
+const BAR_LABEL_GAP= 0;
 const ASSEMBLE_LABEL_TOP = BAR_LABEL_GAP + (ICON_SLOT - (ASSEMBLE_BUTTON_SIZE - ASSEMBLE_LIFT));
 const ASSEMBLE_WRAP_HEIGHT =
   ASSEMBLE_BUTTON_SIZE - ASSEMBLE_LIFT + ASSEMBLE_LABEL_TOP + BAR_LABEL_LINE_HEIGHT;
@@ -87,17 +100,17 @@ export function RoomBottomBar({
         barOpen ? s.bottomBarWrapOpen : [s.bottomBarWrapClosed, { left: padL }],
       ]}
     >
-      {!barOpen ? (
-        <Animated.View style={s.chevronLift} entering={BAR_ITEM_ENTERING} exiting={BAR_ITEM_EXITING} layout={BAR_LAYOUT}>
+      {barOpen ? (
+        <Animated.View entering={BAR_ITEM_ENTERING} exiting={BAR_ITEM_EXITING} layout={BAR_LAYOUT}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Expand menu"
-            accessibilityState={{ expanded: false }}
+            accessibilityLabel="Collapse menu"
+            accessibilityState={{ expanded: true }}
             hitSlop={12}
             style={s.chevronButton}
-            onPress={() => setBarOpen(true)}
+            onPress={() => setBarOpen(false)}
           >
-            <View style={s.chevronLeft}>
+            <View style={s.chevronRight}>
               <ChevronIcon size={26} up color={BAR_FILL} outlineColor={BAR_STROKE} outlineWidth={BAR_STROKE_WIDTH} />
             </View>
           </Pressable>
@@ -195,17 +208,18 @@ export function RoomBottomBar({
         ) : null}
       </Animated.View>
 
-      {barOpen ? (
-        <Animated.View entering={BAR_ITEM_ENTERING} exiting={BAR_ITEM_EXITING} layout={BAR_LAYOUT}>
+      {/* Collapsed, the arrow FOLLOWS the shrunken pill; expanded, the collapse arrow leads it. */}
+      {!barOpen ? (
+        <Animated.View style={s.chevronLift} entering={BAR_ITEM_ENTERING} exiting={BAR_ITEM_EXITING} layout={BAR_LAYOUT}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Collapse menu"
-            accessibilityState={{ expanded: true }}
+            accessibilityLabel="Expand menu"
+            accessibilityState={{ expanded: false }}
             hitSlop={12}
             style={s.chevronButton}
-            onPress={() => setBarOpen(false)}
+            onPress={() => setBarOpen(true)}
           >
-            <View style={s.chevronRight}>
+            <View style={s.chevronLeft}>
               <ChevronIcon size={26} up color={BAR_FILL} outlineColor={BAR_STROKE} outlineWidth={BAR_STROKE_WIDTH} />
             </View>
           </Pressable>
@@ -226,8 +240,9 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   bottomBarWrapOpen: {
     alignSelf: 'center',
   },
+  // Keeps the chevron clear of the collar, which overhangs the shrunken pill
   bottomBarWrapClosed: {
-    gap: 14,
+    gap: 0,
   },
   chevronLift: {
     zIndex: 2,
@@ -259,11 +274,13 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Points AWAY from the pill it expands: collapsed, the arrow sits on the pill's right
   chevronLeft: {
-    transform: [{ rotate: '270deg' }],
-  },
-  chevronRight: {
     transform: [{ rotate: '90deg' }],
+  },
+  // Points AWAY from the bar it collapses: expanded, the arrow sits on the pill's left
+  chevronRight: {
+    transform: [{ rotate: '270deg' }],
   },
 
   barItem: {

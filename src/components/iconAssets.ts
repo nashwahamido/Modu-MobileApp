@@ -11,8 +11,8 @@ export const INVENTORY_ICON: ImageSourcePropType = require("@/src/assets/ui/icon
 export const HOME_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/icon-home.png");
 export const VISIT_FRIENDS_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/VisitFriends-icon.png");
 export const YOU_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/You-icon.png");
-// Distinct from the older icon-settings.png, which the in-game HUD still uses.
-export const SETTINGS_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/Settings-icon.png");
+// The same file the in-game HUD uses (game/ui/hud/hudIcons.ts), so the gear is one drawing everywhere.
+export const SETTINGS_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/icon-settings.png");
 
 // Blank, so the level is drawn over it as text. The fallback past the last numbered star, and the shop's lock badge
 export const STAR_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/star-universal-icon.png");
