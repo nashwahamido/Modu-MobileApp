@@ -80,6 +80,7 @@ import { MomentumCompanion } from "@/src/game/tutorial/MomentumCompanion";
 import { MomentumAttentionOverlay } from "@/src/game/tutorial/MomentumAttentionOverlay";
 import { useTutorialStore } from "@/src/game/tutorial/store";
 import { useTutorialHaptics } from "@/src/game/tutorial/useTutorialHaptics";
+import { useBuildPersistence } from "@/src/hooks/useBuildPersistence";
 import {
   TUTORIAL_STEP_REWARD_TOKENS,
   type ToolTutorialKind,
@@ -92,6 +93,10 @@ const TUTORIAL_SPOT_MS = 2800;
 function TutorialScreen() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
   useTutorialHaptics();
+  // The tutorial builds the SAME LACK table the catalogue lists, so its progress has to be written —
+  // without this, a player who skipped halfway found the catalogue offering "Start" and their four
+  // legs gone. Save only, never resume: see the note on the hook.
+  useBuildPersistence(TUTORIAL_FURNITURE_ID, { resume: false, settleOnFinish: false });
   // Chrome AND spotlight targets together: the targets are measured rectangles standing in for controls, so they have to cross the screen with the controls they frame or the highlight lands on nothing.
   const styles = useTutorialChrome();
   const hudControls = useHudControlStyles();
