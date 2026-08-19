@@ -1,6 +1,7 @@
 import { router } from "expo-router";
 import type { Href } from "expo-router";
 import * as Speech from "@/src/onboarding/speech";
+import { introPath, optionPath, promptPath } from "@/src/onboarding/voiceAssets";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
@@ -437,25 +438,24 @@ export default function QuestionnaireScreen() {
     }, 650);
   };
 
-  const speak = (text: string) => {
-    Speech.stop();
-    Speech.speak(text, {
-      language: "en-US",
-      pitch: 1.08,
-      rate: 0.92,
-    });
-  };
+  // Every voice button plays the RECORDED clip for its line, falling back to synthesis if the clip
+  // is missing or the device is offline (see onboarding/speech.ts). The pitch and rate below only
+  // ever reach the fallback — a recording already sounds however it was performed.
+  const VOICE = { language: "en-US", pitch: 1.08, rate: 0.92 };
 
   const speakIntro = () => {
-    speak(questionnaireIntroVoiceText);
+    Speech.speakLine(introPath(), questionnaireIntroVoiceText, VOICE);
   };
 
   const speakCurrentQuestion = () => {
-    speak(question.prompt);
+    Speech.speakLine(promptPath(index), question.prompt, VOICE);
   };
 
-  const speakAnswer = (answer: string) => {
-    speak(answer);
+  // Takes the option's INDEX as well as its text: the clip is identified by position (Q3-Opt2.mp3),
+  // and matching on the text instead would break the moment a line was reworded — silently, and
+  // only for the players using the voice button.
+  const speakAnswer = (answer: string, optionIndex: number) => {
+    Speech.speakLine(optionPath(index, optionIndex), answer, VOICE);
   };
 
   const goBack = () => {
@@ -838,7 +838,7 @@ export default function QuestionnaireScreen() {
               <VoiceButton
                 onPress={(event) => {
                   event.stopPropagation();
-                  speakAnswer(option);
+                  speakAnswer(option, optionIndex);
                 }}
                 style={styles.optionAudioButton}
                 size="small"
