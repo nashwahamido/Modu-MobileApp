@@ -224,6 +224,70 @@ export function dragRayPoint(
   return [eye[0] + t * dir[0], eye[1] + t * dir[1], eye[2] + t * dir[2]];
 }
 
+/** Slack (m) added to an anchor's own burial depth to form its visibility threshold: the first surface the sightline meets must be within (burial + slack) of the anchor. 6mm passes a countersunk screw seen face-on (gap ~0) and a cam seen from its bore side (gap = its 4mm burial), while a 15mm panel's far side (gap 11mm vs 4+6) and a leg's far side (gap 20mm+ vs 0+6) fail. */
+export const VIS_GAP_SLACK_M = 0.006;
+
+/** How deep `target` sits inside the boxes that contain it — the distance to the nearest boundary of the tightest containing box, 0 when nothing contains it. An anchor buried d metres deep cannot possibly be seen closer than d, so d joins its visibility threshold: this is what lets ONE rule serve a flush screw head (d=0), a cam 4mm into its bore, and a bridge anchor at a dowel's centre, with no per-type exemptions. */
+export function burialDepthM(
+  target: Vec3,
+  boxes: readonly { min: Vec3; max: Vec3 }[],
+): number {
+  let d = 0;
+  for (const b of boxes) {
+    if (
+      target[0] < b.min[0] || target[0] > b.max[0] ||
+      target[1] < b.min[1] || target[1] > b.max[1] ||
+      target[2] < b.min[2] || target[2] > b.max[2]
+    )
+      continue;
+    const toFace = Math.min(
+      target[0] - b.min[0], b.max[0] - target[0],
+      target[1] - b.min[1], b.max[1] - target[1],
+      target[2] - b.min[2], b.max[2] - target[2],
+    );
+    if (toFace > d) d = toFace;
+  }
+  return d;
+}
+
+/** The gap (m) between the FIRST box surface the sightline eye->target crosses and the target itself, plus which box owns that surface. 0 when nothing stands in front. This is the visibility question asked properly: not "is the neighbourhood visible" (box/halo sampling — a halo corner peeking past a silhouette passed a socket the player could not see) but "is the first thing the eye touches along this line the socket, or something in front of it". Boxes the ray only meets past the target do not count; a box the EYE starts inside contributes its exit... its entry is clamped to 0 and counts only if the target is beyond it. */
+export function sightlineGapM(
+  eye: Vec3,
+  target: Vec3,
+  boxes: readonly { min: Vec3; max: Vec3; pid?: string }[],
+): { gap: number; by: string | null } {
+  const seg: Vec3 = [target[0] - eye[0], target[1] - eye[1], target[2] - eye[2]];
+  const len = Math.hypot(seg[0], seg[1], seg[2]) || 1;
+  let tFirst = 1;
+  let by: string | null = null;
+  for (const b of boxes) {
+    let lo = 0;
+    let hi = 1;
+    let ok = true;
+    for (let k = 0; k < 3 && ok; k++) {
+      const d = seg[k];
+      if (Math.abs(d) < 1e-9) {
+        if (eye[k] < b.min[k] || eye[k] > b.max[k]) ok = false;
+        continue;
+      }
+      const t0 = (b.min[k] - eye[k]) / d;
+      const t1 = (b.max[k] - eye[k]) / d;
+      const a = Math.min(t0, t1);
+      const z = Math.max(t0, t1);
+      if (a > lo) lo = a;
+      if (z < hi) hi = z;
+      if (lo > hi) ok = false;
+    }
+    if (!ok || lo >= 1) continue;
+    const entry = Math.max(0, lo);
+    if (entry < tFirst) {
+      tFirst = entry;
+      by = b.pid ?? null;
+    }
+  }
+  return { gap: (1 - tFirst) * len, by };
+}
+
 /** Whether any part of a projected aim segment is inside the viewport plus `margin` px. Endpoints and midpoint cover the short hole→park segments this gates; a snap must not be earnable against a socket the player cannot see (measured: an off-screen seat at y=-88 was still inside the finger's capture band near the top edge). Acquisition uses margin 0; an ALREADY-matched socket is held to a generous negative test elsewhere so an orbit nudge does not pop the match. */
 export function segmentInFrame(
   ax: number,
@@ -265,30 +329,6 @@ export function segmentHitsBox(
   const lo = Math.max(t0, margin);
   const hi = Math.min(t1, 1 - margin);
   return hi > lo;
-}
-
-/** Sample points over a box's surface — 8 corners and 6 face centers, each pushed `push` metres outward from the box center so a sample seated flush against neighbouring geometry escapes it. These are the fastener-visibility probes: the fraction of them with a clear line of sight IS "how much of the seated fastener the camera can see". The rule is the user's: a fastener is assemblable when >=30% of its target-position geometry is visible — face heuristics (arrival direction, nearest face) were both falsified on EKET's cam lock, whose bore orientation encodes nothing about which side of the panel it is reached from. */
-export function boxSurfaceSamples(
-  box: { min: Vec3; max: Vec3 },
-  push = 0.004,
-): Vec3[] {
-  const c: Vec3 = [
-    (box.min[0] + box.max[0]) / 2,
-    (box.min[1] + box.max[1]) / 2,
-    (box.min[2] + box.max[2]) / 2,
-  ];
-  const pts: Vec3[] = [];
-  for (const x of [box.min[0], box.max[0]])
-    for (const y of [box.min[1], box.max[1]])
-      for (const z of [box.min[2], box.max[2]]) pts.push([x, y, z]);
-  pts.push([c[0], c[1], box.min[2]], [c[0], c[1], box.max[2]]);
-  pts.push([c[0], box.min[1], c[2]], [c[0], box.max[1], c[2]]);
-  pts.push([box.min[0], c[1], c[2]], [box.max[0], c[1], c[2]]);
-  return pts.map((p) => {
-    const d: Vec3 = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
-    const l = Math.hypot(d[0], d[1], d[2]) || 1;
-    return [p[0] + (d[0] / l) * push, p[1] + (d[1] / l) * push, p[2] + (d[2] / l) * push];
-  });
 }
 
 /** The point on the finger's ray nearest `socket` — the socket-depth policy's target: on the ray, so exactly under the finger on screen, at the depth where vertical finger tremor costs nothing (a grazing work plane turns the same tremor into metres). `t` is floored at 0 so a socket behind the camera degrades to the eye rather than a point behind it. */

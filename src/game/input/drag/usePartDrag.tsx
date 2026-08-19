@@ -34,7 +34,7 @@ import { computeFit, APPROACH_FACTOR } from "@/src/game/core/geometry/fit";
 import { isStaged } from "@/src/game/core/model/staging";
 import { isPickupType, placeId } from "@/src/game/core/ids";
 import { quatConjugate, quatMultiply, quatRotateVec3, quatSlerp, screenRay } from "@/src/game/core/geometry/math";
-import { AIM_BAND_MAX_PX, aimBandScale, clusterCarryAnchor, dragPlanePoint, dragRayPoint, holdReachFrom, leashAlongRay, boxSurfaceSamples, pointToSegmentPx, rayPointNearest, segmentHitsBox, segmentInFrame } from "./dragPlane";
+import { AIM_BAND_MAX_PX, aimBandScale, clusterCarryAnchor, dragPlanePoint, dragRayPoint, holdReachFrom, leashAlongRay, burialDepthM, pointToSegmentPx, sightlineGapM, VIS_GAP_SLACK_M, rayPointNearest, segmentHitsBox, segmentInFrame } from "./dragPlane";
 import { ActionId, AssemblyAction, Furniture, PartBox, PartDef, PartId, Quat, Vec3 } from "@/src/game/core/type";
 import { selectFirstDrop, useGameStore } from "@/src/game/core/store";
 import type { OrbitManipulator } from "../../scene/AssemblyScene";
@@ -110,7 +110,7 @@ interface DragSession {
   /** matchVisual is where the fit is MEASURED — the park pose for a part that enters along an axis,
    *  the seated hold point for everything else. GroupCandidate's own position stays what the
    *  release path places at. */
-  candidates: (GroupCandidate & { matchVisual: Vec3; seatVisual: Vec3; visSamples: Vec3[] | null; receiverIds: Set<PartId> })[];
+  candidates: (GroupCandidate & { matchVisual: Vec3; seatVisual: Vec3; burial: number; receiverIds: Set<PartId> })[];
   /** Live sockets outside the group, for wrong-target detection. */
   otherSockets: Vec3[];
   bakedPos: Vec3;
@@ -147,6 +147,8 @@ interface DragSession {
   modelR: number;
   /** Parts placed at pickup time — the occluder set for the socket line-of-sight gate. */
   placedIds: Set<PartId>;
+  /** Boxes of those parts (with owner ids) — the sightline-gap gate's occluder list. */
+  placedBoxes: { min: Vec3; max: Vec3; pid: string }[];
   /** How far this part reaches from the point the finger controls — what the carry must clear so no end of it crosses the lens. Captured at pickup because the bounds and the hold point are both fixed for the drag. */
   holdReach: number;
 }
@@ -613,12 +615,21 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
             if (!cl) return true;
             return !!furniture.clusters?.[cl]?.seed || combinedClusters.has(cl);
           };
+          const placedBoxListOf = (ids: Iterable<PartId>) => {
+            const out: { min: Vec3; max: Vec3; pid: string }[] = [];
+            for (const pid of ids) {
+              const bx = partBoxes[pid];
+              if (bx) out.push({ min: bx.min, max: bx.max, pid });
+            }
+            return out;
+          };
           const placedSet = new Set<PartId>(
             furniture.actions
               .filter((a) => a.type === "placePart" && a.partId && doneSet.has(a.actionId))
               .map((a) => a.partId!)
               .filter(atBakedPose),
           );
+          const placedBoxList = placedBoxListOf(placedSet);
           const liaisonMap = furniture.liaisons ?? {};
           const candidatesWithFacing = candidates.map((c) => {
             // The candidate's RECEIVERS (liaison partners) are exempt from the occlusion gate: the seat anchor is clamped INTO the receiver's box, so every legitimate sightline ends inside it — treating the receiver as an occluder blocks all its own sockets from any angle (measured: the steep-camera approach crosses 5.5cm of DALFRED's plate to reach a rim anchor).
@@ -628,36 +639,11 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
               if (l.b === c.action.partId) receiverIds.add(l.a);
             }
             // FASTENER visibility is measured against the seated part's own GEOMETRY (the user's rule): sample the fastener's baked box surface, discard samples buried inside placed geometry, and per frame require >=30% of the exposed remainder to have a clear line of sight. Face heuristics were falsified twice on EKET's cam lock — arrival direction (-engageDir) points along the panel and blocked legitimate views of the bore face; nearest-receiver-face picked the interior face and allowed assembling the rear cam THROUGH the panel from the front. Sampling makes the receiver a legitimate occluder of the fastener's buried side, which is the physical truth both heuristics missed. Structural parts keep the anchor line-of-sight test.
-            const cPart2 = c.action.partId ? furniture.parts[c.action.partId] : undefined;
-            let visSamples: Vec3[] | null = null;
-            {
-              // Structural parts sample a HALO around the seat anchor (the socket neighborhood — "the target pos geometry"); fasteners sample their own seated box, which is the same idea at their scale. No receiver exemptions anywhere in sampling: burial replaces them — samples inside placed geometry drop at pickup, and the receiver hiding its own socket is then honest occlusion of the exposed remainder (a plate DOES hide its underside leg sockets from above; the old exempt-the-receiver line-of-sight said it couldn't, which let legs snap through plates and screws through panels).
-              const H = 0.025;
-              const halo: PartBox = {
-                min: [c.seatVisual[0] - H, c.seatVisual[1] - H, c.seatVisual[2] - H],
-                max: [c.seatVisual[0] + H, c.seatVisual[1] + H, c.seatVisual[2] + H],
-              };
-              const inside = (pt: Vec3, bx: { min: Vec3; max: Vec3 }) =>
-                pt[0] >= bx.min[0] && pt[0] <= bx.max[0] &&
-                pt[1] >= bx.min[1] && pt[1] <= bx.max[1] &&
-                pt[2] >= bx.min[2] && pt[2] <= bx.max[2];
-              const exposedOf = (bx: PartBox) =>
-                boxSurfaceSamples(bx).filter((pt) => {
-                  for (const pid of placedSet) {
-                    const ob = partBoxes[pid];
-                    if (ob && inside(pt, ob)) return false;
-                  }
-                  return true;
-                });
-              // Fasteners sample their seated box — but a FLUSH/countersunk fastener's box is fully inside its receiver, every sample buries, and a null here used to fall back to the exemption-based test whose transparent receivers were the very hole (user: "the screw still snaps when hidden"). The anchor halo is the retry: a countersunk head's halo still pokes out of the entry face.
-              const fb = cPart2?.type === "fastener" ? partBoxes[cPart2.partId] : null;
-              let exposed = fb ? exposedOf(fb) : [];
-              if (!exposed.length) exposed = exposedOf(halo);
-              visSamples = exposed.length ? exposed : null;
-            }
+            // ONE visibility rule (sightline gap; see dragPlane.sightlineGapM): precompute this anchor's burial depth — its own threshold calibration. No exemptions, no fastener/structural split, no samples: box/halo sampling answered "is the NEIGHBOURHOOD visible" and a halo corner peeking past the plate's silhouette armed a socket the player could not see (user screenshot, wood screw at 9%).
+            const burial = burialDepthM(c.seatVisual, placedBoxList);
             return {
               ...c,
-              visSamples,
+              burial,
               receiverIds,
             };
           });
@@ -666,7 +652,7 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
             const c0 = candidates[0];
             const j = jointAnchors[c0.action.partId!];
             console.log(
-              `[pickup] ${c0.action.actionId} pos=${c0.position.map((v) => v.toFixed(3)).join(",")} hold=${c0.holdPosition.map((v) => v.toFixed(3)).join(",")} seat=${c0.seatVisual.map((v) => v.toFixed(3)).join(",")} match=${c0.matchVisual.map((v) => v.toFixed(3)).join(",")} anchor=${j ? j.map((v) => v.toFixed(3)).join(",") : "none"} BUILD=noplane17`,
+              `[pickup] ${c0.action.actionId} pos=${c0.position.map((v) => v.toFixed(3)).join(",")} hold=${c0.holdPosition.map((v) => v.toFixed(3)).join(",")} seat=${c0.seatVisual.map((v) => v.toFixed(3)).join(",")} match=${c0.matchVisual.map((v) => v.toFixed(3)).join(",")} anchor=${j ? j.map((v) => v.toFixed(3)).join(",") : "none"} BUILD=noplane18`,
             );
           }
           const groupIds = new Set(candidates.map((c) => c.action.actionId));
@@ -695,6 +681,7 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
             modelR,
             holdReach,
             placedIds: placedSet,
+            placedBoxes: placedBoxList,
           };
         })
         .onUpdate((e) => {
@@ -818,40 +805,15 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
               const d = distPx(c);
               // A socket the player cannot SEE cannot be aimed at — off-frame candidates are skipped for acquisition (a snap must never be earned against an invisible hole; measured: a seat at y=-88 was still inside the capture band near the top edge). The CURRENT match is not acquired here either — it is held through the more generous nearFrame test below, so a mid-drag orbit that nudges the socket just past the edge does not pop the magnet.
               if (!d.inFrame) continue;
-              // Visibility gate: >=30% of the exposed seated-geometry samples must be in clear sight.
+              // Visibility gate, one rule for every part type: the first surface the sightline meets must be within (the anchor's own burial + slack) of the anchor. Looking AT the socket passes; looking at anything in front of it — another part, or the SAME part's far side — fails. Replaces box/halo sampling (neighbourhood visibility) and the exemption-based line-of-sight test (transparent receivers), both of which armed hidden sockets in play tests.
               let visStat: string | null = null;
-              if (c.visSamples && laF) {
-                let vis = 0;
-                let blocker: PartId | null = null;
-                for (const pt of c.visSamples) {
-                  let hit: PartId | null = null;
-                  for (const pid of s.placedIds) {
-                    if (pid === c.action.partId) continue;
-                    const bx = partBoxes[pid];
-                    const segLen = Math.hypot(pt[0] - laF[0][0], pt[1] - laF[0][1], pt[2] - laF[0][2]) || 1;
-                    if (bx && segmentHitsBox(laF[0], pt, bx, SAMPLE_HIT_MARGIN_M / segLen)) {
-                      hit = pid;
-                      break;
-                    }
-                  }
-                  if (hit) blocker = hit;
-                  else vis++;
-                }
-                visStat = `${vis}/${c.visSamples.length}`;
-                if (vis / c.visSamples.length < VIS_FRACTION_MIN) {
+              if (laF) {
+                const g = sightlineGapM(laF[0], c.seatVisual, s.placedBoxes);
+                visStat = `${(g.gap * 1000).toFixed(0)}/${((c.burial + VIS_GAP_SLACK_M) * 1000).toFixed(0)}mm`;
+                if (g.gap > c.burial + VIS_GAP_SLACK_M) {
                   if (d.px < blockedPx) {
                     blockedPx = d.px;
-                    blockedBy = blocker ?? c.action.partId ?? null;
-                  }
-                  continue;
-                }
-                // Sampling answered visibility outright; the anchor line-of-sight test in the other branch is for structural parts.
-              } else {
-                const occ = occludedOf(c);
-                if (occ) {
-                  if (d.px < blockedPx) {
-                    blockedPx = d.px;
-                    blockedBy = occ;
+                    blockedBy = (g.by as PartId | null) ?? c.action.partId ?? null;
                   }
                   continue;
                 }
@@ -1090,7 +1052,7 @@ function parkShiftFor(part: PartDef | undefined): Vec3 {
             const nSeat = nearest?.seatVisual ? worldToScreen(nearest.seatVisual) : null;
             const nPark = nearest?.matchVisual ? worldToScreen(nearest.matchVisual) : null;
             console.log(
-              `[drag] f=(${e.absoluteX.toFixed(0)},${e.absoluteY.toFixed(0)}) part=(${hp ? `${hp.x.toFixed(0)},${hp.y.toFixed(0)}` : "?"}) gapPx=${gapPx} p=${p ? p.map((v) => v.toFixed(2)).join(",") : "null"} plane=${s.planeY.toFixed(2)} upright=${!!s.uprightAnchor} aim=${Number.isFinite(bestD) ? bestD.toFixed(3) : "inf"} pull=${Number.isFinite(pullD) ? pullD.toFixed(3) : "inf"} band=${band.toFixed(2)} cam=${camDist.toFixed(3)} reach=${s.holdReach.toFixed(3)} carry=${carryDepth} blend=${s.depthBlend.toFixed(2)} tgt=${s.matchedActionId ?? "-"} blk=${aimBlockedNow ? 1 : 0} occ=${blockedBy ?? "-"} vis=${nearestVis} near=${nearest?.action.actionId ?? "-"} seat=(${nSeat ? `${nSeat.x.toFixed(0)},${nSeat.y.toFixed(0)}` : "?"}) park=(${nPark ? `${nPark.x.toFixed(0)},${nPark.y.toFixed(0)}` : "?"}) fit=${fs} BUILD=noplane17`,
+              `[drag] f=(${e.absoluteX.toFixed(0)},${e.absoluteY.toFixed(0)}) part=(${hp ? `${hp.x.toFixed(0)},${hp.y.toFixed(0)}` : "?"}) gapPx=${gapPx} p=${p ? p.map((v) => v.toFixed(2)).join(",") : "null"} plane=${s.planeY.toFixed(2)} upright=${!!s.uprightAnchor} aim=${Number.isFinite(bestD) ? bestD.toFixed(3) : "inf"} pull=${Number.isFinite(pullD) ? pullD.toFixed(3) : "inf"} band=${band.toFixed(2)} cam=${camDist.toFixed(3)} reach=${s.holdReach.toFixed(3)} carry=${carryDepth} blend=${s.depthBlend.toFixed(2)} tgt=${s.matchedActionId ?? "-"} blk=${aimBlockedNow ? 1 : 0} occ=${blockedBy ?? "-"} vis=${nearestVis} near=${nearest?.action.actionId ?? "-"} seat=(${nSeat ? `${nSeat.x.toFixed(0)},${nSeat.y.toFixed(0)}` : "?"}) park=(${nPark ? `${nPark.x.toFixed(0)},${nPark.y.toFixed(0)}` : "?"}) fit=${fs} BUILD=noplane18`,
             );
           }
         })
