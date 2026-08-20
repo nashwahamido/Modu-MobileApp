@@ -24,6 +24,7 @@ import { ObjectiveBar } from "@/src/game/ui/hud/ObjectiveBar";
 import {
   HintButton,
   RecenterButton,
+  SpokenStepsButton,
   useHudControlStyles,
   useTutorialChrome,
 } from "@/src/game/ui/hud/hudChrome";
@@ -874,6 +875,17 @@ function TutorialScreen() {
           style={styles.partsTrayTarget}
           pointerEvents="none"
         />
+        {/* No TutorialTarget: no step points at it, and wrapping it would register a spotlight
+            rectangle the script never uses. Renders itself away outside the visual profile.
+
+            Slot follows the same rule as play.tsx — beside the gear unless the hint is there. The
+            hint's own spotlight measures hudControls.hintButton, so the two must agree about who
+            holds 58 or a step would highlight the wrong button. */}
+        {focus ? null : (
+          <SpokenStepsButton
+            style={mode === "free" ? hudControls.spokenStepsButton : hudControls.hintButton}
+          />
+        )}
         {mode === "free" && !focus ? (
           <TutorialTarget id="hint" style={hudControls.hintButton}>
             <HintButton
