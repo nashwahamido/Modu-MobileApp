@@ -4,7 +4,7 @@ import { Image, StyleSheet, Text, View } from "react-native";
 import Svg, { Defs, RadialGradient, Rect, Stop } from "react-native-svg";
 import { useGameStore } from "@/src/game/core/store";
 import { avatarHeadForProfile } from "@/src/components/avatarAssets";
-import { Theme, useFixedStyles, useReadingFont } from "@/src/game/ui/system/theme";
+import { FONT, Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 
 /** FREE-mode soft nudge: a calm, low-stimulation message shown when the player reaches for a part that isn't ready yet ("Maybe place the leg first."). Driven by store.hint (set by noteBlocked); off entirely in plan/guide and when the softHints setting is off (noteBlocked no-ops there). */
 const DISMISS_MS = 3200;
@@ -12,7 +12,6 @@ const DISMISS_MS = 3200;
 export function HintToast() {
   const styles = useFixedStyles(makeStyles);
   // A hint is read, not glanced at.
-  const readingFont = useReadingFont();
   const hint = useGameStore((s) => s.hint);
   const hintTone = useGameStore((s) => s.hintTone);
   const clearHint = useGameStore((s) => s.clearHint);
@@ -51,7 +50,7 @@ export function HintToast() {
             read. The ink stays dark: red-on-red text would cost the legibility the message needs. */}
         <View style={[styles.bubble, hintTone === "error" && styles.bubbleError]}>
           <GrainOverlay radius={14} />
-          <Text style={[styles.text, { fontFamily: readingFont, fontSize: Math.round(14 * fontScale) }]}>{hint}</Text>
+          <Text style={[styles.text, { fontFamily: FONT, fontSize: Math.round(14 * fontScale) }]}>{hint}</Text>
         </View>
       </View>
     </View>

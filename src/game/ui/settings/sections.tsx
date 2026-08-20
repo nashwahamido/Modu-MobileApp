@@ -426,6 +426,8 @@ export function AppDisplaySection() {
   const styles = useFixedStyles(makeSettingsStyles);
   const settings = useGameStore((s) => s.settings);
   const setSettings = useGameStore((s) => s.setSettings);
+  const handedness = useGameStore((s) => s.handedness);
+  const setHandedness = useGameStore((s) => s.setHandedness);
   const changeFont = (delta: number) =>
     setSettings({
       fontScale: Math.min(1.5, Math.max(0.9, +(settings.fontScale + delta).toFixed(2))),
@@ -450,11 +452,22 @@ export function AppDisplaySection() {
           </Pressable>
         </View>
       </View>
+      {/* The "Reading font" row was removed 2026-08-19 with OpenDyslexic itself. Every reading
+          surface uses Lexend now, and Text size above is what remains for legibility here. */}
+      {/* Handedness is answered in onboarding's first question and never asked again — so until now
+          a mis-tap there was permanent short of redoing onboarding. It sits in the GENERAL settings
+          rather than the build's own, because it is a fact about the player rather than a
+          preference about one build, and because a left-hander who realises mid-catalogue should
+          not have to start an assembly to fix it.
+
+          Not `setSettings`: handedness lives beside theme and renderStyle rather than inside the
+          settings object, because applyProfile replaces that object wholesale and would reset it
+          every time the player changed avatar. */}
       <Row
-        label="Reading font"
-        desc="OpenDyslexic for instructions, hints and the tutorial"
-        value={settings.readingFont}
-        onValueChange={(v) => setSettings({ readingFont: v })}
+        label="Left-handed layout"
+        desc="Mirrors the assembly controls, trays and buttons"
+        value={handedness === "left"}
+        onValueChange={(v) => setHandedness(v ? "left" : "right")}
       />
     </>
   );

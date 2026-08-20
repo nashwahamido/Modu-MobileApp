@@ -24,7 +24,7 @@ import {
 import { useGameStore } from "@/src/game/core/store";
 import { clusterThumbSet, modelThumbSet } from "@/src/game/core/presentation/finish";
 import Svg, { Circle as SvgCircle, Defs, RadialGradient, Stop } from "react-native-svg";
-import { COIN_ICON } from "@/src/components/iconAssets";
+import { ASSEMBLE_ICON, COIN_ICON } from "@/src/components/iconAssets";
 import { Theme, useFixedStyles, FONT, RADIUS, SIZE } from "@/src/game/ui/system/theme";
 import { useMirror } from "@/src/game/ui/system/handedness";
 import { useRepos } from "@/src/data";
@@ -294,7 +294,7 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
             accessibilityLabel="Back to the catalogue"
           >
             <Image
-              source={require("@/src/assets/ui/icons/Assemble-icon.png")}
+              source={ASSEMBLE_ICON}
               style={styles.homeIcon}
               resizeMode="contain"
             />
@@ -625,6 +625,18 @@ export function ClusterFocusControl() {
 }
 
 /** Every text on this modal, per the wireframe. */
+/** The catalogue glyph's box, and how much of that box the artwork actually inks.
+ *
+ *  37 rather than the 26 of the house it replaced: the two assets are framed differently — the house
+ *  filled 94% of its canvas where this fills 67% — so at a matched BOX this would have drawn about a
+ *  third smaller. Sized so the INK matches instead: 37 x 0.67 lands on the same ~25pt of mark.
+ *  Re-measure both if the artwork is re-exported; it has already moved once, from a 1024 grey glyph
+ *  at 62% fill to the 356 colour version at 67%. */
+const HOME_ICON = 37;
+const HOME_ICON_INK = 0.667;
+/** The empty artwork down one side of that box — what the label has to be pulled back through. */
+const HOME_ICON_MARGIN = Math.round((HOME_ICON * (1 - HOME_ICON_INK)) / 2);
+
 const INK = "#231F20";
 
 /** Centre-to-centre span of the band between two stage circles (node 116 + slot 24). */
@@ -673,19 +685,28 @@ const makeStyles = (t: Theme) =>
     // control now.)
     home: {
       position: "absolute",
-      top: 12,
+      // 6, was 12. The row sat a card's-corner below the top edge with nothing above it, so the
+      // pair read as floating rather than as the card's own header.
+      top: 6,
       left: 16,
       zIndex: 3,
       flexDirection: "row",
       alignItems: "center",
       gap: 6,
     },
-    // 40, not the house's 26. The two assets are framed differently: the house fills 94% of its
-    // 1024 canvas where the assemble glyph fills 62%, so at a matched BOX the glyph would draw
-    // about a third smaller than the icon it replaced. Sized so the INK matches instead — 40 x 0.62
-    // lands on the same ~25pt of drawn mark the house had at 26.
-    homeIcon: { width: 40, height: 40 },
-    homeText: { fontFamily: FONT, fontSize: 13, fontWeight: "700", color: INK },
+    homeIcon: { width: HOME_ICON, height: HOME_ICON },
+    // Pulled back by the icon's OWN transparent margin. The gap above is 6, but the glyph only
+    // fills 67% of its 37pt box, so a further ~6pt of empty artwork sat between the two and the
+    // word read as belonging to nothing. Negating it makes the six points be six points of INK,
+    // which is what the eye measures. Derived from the same fill fraction as the size above, so
+    // both follow if the artwork is re-exported.
+    homeText: {
+      marginLeft: -HOME_ICON_MARGIN,
+      fontFamily: FONT,
+      fontSize: 13,
+      fontWeight: "700",
+      color: INK,
+    },
     titleRow: {
       flexDirection: "row",
       alignItems: "center",

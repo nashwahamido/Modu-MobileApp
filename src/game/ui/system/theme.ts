@@ -509,19 +509,9 @@ export const SIZE = {
 // React Native has no font inheritance, so FONT has to appear in every text style. A style that sets fontWeight without FONT silently renders in the system font — that mismatch is the failure mode to watch for, not a missing font.
 export const FONT = "Lexend";
 
-/** The OpenDyslexic family name, as registered by the expo-font plugin in app.json. */
-export const READING_FONT = "OpenDyslexic";
-
-/**
- * The family for a READING surface — the objective line, a hint, a tutorial message.
- *
- * A hook rather than a constant, because it depends on a setting. Only the handful of components
- * where a player is genuinely reading call this; everything else keeps FONT, which stays a constant
- * so the other ~200 sheets are untouched.
- */
-export function useReadingFont(): string {
-  return useGameStore((s) => (s.settings.readingFont ? READING_FONT : FONT));
-}
+// The OpenDyslexic alternative and its `useReadingFont` hook were REMOVED 2026-08-19, along with
+// the setting that switched them on and the fonts themselves. Every reading surface — the objective
+// line, hints, the tutorial's messages, the questionnaire — takes FONT like everything else now.
 
 /** The named weights, as spreadable style fragments:
  *

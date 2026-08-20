@@ -314,7 +314,11 @@ export const AUTHORED_ACTIONS: DraftAction[] = [
   action({ actionId: "combine_drawerB", type: "combineClusters", stage: 4, cluster: "drawerB", requires: [] }),
   action({ actionId: "test_drawerA", type: "reorient", stage: 4, requires: ["combine_drawerA", "combine_drawerB"] }),
   action({ actionId: "test_drawerB", type: "reorient", stage: 4, requires: ["test_drawerA"] }),
-  action({ actionId: "finishing_checks", type: "reorient", stage: 4, requires: ["test_drawerB"] }),
+  // The ceremonial `finishing_checks` beat was REMOVED 2026-08-19 — it moved no part, so it was a
+  // swipe card standing between the player and a finished build. The last real assembly step is
+  // the last step now.
+  // test_drawerA / test_drawerB above are NOT ceremony and stay: their swipe runs the drawers'
+  // telescoping open and close (see pushOpen below), which nothing else drives.
 ];
 
 export const BEATS = {
@@ -337,10 +341,6 @@ export const BEATS = {
   test_drawerB: {
     text: "Now the bottom drawer: press to pop it open, pull it out, and push it home.",
     simpleText: "Press the bottom drawer, pull it out, push it back in.",
-  },
-  finishing_checks: {
-    text: "Secure the cabinet to the wall with the suspension fittings.",
-    simpleText: "Fix it to the wall.",
   },
 } as InstructionSet;
 

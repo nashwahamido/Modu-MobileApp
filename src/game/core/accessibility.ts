@@ -48,17 +48,6 @@ export interface AccessibilitySettings {
   /** Show only the current part + action; hide the rest of the chrome. */
   focusMode: boolean;
   fontScale: number;
-  /**
-   * Set the READING surfaces in OpenDyslexic — the objective line, hints, the tutorial's messages
-   * and the questionnaire.
-   *
-   * Deliberately not the whole app. Every one of the ~200 style sheets names Lexend as a constant
-   * evaluated once at module load, so an app-wide swap means routing all of them through a hook —
-   * a large mechanical change to a mechanism that has already broken this app once. These are the
-   * places a reader is actually READING rather than glancing at a chip, which is most of the
-   * benefit for a fraction of the risk.
-   */
-  readingFont: boolean;
   
   // dev-setting
   ghostStyle: GhostStyle;

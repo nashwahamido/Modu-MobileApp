@@ -7,7 +7,7 @@ import { popOpen, setTravel } from "@/src/game/scene/pushOpen";
 import type { DriverRegistry } from "@/src/game/scene/offsetDriver";
 import type { AssemblyAction, PushOpenSpec } from "@/src/game/core/type";
 import { CONTROL } from "@/src/game/ui/system/theme";
-import { PressPad, pressPadStyles } from "@/src/game/input/pad/PressPad";
+import { PressPad, pressPadStyles, HAND_ICON } from "@/src/game/input/pad/PressPad";
 
 /** Track height in px — also the drag distance for a drawer's full travel, so the thumb follows the finger 1:1. */
 const TRACK = 220;
@@ -78,7 +78,7 @@ export function PushTestControl({
     return (
       <View style={pressPadStyles.wrap} pointerEvents="box-none">
         {/* pulse={false}: this pad never showed the ring, unlike its four siblings — a latch test is not an instruction */}
-        <PressPad icon="✋" resetKey={action.actionId} onPress={press} pulse={false} />
+        <PressPad icon={HAND_ICON} resetKey={action.actionId} onPress={press} pulse={false} />
         <Text style={pressPadStyles.hint}>Press the drawer to pop it open</Text>
       </View>
     );

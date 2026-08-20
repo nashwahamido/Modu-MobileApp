@@ -24,6 +24,7 @@ import { ObjectiveBar } from "@/src/game/ui/hud/ObjectiveBar";
 import {
   HintButton,
   RecenterButton,
+  SpokenStepsButton,
   useHudControlStyles,
   useTutorialChrome,
 } from "@/src/game/ui/hud/hudChrome";
@@ -80,6 +81,7 @@ import { MomentumCompanion } from "@/src/game/tutorial/MomentumCompanion";
 import { MomentumAttentionOverlay } from "@/src/game/tutorial/MomentumAttentionOverlay";
 import { useTutorialStore } from "@/src/game/tutorial/store";
 import { useTutorialHaptics } from "@/src/game/tutorial/useTutorialHaptics";
+import { useBuildPersistence } from "@/src/hooks/useBuildPersistence";
 import {
   TUTORIAL_STEP_REWARD_TOKENS,
   type ToolTutorialKind,
@@ -92,6 +94,10 @@ const TUTORIAL_SPOT_MS = 2800;
 function TutorialScreen() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
   useTutorialHaptics();
+  // The tutorial builds the SAME LACK table the catalogue lists, so its progress has to be written —
+  // without this, a player who skipped halfway found the catalogue offering "Start" and their four
+  // legs gone. Save only, never resume: see the note on the hook.
+  useBuildPersistence(TUTORIAL_FURNITURE_ID, { resume: false, settleOnFinish: false });
   // Chrome AND spotlight targets together: the targets are measured rectangles standing in for controls, so they have to cross the screen with the controls they frame or the highlight lands on nothing.
   const styles = useTutorialChrome();
   const hudControls = useHudControlStyles();
@@ -869,6 +875,17 @@ function TutorialScreen() {
           style={styles.partsTrayTarget}
           pointerEvents="none"
         />
+        {/* No TutorialTarget: no step points at it, and wrapping it would register a spotlight
+            rectangle the script never uses. Renders itself away outside the visual profile.
+
+            Slot follows the same rule as play.tsx — beside the gear unless the hint is there. The
+            hint's own spotlight measures hudControls.hintButton, so the two must agree about who
+            holds 58 or a step would highlight the wrong button. */}
+        {focus ? null : (
+          <SpokenStepsButton
+            style={mode === "free" ? hudControls.spokenStepsButton : hudControls.hintButton}
+          />
+        )}
         {mode === "free" && !focus ? (
           <TutorialTarget id="hint" style={hudControls.hintButton}>
             <HintButton
@@ -935,14 +952,10 @@ function TutorialScreen() {
               style={styles.beatControlTarget}
               pointerEvents="none"
             />
-            <BeatControl
-              action={sceneState.activeBeat}
-              onSwipeStart={
-                sceneState.activeBeat.actionId === "finishing_checks"
-                  ? resetCamera
-                  : undefined
-              }
-            />
+            {/* No onSwipeStart. It used to recentre the camera for `finishing_checks`, which was
+                removed with the ceremonial beat — the tutorial's furniture has no beat left, and
+                this control only stands for the push-open drawer tests on EKET now. */}
+            <BeatControl action={sceneState.activeBeat} />
           </>
         ) : null}
         <TutorialTarget id="joystick" style={styles.joystickZone}>
@@ -977,7 +990,12 @@ function TutorialScreen() {
       </View>
       {/* Same project/pause card as a task, but tutorial has no selectable
           sub-assembly stages: it presents the LACK furniture as one project. */}
-      {profile === "momentum" ? <BuildMap overviewOnly /> : null}
+      {/* LIGHT, always — see the note in play.tsx. */}
+      {profile === "momentum" ? (
+        <ThemeScope value="light">
+          <BuildMap overviewOnly />
+        </ThemeScope>
+      ) : null}
       {ringOverlay}
       <GreenFlash trigger={completedCount} />
       {/* Above everything, and only on its own step: how to HOLD the device comes before any control

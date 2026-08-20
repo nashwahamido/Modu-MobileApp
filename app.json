@@ -44,13 +44,6 @@
           "android": {
             "fonts": [
               {
-                "fontFamily": "OpenDyslexic",
-                "fontDefinitions": [
-                  { "path": "./src/assets/fonts/OpenDyslexic-Regular.otf", "weight": 400 },
-                  { "path": "./src/assets/fonts/OpenDyslexic-Bold.otf",    "weight": 700 }
-                ]
-              },
-              {
                 "fontFamily": "Lexend",
                 "fontDefinitions": [
                   { "path": "./src/assets/fonts/Lexend-Regular.ttf",   "weight": 400 },
@@ -65,8 +58,6 @@
           },
           "ios": {
             "fonts": [
-              "./src/assets/fonts/OpenDyslexic-Regular.otf",
-              "./src/assets/fonts/OpenDyslexic-Bold.otf",
               "./src/assets/fonts/Lexend-Regular.ttf",
               "./src/assets/fonts/Lexend-Medium.ttf",
               "./src/assets/fonts/Lexend-SemiBold.ttf",

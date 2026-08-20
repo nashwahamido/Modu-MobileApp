@@ -8,8 +8,10 @@ import {
   dragTopTarget,
   dragWallTarget,
   pickBoxAt,
+  placementPickBoxes,
   pointsAtSurface,
   roomPointToScreen,
+  type PickResolver,
   screenPointToFloorCell,
   screenPointToFloorScene,
   screenPointToTopCell,
@@ -359,6 +361,75 @@ test("a press on a deep wall item's visible front face picks it via its pick vol
   assert.ok(screen, "the cabinet's front face projects behind the camera");
   const box = wallPlacementBox("z-max", cabinetPlacement, cabinet, CABINET_DEPTH);
   assert.equal(pickBoxAt(screen!.x, screen!.y, VIEWPORT, angles, [box]), 0);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THE ASSEMBLY, not the parts.
+//
+// The two tests above prove that wallPlacementBox + pickBoxAt can pick a deep wall item, and that
+// the plane pick cannot. Both kept passing on 2026-08-20 while the feature was broken in the app,
+// because pickUpAt had been reverted to plane-picking and nothing tested the thing that CHOOSES
+// which boxes to build. These drive placementPickBoxes — the extracted assembly pickUpAt now calls —
+// so that revert would fail here.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Everything the room can resolve, at real-world sizes. eket-cabinet is the reported case: 0.35 m deep, so its visible face is nearly two wall cells off its anchor.
+const RESOLVE: PickResolver = (itemId) =>
+  itemId === "eket-cabinet"
+    ? { def: cabinet, size: { x: 0.5, y: 0.75, z: CABINET_DEPTH } }
+    : null;
+const ALL_WALLS_VISIBLE = () => true;
+
+test("a long press on a deep wall item's visible body picks it up — the whole pickUpAt path, not just its parts", () => {
+  const angles = { ...REST, theta: ORBIT.restTheta };
+  const screen = roomPointToScreen(cabinetFrontFacePoint(), VIEWPORT, angles);
+  assert.ok(screen, "the cabinet's front face projects behind the camera");
+
+  const targets = placementPickBoxes([cabinetPlacement], RESOLVE, ALL_WALLS_VISIBLE);
+  assert.equal(targets.length, 1, "a visible wall piece must contribute a pick volume");
+  const hit = pickBoxAt(screen!.x, screen!.y, VIEWPORT, angles, targets.map((t) => t.box));
+  assert.notEqual(hit, null, "pressing the cabinet's own visible body must pick something");
+  assert.equal(targets[hit!].placement.instanceId, "cab");
+});
+
+test("the cabinet stays pickable all the way across its visible face, at every angle a player can reach", () => {
+  // The regression was not "never works" but "works in a band that moves with the camera", which is
+  // why it read as flaky. Sampling the face at several points and several poses is what distinguishes
+  // a real volume pick from a plane pick that happens to line up once.
+  const targets = placementPickBoxes([cabinetPlacement], RESOLVE, ALL_WALLS_VISIBLE);
+  const box = targets[0].box;
+  for (const angles of ANGLE_SAMPLES) {
+    // Skip poses where z-max has been orbited out of view; the room would not offer the piece then.
+    if (!visibleWalls(angles.theta).includes("z-max")) continue;
+    for (const fx of [0.2, 0.5, 0.8]) {
+      for (const fy of [0.2, 0.5, 0.8]) {
+        const point = {
+          x: box.min.x + (box.max.x - box.min.x) * fx,
+          y: box.min.y + (box.max.y - box.min.y) * fy,
+          // The front face: the corner furthest from the wall's inner face.
+          z: Math.min(box.min.z, box.max.z),
+        };
+        const screen = roomPointToScreen(point, VIEWPORT, angles);
+        if (!screen) continue;
+        assert.equal(
+          pickBoxAt(screen.x, screen.y, VIEWPORT, angles, [box]),
+          0,
+          `press at (${fx}, ${fy}) theta ${angles.theta.toFixed(2)} missed the cabinet`,
+        );
+      }
+    }
+  }
+});
+
+test("a piece on a wall the camera cannot see contributes no pick volume", () => {
+  // Picking a hidden wall would hand the player a piece they cannot look at.
+  const targets = placementPickBoxes([cabinetPlacement], RESOLVE, () => false);
+  assert.deepEqual(targets, []);
+});
+
+test("an item the catalog cannot resolve yet is simply not pickable, rather than throwing", () => {
+  const unknown: GridPlacement = { ...cabinetPlacement, instanceId: "ghosty", itemId: "not-in-catalog" };
+  assert.deepEqual(placementPickBoxes([unknown], RESOLVE, ALL_WALLS_VISIBLE), []);
 });
 
 test("a floor piece standing in front of a wall piece still picks the floor piece — nearest wins across surface kinds", () => {
