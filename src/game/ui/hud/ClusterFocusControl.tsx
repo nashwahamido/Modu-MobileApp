@@ -64,22 +64,45 @@ function TapCue({ label, resuming }: { label: string; resuming: boolean }) {
 }
 
 /** Plain sheet: the cue takes no theme — it is one fixed accent either way. */
+/** The stage circle's diameter, and the Start/Resume pill's height — the pill is centred on the
+ *  circle's bottom edge, so both numbers have to agree with the `circle` style below. */
+const CIRCLE = 92;
+const PILL_H = 22;
+
+/** The catalogue's "in progress" blue, shared by the map so a stage you have opened before is marked
+ *  the same way in both places. */
+const RESUME_BLUE = "#A9BFD9";
+
 const styles_cue = StyleSheet.create({
   wrap: {
-    marginTop: 4,
+    // Centred on the circle's bottom edge: the circle is CIRCLE tall and starts at the node's top,
+    // so half the pill above that line and half below puts it on the rim. zIndex clears the circle,
+    // which draws its own gradient and would otherwise cover it.
+    position: "absolute",
+    top: CIRCLE - PILL_H / 2,
+    height: PILL_H,
+    zIndex: 3,
     paddingHorizontal: 12,
-    paddingVertical: 4,
+    // No vertical padding: the height is fixed and `justifyContent` centres the label in it. Padding
+    // plus a fixed height fight each other, and that fight is what left the text sitting high.
+    justifyContent: "center",
     borderRadius: 999,
     backgroundColor: "#8D7BA8",
   },
   // The Continue blue, as used by the catalogue's in-progress pill.
-  wrapResume: { backgroundColor: "#6E90B8" },
+  wrapResume: { backgroundColor: RESUME_BLUE },
   text: {
     color: "#FBF8F3",
     fontFamily: FONT,
     fontSize: 11,
     fontWeight: "900",
     letterSpacing: 0.3,
+    // Both lines are about Android. It pads a Text by the font's own ascent and descent, which are
+    // not symmetric — so a label centred by its BOX sits visibly high in a short pill. Dropping that
+    // padding and pinning lineHeight to the pill's own height centres the glyphs instead.
+    lineHeight: PILL_H,
+    includeFontPadding: false,
+    textAlign: "center",
   },
 });
 
@@ -363,6 +386,14 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                   ]}
                   accessibilityLabel={`${n.label}, ${n.doneCount} of ${n.actions.length} steps`}  /* the count lives here now: read aloud, not drawn */
                 >
+                  {/* STRADDLING the circle's lower rim, absolutely — half on the circle, half off.
+                      In flow it pushed every node taller and the pill floated in the gap between
+                      stages; sat on the rim it reads as a badge on the thing it opens, and costs
+                      the node no height at all, so a finished or locked stage still lines up with
+                      its neighbours without reserving a slot it never fills. */}
+                  {n.enabled && !n.finished ? (
+                    <TapCue label={n.doneCount > 0 ? "Resume" : "Start"} resuming={n.doneCount > 0} />
+                  ) : null}
                   {/* Available: pulsing. Finished: a steady outline plus the tick. Both are
                       SIBLINGS of the circle, never a border on it — the circle clips its own
                       gradient, and a bordered view with a rounded inner overlay is what made
@@ -440,13 +471,6 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                       look at without touching — so a first-time player reads the map, understands
                       it, and waits. This says what to do, in words, exactly once: more than one
                       would be a scatter of instructions rather than a next step. */}
-                  {/* On EVERY stage that can be opened, not just the first: with three or four
-                      stages the player picks which to work on, and a single tab on the leftmost
-                      one implied the others were not choices. A finished stage has nothing to
-                      start; a locked one cannot be started yet. */}
-                  {n.enabled && !n.finished ? (
-                    <TapCue label={n.doneCount > 0 ? "Resume" : "Start"} resuming={n.doneCount > 0} />
-                  ) : null}
                 </Pressable>
               </Fragment>
             ))}
@@ -773,7 +797,15 @@ const makeStyles = (t: Theme) =>
       flexDirection: "row",
       alignItems: "flex-start",
       justifyContent: "center",
-      marginBottom: 6,
+      // Room for the Start/Resume pill, which straddles the circle's bottom edge and so hangs half
+      // its height (PILL_H / 2) past the node it belongs to — THEN the row's own gap on top of it.
+      //
+      // The two were netted against each other at first, to keep the card the same height as before
+      // the pill moved. That was the wrong instinct: it gave the pill its space and took the gap
+      // away again, so the pill cleared the node and landed straight on the progress bar. The card
+      // is allowed to grow by the height of a thing that was added to it.
+      paddingBottom: PILL_H / 2,
+      marginBottom: 12,
     },
     // The connector's SLOT in the row is narrow; the line itself is longer and overflows it deliberately, running across the empty padding either side of the circles. Midpoint between the two circle centres: radius 46 + half the 34dp stagger. Pure spacer now — the bands live in connectorLayer, which paints before any node.
     connectorSlot: { width: 24 },
@@ -837,9 +869,10 @@ const makeStyles = (t: Theme) =>
       borderColor: "#8FA876",
       zIndex: 2,
     },
-    pulseRingResume: { borderColor: "#6E90B8" },
+    pulseRingResume: { borderColor: RESUME_BLUE },
     // Bottom-left of the circle. It used to share this spot with the resume badge, which is now
     // retired — a finished stage is the only thing marked here.
+    // Measured from the BOTTOM, so it follows the circle without needing the cue-slot offset above.
     doneCheck: {
       position: "absolute",
       bottom: 14,
