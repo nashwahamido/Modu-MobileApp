@@ -4,7 +4,7 @@ import { engageAxis } from "@/src/game/core/evaluation/engagement";
 import { AssemblyAction } from "@/src/game/core/type";
 import { MALLET_TAPS, TIGHTEN_TOTAL_DEG, useGameStore } from "@/src/game/core/store";
 import { playTapSfx } from "@/src/game/audio/useAssemblySfx";
-import { PressPad, pressPadStyles as styles } from "@/src/game/input/pad/PressPad";
+import { PressPad, pressPadStyles as styles, HAND_ICON } from "@/src/game/input/pad/PressPad";
 import type { OffsetDriver } from "../../scene/offsetDriver";
 import { useMirror } from "@/src/game/ui/system/handedness";
 
@@ -41,7 +41,7 @@ export function TapControl({ action, sinkDriver }: Props) {
 
   return (
     <View style={m(styles.wrap)} pointerEvents="box-none">
-      <PressPad icon={struck ? "🔨" : "✋"} resetKey={action.actionId} onPress={press} />
+      <PressPad icon={struck ? "🔨" : HAND_ICON} resetKey={action.actionId} onPress={press} />
       {/* hintInk: this control's caption is dark where its siblings' are cream. Kept as it was — see PressPad */}
       <Text style={[styles.hint, styles.hintInk]}>
         {single ? "Press it home" : `Tap to drive it in · ${hits}/${taps}`}

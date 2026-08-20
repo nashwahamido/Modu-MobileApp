@@ -67,7 +67,7 @@ test("tightening completion waits for the physical animation to settle", async (
   useTutorialStore.getState().resetTutorial();
 });
 
-test("the completion card waits for the final table rotation to settle", async () => {
+test("the completion card waits for the final step to settle", async () => {
   const tutorial = useTutorialStore.getState();
   tutorial.configureTutorial({
     profile: "momentum",
@@ -75,8 +75,10 @@ test("the completion card waits for the final table rotation to settle", async (
     manualTools: false,
     softHints: true,
   });
+  // The last step is installing the fourth leg now — "stand-table-upright" was removed with the
+  // ceremonial beat it waited on. What this test pins is the SETTLING, not which step settles.
   const finalStep = tutorial.steps.find(
-    (step) => step.id === "stand-table-upright",
+    (step) => step.id === "install-four-legs",
   );
   assert.ok(finalStep);
 
@@ -87,18 +89,18 @@ test("the completion card waits for the final table rotation to settle", async (
     pendingCompletionStepId: null,
     pendingAdvanceStepId: null,
   });
-  useTutorialStore.getState().completeEvent("assembly_reoriented");
+  useTutorialStore.getState().completeEvent("all_legs_installed");
 
   assert.equal(useTutorialStore.getState().settingsReady, false);
   assert.equal(
     useTutorialStore.getState().pendingCompletionStepId,
-    "stand-table-upright",
+    "install-four-legs",
   );
   await wait(550);
   assert.equal(useTutorialStore.getState().settingsReady, false);
   assert.equal(
     useTutorialStore.getState().pendingAdvanceStepId,
-    "stand-table-upright",
+    "install-four-legs",
   );
   useTutorialStore.getState().resetTutorial();
 });

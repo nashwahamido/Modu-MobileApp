@@ -14,7 +14,8 @@ const SWIPE_PX = 80;
 /** Swipe direction per beat: up = lift/stand, down = lower/press. */
 const BEAT_DIRECTION: Record<string, "up" | "down"> = {
   combine_assemblies: "down",
-  finishing_checks: "down",
+  // finishing_checks removed 2026-08-19 with the ceremonial beat itself. What is left here are the
+  // beats that actually move something — anything unlisted still defaults to "up".
 };
 
 const HINTS: Record<"up" | "down", { arrow: string; verb: string }> = {
