@@ -246,8 +246,6 @@ const makeStyles = (t: Theme) =>
     panel: {
       position: "absolute",
       borderRadius: 28,
-      borderWidth: 1.2,
-      borderColor: "#544F4B",
       backgroundColor: CREAM.card,
       paddingTop: 18,
       paddingHorizontal: 22,

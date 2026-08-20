@@ -10,7 +10,11 @@ export const WELL_ASPECT = 0.88;
 export const WELL_TOP_PAD = 14;
 export const FRAME_FILL = "#EFE9E0";
 export const FRAME_STROKE = "#8E8985";
-export const FRAME_STROKE_WIDTH = 0.8;
+// 0 = no outline. The frames and their name tabs are told apart by their FILL against the panel's
+// cream, which is enough at this size — an outline on every tile turned a grid of pictures into a
+// grid of boxes. Kept as a token rather than deleted: the art box still insets by it, and the popups'
+// preview wells read it too, so one number still governs whether these surfaces are outlined.
+export const FRAME_STROKE_WIDTH = 0;
 export const FRAME_RADIUS = 14;
 /** Row spacing, ON TOP of the grid's own gap. Only the rows: the grid's gap also sets the column spacing, and it feeds the tile-width solve. */
 export const TILE_ROW_GAP = 4;
@@ -129,8 +133,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     // The price pill's fill, so the two badges on a tile read as the same component
     backgroundColor: CREAM.card,
-    borderWidth: 0.6,
-    borderColor: FRAME_STROKE,
     alignItems: "center",
     justifyContent: "center",
   },

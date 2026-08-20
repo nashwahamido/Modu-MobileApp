@@ -11,10 +11,12 @@ import { ROOM_BACKGROUND } from './roomBackdrops';
 import { ceilingLightOn, type CeilingLightOverride } from '../core/timeOfDay';
 import { useGameStore } from '../../game/core/store';
 import { avatarForProfile } from '@/src/components/avatarAssets';
-import { CARD_CHROME, CREAM, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
+import { CARD_CHROME, CREAM, useFixedStyles, useIsTablet, LEXEND } from "@/src/game/ui/system/theme";
 import { useCurrentUserId } from '../../data';
 import { RoomScene } from '../scene/RoomScene';
 import { FriendPickerOverlay } from './FriendPickerOverlay';
+import { RoomNavRail } from './RoomNavRail';
+import { RoomAssembleButton } from './RoomAssembleButton';
 import { RoomBottomBar } from './RoomBottomBar';
 import { LIGHT_COLUMN_GAP, RoomLightControls } from './RoomLightControls';
 import { useLeftColumnScale } from './roomScale';
@@ -48,6 +50,8 @@ export function RoomExperience() {
   // This screen's sheet stays FIXED — it carries the scene's own chrome, laid out to the point. Only
   // the left column is scaled for tablets, and by hand, so nothing else on the screen moves.
   const k = useLeftColumnScale();
+  // The room has TWO layouts, not one layout at two sizes. See the branch further down.
+  const tablet = useIsTablet();
  
   const { welcome, open, firstPlacement } = useLocalSearchParams<{
     welcome?: string;
@@ -245,11 +249,38 @@ export function RoomExperience() {
 
       <RoomTopStats />
 
-      <RoomBottomBar
-        onOpenShop={() => setShopOpen(true)}
-        onOpenInventory={() => setInventoryOpen(true)}
-        onOpenVisit={() => setVisitPickerOpen(true)}
-      />
+      {/* TWO LAYOUTS, chosen by device — not one layout scaled.
+          A phone is narrow and tall-ish in landscape: a band across the bottom eats the floor, which is
+          where the room's furniture is, so navigation goes down the right edge as a rail and Assemble
+          stands alone in the opposite corner.
+          A tablet has width to spare and the bar reads fine there, so it keeps the arrangement it was
+          designed and tuned against. The two share their icons, their scale hooks and their chrome, but
+          not their arrangement — a tweak to one does NOT reach the other, which is the cost of this. */}
+      {tablet ? (
+        <RoomBottomBar
+          onOpenShop={() => setShopOpen(true)}
+          onOpenInventory={() => setInventoryOpen(true)}
+          onOpenVisit={() => setVisitPickerOpen(true)}
+        />
+      ) : (
+        <>
+          <RoomNavRail
+            onOpenShop={() => setShopOpen(true)}
+            onOpenInventory={() => setInventoryOpen(true)}
+            onOpenVisit={() => setVisitPickerOpen(true)}
+          />
+
+          {/* Opposite the rail, and clear of it: the one action, not one of the places to go. Hidden mid-placement, like the light controls — the room is being edited, not navigated. */}
+          {editing ? null : (
+            <RoomAssembleButton
+              style={{
+                left: 18 * k + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+                bottom: 14 * k + Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN),
+              }}
+            />
+          )}
+        </>
+      )}
 
       {/* all of the placement UI swatches and buttons lives in one component on the right edge */}
       {editing ? (

@@ -2,7 +2,7 @@
 import { router } from 'expo-router';
 import type { Href } from 'expo-router';
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
-import { CARD_CHROME, CREAM, useScaledStyles, LEXEND } from "@/src/game/ui/system/theme";
+import { CARD_CHROME, CREAM, useScaledStyles, useIsTablet, LEXEND } from "@/src/game/ui/system/theme";
 import { useTopStatsScale } from './roomScale';
 import type { Theme } from "@/src/game/ui/system/theme";
 import { COIN_ICON, STAR_ICON, XP_ICON, levelIcon } from '../../components/iconAssets';
@@ -31,6 +31,9 @@ export function RoomTopStats() {
   const safe = useScreenInsets();
   // The DESIGN offset scales; the device inset does not. An inset is a physical clearance around a
   // cutout or a gesture bar — growing it would push the cluster inward for no reason.
+  // The pair sits in the TOP-RIGHT corner on a tablet, where the bottom bar leaves the corners free,
+  // and CENTRED on a phone, where the right edge belongs to the nav rail. Same two pills either way.
+  const tablet = useIsTablet();
   const padTop = 12 * k + safe.top;
   const padR = 18 * k + safe.right;
   const profile = useProfileHud();
@@ -44,7 +47,10 @@ export function RoomTopStats() {
       : `${profile.xpIntoLevel}/${profile.xpForNextLevel}`
     : "–";
   return (
-    <View style={[s.topRightGroup, { top: padTop, right: padR }]}>
+    <View
+      style={[s.statsGroup, tablet ? { top: padTop, right: padR } : { top: padTop, left: 0, right: 0 }]}
+      pointerEvents="box-none"
+    >
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Profile — level ${profile?.level ?? "unknown"}, ${levelPercent}% to next level`}
@@ -75,11 +81,22 @@ export function RoomTopStats() {
 }
 
 const makeStyles = (t: Theme) => StyleSheet.create({
-  topRightGroup: {
+  // CENTRED across the screen rather than pinned to a corner: level and coins are the room's headline
+  // numbers, and the left column and the right rail both want their own edge. Spanning the full width
+  // and centring inside it is what keeps the pair centred on the SCREEN rather than on whatever they
+  // happen to measure — so a longer balance grows both ways instead of pushing the level bar left.
+  //
+  // box-none, or this full-width strip would swallow taps meant for the room behind it.
+  // left/right are set at the call site, since they are what differs between the two layouts: pinned to
+  // the right edge on a tablet, spanning the width on a phone. Spanning is what keeps the pair centred
+  // on the SCREEN rather than on whatever it happens to measure — so a longer balance grows both ways
+  // instead of pushing the level bar left.
+  statsGroup: {
     position: 'absolute',
     zIndex: 12,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 18,
   },
   coinIcon: {
@@ -147,8 +164,10 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  // Shorter than the level bar: it carries a balance, not a pair of numbers. BAR_TUCK of this hides
+  // under the coins, so the visible strip is what has to hold four digits — see the floor note below.
   currency: {
-    width: 82,
+    width: 64,
     paddingLeft: COIN_COVER,
     height: BAR_HEIGHT,
     marginLeft: -BAR_TUCK,

@@ -408,6 +408,18 @@ const PHONE_SHORT_DP = 360;
  *  long-side ceiling above: at k = long / PHONE_LONG_DP a screen has exactly the horizontal room the
  *  phone had, which is the most the fixed widths in these sheets can be trusted with. */
 const PHONE_LONG_DP = 800;
+/**
+ * Is this a tablet? The one place that question is answered.
+ *
+ * Exported because it decides more than scale: the room draws a DIFFERENT layout on each — a rail down
+ * the right on a phone, a bar across the bottom on a tablet — and a second copy of this threshold
+ * somewhere else would eventually disagree with the scaling about which device it is looking at.
+ */
+export function useIsTablet(): boolean {
+  const { width, height } = useWindowDimensions();
+  return Math.min(width, height) >= TABLET_MIN_SHORT_DP;
+}
+
 /** Below this the device is a phone and nothing is scaled. Comfortably above any phone in landscape
  *  (~330-420dp) and comfortably below any tablet (~700dp+), so neither is a borderline case. */
 const TABLET_MIN_SHORT_DP = 600;
