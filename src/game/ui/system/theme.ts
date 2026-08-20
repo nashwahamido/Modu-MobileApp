@@ -29,8 +29,8 @@
 //   Three accents, three meanings, no overlap. Lavender = interactive (press this).
 //   Green = complete (you did this). Gold = earned (XP, score). If a fourth meaning shows up, it does NOT get a fourth colour — it gets a shape or a position.
 
-import { useWindowDimensions } from "react-native";
-import { useMemo } from "react";
+import { StyleSheet, useWindowDimensions } from "react-native";
+import { createContext, useContext, useMemo } from "react";
 import type { TextStyle } from "react-native";
 import { ThemeId } from "@/src/game/core/type";
 import { useGameStore } from "@/src/game/core/store";
@@ -109,8 +109,11 @@ export interface Theme {
 
 const DARK: Theme = {
   bg: PALETTE.ink900,
-  surface: "rgba(43,37,35,0.92)",
-  surfaceRaised: PALETTE.ink600,
+  // LIGHTER than the old rgba(43,37,35,0.92) — at near-black these chips read as holes punched in
+  // the build — and effectively SOLID: what makes them work is the raised grey value, not seeing the
+  // workbench through them. The last 1% of alpha keeps the edge from looking cut out of the scene.
+  surface: "rgba(74,66,62,0.99)",
+  surfaceRaised: "rgba(96,86,80,0.99)",
   surfaceInset: "rgba(0,0,0,0.30)",
   border: "rgba(243,239,232,0.08)",
   borderStrong: "rgba(243,239,232,0.16)",
@@ -210,6 +213,24 @@ export const CREAM = {
 
 // The shadows for those same cream surfaces.
 // A separate scale from ELEVATION below, on purpose: that one is authored for the dark HUD (#000 at 0.35-0.45), and on cream a black shadow reads as grime rather than as height. These use a warm grey at low opacity instead. Four tiers, and the numbers are EXACTLY what the eight call sites had — this is an extraction, not a retune. KNOWN ODDITY 1: `panel` and `card` have IDENTICAL iOS shadows and differ only in Android `elevation` (6 vs 8). So on Android a purchase popup reads as floating above the shop panel it sits on, and on iOS the two read as the same height. One of those is wrong, and which one depends on the intent, so it is preserved here rather than guessed at. KNOWN ODDITY 2: `chip` uses #000 rather than the warm grey, because the close button it belongs to is itself the only dark thing on the cream.
+/** The catalogue card's edge and shadow, so the room's chrome — its bars, its bottom navigation, its
+ *  light buttons — reads as the same object as the cards on the build screen.
+ *
+ *  boxShadow is what actually draws the shadow on ANDROID: `elevation` ignores shadowColor and
+ *  shadowOpacity and paints its own grey ramp, which is why colour edits to those properties used to
+ *  change nothing on device. The shadowColor/Radius/Offset below are the iOS + old-architecture
+ *  fallback, and `elevation` only keeps Android's z-ordering honest. */
+export const CARD_CHROME = {
+  borderWidth: StyleSheet.hairlineWidth * 2,
+  borderColor: "rgba(60,50,40,0.12)",
+  boxShadow: "0px 5px 4px rgba(0,0,0,0.22)",
+  shadowColor: "#000",
+  shadowOpacity: 0.45,
+  shadowRadius: 2,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 6,
+} as const;
+
 export const CREAM_LIFT = {
   /** The popup frame: shop and inventory panels. */
   panel: {
@@ -252,8 +273,28 @@ export const THEMES: Record<ThemeId, Theme> = {
 };
 
 /** The active theme. The store already owns the ThemeId; this maps it to tokens. */
+/**
+ * A theme forced on ONE subtree, regardless of the app's own.
+ *
+ * "Assemble in dark mode" is a property of the build screen, not of the app: the room, catalogue and
+ * shop stay light while the workbench goes dark. A context does that without a second palette —
+ * everything under the provider resolves through the same tokens, it just resolves a different one.
+ * null (the default) means "use the app theme", which is what every other screen gets.
+ */
+const ThemeOverride = createContext<ThemeId | null>(null);
+
+/** Wrap a subtree to pin its theme. Used by the assembly screens; nothing else should need it. */
+export const ThemeScope = ThemeOverride.Provider;
+
+/** The ThemeId in effect here — the scope's, if one is set, else the app's. */
+export function useThemeId(): ThemeId {
+  const scoped = useContext(ThemeOverride);
+  const app = useGameStore((s) => s.theme);
+  return scoped ?? app;
+}
+
 export function useTheme(): Theme {
-  return THEMES[useGameStore((s) => s.theme)];
+  return THEMES[useThemeId()];
 }
 
 /** Theme-driven styles, in one line per component:

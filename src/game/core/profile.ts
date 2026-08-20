@@ -13,6 +13,12 @@ export const DEFAULT_SETTINGS: AccessibilitySettings = {
   audio: false,
   // On by default: effects are expected in a game, and unlike narration they do not talk over anything. Profiles that need a quiet build turn it off explicitly.
   soundEffects: true,
+  // On by default: the build is a long, quiet task, and the track is what makes it feel like a place
+  // rather than a form. It sits well under the effects and can be turned down without turning off.
+  music: true,
+  musicVolume: 0.5,
+  buildMusic: true,
+  buildMusicVolume: 0.5,
   // Off by default: OpenDyslexic is a strong preference rather than a neutral improvement, and it
   // reads as unusual to anyone who did not ask for it.
   readingFont: false,

@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
 import Animated, {
   cancelAnimation,
+  runOnJS,
+  useAnimatedReaction,
   Extrapolation,
   interpolate,
   useAnimatedScrollHandler,
@@ -17,7 +19,6 @@ import Animated, {
 import { StyleSheet,
   Image,
   Pressable,
-  ScrollView,
   Text,
   useColorScheme,
   View,
@@ -25,13 +26,14 @@ import { StyleSheet,
 
 // type
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
-import type { FurnitureMeta, ThumbSet } from "@/src/game/core/type";
+import type { FurnitureMeta, RenderStyleId, ThumbSet } from "@/src/game/core/type";
 import { type Milestone } from "@/src/game/ui/loading/loadingProgress";
 
 // data
 import { FURNITURE_METAS } from "@/src/game/content/furnitures/furnitures";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import { useCatalogRow, useCatalogStore } from "@/src/data/catalog/buildStore";
+import { useGameStore } from "@/src/game/core/store";
 import { useVariantStore } from "@/src/data/catalog/variantStore";
 import { brandFor } from "@/src/game/content/brands";
 import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
@@ -334,10 +336,10 @@ function stageTrendArrow(stages: number) {
 // SHADOW = chrome (pills, cards). SHADOW_SM = the small action buttons that sit ON a card.
 // Darker: raise the alpha in rgba(). Sharper: lower the blur (the 3rd length).
 const SHADOW = {
-  boxShadow: "0px 5px 4px rgba(0,0,0,0.40)",
+  boxShadow: "0px 5px 4px rgba(0,0,0,0.22)",
   // iOS fallback for the old architecture; harmless where boxShadow is supported.
   shadowColor: "#000",
-  shadowOpacity: 0.8,
+  shadowOpacity: 0.45,
   shadowRadius: 2,
   shadowOffset: { width: 0, height: 4 },
   elevation: 6,
@@ -352,12 +354,35 @@ const SHADOW_SM = {
   elevation: 4,
 } as const;
 
+/** The thumbnail groove. A SOLID mid grey rather than a translucent brown wash: the card beneath is
+ *  cream, so a low-alpha inset just tinted the cream and left a white finish with nothing to sit
+ *  against. Light enough to stay a recess rather than a grey panel — a white finish separates from
+ *  it without the tile reading as dark. */
+const THUMB_INSET = "#CFCAC2";
+
 /** The single text colour for this screen (wireframe ink). */
 const INK = "#231F20";
 
 /** The finish carousel: how long a table sits still, and how long the slide to the next one takes.
  *  Together they set the loop's pace — four cells at 1.75s each is a ~7s cycle, slow enough to read
  *  as a showcase running in the background rather than something demanding attention. */
+/**
+ * What each carousel finish means to the BUILD.
+ *
+ * The assembly screen has exactly one lever for how a model looks — `renderStyle` — and it drives
+ * either a whole-model swap (cozy / cartoon ship their own GLB) or a material pass (illustrated is
+ * the wood-grain shader, shown as "Wooden" in settings). The DB's variations are a different axis:
+ * they dress the FINISHED piece in the room, and the build screen does not read them at all, which
+ * is why white and black land on the plain model here rather than silently doing nothing.
+ */
+const FINISH_STYLE: Record<string, RenderStyleId> = {
+  cozy: "cozy",
+  cartoon: "cartoon",
+  wooden: "illustrated",
+  white: "realistic",
+  black: "realistic",
+};
+
 const FINISH_HOLD_MS = 1100;
 const FINISH_SLIDE_MS = 650;
 
@@ -420,12 +445,26 @@ function FurnitureCard({
     const t = setTimeout(() => setBurst(0), CELEBRATE_MS);
     return () => clearTimeout(t);
   }, [burst]);
-  // The build always uses the DEFAULT finish — the carousel is a showcase, not a picker, so a tap on Start mid-slide must not launch whatever frame was on screen.
+  // The DEFAULT finish, kept as the fallback for anything the carousel is showing that a build can't
+  // actually be started in.
   const buildFinish = finishes[0] ?? null;
-  // Cells: the alternates in reverse, then the default, then the FIRST cell again — so the pass opens and closes on the same finish (white for LACK). That repeat is also what makes a REPLAY seamless: the run ends parked on the last cell, and jumping back to cell 0 to start again lands on an identical image, so the reset is never seen.
+  // The carousel is a SHOWCASE, so it runs on the artwork a build ships, not on item_variants:
+  // "cartoon" and "cozy" are finishes the catalogue can display but nobody can buy or build, and
+  // gating the reel on the purchasable list meant three of the four models had nothing to show.
+  // buildFinish above still comes from the DB list, so what a tap on Start launches is unchanged.
+  const reel = useMemo(() => {
+    const art = meta.variantThumbnails;
+    if (!art) return [] as string[];
+    // THE META'S OWN ORDER, untouched. This used to hoist the DB default to the front, which quietly
+    // took the choice away from the meta: the pass opens on the reel's LAST entry, so reordering the
+    // list moved the opening finish somewhere nobody had asked for (every model opened on whatever
+    // happened to trail the default). The meta lists its finishes in the order it wants them shown.
+    return Object.keys(art);
+  }, [meta.variantThumbnails]);
+  // Cells: the alternates in reverse, then the first, then the LAST cell again — so the pass opens and closes on the meta's last-listed finish. That repeat is also what makes a REPLAY seamless: the run ends parked on the last cell, and jumping back to cell 0 to start again lands on an identical image, so the reset is never seen.
   const track = useMemo(
-    () => (finishes.length > 1 ? [...finishes.slice(1).reverse(), finishes[0], finishes[finishes.length - 1]] : []),
-    [finishes],
+    () => (reel.length > 1 ? [...reel.slice(1).reverse(), reel[0], reel[reel.length - 1]] : []),
+    [reel],
   );
   // `dark` survives here for the ARTWORK, not the styling: each meta ships a light and a dark thumbnail, and that choice can't come from a colour token.
   const pickThumb = (set: ThumbSet) => (dark ? set.dark : set.light) ?? set.light;
@@ -458,6 +497,41 @@ function FurnitureCard({
     slide.value = withSequence(...steps);
     return () => cancelAnimation(slide);
   }, [slide, track.length, selected]);
+  // WHICH finish is on the tile right now. The carousel is a picker as well as a showcase: a player
+  // who taps Start while Cozy is up expects to build the cozy one, so the visible cell has to exist
+  // on the JS side, not only on the UI thread. Rounded, because a tap mid-slide should launch the
+  // finish it is closest to rather than a half-scrolled neither.
+  const [shownIndex, setShownIndex] = useState(0);
+  useAnimatedReaction(
+    () => Math.round(slide.value),
+    (cell, prev) => {
+      if (cell !== prev) runOnJS(setShownIndex)(cell);
+    },
+    [],
+  );
+  const shownFinish = track.length ? track[Math.min(shownIndex, track.length - 1)] : null;
+
+  /**
+   * Start the build in the finish the tile is SHOWING.
+   *
+   * The carousel mixes two different things, and they launch differently:
+   *   - a DB VARIATION (wooden / white / black) is the build's own artwork — it travels as the
+   *     `variation` route param, exactly as the default did.
+   *   - a RENDER STYLE (cozy / cartoon) is a whole-model look owned by settings, not by the route,
+   *     so it is applied to the store before navigating.
+   * Anything the carousel can show but a build can't honour falls back to the default variation,
+   * so Start never launches something that doesn't exist.
+   */
+  const startShown = () => {
+    const shown = shownFinish;
+    // ALWAYS set it, including for the plain finishes: renderStyle is session state, so a player who
+    // built the cozy LACK and then starts the white one would otherwise get cozy again.
+    useGameStore.getState().setRenderStyle(shown ? FINISH_STYLE[shown] ?? "realistic" : "realistic");
+    // The variation still travels with the route: the build ignores it today, but it is the piece's
+    // finish once it reaches the room, and dropping it here would lose the player's choice there.
+    onStart(shown && finishes.includes(shown) ? shown : buildFinish);
+  };
+
   const trackStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: -slide.value * THUMB_CELL }],
   }));
@@ -508,7 +582,18 @@ function FurnitureCard({
         </View>
         <View style={styles.cardCopy}>
           <View style={styles.nameRow}>
-            <Text style={styles.name} numberOfLines={2}>{row?.name ?? "…"}</Text>
+            {/* adjustsFontSizeToFit with a floor: "BEKVÄM Step Stool" is the longest name in the
+                catalogue and sits right on the wrap boundary, so it flips between one and two lines
+                on the smallest width change. Letting it shrink a hair keeps every card's copy block
+                the same height instead of one of them being a line taller than the rest. */}
+            <Text
+              style={styles.name}
+              numberOfLines={2}
+              adjustsFontSizeToFit
+              minimumFontScale={0.85}
+            >
+              {row?.name ?? "…"}
+            </Text>
             {brand ? (
               <Image source={brand.logo} style={styles.brandLogo} resizeMode="contain" />
             ) : null}
@@ -557,7 +642,7 @@ function FurnitureCard({
       {/* Now a real target: the card body selects, this starts. Two jobs, two touch areas — a nested Pressable swallows its own touch, so it never falls through to selection. */}
       <Pressable
         style={({ pressed }) => [styles.startBtn, { backgroundColor: PILL_STYLE[state].bg }, pressed && styles.startBtnPressed]}
-        onPress={() => (armsFirst ? onSelect() : onStart(buildFinish))}
+        onPress={() => (armsFirst ? onSelect() : startShown())}
         accessibilityRole="button"
         accessibilityLabel={`${PILL_LABEL[state].replace(" ›", "")} ${row?.name ?? meta.id}`}
         accessibilityHint={armsFirst ? "Shows the available finishes. Tap again to start building." : undefined}
@@ -680,14 +765,25 @@ const makeStyles = (t: Theme) =>
     cardPressed: { backgroundColor: t.surfaceRaised },
     burstClip: { ...StyleSheet.absoluteFillObject, borderRadius: RADIUS.panel, overflow: "hidden" },
     // The colour comes from PILL_STYLE at the call site, so the outline and the button always agree about which state the card is in — one signal in two places, never two signals.
-    cardSelected: { borderWidth: 3 },
+    // The selected outline is 3pt where the resting one is a hairline, so selecting a card USED TO
+    // narrow its content box by ~4pt. Every card shifted a little; BEKVÄM's title sits right at the
+    // wrap boundary, so those few points tipped it onto a second line and shoved the stage pill,
+    // duration and logo down with it. Giving the padding back keeps the inner width identical in
+    // both states, so nothing reflows on selection.
+    cardSelected: {
+      borderWidth: 3,
+      padding: SPACE.lg - (3 - StyleSheet.hairlineWidth * 2),
+    },
     cardBody: { flexDirection: "row", gap: SPACE.md },
     thumbWrap: {
       width: 118,
       height: 118,
       borderRadius: RADIUS.control,
-      // Inset, like every other groove in the palette — the thumbnail sits IN the card.
-      backgroundColor: t.surfaceInset,
+      // Inset, like every other groove in the palette — the thumbnail sits IN the card. Held LOCALLY
+      // and darker than t.surfaceInset (0.10): these tiles carry white and pale-wood furniture, and
+      // at the theme's value a white LACK dissolved into its own groove. Every other inset in the
+      // app sits behind text or controls, which is why the token stays where it is.
+      backgroundColor: THUMB_INSET,
       alignItems: "center",
       justifyContent: "center",
       // The carousel is wider than the frame; without this the off-screen cells spill over the card.

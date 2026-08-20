@@ -240,6 +240,25 @@ export const makeSettingsStyles = (t: Theme) =>
     borderColor: t.border,
   },
   fontBtn: { paddingHorizontal: 12, paddingVertical: 6 },
+  // The music meter, in the same shell as the text-size stepper so the two rows read as one family.
+  meterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: t.surfaceRaised,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: t.border,
+  },
+  meter: { flexDirection: "row", alignItems: "flex-end", gap: 2, height: 18, paddingHorizontal: 2 },
+  // A rung that is BELOW the level stays visible but unlit — an empty gap would read as a broken
+  // meter rather than as headroom.
+  meterBar: {
+    width: 4,
+    height: "100%",
+    borderRadius: 2,
+    backgroundColor: t.surfaceInset,
+  },
+  meterBarOn: { backgroundColor: t.accent },
   actionRow: {
     backgroundColor: t.surfaceRaised,
     borderRadius: 12,

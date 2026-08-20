@@ -7,13 +7,13 @@ import { useScreenInsets } from '@/src/hooks/use-safe-insets';
 import { Button } from "@/src/game/ui/system/Button";
 import { StarIcon } from "@/src/components/Icons";
 import { avatarForProfile } from "@/src/components/avatarAssets";
-import { RADIUS, TYPE, ELEVATION, SPACE, useStyles, useTheme, useUiScale, SIZE } from "@/src/game/ui/system/theme";
+import { RADIUS, TYPE, SPACE, useStyles, useTheme, useUiScale, SIZE } from "@/src/game/ui/system/theme";
 import { FURNITURE_METAS } from "@/src/game/content/furnitures/furnitures";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import type { FriendRequest, Profile } from "@/src/data";
 import type { Theme } from "@/src/game/ui/system/theme";
+import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
 
-import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 // The "/N" denominator for items assembled: the same buildable set the catalogue counts.
 const TOTAL_BUILDS = FURNITURE_METAS.length;
 
@@ -26,12 +26,56 @@ function titleCase(s: string): string {
 }
 
 /** The avatar recommendation's backdrop, so the two "who you are" screens share a look. */
-const BG_FROM = "#E8D48C";
-const BG_TO = "#A9BFD9";
+/** Shared with the avatar recommendation screen — the two are the same moment either side of
+ *  onboarding ("this is who you are"), so they wear the same art rather than each tuning a ramp. */
+const backdrop = require("@/src/assets/ui/profile-backdrop.jpg");
+
+/** What shows for the frame before the artwork decodes, and behind it if the asset ever fails to
+ *  load. Sampled from the art's own open area so the swap is invisible rather than a flash. */
+const BG_FALLBACK = "#E9E6DF";
 
 /** The screen's own margins, before any device inset is added on top. */
 const GUTTER_H = 28;
-const GUTTER_V = 4;
+/** The lift under every cream surface on this screen — the search field, both tabs, the list and the
+ *  name pill.
+ *
+ *  Lifted from the catalogue's own local SHADOW, and written as `boxShadow` for the same reason it is
+ *  there: RN 0.81 renders boxShadow on ANDROID with a real colour and alpha, where `elevation`
+ *  ignores shadowColor/shadowOpacity entirely and draws its own soft grey ramp. The remaining keys
+ *  are the iOS fallback for the old architecture. Darker: raise the alpha. Softer: raise the blur. */
+const PANEL_SHADOW = {
+  boxShadow: "0px 5px 4px rgba(0,0,0,0.40)",
+  shadowColor: "#000",
+  shadowOpacity: 0.8,
+  shadowRadius: 2,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 6,
+} as const;
+
+/** How far the friends column starts below the top of the screen. It clears the avatar's own top
+ *  (GUTTER_V + the card's SPACE.lg = 30) and then some, so the column reads as deliberately set
+ *  down rather than as almost-aligned. One number to retune the whole right-hand stack. */
+const PANEL_LEAD = 32;
+
+/** The back arrow's drawn size. 26 is what the questionnaire and the avatar screen give the same
+ *  asset, so the glyph reads at one weight wherever the app offers a way back. */
+const BACK_ICON = 26;
+
+/** The empty padding inside the back button, taken back off its position.
+ *
+ *  The button is a 44pt touch target around a 26pt icon, so putting its BOX on the gutter would
+ *  leave the ICON — the only part anyone can see — sitting 9pt further in than every other edge on
+ *  the screen. Optical alignment: what lines up is the paint, not the hit area. Derived from the two
+ *  sizes rather than typed as a number, so it follows if either changes. */
+const BACK_INSET = (SIZE.controlHeight - BACK_ICON) / 2;
+/** How tall the friends list may get before it scrolls: four rows plus its own padding.
+ *  A row is the 34pt avatar with 4pt above and below, and listContent adds SPACE.sm each end. */
+const LIST_MAX = 4 * (34 + 8) + 8 * 2;
+/** Was 4 — a seventh of the horizontal gutter, so the search field and the home icon sat almost on
+ *  the glass while the sides had a generous 28. Landscape has less height to give than width, so
+ *  this stays smaller than GUTTER_H; it just stops being a hairline. The left column's stack is
+ *  330pt tall against the 356 this leaves, so the room is there to spend. */
+const GUTTER_V = 14;
 
 export default function ProfileScreen() {
   const styles = useStyles(makeStyles);
@@ -209,20 +253,12 @@ export default function ProfileScreen() {
   }
 
   return (
-    // The gradient owns an UNPADDED layer of its own. Absolute children are inset by their parent's
-    // padding, so drawing it inside the padded root leaves a border of flat colour all round — which
-    // reads as a frame rather than as the background.
-    <View style={styles.screen}>
-      {/* Diagonal, so neither end of the ramp sits flat behind a whole column of content. */}
-      <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
-        <Defs>
-          <LinearGradient id="profileBg" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor={BG_FROM} />
-            <Stop offset="1" stopColor={BG_TO} />
-          </LinearGradient>
-        </Defs>
-        <Rect x="0" y="0" width="100%" height="100%" fill="url(#profileBg)" />
-      </Svg>
+    // The artwork is the screen ROOT, through SceneBackdrop — an ImageBackground, never an
+    // <Image absoluteFill>, which scales the same file differently and renders it zoomed (see the
+    // note at the top of SceneBackdrop.tsx). It also keeps the art UNPADDED: an absolute child is
+    // inset by its parent's padding, so drawing the background inside the padded root below would
+    // leave a border of flat colour all round and read as a frame rather than as the background.
+    <SceneBackdrop source={backdrop} style={styles.screen}>
       <View
       style={[
         styles.root,
@@ -240,20 +276,22 @@ export default function ProfileScreen() {
         },
       ]}
     >
-      <View style={styles.header}>
-        {/* One control, and no label on it: an icon that IS a house does not need the word under it.
+      <View style={[styles.header, { top: GUTTER_V, left: GUTTER_H + safe.left - BACK_INSET }]}>
+        {/* The drawn arrow head, the same asset the questionnaire and the avatar screen use — a "<"
+            glyph is a less-than sign that happens to look like an arrow, and it renders differently
+            in every font.
             dismissTo, not replace: pops back to the room already under the modal so it never
-            remounts. */}
+            remounts. The DESTINATION has not changed with the icon; only what it looks like has. */}
         <Pressable
-          style={styles.homeButton}
+          style={styles.backButton}
           onPress={() => router.dismissTo("/room")}
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel="Home"
+          accessibilityLabel="Back to your room"
         >
           <Image
-            source={require("@/src/assets/ui/icons/icon-home.png")}
-            style={styles.homeIcon}
+            source={require("@/src/assets/ui/icons/arrow-back.png")}
+            style={styles.backIcon}
             resizeMode="contain"
           />
         </Pressable>
@@ -310,6 +348,11 @@ export default function ProfileScreen() {
             </Pressable>
           )}
 
+          {/* The two stats are ONE block, centred as a block. Left-aligned rows stretched across the
+              card sat hard against its left edge under a centred avatar and a centred name, so the
+              column read as two different layouts stacked. Inside the block they stay left-aligned,
+              which is what keeps the two icons on a common edge and the numbers scannable. */}
+          <View style={styles.statList}>
           <View style={styles.statRow}>
             <Image
               source={require("@/src/assets/ui/icons/Assemble-icon.png")}
@@ -318,7 +361,7 @@ export default function ProfileScreen() {
             />
             <View style={styles.statBody}>
               <Text style={styles.statTitle}>
-                {profile.itemsAssembled}/{TOTAL_BUILDS} items assembled
+                {profile.itemsAssembled}/{TOTAL_BUILDS} Assemblies
               </Text>
             </View>
           </View>
@@ -326,9 +369,9 @@ export default function ProfileScreen() {
           <View style={styles.statRow}>
             <Text style={[styles.statGlyph, styles.heartGlyph]}>♥</Text>
             <View style={styles.statBody}>
-              <Text style={styles.statTitle}>{profile.likes} liked</Text>
-              <Text style={styles.statSub}>your cozy home!</Text>
+              <Text style={styles.statTitle}>{profile.likes} Likes</Text>
             </View>
+          </View>
           </View>
         </View>
 
@@ -367,7 +410,7 @@ export default function ProfileScreen() {
                 <Text style={styles.searchNote}>Already friends</Text>
               ) : incoming.some((c) => c.userId === result.userId) ? (
                 // Catches the case where this player already sent US a request: without this branch the "add friend" fallthrough below would fire a second, opposite-direction request instead of pointing them at the accept flow that already exists in the requests tab, and accepting from here would mean duplicating that tab's two-list optimistic rollback.
-                <Text style={styles.searchNote}>Already sent you a request — check Friend requests</Text>
+                <Text style={styles.searchNote}>Already sent you a request — check Friend Requests</Text>
               ) : outgoing.includes(result.userId) ? (
                 <Text style={styles.searchNote}>Requested</Text>
               ) : (
@@ -384,7 +427,7 @@ export default function ProfileScreen() {
               onPress={() => setTab("friends")}
             >
               <Text style={[styles.tabText, tab === "friends" && styles.tabTextActive]}>
-                My friends ({friends.length})
+                My Friends ({friends.length})
               </Text>
             </Pressable>
             <Pressable
@@ -392,13 +435,21 @@ export default function ProfileScreen() {
               onPress={() => setTab("requests")}
             >
               <Text style={[styles.tabText, tab === "requests" && styles.tabTextActive]}>
-                Friend requests ({pendingIncoming.length})
+                Friend Requests ({pendingIncoming.length})
               </Text>
             </Pressable>
           </View>
 
           {tab === "friends" ? (
-            <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+            <ScrollView
+              style={styles.list}
+              contentContainerStyle={styles.listContent}
+              // Android hides the bar the moment a scroll ends, so a bounded list looks like a full
+              // one until you touch it. persistentScrollbar keeps it drawn, which is the only cue
+              // that there is more list below the fold. No-op on iOS, where the prop is ignored.
+              showsVerticalScrollIndicator
+              persistentScrollbar
+            >
               {friends.map((f) => (
                 <View key={f.userId} style={styles.friendRow}>
                   <Image source={avatarForProfile(f.avatarMode)} style={styles.friendAvatar} />
@@ -413,7 +464,15 @@ export default function ProfileScreen() {
               {friends.length === 0 && <Text style={styles.empty}>No friends yet.</Text>}
             </ScrollView>
           ) : (
-            <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+            <ScrollView
+              style={styles.list}
+              contentContainerStyle={styles.listContent}
+              // Android hides the bar the moment a scroll ends, so a bounded list looks like a full
+              // one until you touch it. persistentScrollbar keeps it drawn, which is the only cue
+              // that there is more list below the fold. No-op on iOS, where the prop is ignored.
+              showsVerticalScrollIndicator
+              persistentScrollbar
+            >
               {pendingIncoming.map((c) => (
                 <View key={c.userId} style={styles.friendRow}>
                   <Image source={avatarForProfile(c.avatarMode)} style={styles.friendAvatar} />
@@ -434,7 +493,7 @@ export default function ProfileScreen() {
         </View>
         </View>
       </View>
-    </View>
+    </SceneBackdrop>
   );
 }
 
@@ -442,29 +501,34 @@ const makeStyles = (t: Theme) =>
   StyleSheet.create({
     // Full bleed, never padded: this is what the gradient measures against, and its colour is the
     // gradient's first stop so the frame before the SVG paints is a settling rather than a flash.
-    screen: { flex: 1, backgroundColor: BG_FROM },
+    screen: { flex: 1, backgroundColor: BG_FALLBACK },
     root: { flex: 1 },
     center: { alignItems: "center", justifyContent: "center", gap: SPACE.md },
     errorText: { ...TYPE.body, color: t.textFaint, textAlign: "center", padding: SPACE.lg },
     // OUT OF THE FLOW. As a row it cost 44pt of button plus a 12pt margin before the card could
     // start — 56pt of empty band across the top for one small icon. Absolute, it sits in the corner
     // it always sat in and the content begins at the top of the screen.
+    // The gutter is given EXPLICITLY at the call site, from the same two constants the root pads
+    // itself with. `top: 0, left: 0` put the house within a few points of the screen edge while the
+    // search field beside it sat 28 in — an absolute child here resolves against the border box,
+    // not the padding box, so it was outside the margins the rest of the screen keeps.
     header: {
       position: "absolute",
-      top: 0,
-      left: 0,
       zIndex: 5,
     },
-    // The bare icon, no chip. On a gradient a bordered cream pill reads as a button parked on the
-    // artwork; the house alone is unmistakable and lets the background run behind it. hitSlop keeps
+    // The bare icon, no chip. On the artwork a bordered cream pill reads as a button parked on top
+    // of it; the arrow alone is unmistakable and lets the background run behind it. hitSlop keeps
     // the touch target at size even though the paint no longer shows it.
-    homeButton: {
+    backButton: {
       width: SIZE.controlHeight,
       height: SIZE.controlHeight,
       alignItems: "center",
       justifyContent: "center",
     },
-    homeIcon: { width: 22, height: 22 },
+    // 26, matching the nav arrows on the questionnaire and the avatar screen — the same glyph at the
+    // same weight wherever it appears. The house it replaced was 22, which is why BACK_INSET is
+    // derived from this number rather than left at the old one.
+    backIcon: { width: BACK_ICON, height: BACK_ICON },
 
     // Tighter gap and a narrower card, so the friends list starts further left. SPACE.xl between two
     // columns on a phone is a corridor; the panel is better off with the width.
@@ -506,7 +570,8 @@ const makeStyles = (t: Theme) =>
       borderColor: t.border,
       backgroundColor: t.surface,
       marginBottom: SPACE.lg,
-      ...ELEVATION.card,
+      // PANEL_SHADOW, not ELEVATION.card: the shared scale sets shadowOpacity and elevation, neither of which Android honours — so on device that pill had no shadow at all while the rest of the screen now does.
+      ...PANEL_SHADOW,
     },
     nameText: { ...TYPE.title, color: t.text, flexShrink: 1 },
     // The INPUT keeps a working width — a field that shrank to its text would be unusable to type in.
@@ -514,6 +579,10 @@ const makeStyles = (t: Theme) =>
     pencil: { color: t.textDim, fontSize: 16 },
     saveText: { ...TYPE.label, color: t.accent },
 
+    // Centred under the face, sized by its own content. `alignSelf: "stretch"` on the ROWS is what
+    // used to push them to the card's left edge; the block carries the centring now and the rows
+    // fill it, so the two icons still share a left edge as they always did.
+    statList: { alignSelf: "center", marginTop: SPACE.xs },
     statRow: { flexDirection: "row", alignItems: "center", gap: SPACE.md, alignSelf: "stretch", marginBottom: SPACE.md },
     statIcon: { width: 26, height: 26 },
     statGlyph: { fontSize: 20, color: t.textDim, width: 26, textAlign: "center" },
@@ -534,12 +603,14 @@ const makeStyles = (t: Theme) =>
     titleBadgeText: { ...TYPE.labelSm, color: t.text, letterSpacing: 0.3 },
     // Filled, and red: an outline heart reads as "not yet liked", the opposite of a count received.
     heartGlyph: { color: "#C2544B" },
-    statSub: { ...TYPE.labelSm, color: t.textFaint, marginTop: 1 },
 
     // minWidth 0 is what lets a flex child shrink BELOW its content. Without it the panel refuses to
     // go narrower than its widest row, the body row grows past the screen, and the padding around it
     // is pushed off the edges — which reads as no margins at all rather than as an overflow.
-    friendsPanel: { flex: 1, minWidth: 0 },
+    // Starts level with the AVATAR, not with the top of the screen. The profile card takes SPACE.lg
+    // above the face; without the same lead here the search field began a row higher than the
+    // portrait beside it, and the two columns read as though they had been pasted in separately.
+    friendsPanel: { flex: 1, minWidth: 0, paddingTop: PANEL_LEAD },
     searchRow: { flexDirection: "row", alignItems: "center", gap: SPACE.sm, marginBottom: SPACE.sm },
     searchInput: {
       ...TYPE.labelSm,
@@ -554,6 +625,7 @@ const makeStyles = (t: Theme) =>
       borderWidth: 1,
       borderColor: t.border,
       backgroundColor: t.surface,
+      ...PANEL_SHADOW,
     },
     searchNote: { ...TYPE.labelSm, color: t.textFaint, paddingHorizontal: SPACE.sm },
     tabs: { flexDirection: "row", gap: SPACE.sm, marginBottom: SPACE.sm },
@@ -566,17 +638,25 @@ const makeStyles = (t: Theme) =>
       borderWidth: 1,
       borderColor: t.border,
       backgroundColor: t.surface,
+      ...PANEL_SHADOW,
     },
     tabActive: { backgroundColor: t.surfaceRaised, borderColor: t.borderStrong },
     tabText: { ...TYPE.label, color: t.textDim },
     tabTextActive: { color: t.text },
 
+    // BOUNDED, not flex:1. Filling the panel's leftover height made the list run the full drop of
+    // the screen with five names in it and a field of empty cream beneath them. It now shrinks to
+    // its content and stops at LIST_MAX — about four rows — so a short list is short and a long one
+    // scrolls. flexShrink lets it give way if the panel above it ever grows.
     list: {
-      flex: 1,
+      flexGrow: 0,
+      flexShrink: 1,
+      maxHeight: LIST_MAX,
       borderRadius: RADIUS.panel,
       borderWidth: 1,
       borderColor: t.border,
       backgroundColor: t.surface,
+      ...PANEL_SHADOW,
     },
     listContent: { padding: SPACE.sm },
     friendRow: {
