@@ -58,7 +58,7 @@ import {
 import { useVariantModelSource } from "./variantModel";
 import { GridOverlay } from "./GridOverlay";
 import { applySurfaceItem } from "./applySurfaceItem";
-import { SHELL_ORIGINAL } from "./shellMaterials";
+import { SHELL_GRID, SHELL_GRID_ALPHA, SHELL_GRID_NODE, SHELL_ORIGINAL } from "./shellMaterials";
 import { useSurfaceTextures } from "./useSurfaceTextures";
 import { useCurrentUserId, useRepos } from "../../data";
 import { useShopStore } from "../../data/shop/store";
@@ -71,13 +71,11 @@ import {
   dragWallTarget,
   pickBoxAt,
   pointsAtSurface,
-  roomPointToScreen,
   screenPointToFloorCell,
   screenPointToWallCell,
   type PickBox,
   type TopTarget,
 } from "../input/picking";
-import { convexHull, type Pt } from "../core/gridOcclusion";
 import { anchorForCentre } from "../core/grid";
 import {
   CEILING_MATERIAL,
@@ -136,9 +134,12 @@ type OrbitState = {
 function RoomModel({
   onReady,
   orbit,
+  showGrid,
 }: {
   onReady: () => void;
   orbit: ReturnType<typeof useSharedValue<OrbitState>>;
+  /** Whether the editing grid is up — a floor or tabletop ghost is being placed. */
+  showGrid: boolean;
 }) {
   // addToScene OFF, and it must stay off: this component decides what of the shell is in the scene, cell by cell, and useModel's own add is not a call it can sequence against. That add is `scene.addAssetEntities(asset)` — every node of the asset, unconditionally — dispatched from a WORKLET effect, i.e. queued onto the worklet thread while the effects below run synchronously on the JS thread. Whichever thread got there second won, so a shell that finished loading while the layout already held a window had its knocked-out cells put straight back, leaving the window buried in solid wall and every band showing its panel AND its 84 cells at once. Nothing healed it either: the effects below diff against the refs here, which still claimed the work was done.
   const model = useModel(ROOM_MODEL, { addToScene: false });
@@ -324,6 +325,37 @@ function RoomModel({
     });
     return () => cancelAnimationFrame(frame);
   }, [model, orbit]);
+
+  // The editing grid. It is ordinary shell geometry — 361 quads on the floor plane, generated into the GLB by scripts/add-shell-grid.mts — so showing it is one alpha write through the same material cache a wall fades through, and hiding it is the same write to zero.
+  //
+  // Drawn on the GPU rather than projected into the SVG overlay, which is what the overlay used to do. That was not merely slower: an overlay has no depth buffer, so hiding the lines behind furniture meant clipping all 38 of them against the projected convex hull of every piece in the room, every frame, and it duplicated the camera — the grid projected through roomPointToScreen while the room was drawn by OrbitCameraRig, and the two disagree by the system-bar insets under edgeToEdge. Here Filament's own depth test does the occlusion exactly, for free, through the same camera the room is drawn with, and a piece hides the grid the way it hides everything else.
+  //
+  // NEVER lets the grid cast a shadow, and that is not a tidiness point: Filament's shadow maps treat BLEND geometry as OPAQUE (the property camera-facing wall culling is built on), so an un-suppressed grid would print itself across the floor as 361 hard shadow lines that no alpha write could switch off.
+  // Keyed on the ASSET, never on `model` — useModel rebuilds that as a fresh object literal on every render, so a `model` dep would re-run this (and re-look-up the entity) on every frame of a drag.
+  const gridEntity = useRef<Entity | null>(null);
+  useEffect(() => {
+    if (!asset) return;
+    const instance = shellMaterialsByName.current[SHELL_GRID];
+    // A shell built before the grid pass existed simply has no such material. The room is completely usable without it — the ghost still shows its own cells, in the overlay — so this stays silent in production and says so once in dev, where it means the GLB needs rebuilding.
+    if (!instance) {
+      if (__DEV__ && showGrid)
+        console.log(`[room] no "${SHELL_GRID}" material — rebuild the shell with npm run build:room`);
+      return;
+    }
+    if (gridEntity.current === null) {
+      const entity = asset.getFirstEntityByName(SHELL_GRID_NODE);
+      if (entity) {
+        gridEntity.current = entity;
+        renderableManager.setCastShadow(entity, false);
+        renderableManager.setReceiveShadow(entity, false);
+      }
+    }
+    instance.setFloat4Parameter("baseColorFactor", [1, 1, 1, showGrid ? SHELL_GRID_ALPHA : 0]);
+    // Dropped when the asset is, alongside the material cache this reads: the handle belongs to that asset, and a re-adopted one must look its own entity up rather than inherit a stale pointer.
+    return () => {
+      gridEntity.current = null;
+    };
+  }, [asset, renderableManager, showGrid]);
 
   // The room's chosen surface items, as SAVED IDS. Through the viewing layer, same as `layout` above, so a visited room paints ITS finishes rather than the player's own.
   const finishes = usePlacementStore((s) => s.viewing?.finishes ?? s.finishes);
@@ -944,26 +976,6 @@ function useSmoothedOrbit(
   return shown.current;
 }
 
-// A piece's screen-space silhouette: its eight box corners projected and hulled, for the grid overlay to dim its lines against (see ../core/gridOcclusion). Null when any corner falls behind the eye, which the overlay reads as "this piece hides nothing" — the conservative answer, and only reachable with the camera zoomed inside a piece.
-function boxHull(
-  box: PickBox,
-  viewport: { width: number; height: number },
-  angles: OrbitAngles,
-): Pt[] | null {
-  const corners: Pt[] = [];
-  for (const x of [box.min.x, box.max.x]) {
-    for (const y of [box.min.y, box.max.y]) {
-      for (const z of [box.min.z, box.max.z]) {
-        const p = roomPointToScreen({ x, y, z }, viewport, angles);
-        if (!p) return null;
-        corners.push(p);
-      }
-    }
-  }
-  const hull = convexHull(corners);
-  return hull.length >= 3 ? hull : null;
-}
-
 export function RoomScene({
   rotationY,
   zoom,
@@ -1087,61 +1099,8 @@ export function RoomScene({
   // The floor grid is drawn for a floor or tabletop ghost only — a wall ghost gets its feedback from the tinted model and the live hole preview instead.
   const showGrid =
     activeEdit !== null && activeEdit.placement.surface.kind !== "wall";
-  // Everything below this line exists only while that grid is up, and follows the camera frame by frame so the grid stays welded to the floor through a drag, a pinch and the glide after both.
+  // The GHOST's own cells still follow the camera frame by frame, so they stay welded to the floor through a drag, a pinch and the glide after both. The grid lines themselves no longer need this — they are scene geometry now, drawn by the same camera as the room (see RoomModel) — so what this mirror feeds is a handful of quads rather than 38 lines clipped against every piece in the room.
   const gridAngles = useSmoothedOrbit(orbit, showGrid);
-
-  // The volumes that hide grid lines, in room units: every committed piece standing on the floor or on a top. Recomputed only when the layout or the catalog changes — the per-frame work is the projection below, not this. The GHOST is deliberately absent. It is not in `layout` anyway, but the rule matters: the piece under the finger must never dim the cells it is being aimed at, which are the whole point of the overlay.
-  const occluderBoxes = useMemo(() => {
-    if (!showGrid) return [];
-    const defs = roomItemDefs();
-    const boxes: PickBox[] = [];
-    for (const p of layout) {
-      const item = getRoomItem(p.itemId);
-      if (!item) continue;
-      const height = item.size.y * fitScale(item);
-      if (p.surface.kind === "floor") {
-        boxes.push(floorPlacementBox(p, item.def, height));
-      } else if (p.surface.kind === "furniture") {
-        const host = resolveHost(p.surface.hostInstanceId, layout, defs);
-        const hostItem = host ? getRoomItem(host.placement.itemId) : null;
-        if (!host || !hostItem) continue;
-        boxes.push(
-          topPlacementBox(
-            host,
-            p,
-            item.def,
-            hostItem.size.y * fitScale(hostItem),
-            height,
-          ),
-        );
-      }
-    }
-    return boxes;
-    // roomItems is a dep for its identity alone: it is what changes when the catalog sync lands, and a piece whose item row arrives late must start occluding then.
-  }, [layout, roomItems, showGrid]);
-
-  // ── TEMPORARY DIAGNOSTIC — remove with the viewport one above ──
-  //
-  // How many pieces are actually hiding grid lines. If the grid draws over furniture and this prints
-  // 0 while the room plainly has pieces in it, the occlusion never ran and the fault is in the boxes
-  // (a catalog row without a measured size, so getRoomItem returns null and the piece is skipped) —
-  // NOT in the clipping, which is unit-tested and verified against real camera maths.
-  const occLoggedRef = useRef(-1);
-  useEffect(() => {
-    if (!showGrid) return;
-    if (occLoggedRef.current === occluderBoxes.length) return;
-    occLoggedRef.current = occluderBoxes.length;
-    console.log("[room occlusion]", `placed ${layout.length}`, `| occluders ${occluderBoxes.length}`);
-  }, [occluderBoxes, layout.length, showGrid]);
-
-  // Projected fresh every frame the camera moves, because the silhouettes turn with it. A dozen boxes at eight corners each is a few hundred multiplies — cheaper by far than the SVG diff it feeds.
-  const occluders = useMemo(
-    () =>
-      occluderBoxes
-        .map((box) => boxHull(box, { width, height }, gridAngles))
-        .filter((hull): hull is Pt[] => hull !== null),
-    [occluderBoxes, gridAngles, width, height],
-  );
 
   // While a ghost is active, the finger owns the ghost, not the camera: the same drag that orbited a moment ago now slides the piece cell to cell under the fingertip. A wall ghost slides on ITS wall and hops at the corner; which wall it lands on — and the hysteresis that keeps a finger near a corner from teleporting it — is dragWallTarget's job.
   const dragGhost = useCallback(
@@ -1563,7 +1522,7 @@ export function RoomScene({
           {/* The room's own ceiling light. Off at the three daylight hours by default and on after dark, with the player's switch overriding either way — see ceilingLightOn. */}
           {ceilingLight ? <RoomCeilingLight light={sun.interiorLight} /> : null}
           <RoomPostProcess />
-          <RoomModel onReady={handleReady} orbit={orbit} />
+          <RoomModel onReady={handleReady} orbit={orbit} showGrid={showGrid} />
           {/* Committed pieces AND the ghost render from ONE array, and that is load-bearing: React keys only match within the same children array, so a ghost in its own sibling slot is a different element even with the same key — pick-up and confirm then unmount/remount the piece, and useModel reloads the whole GLB each time (useBuffer has no cache). That remount is what made a dragged piece invisible until seconds after settling, and where the old "Pointer FilamentAssetWrapper has already been manually released" race lived. In one array the key genuinely matches, the component morphs, and the model loads exactly once per piece.
               An id the catalog doesn't know (yet) has no model or dimensions — skip it. */}
           {scenePlacements.map((placement) => (
@@ -1606,12 +1565,11 @@ export function RoomScene({
           <OrbitCameraRig orbit={orbit} />
         </FilamentView>
       </FilamentScene>
-      {/* The overlay draws the FLOOR grid, and the ghost's highlight quads on whatever plane the ghost stands on — the floor, or a host's tabletop. A wall ghost gets its feedback from the tinted model and the live hole preview instead, so the overlay stays down for walls only. */}
+      {/* The overlay draws the ghost's highlight quads ONLY — the floor grid itself is scene geometry (RoomModel). The two are split by which way each one needs occlusion to go: a grid line should be hidden by a piece standing over it, which is what the depth buffer does for free, while these quads must stay visible THROUGH the very piece being placed, since they are the answer to "will it fit here" and the ghost model stands directly on them. A wall ghost gets its feedback from the tinted model and the live hole preview instead, so the overlay stays down for walls only. */}
       {showGrid && activeEdit ? (
         <GridOverlay
           viewport={{ width, height }}
           angles={gridAngles}
-          occluders={occluders}
           ghostQuads={(() => {
             const p = activeEdit.placement;
             const def =

@@ -14,6 +14,12 @@ export const SHELL_GROUPS: Record<"slab" | "cornice" | "walls", readonly string[
 // The plinth. Deliberately not a group: it takes a baseColorFactor tint and never a texture, because unlike the cornice it does NOT fade — nothing else owns its factor, so writing it cannot desync camera-facing wall culling's cached baseline RGB.
 export const SHELL_PLINTH = "FloorEdge";
 
+// The editing grid: the sixteenth material, and the only one Blender never authored. It is GENERATED into the shipped GLB by scripts/add-shell-grid.mts, straight out of the ROOM_SHELL floor constants, for the same class of reason set-shell-blend-modes.mjs exists — except that here it is not that Blender cannot express it, but that Blender must not be the one to say it. The drawn grid and the grid a piece is placed on have to be the same grid; deriving the geometry from the same constants the placement maths reads makes drift impossible rather than merely unlikely. Hand-authoring it would put a second copy of the cell pitch in a mesh, which is precisely the mistake roomShell.ts's header blames for the old alignment bugs.
+export const SHELL_GRID = "Grid";
+export const SHELL_GRID_NODE = "Shell_Grid";
+// What the grid fades to while a floor or tabletop ghost is up. Matches the white the SVG overlay drew its lines at, so moving the lines onto the GPU changed where they are drawn and nothing about how they look. The material is AUTHORED at alpha 0 — unlike a wall, whose resting state is opaque, the grid's resting state is hidden, so a runtime that never writes it leaves the room clean rather than permanently gridded.
+export const SHELL_GRID_ALPHA = 0.38;
+
 // A glTF material's parameter names in gltfio's ubershader. occlusionMap is deliberately absent and must stay absent: that slot holds the room's baked AO on TEXCOORD_1, and a tiled AO map from a texture pack would fight it.
 export const MAP_PARAMS = {
   base: "baseColorMap",
