@@ -1,3 +1,5 @@
+import { SHELL_WALL_IDS, type ShellWallId } from "../core/roomShell";
+
 // The shell's material names, grouped by what a surface item does to them. The names are the shell's authored contract — the same fifteen scripts/normalise_shell_materials.py enforces and scripts/verify-room-glb.mts checks — so this list must move only when the shell does.
 //
 // THREE GROUPS FROM TWO ITEM SLOTS. A floor item drives the slab and the plinth; a wall item drives the four walls AND the cornice. The cornice moved to the wall's side of the split on 2026-08-10: it sits at the wall/ceiling junction, so it is the wallpaper's joinery, not the floor's — the room's cornice should change when its wallpaper does, not when its rug does. (The plinth stays with the floor: it is the raised lip around the floor SLAB, so it is the floor's joinery in the way the cornice used to be assumed to be.) Each group that carries maps gets its OWN images at its OWN tiling — never the same image reused, because a cornice is separate geometry with its own UV mapping and the wall's map on it reads as an extruded strip of wallpaper.
@@ -16,9 +18,15 @@ export const SHELL_PLINTH = "FloorEdge";
 
 // The editing grid: the sixteenth material, and the only one Blender never authored. It is GENERATED into the shipped GLB by scripts/add-shell-grid.mts, straight out of the ROOM_SHELL floor constants, for the same class of reason set-shell-blend-modes.mjs exists — except that here it is not that Blender cannot express it, but that Blender must not be the one to say it. The drawn grid and the grid a piece is placed on have to be the same grid; deriving the geometry from the same constants the placement maths reads makes drift impossible rather than merely unlikely. Hand-authoring it would put a second copy of the cell pitch in a mesh, which is precisely the mistake roomShell.ts's header blames for the old alignment bugs.
 export const SHELL_GRID = "Grid";
+// FIVE grid plates share that one material — the floor and one per wall — because only ever ONE of them is on screen at a time, so which grid is showing is decided by adding that node's entity to the scene and removing the rest, never by giving each its own alpha to get out of step with. Wall grids landed 2026-08-20: placing a picture frame or a cabinet needs cells to aim at exactly as placing a chair does, and the wall lattice is the same 0.25 pitch (WALL_CELL_SIZE) the wall placement maths already uses.
 export const SHELL_GRID_NODE = "Shell_Grid";
-// What the grid fades to while a floor or tabletop ghost is up. Matches the white the SVG overlay drew its lines at, so moving the lines onto the GPU changed where they are drawn and nothing about how they look. The material is AUTHORED at alpha 0 — unlike a wall, whose resting state is opaque, the grid's resting state is hidden, so a runtime that never writes it leaves the room clean rather than permanently gridded.
-export const SHELL_GRID_ALPHA = 0.38;
+export const shellGridWallNode = (wall: ShellWallId): string => `Shell_Grid_${wall.replace("-", "")}`;
+export const SHELL_GRID_NODES: readonly string[] = [
+  SHELL_GRID_NODE,
+  ...SHELL_WALL_IDS.map(shellGridWallNode),
+];
+// The grid lines' colour. A flat unlit grey rather than the translucent white the SVG overlay used, because the plates had to leave the transparent pass to stop the window band drawing over them (the reasoning is in add-shell-grid.mts). One consequence is worth knowing: a blended white read very differently on a dark wall than on cream plaster — stark on one, nearly invisible on the other — where a fixed grey reads much the same against both. Tune it here; it is the only place the value lives.
+export const SHELL_GRID_RGB: readonly [number, number, number] = [0.72, 0.72, 0.72];
 
 // A glTF material's parameter names in gltfio's ubershader. occlusionMap is deliberately absent and must stay absent: that slot holds the room's baked AO on TEXCOORD_1, and a tiled AO map from a texture pack would fight it.
 export const MAP_PARAMS = {
