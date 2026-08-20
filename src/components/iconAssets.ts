@@ -7,10 +7,29 @@ export const ASSEMBLE_ICON: ImageSourcePropType = require("@/src/assets/ui/icons
 
 export const SHOP_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/Shop-icon.png");
 export const INVENTORY_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/Inventory-icon.png");
+// The room, as a destination — the purchase popup's "place it now" choice.
+export const HOME_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/icon-home.png");
 export const VISIT_FRIENDS_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/VisitFriends-icon.png");
 export const YOU_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/You-icon.png");
-// Distinct from the older icon-settings.png, which the in-game HUD still uses.
-export const SETTINGS_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/Settings-icon.png");
+// The same file the in-game HUD uses (game/ui/hud/hudIcons.ts), so the gear is one drawing everywhere.
+export const SETTINGS_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/icon-settings.png");
 
-// Blank, so the level is drawn over it as text. Replaces the old level-1..5 files, which each had a number baked in and so could only ever cover the levels that had artwork
+// Blank, so the level is drawn over it as text. The fallback past the last numbered star, and the shop's lock badge
 export const STAR_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/star-universal-icon.png");
+
+export const XP_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/icon-xp.png");
+
+// Stars with the number baked into the artwork, indexed by level
+const LEVEL_ICONS: Record<number, ImageSourcePropType> = {
+  1: require("@/src/assets/ui/icons/lvl-1.png"),
+  2: require("@/src/assets/ui/icons/lvl-2.png"),
+  3: require("@/src/assets/ui/icons/lvl-3.png"),
+  4: require("@/src/assets/ui/icons/lvl-4.png"),
+  5: require("@/src/assets/ui/icons/lvl-5.png"),
+  6: require("@/src/assets/ui/icons/lvl-6.png"),
+};
+
+// Null past the last numbered star, so callers fall back to STAR_ICON with the level drawn as text
+export function levelIcon(level: number): ImageSourcePropType | null {
+  return LEVEL_ICONS[level] ?? null;
+}
