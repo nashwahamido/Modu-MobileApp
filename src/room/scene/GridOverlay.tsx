@@ -19,9 +19,14 @@ type Viewport = { width: number; height: number };
 const CELL = ROOM_SHELL.cellSize;
 const { floor } = ROOM_SHELL;
 
-// Bright enough to count cells against the floor, dim enough behind a piece that the piece plainly wins.
+// Bright enough to count cells against the floor.
 const CLEAR_STROKE = "rgba(255,255,255,0.38)";
-const OCCLUDED_STROKE = "rgba(255,255,255,0.09)";
+// HIDDEN, not dimmed. It was 0.09 white, which is a fair ghost of a line over a pale floor and a
+// clearly visible one over dark furniture — so a black cabinet came out wearing the grid, and the
+// whole illusion of the grid lying ON the floor went with it. A piece standing in the room should
+// hide the floor behind it the way it hides everything else, and an overlay with no depth buffer
+// can only do that by not drawing.
+const OCCLUDED_STROKE = "rgba(255,255,255,0.0)";
 
 function project(x: number, z: number, viewport: Viewport, angles: OrbitAngles) {
   return roomPointToScreen({ x, y: floor.y, z }, viewport, angles);
@@ -90,6 +95,8 @@ export const GridOverlay = memo(function GridOverlay({
       width={viewport.width}
       height={viewport.height}
     >
+      {/* Kept as a node rather than dropped, so restoring a faint occluded line is one colour again
+          rather than a re-plumb. It costs one empty Path per frame at alpha 0. */}
       {occluded.length > 0 ? (
         <Path d={occluded.join("")} stroke={OCCLUDED_STROKE} strokeWidth={1} fill="none" />
       ) : null}
