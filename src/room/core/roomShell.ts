@@ -111,11 +111,23 @@ export function windowCellEntityName(wall: WallId, col: number, row: number): st
   return `WCell_${wall.replace("-", "")}_c${String(col - band.cols.from).padStart(2, "0")}_r${row - band.rows.from}`;
 }
 
-// How many square cells cover the floor rect, ROUNDED rather than truncated.
-// Truncating left the old shell's z axis one cell short — ten cells covered 5.00 of a 5.48 floor and the leftover 0.48 showed as a bare strip the full width of the room against the back wall. The current shell was authored so this comes out clean: x is exactly 18 cells (4.5 / 0.25), z is 4.4989 so eighteen cells overhang maxZ by ~0.0011 — which is INSIDE the z-max wall, whose inner face sits exactly at the floor edge. Check again if the shell is re-exported: a remainder near half a cell would push the last row past the wall.
+// How many whole cells fit a run — for EVERY grid in the room, floor and walls alike, which is the point of it being one function.
+//
+// THE SLACK IS THE WHOLE IDEA, and it is neither floor() nor round().
+//
+// Truncating left the old shell's z axis one cell short: ten cells covered 5.00 of a 5.48 floor and the leftover 0.48 showed as a bare strip the full width of the room against the back wall. It went wrong a second way on 2026-08-20, more quietly — the x walls' run measures 4.4989 against the z walls' 4.5, a 1.1 mm discrepancy in the authored model rather than a real missing cell, and a bare floor() turned that into a wall one whole column narrower than the wall facing it. The floor had always used round() and so read the same run as 18; the two grids simply disagreed, and nothing said so.
+//
+// But round() is not the answer either, and the wall HEIGHT is why: 2.9175 m is a genuine 11.67 cells, and rounding that up would hand the player a row of cells 8 cm above the top of the wall to hang pictures on. So — snap up only when a run falls short of whole by a few millimetres, which is measurement noise, and truncate otherwise, which is a real remainder.
+//
+// Check again if the shell is re-exported: a remainder near HALF a cell means the geometry moved, and it should be re-measured rather than absorbed here.
+const CELL_SNAP = 0.005;
+function cellsIn(length: number, cell: number): number {
+  return Math.floor((length + CELL_SNAP) / cell);
+}
+
 export const FLOOR_CELLS = {
-  w: Math.round((ROOM_SHELL.floor.maxX - ROOM_SHELL.floor.minX) / ROOM_SHELL.cellSize),
-  d: Math.round((ROOM_SHELL.floor.maxZ - ROOM_SHELL.floor.minZ) / ROOM_SHELL.cellSize),
+  w: cellsIn(ROOM_SHELL.floor.maxX - ROOM_SHELL.floor.minX, ROOM_SHELL.cellSize),
+  d: cellsIn(ROOM_SHELL.floor.maxZ - ROOM_SHELL.floor.minZ, ROOM_SHELL.cellSize),
 } as const;
 
 // Wall and floor grids now share the same 0.25 pitch — wall grids were finer than the floor's old 0.5 until the quarter-cell flip. Wall items are small (frames, shelves, windows) and windows want quarter-metre sizing, so frames and windows share this one fine grid and plain occupancy keeps them apart — no cross-grid rounding anywhere.
@@ -146,11 +158,12 @@ export const WALL_CELLS: Record<WallId, { w: number; h: number }> = {
   "z-max": wallCells("z-max"),
 };
 
+// Through cellsIn, exactly as the floor is: the x walls' run is 1.1 mm short of the z walls' and that must not cost them a column. Their 18th column overhangs the wall's end by that 1.1 mm, into the corner where the next wall begins — the same slack the floor's last row has always taken against the z-max wall. The HEIGHT genuinely does not divide (11.67 cells) and truncates, which is what keeps a picture from hanging above the wall.
 function wallCells(wall: WallId): { w: number; h: number } {
   const spec = ROOM_SHELL.walls[wall];
   return {
-    w: Math.floor((spec.to - spec.from) / WALL_CELL_SIZE),
-    h: Math.floor((spec.top - spec.bottom) / WALL_CELL_SIZE),
+    w: cellsIn(spec.to - spec.from, WALL_CELL_SIZE),
+    h: cellsIn(spec.top - spec.bottom, WALL_CELL_SIZE),
   };
 }
 
