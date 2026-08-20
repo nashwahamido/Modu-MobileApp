@@ -42,6 +42,44 @@ function bundledArt(itemId: string, variation: string | null | undefined): Asset
   return (variation ? entry.byVariation[variation] : undefined) ?? entry.default;
 }
 
+/**
+ * The finish each BUILT model wears in a GRID — the shop and the inventory.
+ *
+ * A grid tile is a portrait of the item, not of a finish the player has chosen, so it needs one
+ * agreed face per model. Left to the catalog row's own default it was "wooden" for all four, which
+ * put four near-identical wood renders in a row and made the models hard to tell apart at tile size.
+ * These are picked for legibility instead: EKET reads best in cartoon, LACK in white.
+ *
+ * Anything not listed — every bought item, and the two built models with no strong preference —
+ * resolves to null, which is the model's own default picture rather than any finish.
+ */
+const GRID_FINISH: Record<string, string> = {
+  "eket-cabinet": "cartoon",
+  "lack-table": "white",
+};
+
+/** The variation a grid tile should show for an item. Null means "the model's own default". */
+export function gridVariation(itemId: string): string | null {
+  return GRID_FINISH[itemId] ?? null;
+}
+
+/** How much of the well a grid thumbnail may use, as a fraction of its height.
+ *
+ *  ONLY THE BUILT MODELS SHRINK. Their art is the assembly pipeline's own render, framed tight —
+ *  72% to 95% of its canvas — where a bought item's storage render already carries its own air. So
+ *  the four ran to the edges of their wells while everything around them sat comfortably inside, and
+ *  a grid of both read as two different sizes of picture. Backing the built four off is what puts
+ *  them in the same band; doing it to everything just made the whole grid smaller and kept the
+ *  mismatch.
+ *
+ *  Keyed off BUNDLED — the same table that decides an item HAS bundled art — so "is this a built
+ *  model" is answered in one place and a fifth furniture needs no edit here. */
+const BUILT_THUMB_FILL = 0.58;
+
+export function gridThumbFill(itemId: string): number {
+  return BUNDLED[itemId] ? BUILT_THUMB_FILL : 1;
+}
+
 export interface CatalogThumbProps {
   source: ItemSource;
   itemId: CatalogId;

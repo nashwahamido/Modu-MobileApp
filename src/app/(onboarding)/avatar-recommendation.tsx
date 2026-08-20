@@ -192,6 +192,22 @@ const backdrop = require("@/src/assets/ui/profile-backdrop.jpg");
  *  load. Sampled from the art's own open area so the swap is invisible rather than a flash. */
 const BG_FALLBACK = "#E9E6DF";
 
+/**
+ * A trait chip's own capital, applied at RENDER rather than fixed in the data.
+ *
+ * The four modes' `personality` strings had drifted — one written "Curious, Observant, Imaginative"
+ * and the other three lower-case — so the chips came out capitalised or not depending on which
+ * avatar was recommended. Doing it here means the data can be written either way and the chips
+ * still match.
+ *
+ * Only the FIRST letter, not every word: "quick-witted" is one trait, and Title Case would render
+ * it "Quick-Witted", which reads as two.
+ */
+function sentenceCase(s: string): string {
+  const t = s.trim();
+  return t ? t[0].toUpperCase() + t.slice(1) : t;
+}
+
 // The tutorial invitation's portrait: Modu at work, wrench on a screw — showing the player what the
 // tutorial IS rather than just who is asking. It replaces the plain bust this screen used to share
 // with create-account, which still has its own copy.
@@ -437,7 +453,7 @@ export default function AvatarRecommendationScreen() {
             {selectedMode.personality.split(",").map((trait, i) => (
               <PopIn key={trait} delay={STAGE.traits + i * STAGE.traitStep} animate={introPlaying} style={styles.traitChip}>
                 <StarIcon size={12} color={t.accent} />
-                <Text style={styles.traitText}>{trait.trim()}</Text>
+                <Text style={styles.traitText}>{sentenceCase(trait)}</Text>
               </PopIn>
             ))}
           </View>

@@ -526,28 +526,57 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
  * beside a map that already does that job with more context. A single button that opens the map is
  * the same capability without a parallel UI to learn, and it gives the HUD's top-right back.
  */
+/** How far the Map chip lifts while held and while its map is open. Small on purpose: it sits at the
+ *  top edge beside the parts tray, and anything larger reads as the button growing rather than as it
+ *  being picked up. */
+const MAP_RAISED_SCALE = 1.08;
+
 export function MapButton() {
   const styles = useFixedStyles(makeStyles);
   // ONLY the button's slot mirrors. The map card itself is centred on the screen and its stage circles read left-to-right in reading order — flipping either would be mirroring content, not ergonomics.
   const m = useMirror();
   const furniture = useGameStore((s) => s.furniture);
   const setMapOpen = useGameStore((s) => s.setMapOpen);
+  const mapOpen = useGameStore((s) => s.mapOpen);
+  const [held, setHeld] = useState(false);
+
+  // Raised while the finger is down AND for as long as the map it opened is up.
+  //
+  // A press state that ends on release would flash and be gone under the card that replaces it —
+  // the player never sees it. Holding the lift while `mapOpen` says so makes the button read as the
+  // thing that is currently open rather than as a button that was tapped a moment ago, which is
+  // what lets it double as the map's own "you are here".
+  const raised = held || mapOpen;
+  const lift = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    Animated.spring(lift, {
+      toValue: raised ? MAP_RAISED_SCALE : 1,
+      useNativeDriver: true,
+      damping: 14,
+      stiffness: 220,
+      mass: 0.6,
+    }).start();
+  }, [raised, lift]);
+
   if (!furniture) return null;
   return (
     <View style={m(styles.mapSlot)}>
-      <Pressable
-        style={({ pressed }) => [styles.mapButton, pressed && styles.mapButtonPressed]}
-        onPress={() => {
-          setMapOpen(true);
-          Haptics.selectionAsync();
-        }}
-        accessibilityRole="button"
-        accessibilityLabel="Open the project map"
-      >
-        {({ pressed }) => (
-          <Text style={[styles.mapLabel, pressed && styles.mapLabelPressed]}>Map</Text>
-        )}
-      </Pressable>
+      <Animated.View style={{ transform: [{ scale: lift }] }}>
+        <Pressable
+          style={styles.mapButton}
+          onPressIn={() => setHeld(true)}
+          onPressOut={() => setHeld(false)}
+          onPress={() => {
+            setMapOpen(true);
+            Haptics.selectionAsync();
+          }}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: mapOpen }}
+          accessibilityLabel="Open the project map"
+        >
+          <Text style={styles.mapLabel}>Map</Text>
+        </Pressable>
+      </Animated.View>
     </View>
   );
 }
@@ -969,19 +998,21 @@ const makeStyles = (t: Theme) =>
     alignItems: "center",
     justifyContent: "center",
     borderRadius: RADIUS.pill,
-    // THEME-driven, not CREAM: this chip sits in the HUD beside the gear and the tray, which both
-    // follow the theme — cream here was a light-mode surface floating on the dark build.
-    backgroundColor: t.surface,
+    // LAVENDER, always — the app's one "you can act on this" colour, which this chip used to take
+    // only while held. It is the only way into the project map and the only coloured thing in a row
+    // of cream chrome, so it should look like the offer it is rather than announce itself for the
+    // length of a tap. The theme surface it replaced is still right for the gear and the tray
+    // beside it; those are settings, and this is the map.
+    backgroundColor: t.accent,
     borderWidth: 1,
-    borderColor: t.border,
+    borderColor: t.accent,
     boxShadow: "0px 3px 3px rgba(0,0,0,0.28)",
   },
-  // Lavender on press — the app's one "you can act on this" colour, the same fill a primary button
-  // takes when held.
+  // The press and open states are the LIFT now (see MapButton), not a second fill: a colour change
+  // on a chip that is already the accent has nowhere to go, and scale reads at a glance on a button
+  // this small.
   // The accent is the same lavender in both themes — "act on this" does not change meaning.
-  mapButtonPressed: { backgroundColor: t.accent, borderColor: t.accent },
-  mapLabel: { fontFamily: FONT, fontSize: 13, fontWeight: "800", color: t.text, letterSpacing: 0.2, textAlign: "center" },
-  mapLabelPressed: { color: t.onAccent },
+  mapLabel: { fontFamily: FONT, fontSize: 13, fontWeight: "800", color: t.onAccent, letterSpacing: 0.2, textAlign: "center" },
   switcher: {
     position: "absolute",
     right: 14,
