@@ -2,6 +2,7 @@
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 
 import { CatalogThumb } from "@/src/components/CatalogThumb";
+import type { ItemSource } from "@/src/data/catalog/assets";
 import { COIN_ICON, STAR_ICON, levelIcon } from "@/src/components/iconAssets";
 import {
   FRAME_FILL,
@@ -36,18 +37,29 @@ export function ShopItemTile({
   price,
   width,
   surface,
+  source = "bought",
   owned,
   lockLevel,
   onPress,
   disabled,
 }: {
-  /** Catalog id, for the well's picture. Source is "bought" by construction: the shop IS the item_buy catalogue */
+  /** Catalog id, for the well's picture */
   itemId: string;
   name: string;
   price: number;
   width: number;
   /** A wallpaper or a floor, whose picture is its own tile image rather than a variation's render */
   surface?: boolean;
+  /**
+   * Which room/<source>/ subtree this item's picture lives under. Defaults to "bought", which every item_buy
+   * row is — and which used to be hardcoded here, on the reasoning that "the shop IS the item_buy catalogue".
+   * That stopped being true when getShopItems started appending testing workshop_drafts: their assets sit
+   * under room/workshop/, so the hardcoded value built a URL into the published subtree for something that has
+   * not been published, 404'd, and CatalogThumb rendered nothing. ShopItem.source has carried the right answer
+   * the whole time (see its own comment in data/shop/items.ts, which predicts exactly this failure) — the tile
+   * simply was not asking for it.
+   */
+  source?: ItemSource;
   owned?: boolean;
   lockLevel?: number;
   onPress?: () => void;
@@ -78,7 +90,7 @@ export function ShopItemTile({
           style={[s.art, { height: wellHeight - FRAME_STROKE_WIDTH * 2 }]}
           pointerEvents="none"
         >
-          <CatalogThumb source="bought" itemId={itemId} surface={surface} size={wellHeight} />
+          <CatalogThumb source={source} itemId={itemId} surface={surface} size={wellHeight} />
         </View>
 
         {/* A tint, not a blur — RN has no blur without a native module */}
