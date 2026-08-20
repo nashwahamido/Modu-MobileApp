@@ -990,7 +990,12 @@ function TutorialScreen() {
       </View>
       {/* Same project/pause card as a task, but tutorial has no selectable
           sub-assembly stages: it presents the LACK furniture as one project. */}
-      {profile === "momentum" ? <BuildMap overviewOnly /> : null}
+      {/* LIGHT, always — see the note in play.tsx. */}
+      {profile === "momentum" ? (
+        <ThemeScope value="light">
+          <BuildMap overviewOnly />
+        </ThemeScope>
+      ) : null}
       {ringOverlay}
       <GreenFlash trigger={completedCount} />
       {/* Above everything, and only on its own step: how to HOLD the device comes before any control

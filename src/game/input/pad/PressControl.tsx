@@ -3,7 +3,7 @@ import { Text, View } from "react-native";
 import { PRESS_TAPS, useGameStore } from "@/src/game/core/store";
 import { AssemblyAction, Vec3 } from "@/src/game/core/type";
 import type { ParkInfo } from "@/src/game/core/evaluation/engagement";
-import { PressPad, pressPadStyles as styles } from "@/src/game/input/pad/PressPad";
+import { PressPad, pressPadStyles as styles, HAND_ICON } from "@/src/game/input/pad/PressPad";
 import type { OffsetDriver } from "../../scene/offsetDriver";
 import { useMirror } from "@/src/game/ui/system/handedness";
 
@@ -48,7 +48,7 @@ export function PressControl({ action, driver, park }: Props) {
   return (
     <View style={m(styles.wrap)} pointerEvents="box-none">
       <PressPad
-        icon={struck ? "🔨" : driven ? "🪛" : "✋"}
+        icon={struck ? "🔨" : driven ? "🪛" : HAND_ICON}
         resetKey={action.actionId}
         onPress={press}
       />
