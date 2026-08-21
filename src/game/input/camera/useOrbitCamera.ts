@@ -245,9 +245,28 @@ export function useOrbitCamera(
 
   // The per-frame orbit integration lives on the RENDER thread (scene/OrbitDrive), not a JS setInterval — a runOnJS part-drag saturating the JS thread used to starve that interval and freeze the camera until the finger lifted. Here the JS side only owns the grab SESSION (grabBegin/grabEnd); OrbitDrive feeds grabUpdate each frame while stickActive is true. If no stickShared was provided the camera simply won't orbit via the stick, which is fine for screens that don't mount OrbitDrive.
 
+  /**
+   * A manipulator swap must not strand the grab session.
+   *
+   * useStableOrbitManipulator builds a REPLACEMENT whenever the pivot or home eye changes — a stage advance, a cluster opening, a recenter press. That changes the identity of the callbacks below, which rebuilds the Joystick's memoised gesture (input/camera/Joystick) underneath a finger that is still down; the lift that would have cleared `grabbing` is delivered to the retired gesture object and lost. The flag then stays true for the rest of the screen's life and every later onStickStart bails on it, so the camera silently stops turning — no error, nothing on screen, and it comes back only if some other code path happens to clear the flag. That is the "turning works sometimes" bug.
+   *
+   * The grab is RE-OPENED on the replacement rather than merely cleared, so an orbit in progress survives the swap instead of dying until the player lifts and presses again. OrbitDrive re-zeros its accumulator on the same manipulator change, which is what makes this fresh grab origin line up with it.
+   *
+   * `panning` is deliberately left alone: the pan reads the live lookAt every frame and re-anchors on its own onPanStart, so it already survives a swap, and clearing it here would cut a pan that was working.
+   */
+  useEffect(() => {
+    if (!manipulator || !grabbing.current) return;
+    if (__DEV__) console.log("[orbit] manipulator swapped mid-grab — reopening stick session");
+    manipulator.grabBegin(0, 0, false);
+  }, [manipulator]);
+
   const onStickStart = useCallback(() => {
-    // Symmetric with onPanStart's active guard: one manipulator supports a single grab session, so an overlapping two-finger pan and stick touch must not double-grabBegin.
-    if (panning.current || grabbing.current) return;
+    // Guards a double grabBegin and nothing else. The PAN used to need guarding too — it was a grabBegin(..., true) truck — and this is the remains of that pairing. Since the pan became ours (see onPanStart) it opens no session at all, so a pan and a stick touch compose fine; all the old cross-guard bought was a way for a stranded pan flag to kill the camera outright.
+    if (grabbing.current) {
+      // Reaching here means a stick touch began while a session was already open. The swap effect above closes the one path known to do that; if this ever fires on device there is another, and the camera is about to stop turning again.
+      if (__DEV__) console.warn("[orbit] stick start refused — a grab session is already open");
+      return;
+    }
     grabbing.current = true;
     manipulator?.grabBegin(0, 0, false);
     // Open the render-thread session AFTER grabBegin so OrbitDrive's first grabUpdate lands on a live session. OrbitDrive resets its own accumulator when it sees active flip.
@@ -312,7 +331,7 @@ export function useOrbitCamera(
   const panStartRef = useRef({ x: 0, y: 0, pan: { x: 0, y: 0, z: 0 } });
   const onPanStart = useCallback(
     (x: number, y: number) => {
-      if (grabbing.current) return;
+      // No grab guard: this accumulates a world displacement and never touches the manipulator's grab session, so it composes with a stick orbit rather than competing with it. Refusing to start while the stick was held also meant a stranded `grabbing` flag silently disabled the strafe.
       panning.current = true;
       panStartRef.current = { x, y, pan: { ...panShared.value } };
     },
@@ -376,6 +395,21 @@ export function useOrbitCamera(
       ],
     });
   }, [stage, framingCluster, heldFocusPoint, examinePartId, focusCluster, pivot, panShared]);
+
+  /**
+   * Opening a sub-assembly is a fresh view.
+   *
+   * The pivot effect above re-aims at the new cluster but deliberately carries the CURRENT eye over, which is right for a stage advance within one cluster and wrong when the framed model changes wholesale: the orbit angle, dolly and pan the player accumulated describe parts that just left the screen, so a stage opened from the map could start face-on to nothing, zoomed into empty air. Declared after resetCamera so it commits after that effect on the same render.
+   *
+   * Only on a real change to a REAL cluster: the null side is the combine, which has its own camera choreography, and the initial null→cluster on a build the player opens straight into is already sitting at home.
+   */
+  const framedRef = useRef(framingCluster);
+  useEffect(() => {
+    if (framedRef.current === framingCluster) return;
+    framedRef.current = framingCluster;
+    if (!framingCluster) return;
+    resetCamera();
+  }, [framingCluster, resetCamera]);
 
   const getFocusPoint = useCallback((): Vec3 => targetRef.current, []);
   const isViewingUnderside = useCallback((): boolean => {

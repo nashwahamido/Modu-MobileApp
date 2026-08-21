@@ -4,6 +4,9 @@ export const FOCAL_LENGTH_MM = 28;
 /** Full vertical field of view: filament derives it from a 24mm sensor height. */
 export const FOV_Y_DEG = (2 * Math.atan(12 / FOCAL_LENGTH_MM) * 180) / Math.PI;
 
+/** The render camera's near plane. RNF's Camera defaults to 0.1 when no `near` prop is passed (ours passes only focalLengthInMillimeters), and the pick confirmer needs the value to turn a reversed-Z depth-buffer sample back into metres (axial depth = near / bufferValue). If a `near` prop is ever added to the Camera, this constant must change with it — the depth math has no way to detect the drift. */
+export const CAMERA_NEAR_M = 0.1;
+
 /**
  * Closest the orbit eye may dolly to its pivot, in metres.
  *

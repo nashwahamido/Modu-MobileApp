@@ -9,7 +9,7 @@ import { quatConjugate, quatMultiply, quatRotateVec3, quatSlerp, screenRay } fro
 import { FOV_Y_DEG } from "@/src/game/scene/cameraConfig";
 import { projectToScreen } from "@/src/game/scene/projectToScreen";
 import type { Vec3 } from "@/src/game/core/type";
-import { AIM_BAND_MAX_PX, aimBandScale, CARRY_CLEARANCE_ENABLED, CARRY_NEAR_MARGIN_M, clusterCarryAnchor, holdReachFrom, dragPlanePoint, dragRayPoint, DRIFT_CAP_FACTOR, RAY_CARRY_MIN_FRACTION, RAY_CARRY_MIN_M, burialDepthM, rayPointNearest, sightlineGapM, VIS_GAP_SLACK_M, segmentHitsBox, segmentInFrame } from "./dragPlane";
+import { AIM_BAND_MAX_PX, aimBandScale, CARRY_CLEARANCE_ENABLED, CARRY_NEAR_MARGIN_M, clusterCarryAnchor, holdReachFrom, dragPlanePoint, dragRayPoint, DRIFT_CAP_FACTOR, RAY_CARRY_MIN_FRACTION, RAY_CARRY_MIN_M, burialDepthM, rayBoxEntryT, rayPointNearest, sightlineGapM, VIS_GAP_SLACK_M, segmentHitsBox, segmentInFrame } from "./dragPlane";
 import { MIN_ORBIT_DISTANCE_M } from "@/src/game/scene/cameraConfig";
 
 // Landscape, the only orientation the game runs in (app.json).
@@ -382,4 +382,94 @@ test("sightline gap: one visibility rule for cam, countersunk screw, dowel bridg
   assert.ok(g.gap > 0.05 && g.by === "topPanel");
   // Nothing in front: gap is exactly 0.
   assert.equal(sightlineGapM([1, 1, 1], [0, 0.3, 0], []).gap, 0);
+});
+
+// The occlusion cap: how far the hand may reach down the finger's ray before it hits something. The
+// tests below are stated in AXIAL depth for the same reason the carry is — screenRay's `dir` is
+// deliberately unnormalised so the ray parameter IS axial depth, and a cap measured in euclidean
+// distance would quietly tighten toward the edges of the frame.
+test("rayBoxEntryT reports the first surface in front of the finger, in axial depth", () => {
+  const look = camera();
+  // A panel standing between the camera and the pivot, spanning the middle of the view.
+  const panel = { min: [-0.3, -0.2, -0.3] as Vec3, max: [0.3, 0.5, -0.28] as Vec3, pid: "sidePanelL" };
+  const { eye, dir } = screenRay(look, FOV_Y_DEG, W, H, W / 2, H / 2);
+  const hit = rayBoxEntryT(eye, dir, [panel]);
+  assert.ok(Number.isFinite(hit.t), "centre of frame must hit the panel");
+  assert.equal(hit.by, "sidePanelL");
+  // The reported t IS the axial depth of the entry point — the quantity dragRayPoint carries at.
+  const entry: Vec3 = [eye[0] + hit.t * dir[0], eye[1] + hit.t * dir[1], eye[2] + hit.t * dir[2]];
+  assert.ok(Math.abs(axialDepth(look, entry) - hit.t) < 1e-9);
+
+  // Off in open space: nothing caps the carry.
+  const clear = screenRay(look, FOV_Y_DEG, W, H, 20, H - 20);
+  assert.equal(rayBoxEntryT(clear.eye, clear.dir, [panel]).t, Infinity);
+  // No boxes at all is the same answer, not a crash.
+  assert.equal(rayBoxEntryT(eye, dir, []).t, Infinity);
+});
+
+test("rayBoxEntryT takes the NEAREST box and ignores boxes the eye is already inside", () => {
+  const look = camera();
+  const far = { min: [-0.3, -0.2, -0.3] as Vec3, max: [0.3, 0.5, -0.28] as Vec3, pid: "far" };
+  const near = { min: [-0.3, -0.2, 0.2] as Vec3, max: [0.3, 0.5, 0.22] as Vec3, pid: "near" };
+  const { eye, dir } = screenRay(look, FOV_Y_DEG, W, H, W / 2, H / 2);
+  // Order must not matter: both orderings pick the nearer surface.
+  assert.equal(rayBoxEntryT(eye, dir, [far, near]).by, "near");
+  assert.equal(rayBoxEntryT(eye, dir, [near, far]).by, "near");
+  assert.ok(rayBoxEntryT(eye, dir, [far, near]).t < rayBoxEntryT(eye, dir, [far]).t);
+
+  // A box CONTAINING the eye has its front face behind the camera, so it stands between the finger
+  // and nothing. Clamping its entry to zero instead would pin the carry at the lens for as long as
+  // the camera sat inside a part.
+  const around = { min: [eye[0] - 1, eye[1] - 1, eye[2] - 1] as Vec3, max: [eye[0] + 1, eye[1] + 1, eye[2] + 1] as Vec3, pid: "around" };
+  assert.equal(rayBoxEntryT(eye, dir, [around]).t, Infinity);
+  // ...and it must not mask a real surface further along the same ray.
+  assert.equal(rayBoxEntryT(eye, dir, [around, far]).by, "far");
+});
+
+test("the cap pulls the carry in front of an occluder, and the lens floor still outranks it", () => {
+  const look = camera();
+  const socketDepth = pivotDist(look) + 0.2; // a socket BEHIND the pivot, as an inner panel's would be
+  const uncapped = dragRayPoint(look, FOV_Y_DEG, W, H, W / 2, H / 2, 0.5, 0, socketDepth);
+  assert.ok(Math.abs(axialDepth(look, uncapped) - socketDepth) < 1e-6, "uncapped rides at socket depth");
+
+  // A surface between camera and socket caps the carry at that surface, not at the socket.
+  const cap = socketDepth - 0.35;
+  const capped = dragRayPoint(look, FOV_Y_DEG, W, H, W / 2, H / 2, 0.5, 0, socketDepth, cap);
+  assert.ok(Math.abs(axialDepth(look, capped) - cap) < 1e-6);
+
+  // The cap only ever pulls the part NEARER. A cap beyond the socket is inert.
+  const loose = dragRayPoint(look, FOV_Y_DEG, W, H, W / 2, H / 2, 0.5, 0, socketDepth, socketDepth + 1);
+  assert.ok(Math.abs(axialDepth(look, loose) - socketDepth) < 1e-6);
+
+  // A cap tighter than the lens floor is overruled: a part drawn behind the furniture is recoverable
+  // by turning the camera, a part inside the near plane fills the screen and is not.
+  const crushed = dragRayPoint(look, FOV_Y_DEG, W, H, W / 2, H / 2, 0.5, 0, socketDepth, 0.001);
+  assert.ok(axialDepth(look, crushed) >= RAY_CARRY_MIN_M - 1e-9);
+
+  // Default argument: every existing call site that passes no cap is byte-for-byte unchanged.
+  const noArg = dragRayPoint(look, FOV_Y_DEG, W, H, 600, 120, 0.5, 0, socketDepth);
+  const infinite = dragRayPoint(look, FOV_Y_DEG, W, H, 600, 120, 0.5, 0, socketDepth, Infinity);
+  assert.deepEqual(noArg, infinite);
+});
+
+test("the cap holds its meaning across the frame, where a euclidean measure would not", () => {
+  // A camera looking straight down -Z, so the world-Z slab below is genuinely CAMERA-FACING. The
+  // shared camera() helper looks along a diagonal, where the same slab sits at honestly different
+  // axial depths across the frame and would prove nothing either way.
+  const look = { eye: [0, 0.3, 1.2] as Vec3, center: [0, 0.3, 0] as Vec3, up: [0, 1, 0] as Vec3 };
+  const slab = { min: [-3, -3, -0.2] as Vec3, max: [3, 3, -0.18] as Vec3, pid: "wall" };
+  const mid = screenRay(look, FOV_Y_DEG, W, H, W / 2, H / 2);
+  const edge = screenRay(look, FOV_Y_DEG, W, H, W - 8, H / 2);
+  const tMid = rayBoxEntryT(mid.eye, mid.dir, [slab]).t;
+  const tEdge = rayBoxEntryT(edge.eye, edge.dir, [slab]).t;
+  assert.ok(Number.isFinite(tMid) && Number.isFinite(tEdge));
+  // Same plane, same axial depth — within a millimetre across 844 px of frame.
+  assert.ok(Math.abs(tMid - tEdge) < 0.001, `centre ${tMid} vs edge ${tEdge}`);
+
+  // The contrast that makes it worth asserting: the EUCLIDEAN distance to that same plane grows by
+  // over a third from centre to edge. Normalising screenRay's `dir` would return this number
+  // instead, and the cap would tighten toward the edges of the frame for no input the player gave.
+  const euclid = (r: { eye: Vec3; dir: Vec3 }, t: number) =>
+    t * Math.hypot(r.dir[0], r.dir[1], r.dir[2]);
+  assert.ok(euclid(edge, tEdge) / euclid(mid, tMid) > 1.3);
 });

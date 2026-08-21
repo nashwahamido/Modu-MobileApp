@@ -126,11 +126,6 @@ for (const F of FURNITURES) {
 
     const placed = new Set<PartId>();
     const combined = new Set<ClusterId>();
-    const atBakedPose = (pid: PartId): boolean => {
-      const cl = parts[pid]?.cluster;
-      if (!cl) return true;
-      return !!authored.CLUSTERS?.[cl]?.seed || combined.has(cl);
-    };
     const failures: string[] = [];
     for (const a of actions) {
       if (isPickupType(a.type) && a.partId && parts[a.partId]) {
@@ -141,8 +136,14 @@ for (const F of FURNITURES) {
           part.pose.position[1] + off[1],
           part.pose.position[2] + off[2],
         ];
+        // The runtime gate asks the renderer which placed parts are on screen and where (scene/partBoxes). Offline there is no renderer, so this replay reconstructs the same set from build state: a placed part stands at its baked pose exactly when it shares the candidate's cluster (both in focus), belongs to a cluster already combined in, or has no cluster at all. Another cluster's work is hidden or parked off-screen while this one has focus and cannot occlude anything. Note what this is NOT: the runtime used to run this same inference on `cluster.seed`, which is an authoring flag about which cluster STARTS the build — BEKVAM and LACK name their one cluster for the UI label and never set it, so every part of those furnitures was disqualified and the gate ran inert for the whole build. Cluster IDENTITY is the honest question; seed never was.
+        const cl = parts[a.partId]?.cluster;
         const occluders = [...placed]
-          .filter((pid) => pid !== a.partId && atBakedPose(pid))
+          .filter((pid) => {
+            if (pid === a.partId) return false;
+            const other = parts[pid]?.cluster;
+            return !other || other === cl || combined.has(other);
+          })
           .map((pid) => ({ ...boxes[pid], pid }))
           .filter((b) => b.min);
         const burial = burialDepthM(seat, occluders);

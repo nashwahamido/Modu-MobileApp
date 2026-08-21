@@ -165,6 +165,17 @@ export const CARRY_NEAR_MARGIN_M = 0.06;
 /** Master switch for the clearance floor above. OFF while we A/B the drag: with it on, a DALFRED leg is carried 0.501 m out so its far end clears the lens, which is also what opens a 24.8 cm gap to the socket's own depth. Flip to true to restore it — the guard test in dragPlane.test.ts re-arms itself with this flag. */
 export const CARRY_CLEARANCE_ENABLED = false;
 
+/**
+ * Carry the held part at the TARGET SOCKET's depth instead of a depth derived from the model.
+ *
+ * The model-derived carry below never mentions the socket, yet every complaint about it is a RATIO between the part and its socket. Measured on EKET at the 0.65 m zoom floor: the carry lands at 0.293 m against a 0.65 m pivot, so the part renders 2.22× oversized, its body hangs ~207 px off the finger, and the magnet has to close a ~36 cm depth gap in one step at the end. Each of those numerators comes from the socket and their denominator from the assembly's bounding sphere, so zoom pulls them apart — and every fix so far has been another constant re-pinning one ratio at one zoom (RAY_CARRY_MIN_FRACTION, aimBandScale's pixel cap).
+ *
+ * Referencing the socket collapses all of it: part and socket share a depth, therefore share metres-per-pixel. The part is drawn the size it will be once placed, its screen offset from the finger is the offset it has at rest, world tolerances and pixels finally agree, and the magnet is left closing lateral aim error alone. Zoom stops being a parameter because the ratios are 1 by construction rather than by tuning.
+ *
+ * Flip to false to restore the model-derived carry. A/B partner of DEPTH_BLEND_ENABLED: that one eases toward the socket only once the finger is near it, this one starts there.
+ */
+export const SOCKET_DEPTH_CARRY_ENABLED = true;
+
 /** How far the held part reaches from the point the finger controls — the farthest corner of its bounds from that hold point. Corners rather than the box's own radius because the hold point is the part's JOINT, sitting at one end of it, so the reach is strongly asymmetric: a leg held at its top reaches its full length downward and almost nothing upward. Returns 0 with no box, which makes the clearance floor inert and leaves the other floors in charge. */
 export function holdReachFrom(
   box: { min: Vec3; max: Vec3 } | undefined,
@@ -208,6 +219,8 @@ export function dragRayPoint(
   screenY: number,
   modelRadius: number,
   holdReach = 0,
+  socketDepthM: number | null = null,
+  capM = Infinity,
 ): Float3 {
   const { eye, dir } = screenRay(look, fovYDeg, viewW, viewH, screenX, screenY);
   const pivot = Math.hypot(
@@ -215,13 +228,60 @@ export function dragRayPoint(
     look.center[1] - eye[1],
     look.center[2] - eye[2],
   );
+  // Socket-referenced carry (SOCKET_DEPTH_CARRY_ENABLED): the target's own axial depth replaces the model-derived floors entirely — keeping them would defeat it, since `pivot - modelRadius` is a whole bounding radius nearer than the socket and would win the max() at every practical zoom. The two floors kept are the ones that protect the LENS rather than frame the model: the absolute backstop, and the part's own reach when the clearance experiment is on.
+  const want =
+    SOCKET_DEPTH_CARRY_ENABLED && socketDepthM != null && Number.isFinite(socketDepthM) && socketDepthM > 0
+      ? socketDepthM
+      : Math.max(pivot * RAY_CARRY_MIN_FRACTION, pivot - modelRadius);
+  // The occlusion cap (see rayBoxEntryT): the part may never be carried DEEPER than the first surface in front of the finger, or the thing in hand is drawn behind the furniture and the player loses sight of what they are dragging. Applied to `want` and not to the floors, in that order deliberately — the floors protect the LENS, and a cap that could push the carry inside the near plane would trade an invisible part for a part smeared across the whole screen. So a cap tighter than the floors is simply overruled: being swallowed is the lesser failure of the two, and the camera has to be pressed against geometry for it to arise at all.
   const t = Math.max(
     RAY_CARRY_MIN_M,
     CARRY_CLEARANCE_ENABLED ? holdReach + CARRY_NEAR_MARGIN_M : 0,
-    pivot * RAY_CARRY_MIN_FRACTION,
-    pivot - modelRadius,
+    Math.min(want, capM),
   );
   return [eye[0] + t * dir[0], eye[1] + t * dir[1], eye[2] + t * dir[2]];
+}
+
+/**
+ * Axial depth (m) at which the finger's ray first ENTERS one of `boxes`, and which box owns it. Infinity when the ray meets none — the finger is over open space and nothing caps the carry.
+ *
+ * Same slab arithmetic as sightlineGapM, asked along a different line: that one runs eye→socket and asks whether the socket is the first thing seen, this one runs eye→finger and asks how far the hand may reach before it hits something. One primitive would need a segment; these are a segment and an open ray, so they stay two.
+ *
+ * NO NORMALISATION, and that is not an oversight: screenRay hands back `dir` as `fwd + …` so that `dir·fwd = 1`, which makes the slab parameter t the AXIAL depth in metres directly — the very quantity dragRayPoint carries at and projectToScreen reports. Normalising dir here would silently return euclidean distance instead and the cap would tighten toward the edges of the frame.
+ *
+ * A box the ray enters at t <= 0 is skipped rather than clamped to zero. It contains the eye, or lies behind it; either way its front face is already behind the camera and it is not standing between the finger and anything. Clamping instead would cap the carry at the lens for the whole time the camera sat inside a part.
+ */
+export function rayBoxEntryT(
+  eye: Vec3,
+  dir: Vec3,
+  boxes: readonly { min: Vec3; max: Vec3; pid?: string }[],
+): { t: number; by: string | null } {
+  let best = Infinity;
+  let by: string | null = null;
+  for (const b of boxes) {
+    let lo = -Infinity;
+    let hi = Infinity;
+    let ok = true;
+    for (let k = 0; k < 3 && ok; k++) {
+      const d = dir[k];
+      if (Math.abs(d) < 1e-9) {
+        // Parallel to this slab: the ray either sits inside it for its whole length or misses the box entirely.
+        if (eye[k] < b.min[k] || eye[k] > b.max[k]) ok = false;
+        continue;
+      }
+      const t0 = (b.min[k] - eye[k]) / d;
+      const t1 = (b.max[k] - eye[k]) / d;
+      const a = Math.min(t0, t1);
+      const z = Math.max(t0, t1);
+      if (a > lo) lo = a;
+      if (z < hi) hi = z;
+      if (lo > hi) ok = false;
+    }
+    if (!ok || lo <= 0 || lo >= best) continue;
+    best = lo;
+    by = b.pid ?? null;
+  }
+  return { t: best, by };
 }
 
 /** Slack (m) added to an anchor's own burial depth to form its visibility threshold: the first surface the sightline meets must be within (burial + slack) of the anchor. 6mm passes a countersunk screw seen face-on (gap ~0) and a cam seen from its bore side (gap = its 4mm burial), while a 15mm panel's far side (gap 11mm vs 4+6) and a leg's far side (gap 20mm+ vs 0+6) fail. */

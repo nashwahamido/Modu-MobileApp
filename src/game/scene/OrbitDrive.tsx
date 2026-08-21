@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { RenderCallbackContext, useFilamentContext } from "react-native-filament";
 import type { ISharedValue } from "react-native-worklets-core";
 import { useSharedValue as useWorkletSharedValue } from "react-native-worklets-core";
@@ -59,6 +60,17 @@ export function OrbitDrive({
   const gx = useWorkletSharedValue(0);
   const gy = useWorkletSharedValue(0);
   const wasActive = useWorkletSharedValue(false);
+
+  /**
+   * A replacement manipulator is a fresh grab origin, so the accumulator has to start over.
+   *
+   * These are shared values: they outlive the render callback's re-registration and would otherwise carry the retired manipulator's total onto the new one, whose session begins at (0,0) — the camera would jump by everything accumulated since the grab started. Clearing `wasActive` as well makes the next active frame take the rising-edge path, which is the same re-zero the normal grab start relies on; that keeps ONE reset rule instead of two that have to agree. Pairs with useOrbitCamera's swap effect, which re-opens the session on the replacement.
+   */
+  useEffect(() => {
+    gx.value = 0;
+    gy.value = 0;
+    wasActive.value = false;
+  }, [manipulator, gx, gy, wasActive]);
 
   // ONE render callback, not two. RenderCallbackContext keys registrations per component, so a
   // second useRenderCallback in the same component does not get its own capture scope — its worklet

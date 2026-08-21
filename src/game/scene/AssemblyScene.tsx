@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { StyleSheet } from "react-native";
 import {
   Camera,
@@ -19,6 +19,8 @@ import { stageOffsetMap } from "@/src/game/core/model/staging";
 import { FOCAL_LENGTH_MM } from "./cameraConfig";
 import { CEL_IBL_INTENSITY, getLightRig, IBL_INTENSITY } from "./lighting";
 import type { ClusterDriver, DriverRegistry, OffsetDriver } from "./offsetDriver";
+import { registerLiveBoxReader, worldBoxFromObjectBox } from "./partBoxes";
+import { registerPickProber } from "./pickProbe";
 import { PartModel } from "./PartModel";
 import { buildPushDriverMap } from "./pushOpen";
 import { ToolModel } from "./ToolModel";
@@ -71,7 +73,7 @@ export function AssemblyScene({
     furniture?.styleModels?.[renderStyle] ?? furniture?.model ?? 0,
     { instanceCount: 2, addToScene: false },
   );
-  const { renderableManager, transformManager } = useFilamentContext();
+  const { renderableManager, transformManager, view } = useFilamentContext();
   const manualTools = useGameStore((s) => s.settings.manualTools);
   const lightingPreset = useGameStore((s) => s.settings.lightingPreset);
   // The SCOPED theme, not the app's: this scene renders under the assembly's ThemeScope, so
@@ -123,25 +125,11 @@ export function AssemblyScene({
       const entity = model.asset.getFirstEntityByName(p.meshName);
       if (!entity) continue;
       const b = renderableManager.getAxisAlignedBoundingBox(entity);
-      // Filament hands back the renderable's box in OBJECT space; every mesh node in these GLBs carries a translation and most carry a rotation, so the box must be pushed through the node's world transform before it means anything to the derivation. All EIGHT corners are swept and re-bounded — transforming only the centre would keep a rotated part's extent wrong, and the extent is what decides whether two parts overlap at all.
-      const m = transformManager.getWorldTransform(entity).data;
-      const min: [number, number, number] = [Infinity, Infinity, Infinity];
-      const max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
-      for (let c = 0; c < 8; c++) {
-        const lx = b.center[0] + (c & 1 ? b.halfExtent[0] : -b.halfExtent[0]);
-        const ly = b.center[1] + (c & 2 ? b.halfExtent[1] : -b.halfExtent[1]);
-        const lz = b.center[2] + (c & 4 ? b.halfExtent[2] : -b.halfExtent[2]);
-        // `data` is filament's mat4f::asArray() — COLUMN-major, so the basis columns are m[0..2]/m[4..6]/m[8..10] and the translation is m[12..14] (matching the wrapper's own `translation` getter, which reads _matrix[3]).
-        const w: [number, number, number] = [
-          m[0] * lx + m[4] * ly + m[8] * lz + m[12],
-          m[1] * lx + m[5] * ly + m[9] * lz + m[13],
-          m[2] * lx + m[6] * ly + m[10] * lz + m[14],
-        ];
-        for (let k = 0; k < 3; k++) {
-          if (w[k] < min[k]) min[k] = w[k];
-          if (w[k] > max[k]) max[k] = w[k];
-        }
-      }
+      const { min, max } = worldBoxFromObjectBox(
+        b.center,
+        b.halfExtent,
+        transformManager.getWorldTransform(entity).data,
+      );
       boxes[p.partId] = { min, max };
       const vco = p.visualCenterOffset ?? [0, 0, 0];
       const dx = (min[0] + max[0]) / 2 - (p.pose.position[0] + vco[0]);
@@ -163,6 +151,65 @@ export function AssemblyScene({
     // model is a fresh object identity every render (useModel returns a new literal once loaded — see PartModel.tsx's modelEqual/useInstanceEntity for the same caveat), so depending on the whole object would re-run this harvest on every render instead of once per load; model.state is the stable signal that actually changes on load/unload.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [model.state, furniture, renderableManager, transformManager]);
+
+  // Modes decide what is on SCREEN and they change with every store tick, so the reader below reads them through a ref — re-registering the closure on each mode change would churn a native-bridge callback for a value only read at pickup.
+  const modesRef = useRef(modes);
+  modesRef.current = modes;
+  // The harvest above is a snapshot of the ASSEMBLED furniture — right for joint frames, which are baked-pose geometry by definition, and wrong for anything asking what stands between the camera and a socket. This publishes the second answer: the same sweep, re-run on demand against whatever transform the render thread last wrote. PartModel drives instance 0 through this very entity (useInstanceEntity returns the asset's own entity for index 0), so a staged carrier or a cluster parked off-screen for the combine reads at the offset it is actually drawn at. A "hidden" part is skipped outright rather than boxed: its entity is out of the scene while its transform still says baked, which is the phantom this whole reader exists to kill. On demand rather than per frame because the answers are world-space part poses, which camera motion never changes (the drag reads the eye fresh every frame and tests sightlines against these boxes) — the poses themselves shift only on the rare mid-drag events the caller's own refresh throttle covers (usePartDrag re-reads every OCCLUDER_REFRESH_MS: a second finger toggling cluster focus, a prior part's commit animation still easing home).
+  useEffect(() => {
+    if (model.state !== "loaded" || !furniture) return;
+    const asset = model.asset;
+    registerLiveBoxReader((ids) => {
+      const out: Record<PartId, PartBox> = {};
+      for (const id of ids) {
+        const p = furniture.parts[id];
+        if (!p) continue;
+        const mode = modesRef.current[id];
+        if (!mode || mode === "hidden") continue;
+        const entity = asset.getFirstEntityByName(p.meshName);
+        if (!entity) continue;
+        const b = renderableManager.getAxisAlignedBoundingBox(entity);
+        out[id] = worldBoxFromObjectBox(
+          b.center,
+          b.halfExtent,
+          transformManager.getWorldTransform(entity).data,
+        );
+      }
+      return out;
+    });
+    return () => registerLiveBoxReader(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model.state, furniture, renderableManager, transformManager]);
+
+  // Renderer-truth pick for the visibility gate's second opinion (input/drag/pickConfirm). The entity→part map is built once per load: instance 0 is the world copy, instance 1 the ghost copy (same index order — see PartModel.useInstanceEntity), and the confirmer needs to tell them apart because a ghost is never an occluder. pickEntityWithDepth only exists on the PATCHED native module (patches/react-native-filament+1.11.0.patch); on an unpatched build the guard leaves the prober unregistered and every box verdict simply stands — the gate degrades to exactly its pre-confirmer behaviour.
+  useEffect(() => {
+    if (model.state !== "loaded" || !furniture) return;
+    const pick = (view as unknown as { pickEntityWithDepth?: (x: number, y: number) => Promise<{ entityId: number; depth: number } | null> }).pickEntityWithDepth;
+    if (typeof pick !== "function") {
+      if (__DEV__) console.warn("[pickProbe] view.pickEntityWithDepth missing — native patch not built; visibility gate runs box-only.");
+      return;
+    }
+    const asset = model.asset;
+    const byEntityId = new Map<number, { partId: PartId; ghost: boolean }>();
+    const baseEntities = asset.getInstance().getEntities();
+    const ghostEntities = asset.getAssetInstances()[1]?.getEntities() ?? [];
+    for (const p of Object.values(furniture.parts)) {
+      const named = asset.getFirstEntityByName(p.meshName);
+      if (!named) continue;
+      byEntityId.set(named.id, { partId: p.partId, ghost: false });
+      const idx = baseEntities.findIndex((e) => e.id === named.id);
+      const ghost = idx >= 0 ? ghostEntities[idx] : undefined;
+      if (ghost) byEntityId.set(ghost.id, { partId: p.partId, ghost: true });
+    }
+    registerPickProber(async (xDp, yDp) => {
+      const hit = await pick.call(view, xDp, yDp);
+      if (!hit) return null;
+      const owner = byEntityId.get(hit.entityId);
+      return { partId: owner?.partId ?? null, ghost: owner?.ghost ?? false, depth: hit.depth };
+    });
+    return () => registerPickProber(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model.state, furniture, view]);
   if (!furniture) return null;
   const driveAction = driveActionId
     ? furniture.actions.find((a) => a.actionId === driveActionId) ?? null
