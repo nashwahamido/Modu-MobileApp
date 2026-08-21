@@ -82,13 +82,13 @@ export function FitChip() {
 
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
-  chip: {
-    position: "absolute",
-    top: 52,
-    alignSelf: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 14,
-  },
-  text: { color: t.text, fontWeight: "700", fontSize: 13 },
+    chip: {
+      position: "absolute",
+      top: 68,
+      alignSelf: "center",
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+      borderRadius: 14,
+    },
+    text: { color: t.text, fontWeight: "700", fontSize: 13 },
   });

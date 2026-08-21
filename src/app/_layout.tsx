@@ -11,6 +11,7 @@ import "react-native-reanimated";
 
 import { useDevAutoSignIn } from "@/src/dev/devAuth";
 import { GmTestPanel } from "@/src/dev/GmTestPanel";
+import { SHOWCASE_ENABLED } from "@/src/dev/showcase";
 import { AuthProvider } from "@/src/hooks/useAuth";
 import { useCatalogSync } from "@/src/hooks/useCatalogSync";
 import { useSessionGate } from "@/src/hooks/useSessionGate";
@@ -58,7 +59,8 @@ function AppContent() {
         {/* The (presentation) group is the modal LAYER: it presents over the current scene (hub or task) without unmounting it, so nothing behind it reloads. */}
         <Stack.Screen name="(presentation)" options={{ presentation: "modal" }} />
       </Stack>
-      {__DEV__ && <GmTestPanel />}
+      {/* Showcase is excluded on top of __DEV__: a demo shows the player nothing but the game, and a showcase run off Metro has __DEV__ true. Same gate as DevMenu. */}
+      {__DEV__ && !SHOWCASE_ENABLED && <GmTestPanel />}
       <StatusBar style="auto" hidden />
     </>
   );
