@@ -1,4 +1,28 @@
 export const TURN_IN_PLACE_THRESHOLD = Math.PI / 6;
+export const POST_PATH_STANDING_MS = 5_000;
+
+export type AvatarSpecialAction = {
+  index: number;
+  duration: number;
+};
+
+/**
+ * Select a one-shot action without immediately repeating the previous one.
+ * A model with only one special action waits instead of violating that rule.
+ */
+export function chooseDistinctSpecialAction(
+  actions: readonly AvatarSpecialAction[],
+  lastIndex: number | null,
+  randomValue = Math.random(),
+): AvatarSpecialAction | null {
+  const candidates = actions.filter((action) => action.index !== lastIndex);
+  if (candidates.length === 0) return null;
+  const offset = Math.min(
+    candidates.length - 1,
+    Math.floor(Math.max(0, randomValue) * candidates.length),
+  );
+  return candidates[offset];
+}
 
 export type AvatarMotionPhase = "idle" | "turning" | "walking" | "special";
 

@@ -3,13 +3,14 @@ import { supabase } from "../config/supabase";
 export type UserProfile = {
   user_id: string;
   username: string | null;
+  avatar_id: number | null;
   onboarding_completed: boolean;
   created_at: string | null;
   last_login: string | null;
 };
 
 export type UserProfileUpdate = Partial<
-  Pick<UserProfile, "username" | "onboarding_completed" | "last_login">
+  Pick<UserProfile, "username" | "avatar_id" | "onboarding_completed" | "last_login">
 >;
 
 export async function getCurrentUser() {

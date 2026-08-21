@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   RenderCallbackContext,
   useAnimator,
@@ -9,7 +9,11 @@ import {
 import { useSharedValue } from "react-native-worklets-core";
 
 import { findPath, inflateBlocked, nearestWalkable } from "../character/navigation";
-import { avatarMotionPhase } from "../character/avatarMotion";
+import {
+  avatarMotionPhase,
+  chooseDistinctSpecialAction,
+  POST_PATH_STANDING_MS,
+} from "../character/avatarMotion";
 import {
   roomAvatarKindForProfile,
   type RoomAvatarKind,
@@ -36,6 +40,7 @@ type AvatarConfig = {
   animation: {
     walk: number;
     idle: number;
+    idleRate?: number;
     walkRate?: number;
     walkWindow?: { start: number; end: number };
   };
@@ -74,11 +79,14 @@ const AVATAR_CONFIG: Record<RoomAvatarKind, AvatarConfig> = {
   lumi: {
     model: require("../../assets/models/avatars/lumi.glb"),
     size: { x: 0.719726, y: 0.979431, z: 0.636903 },
-    // Lumi's export orders these differently from Sparky: NlaTrack has the
-    // alternating thigh/calf cycle, while NlaTrack.002 is nearly motionless.
-    // The long middle action remains unscheduled until its gesture is reviewed.
-    animation: { walk: 0, idle: 2 },
-    specials: [],
+    // This Lumi export contains five clips. NlaTrack.004 is the symmetric,
+    // alternating leg cycle used for navigation. A frozen first frame of the
+    // arm-led NlaTrack.001 provides a stable standing pose between routes.
+    animation: { walk: 4, idle: 1, idleRate: 0 },
+    specials: [
+      { index: 0, duration: 2.625 },
+      { index: 2, duration: 17.625 },
+    ],
   },
 };
 
@@ -91,7 +99,6 @@ const TURN_SPEED = 7;
 const ARRIVAL_EPSILON = 0.025;
 const ANIMATION_CROSS_FADE_SECONDS = 0.18;
 const FLOOR_CLEARANCE_METRES = 0.005;
-const SPECIAL_ACTION_CHANCE = 0.35;
 
 type Point = { x: number; z: number };
 type Motion = {
@@ -101,6 +108,7 @@ type Motion = {
   idleUntil: number;
   special: { index: number; until: number } | null;
   specialEligible: boolean;
+  lastSpecialIndex: number | null;
 };
 
 const shortestAngle = (from: number, to: number): number =>
@@ -159,6 +167,36 @@ function PebbleBedAvatar({ bed }: { bed: GridPlacement }) {
   const animator = useAnimator(asset ?? undefined);
   const { transformManager } = useFilamentContext();
   const baseTransform = useRef<Mat4 | null>(null);
+  const [arrivalScale, setArrivalScale] = useState(0.05);
+
+  // The bed arrives first; Pebble follows after it has had time to settle.
+  // This component keeps the bed instance as its key, so dragging that bed
+  // later updates the transform without replaying the entrance.
+  useEffect(() => {
+    if (!asset) return;
+    let frame = 0;
+    let delay = 0;
+    const delayStartedAt = performance.now();
+    const begin = () => {
+      const startedAt = performance.now();
+      const tick = (now: number) => {
+        const t = Math.min(1, (now - startedAt) / 360);
+        const eased = t * t * (3 - 2 * t);
+        setArrivalScale(0.05 + eased * 0.95);
+        if (t < 1) frame = requestAnimationFrame(tick);
+      };
+      frame = requestAnimationFrame(tick);
+    };
+    const wait = (now: number) => {
+      if (now - delayStartedAt >= 460) begin();
+      else delay = requestAnimationFrame(wait);
+    };
+    delay = requestAnimationFrame(wait);
+    return () => {
+      cancelAnimationFrame(delay);
+      cancelAnimationFrame(frame);
+    };
+  }, [asset]);
 
   RenderCallbackContext.useRenderCallback(
     () => {
@@ -191,8 +229,9 @@ function PebbleBedAvatar({ bed }: { bed: GridPlacement }) {
     // Keep Pebble centred on the mattress, but turn its head and feet through
     // 180 degrees relative to the previous pose. Position and height stay fixed.
     const pebbleYaw = bedYaw;
+    const pebbleScale = (SCENE_SCALE / unitScale) * arrivalScale;
     const transform = baseTransform.current
-      .scaling([SCENE_SCALE / unitScale, SCENE_SCALE / unitScale, SCENE_SCALE / unitScale])
+      .scaling([pebbleScale, pebbleScale, pebbleScale])
       .rotate(pebbleYaw, [0, 1, 0])
       .rotate(-Math.PI / 2, [1, 0, 0])
       .translate([
@@ -202,7 +241,7 @@ function PebbleBedAvatar({ bed }: { bed: GridPlacement }) {
         centre.z,
       ]);
     transformManager.setTransform(model.rootEntity, transform);
-  }, [asset, bed.cell, bed.rotSteps, item, model, transformManager]);
+  }, [arrivalScale, asset, bed.cell, bed.rotSteps, item, model, transformManager]);
 
   return null;
 }
@@ -254,9 +293,12 @@ function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
     idleUntil: 0,
     special: null,
     specialEligible: true,
+    lastSpecialIndex: null,
   });
   const walkAnimationIndex = config.animation.walk;
   const walkPlaybackRate = config.animation.walkRate ?? 1;
+  const idleAnimationIndex = config.animation.idle;
+  const idlePlaybackRate = config.animation.idleRate ?? 1;
   const walkWindowStart = config.animation.walkWindow?.start ?? 0;
   const walkWindowDuration = config.animation.walkWindow
     ? config.animation.walkWindow.end - config.animation.walkWindow.start
@@ -268,7 +310,11 @@ function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
       if (!animator) return;
       const requested = animationIndex.value;
       const requestedRate =
-        requested === walkAnimationIndex ? walkPlaybackRate : 1;
+        requested === walkAnimationIndex
+          ? walkPlaybackRate
+          : requested === idleAnimationIndex
+            ? idlePlaybackRate
+            : 1;
       if (activeAnimationIndex.value !== requested) {
         if (activeAnimationIndex.value >= 0) {
           previousAnimationIndex.value = activeAnimationIndex.value;
@@ -328,6 +374,8 @@ function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
       animationIndex,
       animationStartedAt,
       animator,
+      idleAnimationIndex,
+      idlePlaybackRate,
       previousAnimationIndex,
       previousAnimationRate,
       previousAnimationTime,
@@ -449,8 +497,12 @@ function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
         if (now >= state.idleUntil) {
           if (state.specialEligible && config.specials.length > 0) {
             state.specialEligible = false;
-            if (Math.random() < SPECIAL_ACTION_CHANCE) {
-              const action = config.specials[Math.floor(Math.random() * config.specials.length)];
+            const action = chooseDistinctSpecialAction(
+              config.specials,
+              state.lastSpecialIndex,
+            );
+            if (action) {
+              state.lastSpecialIndex = action.index;
               state.special = { index: action.index, until: now + action.duration * 1_000 };
               setAnimation(action.index);
               paint();
@@ -470,7 +522,7 @@ function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
         state.position = target;
         state.path.shift();
         if (state.path.length === 0) {
-          state.idleUntil = now + 1_200 + Math.random() * 1_800;
+          state.idleUntil = now + POST_PATH_STANDING_MS;
           state.specialEligible = true;
           setAnimation(config.animation.idle);
         }
@@ -507,7 +559,9 @@ function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
     );
     if (pathInvalid) motion.current.path = [];
     recoverFromCollision(now);
-    if (motion.current.idleUntil === 0) motion.current.idleUntil = now + 600;
+    if (motion.current.idleUntil === 0) {
+      motion.current.idleUntil = now + POST_PATH_STANDING_MS;
+    }
     paint();
     frame = requestAnimationFrame(tick);
     return () => {

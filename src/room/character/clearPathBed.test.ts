@@ -7,6 +7,7 @@ import {
   CLEAR_PATH_BED_ITEM_ID,
   clearPathBedPlacement,
 } from "./clearPathBed";
+import { FLOOR_CELLS } from "../core/roomShell";
 
 const bedDef: PlaceableItemDef = {
   itemId: CLEAR_PATH_BED_ITEM_ID,
@@ -52,4 +53,24 @@ test("existing furniture wins and sends the built-in bed to another corner", () 
 
 test("an unavailable catalogue row produces neither bed nor Pebble anchor", () => {
   assert.equal(clearPathBedPlacement([], undefined, defs), null);
+});
+
+test("a room with no legal bed footprint refuses Clear Path instead of overlapping furniture", () => {
+  const fullRoomDef: PlaceableItemDef = {
+    itemId: "full-room-blocker",
+    footprint: { w: FLOOR_CELLS.w, d: FLOOR_CELLS.d },
+    topFootprint: { w: 1, d: 1 },
+    allowedSurfaces: ["floor"],
+  };
+  const fullRoom: GridPlacement = {
+    instanceId: "full-room-blocker#1",
+    itemId: fullRoomDef.itemId,
+    variation: null,
+    surface: { kind: "floor" },
+    cell: { x: 0, y: 0 },
+    rotSteps: 0,
+  };
+  const fullDefs = new Map(defs).set(fullRoomDef.itemId, fullRoomDef);
+
+  assert.equal(clearPathBedPlacement([fullRoom], bedDef, fullDefs), null);
 });

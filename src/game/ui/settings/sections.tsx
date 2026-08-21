@@ -2,7 +2,7 @@
 //
 // Where a section differs between the two panels it takes a named boolean rather than a variant string, so the call site reads as a list of what that panel shows.
 import { Alert, Pressable, Text, View, type LayoutChangeEvent } from "react-native";
-import { router } from "expo-router";
+import { router, usePathname } from "expo-router";
 import { useGameStore } from "@/src/game/core/store";
 import { setMusicEnabled, setMusicVolume } from "@/src/game/audio/music";
 import { useFixedStyles } from "@/src/game/ui/system/theme";
@@ -28,6 +28,15 @@ import type {
   TextLevel,
 } from "@/src/game/core/type";
 import type { ProfileId } from "@/src/game/core/profile";
+import { useState } from "react";
+import { saveSelectedAvatarMode } from "@/src/services/onboarding";
+import { usePlacementStore } from "@/src/room/core/placement";
+import { roomItemDefs, useRoomCatalogStore } from "@/src/room/core/placeableItems";
+import {
+  CLEAR_PATH_BED_ITEM_ID,
+  clearPathBedPlacement,
+} from "@/src/room/character/clearPathBed";
+import { useAvatarModeNotice } from "@/src/room/ui/avatarModeNotice";
 
 // ── option tables ────────────────────────────────────────────────────────────
 const PROFILES: { value: ProfileId; label: string }[] = [
@@ -137,6 +146,44 @@ export function RestartRow() {
 export function ProfileSection() {
   const profile = useGameStore((s) => s.profile);
   const applyProfile = useGameStore((s) => s.applyProfile);
+  const pathname = usePathname();
+  const [saving, setSaving] = useState(false);
+  const layout = usePlacementStore((s) => s.layout);
+  const activeEdit = usePlacementStore((s) => s.activeEdit);
+  const bedDef = useRoomCatalogStore(
+    (s) => s.items[CLEAR_PATH_BED_ITEM_ID]?.def,
+  );
+  const requestClearPath = useAvatarModeNotice((s) => s.requestClearPath);
+  const cancelClearPathRequest = useAvatarModeNotice(
+    (s) => s.cancelClearPathRequest,
+  );
+
+  const selectProfile = async (next: ProfileId) => {
+    if (saving || next === profile) return;
+    if (next === "clearPath") {
+      const occupied = activeEdit ? [...layout, activeEdit.placement] : layout;
+      const bedFits = clearPathBedPlacement(
+        occupied,
+        bedDef,
+        roomItemDefs(),
+      ) !== null;
+      requestClearPath(bedFits);
+      // Do not apply the mode yet: Pebble gets the final word from the room,
+      // and the bed arrives only after the player accepts that second prompt.
+      if (pathname === "/settings") router.back();
+      return;
+    }
+    cancelClearPathRequest();
+    setSaving(true);
+    try {
+      await saveSelectedAvatarMode(next);
+      applyProfile(next);
+    } catch (error) {
+      console.warn("[profile] could not save avatar mode", error);
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
     <>
       <SectionHeader>Profile</SectionHeader>
@@ -145,7 +192,7 @@ export function ProfileSection() {
         desc="Preset that sets all the defaults below"
         value={profile}
         options={PROFILES}
-        onChange={applyProfile}
+        onChange={selectProfile}
       />
     </>
   );

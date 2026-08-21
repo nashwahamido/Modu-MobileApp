@@ -641,6 +641,29 @@ const LoadedItem = memo(function LoadedItem({
 }) {
   const model = useModel(source);
   const { renderableManager, transformManager, scene } = useFilamentContext();
+  const isClearPathBed =
+    placement.instanceId === CLEAR_PATH_BED_INSTANCE_ID;
+  const [arrivalScale, setArrivalScale] = useState(
+    isClearPathBed ? 0.05 : 1,
+  );
+
+  // The profile fixture is the only furniture that enters by itself rather
+  // than under the player's drag. Let it grow gently out of the floor instead
+  // of popping into existence in one React commit. Moving it later keeps the
+  // same key/component and therefore never replays this arrival.
+  useEffect(() => {
+    if (!isClearPathBed || model.state !== "loaded") return;
+    let frame = 0;
+    const startedAt = performance.now();
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - startedAt) / 420);
+      const eased = t * t * (3 - 2 * t);
+      setArrivalScale(0.05 + eased * 0.95);
+      if (t < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [isClearPathBed, model.state]);
 
   // Parsed — not yet transformed or painted, both of which happen in effects below, in the same commit. Depends on model.STATE rather than on `model`, which useModel rebuilds as a fresh object literal every render.
   useEffect(() => {
@@ -667,7 +690,7 @@ const LoadedItem = memo(function LoadedItem({
     transformManager.transformToUnitCube(model.rootEntity, model.boundingBox);
     const unit = transformManager.getTransform(model.rootEntity);
 
-    const scale = fitScale(item) * SCENE_SCALE;
+    const scale = fitScale(item) * SCENE_SCALE * arrivalScale;
     const unitScale = 2 / Math.max(item.size.x, item.size.y, item.size.z);
 
     if (placement.surface.kind === "wall") {
@@ -735,6 +758,7 @@ const LoadedItem = memo(function LoadedItem({
     transformManager.setTransform(model.rootEntity, transform);
   }, [
     hostPlacement,
+    arrivalScale,
     item,
     model,
     placement.cell,
