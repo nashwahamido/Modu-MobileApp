@@ -20,3 +20,8 @@ export function registerPickProber(p: PickProber | null): void {
 export function probePick(xDp: number, yDp: number): Promise<PickHit | null> | null {
   return prober ? prober(xDp, yDp) : null;
 }
+
+/** Whether the renderer-truth layer is available at all. For diagnostics only: registration happens only on a build carrying the native patch, so this answers "is layer 2 running on THIS device" — a question that otherwise depends on catching a one-shot console warning as the scene mounts. */
+export function hasPickProber(): boolean {
+  return prober !== null;
+}

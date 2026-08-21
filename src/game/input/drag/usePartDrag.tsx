@@ -33,7 +33,7 @@ import { ActionId, AssemblyAction, PartId, Vec3 } from "@/src/game/core/type";
 import { selectFirstDrop, useGameStore } from "@/src/game/core/store";
 import type { OrbitManipulator } from "../../scene/AssemblyScene";
 import { occluderBoxes, readLiveBoxes } from "../../scene/partBoxes";
-import { probePick } from "../../scene/pickProbe";
+import { hasPickProber, probePick } from "../../scene/pickProbe";
 import { judgePick, PickConfirmCache } from "./pickConfirm";
 import {
   APPROACH_RADIUS_M,
@@ -275,7 +275,9 @@ export function usePartDrag({
                 .map((a) => a.partId!),
             ),
           ];
-          const placedBoxList = occluderBoxes(placedIds, readLiveBoxes(placedIds), partBoxes);
+          // Kept as its own binding rather than inlined into the call: null (no scene reader registered) and {} (reader present, nothing on screen) drive the same empty obstacle list but mean opposite things, and only the probe below can tell them apart.
+          const liveBoxes0 = readLiveBoxes(placedIds);
+          const placedBoxList = occluderBoxes(placedIds, liveBoxes0, partBoxes);
           // Seeded raw, not eased: there is no previous frame to ease from, and the whole point of computing it here is that frame zero is already correct.
           const carryCap0 = carryCapAt(e.absoluteX, e.absoluteY, placedBoxList);
           const visualStart = uprightAnchor
@@ -365,11 +367,16 @@ export function usePartDrag({
             };
           });
           // DEV pickup probe: one line per pickup with the first candidate's WORLD anchors, to catch an anchor landing in the wrong space (a seat that projects fine can still sit centimetres from the LENS — band collapse, unmatched drags).
-          if (__DEV__ && candidates[0]) {
+          //
+          // The four counts after it characterise the OCCLUDER PIPELINE end to end, because every stage of it can fail silently to PERMISSIVE — an empty obstacle list is indistinguishable from a clear line of sight at the point the verdict is taken, so the gate simply passes everything and says nothing. Read them together: `boxes` 0 means the harvest tripped its own 2mm gate and published none (AssemblyScene); `live=none` means no scene reader is registered at all, so occluders fell back to those baked boxes; `live=0` with a non-zero `placed` means the reader IS registered and reported nothing on screen, which is a different fault with the same symptom. `occN` is what the gate actually received. `pk` is whether layer 2 exists on this build — it needs the native patch, so it can differ between two platforms built from one tree, which is exactly the kind of divergence this line exists to catch.
+          if (__DEV__) {
             const c0 = candidates[0];
-            const j = jointAnchors[c0.action.partId!];
+            const j = c0 ? jointAnchors[c0.action.partId!] : undefined;
+            const cand = c0
+              ? `${c0.action.actionId} pos=${c0.position.map((v) => v.toFixed(3)).join(",")} hold=${c0.holdPosition.map((v) => v.toFixed(3)).join(",")} seat=${c0.seatVisual.map((v) => v.toFixed(3)).join(",")} match=${c0.matchVisual.map((v) => v.toFixed(3)).join(",")} anchor=${j ? j.map((v) => v.toFixed(3)).join(",") : "none"}`
+              : `${action.actionId} NO-CANDIDATES`;
             console.log(
-              `[pickup] ${c0.action.actionId} pos=${c0.position.map((v) => v.toFixed(3)).join(",")} hold=${c0.holdPosition.map((v) => v.toFixed(3)).join(",")} seat=${c0.seatVisual.map((v) => v.toFixed(3)).join(",")} match=${c0.matchVisual.map((v) => v.toFixed(3)).join(",")} anchor=${j ? j.map((v) => v.toFixed(3)).join(",") : "none"} BUILD=noplane18`,
+              `[pickup] ${cand} placed=${placedIds.length} live=${liveBoxes0 ? Object.keys(liveBoxes0).length : "none"} boxes=${Object.keys(partBoxes).length} occN=${placedBoxList.length} pk=${hasPickProber() ? "on" : "off"} BUILD=noplane18`,
             );
           }
           const groupIds = new Set(candidates.map((c) => c.action.actionId));
