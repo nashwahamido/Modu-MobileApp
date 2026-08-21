@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { findNodeHandle, Image, Pressable, StyleSheet, Text, useWindowDimensions, UIManager, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
-import * as Speech from 'expo-speech';
+import { useTutorialVoice } from '@/src/game/audio/useTutorialVoice';
 import {
   TUTORIAL_REWARD_TOKENS,
   TUTORIAL_STEP_REWARD_TOKENS,
@@ -107,51 +107,41 @@ export function MascotGuideOverlay({
       !rewardReady,
   );
 
-  useEffect(() => {
-    if (
-      !presentation.showVisualDemo ||
-      !visualSpeechEnabled ||
-      focusReturnPrompt ||
-      undoPreviewActive ||
-      blocked ||
-      mapOpen ||
-      attentionOverlayActive ||
-      skipped ||
-      completed ||
-      rewardReady ||
-      // The grip step is silent. Its card is a full-screen coach with its own art and its own "Got
-      // it" button (GripCoach), and the mascot's bubble is not even up yet — so the line was read
-      // aloud over a screen that showed no bubble to read it from.
-      step?.id === GRIP_STEP_ID ||
-      !step
-    ) {
-      Speech.stop();
-      return;
-    }
-    const spokenMessage = visualMessageForStep(
-      step.id,
-      guideMessageOverride ?? step.shortLabel ?? step.message,
-    );
-    Speech.stop();
-    Speech.speak(spokenMessage, { rate: 0.82 });
-    return () => {
-      Speech.stop();
-    };
-  }, [
-    attentionOverlayActive,
-    blocked,
-    mapOpen,
-    completed,
-    currentIndex,
-    focusReturnPrompt,
-    guideMessageOverride,
-    undoPreviewActive,
-    presentation.showVisualDemo,
-    rewardReady,
-    skipped,
-    step,
-    visualSpeechEnabled,
-  ]);
+  // LUMI'S VOICE. A recorded clip where the step has one, expo-speech where it does not — see
+  // game/audio/useTutorialVoice. This used to synthesise every line unconditionally; the gating
+  // below is unchanged, and only what happens once a step qualifies is different.
+  //
+  // The grip step is silent, as before. Its card is a full-screen coach with its own art and its own
+  // "Got it" button (GripCoach), and the mascot's bubble is not even up yet — so the line was read
+  // aloud over a screen that showed no bubble to read it from. Passing `undefined` as the step id is
+  // what keeps it that way: the hook silences both voices rather than falling back to speaking it.
+  const spokenStepId =
+    presentation.showVisualDemo && step && step.id !== GRIP_STEP_ID
+      ? step.id
+      : undefined;
+  const spokenMessage = step
+    ? visualMessageForStep(
+        step.id,
+        guideMessageOverride ?? step.shortLabel ?? step.message,
+      )
+    : '';
+  // NOT GATED ON `blocked`. That flag means the card has been collapsed out of the way because the
+  // player has picked a part up and the bubble would sit over the tray they are reaching into — the
+  // guidance is hidden, not cancelled. Silencing the line there took the instruction away at the
+  // exact moment the player was carrying it out, on the profile that relies on hearing it. The
+  // OVERLAY still returns null for `blocked` (see below); only the voice carries on.
+  useTutorialVoice(
+    spokenStepId,
+    spokenMessage,
+    visualSpeechEnabled &&
+      !focusReturnPrompt &&
+      !undoPreviewActive &&
+      !mapOpen &&
+      !attentionOverlayActive &&
+      !skipped &&
+      !completed &&
+      !rewardReady,
+  );
 
   // THE GRIP STEP IS NOT NUMBERED. It teaches how to hold the device, not how to use a control, and
   // it is acknowledged by a button rather than by doing anything — so counting it made the first
@@ -600,6 +590,7 @@ function Scrim({
  *  Bounded by the screen, not by taste: the placement below insets it 16 from either edge, so on the
  *  narrowest phone this app supports (~640 landscape) the card and its two margins still fit. */
 const BUBBLE_W = 372;
+
 
 /** The grip step's id, in one place: it is special-cased twice above — not numbered, not spoken. */
 const GRIP_STEP_ID = 'hold-like-controller';

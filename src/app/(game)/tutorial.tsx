@@ -138,8 +138,26 @@ function TutorialScreen() {
   const [undoPreviewActive, setUndoPreviewActive] = useState(false);
   const undoPreviewProgress = useRef(new Animated.Value(0)).current;
 
+  // THE GHOST, AND ONLY THE GHOST.
+  //
+  // `undoPreviewActive` drives TWO separate things: this scene animation, and a whole card takeover
+  // in MascotGuideOverlay — header replaced with "UNDO PREVIEW", its own copy, the spotlight moved
+  // to the assembly area, and a full-screen Pressable that dismisses by firing `step_undone`.
+  //
+  // Lumi's step can have the first but NOT the second. `visual-undo-recenter` closes on
+  // `controls_acknowledged`, so that Pressable's `step_undone` would match nothing and the tap would
+  // do nothing at all — a player stuck on a card with no way off it. The takeover would also throw
+  // away her authored line and its recorded clip. So the scene animation reads this flag while
+  // `showingUndoPreview` below, which is what the overlay receives, stays pinned to `hud-undo`.
+  // Its own subscription rather than the `tutorialStepId` further down: this sits above that
+  // declaration, and a const reading it from here would be in its temporal dead zone.
+  const onVisualUndoStep = useTutorialStore(
+    (s) => s.steps[s.currentIndex]?.id === "visual-undo-recenter",
+  );
+  const undoGhostRunning = undoPreviewActive || onVisualUndoStep;
+
   useEffect(() => {
-    if (!undoPreviewActive) {
+    if (!undoGhostRunning) {
       undoPreviewProgress.stopAnimation();
       undoPreviewProgress.setValue(0);
       return;
@@ -160,13 +178,25 @@ function TutorialScreen() {
         }),
         Animated.delay(220),
       ]),
+      // TWO PASSES ON LUMI'S STEP, then the scene sits still.
+      //
+      // Looping forever is right for `hud-undo`, whose card waits on the player and whose whole
+      // screen IS the preview — so -1 stays the default for it. On `visual-undo-recenter` the ghost
+      // is a one-off demonstration beside a card the player is reading, and left looping it was
+      // still travelling when the tap moved them to step 8, so the scene slid and faded under a card
+      // about Spot and Auto that has nothing to do with undo.
+      //
+      // Two rather than one: a single pass reads as a glitch, a second says it was deliberate. The
+      // sequence ends on a timing back to 0, so when it finishes the tabletop is already home and
+      // nothing has to put it there.
+      { iterations: onVisualUndoStep ? 2 : -1 },
     );
     animation.start();
     return () => {
       animation.stop();
       undoPreviewProgress.setValue(0);
     };
-  }, [undoPreviewActive, undoPreviewProgress]);
+  }, [undoGhostRunning, onVisualUndoStep, undoPreviewProgress]);
 
   const undoPreviewSceneStyle = {
     opacity: undoPreviewProgress.interpolate({
@@ -358,6 +388,17 @@ function TutorialScreen() {
   });
   const guideCompleted = useTutorialStore((s) => s.completed);
   const guideStepCount = useTutorialStore((s) => s.steps.length);
+  // "Step 4" for the bar — THE SAME NUMBER THE MASCOT CARD SHOWS, computed the same way
+  // (MascotGuideOverlay), because two places counting the same run differently is worse than either
+  // choice on its own. The grip step is not numbered: it teaches how to hold the device rather than
+  // how to use a control, so the first real instruction is Step 1 and not Step 2. It has a
+  // shortLabel of its own ("Get comfortable"), which the bar reaches before this.
+  const tutorialStepNumber = useTutorialStore((s) => {
+    const gripAt = s.steps.findIndex((step) => step.id === "hold-like-controller");
+    return gripAt >= 0 && s.currentIndex > gripAt
+      ? s.currentIndex
+      : s.currentIndex + 1;
+  });
   const orientationActionId = useGameStore((s) => s.orientationActionId);
   const totalCount = furniture?.actions.length ?? 0;
   const installedLegCount = useMemo(
@@ -442,10 +483,18 @@ function TutorialScreen() {
   }, [firstAvailable, furniture, installedLegCount, profile, tutorialStepId]);
   const collapsedLegGuide =
     guideCollapsed && tutorialStepId === "install-four-legs";
+  // THE CARD STANDS ASIDE ONCE A PART IS IN THE AIR. Every step named here puts its bubble beside
+  // the parts tray, which is exactly where the player's hand goes and what it covers on the way —
+  // including the centre drop ring the pick-up-and-place step is asking them to aim at. The voice
+  // keeps talking through it (see MascotGuideOverlay), so the instruction is hidden, not withdrawn.
+  //
+  // `visual-pickup-and-place` is Lumi's merged pick-up-and-drag step; useTutorialEvents already
+  // reported the pickup for it, and only this list was missing it.
   const collapsedActionGuide =
     guideCollapsed &&
     (tutorialStepId === "install-four-legs" ||
-      tutorialStepId === "place-connector");
+      tutorialStepId === "place-connector" ||
+      tutorialStepId === "visual-pickup-and-place");
   const tutorialTrayItems = useMemo(() => {
     // LUMI KEEPS HER TRAY — with ONE exception.
     //
@@ -615,7 +664,13 @@ function TutorialScreen() {
     needsFocusChoice,
     mode,
     textLevel: settings.textLevel,
-    audioOn: settings.audio,
+    // THE ASSEMBLY VOICE STAYS QUIET WHILE THE TUTORIAL IS RUNNING. `settings.audio` alone meant the
+    // recorded LACK instruction played on top of Lumi's tutorial line — two performances of two
+    // different scripts at once, on the profile built around being read to. `guideCompleted` hands
+    // the voice over once the tutorial is done and the player is simply finishing the table.
+    //
+    // ONLY the audio is gated here. The bar's line is fixed separately, below.
+    audioOn: settings.audio && guideCompleted,
     completedCount,
     totalCount,
   });
@@ -797,7 +852,25 @@ function TutorialScreen() {
                   ? repeatedAssemblyLabel
                   : guideCompleted
                   ? `Finish the LACK table · ${displayedCompletedCount}/${displayedTotalCount}`
-                  : tutorialStep?.shortLabel ?? objective
+                  : // THE STEP NUMBER, not the step's sentence.
+                    //
+                    // This used to be `shortLabel ?? objective`, which worked for the profiles whose
+                    // steps carry a shortLabel and failed for Lumi's, which deliberately carry none
+                    // so the mascot card shows the authored sentence instead of a three-word stub
+                    // (see VISUAL_TUTORIAL_STEPS). With no shortLabel the chain fell through to
+                    // `objective` — the live LACK instruction, tracking whatever action happens to
+                    // be available next — so the bar ran its own assembly sequence underneath a
+                    // tutorial teaching something else entirely.
+                    //
+                    // The step's own message is not the answer either: it is already on the card an
+                    // inch away, and printing it twice makes the player read the same sentence in
+                    // two places to be sure they are not two instructions. The NUMBER says where
+                    // they are in the run, which is the one thing the card's sentence does not.
+                    //
+                    // `objective` stays as the last rung, for a screen with no tutorial step left.
+                    tutorialStep
+                      ? tutorialStep.shortLabel ?? `Step ${tutorialStepNumber}`
+                      : objective
                 : null
             }
             fontSize={objectiveFontSize}
