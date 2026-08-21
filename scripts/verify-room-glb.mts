@@ -16,7 +16,7 @@ import { ROOM_SHELL } from "../src/room/core/roomShell";
 const SHIPPED = "src/assets/models/room/virtualroom_empty.glb";
 const WALLS = ["xmin", "xmax", "zmin", "zmax"];
 
-// The export contract, and the same fifteen names scripts/normalise_shell_materials.py enforces on the Blender side: one per wall, one per cornice run, one per cornice CORNER (a corner shows while EITHER of its walls does, so it cannot share either one's material), plus the ceiling, the floor slab and the plinth.
+// The authored export contract: one per wall, one per cornice run, one per cornice CORNER (a corner shows while EITHER of its walls does, so it cannot share either one's material), plus the ceiling, the floor slab and the plinth. The build pipeline adds Grid as a sixteenth, generated material.
 const CULLABLE = [
   ...WALLS.map((w) => `Wall_${w}`),
   ...WALLS.map((w) => `Trim_${w}`),
@@ -27,9 +27,10 @@ const CULLABLE = [
   "Ceiling",
 ];
 // Never culled, and deliberately left OPAQUE — putting the floor in the transparent pass costs real overdraw for nothing.
-const OPAQUE = ["Floor", "FloorEdge"];
-// The ceiling is pinned invisible forever and exists only to cast shadow, so it carries no baked occlusion.
-const NO_AO = ["Ceiling"];
+const OPAQUE = ["Floor", "FloorEdge", "Grid"];
+// The ceiling is pinned invisible forever and exists only to cast shadow. Grid
+// is generated unlit line art. Neither needs baked occlusion.
+const NO_AO = ["Ceiling", "Grid"];
 
 // The materials a surface item may retexture, and therefore the ones that MUST declare every map slot it writes — gltfio picks a shader variant from a material's declared features, and MaterialInstance::setParameter THROWS on a parameter the variant lacks. A material with no normalTexture has no normalMap to write. scripts/declare-shell-map-slots.mjs is what puts them there.
 const TEXTUREABLE = [
@@ -42,7 +43,7 @@ const TEXTUREABLE = [
   "Trim_xmax_zmax",
 ];
 // Deliberately NOT textureable: the plinth takes a baseColorFactor tint (it never fades, so nothing else owns its factor) and the ceiling is never drawn at all. Declaring map slots on them would ship placeholder textures nothing can ever use.
-const FACTOR_ONLY = ["FloorEdge", "Ceiling"];
+const FACTOR_ONLY = ["FloorEdge", "Ceiling", "Grid"];
 
 const path = process.argv[2] ?? SHIPPED;
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
@@ -65,7 +66,7 @@ const extra = [...byName.keys()].filter((n) => !expected.includes(n));
 // A .001 suffix survives the glTF export and is fatal three ways at once — wallCulling.ts's ANCHORED /^(?:Wall|Trim)_(xmin|...)$/ matches nothing, the corner regex likewise, and CEILING_MATERIAL is compared with === so the ceiling renders as a solid opaque lid. Fix it in Blender with scripts/normalise_shell_materials.py, not here.
 check(
   missing.length === 0 && extra.length === 0,
-  "15 material names",
+  "16 material names",
   missing.length || extra.length ? `missing [${missing}] unexpected [${extra}]` : `all present`,
 );
 
@@ -74,7 +75,7 @@ const wrongBlend = CULLABLE.filter((n) => byName.get(n)?.getAlphaMode() !== "BLE
 check(wrongBlend.length === 0, "cullable are BLEND", wrongBlend.length ? `not BLEND: ${wrongBlend}` : `${CULLABLE.length} materials`);
 
 const wrongOpaque = OPAQUE.filter((n) => byName.get(n)?.getAlphaMode() !== "OPAQUE");
-check(wrongOpaque.length === 0, "floor stays OPAQUE", wrongOpaque.length ? `not OPAQUE: ${wrongOpaque}` : OPAQUE.join(", "));
+check(wrongOpaque.length === 0, "opaque stay OPAQUE", wrongOpaque.length ? `not OPAQUE: ${wrongOpaque}` : OPAQUE.join(", "));
 
 const wantAO = expected.filter((n) => !NO_AO.includes(n));
 const noAO = wantAO.filter((n) => !byName.get(n)?.getOcclusionTexture());

@@ -21,6 +21,7 @@ import {
   topPlacementBox,
   roomPointToTopCell,
   wallCellToRoom,
+  wallPlacementBox,
   windowCellNamesFor,
   type Footprint,
   type GridPlacement,
@@ -34,6 +35,8 @@ import {
   SHELL_WALL_IDS,
   TOP_CELL_SIZE,
   WALL_CELLS,
+  WALL_CELL_SIZE,
+  WALL_THICKNESS,
   WINDOW_BANDS,
   isXWall,
   roomToScene,
@@ -654,5 +657,70 @@ test("wallDepthOffset is sign-opposite for the two policies at every depth", () 
   for (const depth of [0.01, 0.036, 0.12, 0.218, 0.5, 1]) {
     assert.ok(wallDepthOffset(depth, false) < 0, `mounted at ${depth} must move inward`);
     assert.ok(wallDepthOffset(depth, true) > 0, `hole-cutter at ${depth} must move outward`);
+  }
+});
+
+// wallPlacementBox is the wall twin of floorPlacementBox: a real pickable VOLUME instead of a
+// single plane cell. It must agree with the renderer's own seating (wallDepthOffset) exactly —
+// worked by hand for all three of wallDepthOffset's cases below, on both an isXWall (x-min,
+// outward -1) and a z-wall (z-max, outward +1) so the min/max sort is proven for both signs.
+const eket: PlaceableItemDef = {
+  itemId: "eket-cabinet",
+  footprint: { w: 2, d: 2 },
+  topFootprint: { w: 4, d: 4 },
+  allowedSurfaces: ["wall"],
+  wallHeightCells: 3,
+};
+const onZMax = place({ itemId: "eket-cabinet", surface: { kind: "wall", wall: "z-max" }, cell: { x: 6, y: 2 } });
+const onXMin = place({ itemId: "eket-cabinet", surface: { kind: "wall", wall: "x-min" }, cell: { x: 6, y: 2 } });
+
+test("case 1 — a MOUNTED item (!opensWall): back on the inner face, body into the room", () => {
+  const sizeZ = 0.35; // eket-cabinet's measured depth
+  const box = wallPlacementBox("z-max", onZMax, eket, sizeZ);
+  const spec = ROOM_SHELL.walls["z-max"];
+  // Tangent (x) and vertical (y) come straight from occupiedFootprint's cells, at WALL_CELL_SIZE.
+  assert.ok(Math.abs(box.min.x - (spec.from + 6 * WALL_CELL_SIZE)) < 1e-9);
+  assert.ok(Math.abs(box.max.x - (spec.from + 8 * WALL_CELL_SIZE)) < 1e-9);
+  assert.ok(Math.abs(box.min.y - (spec.bottom + 2 * WALL_CELL_SIZE)) < 1e-9);
+  assert.ok(Math.abs(box.max.y - (spec.bottom + 5 * WALL_CELL_SIZE)) < 1e-9);
+  // z-max's outward normal is +1: BACK (innerFace, where the anchor sits) is the box's smaller z; the FRONT is sizeZ closer to the room, i.e. smaller still — 0.35 m of body between the wall and the visible face.
+  assert.ok(Math.abs(box.max.z - spec.innerFace) < 1e-9, "back must sit exactly on the inner face");
+  assert.ok(Math.abs(box.min.z - (spec.innerFace - sizeZ)) < 1e-9, "front must be sizeZ into the room");
+
+  // Mirrored on an isXWall (x-min, outward -1): the sort flips, but back is still exactly on the face and the box still spans sizeZ into the room (increasing x, toward the room's interior).
+  const onX = wallPlacementBox("x-min", onXMin, eket, sizeZ);
+  const specX = ROOM_SHELL.walls["x-min"];
+  assert.ok(Math.abs(onX.min.x - specX.innerFace) < 1e-9, "back must sit exactly on x-min's inner face");
+  assert.ok(Math.abs(onX.max.x - (specX.innerFace + sizeZ)) < 1e-9, "front must be sizeZ into the room");
+});
+
+test("case 2 — a HOLE-CUTTER (opensWall) deeper than the wall: front flush with the inner face, body through the hole", () => {
+  const sizeZ = 0.218; // >= WALL_THICKNESS (0.12)
+  const box = wallPlacementBox("z-max", onZMax, { ...eket, opensWall: true }, sizeZ);
+  const spec = ROOM_SHELL.walls["z-max"];
+  assert.ok(Math.abs(box.min.z - spec.innerFace) < 1e-9, "front must be flush with the inner face");
+  assert.ok(Math.abs(box.max.z - (spec.innerFace + sizeZ)) < 1e-9, "back must extend the full depth through the wall");
+});
+
+test("case 3 — a HOLE-CUTTER shallower than the wall: recessed, back on the outer skin", () => {
+  const sizeZ = 0.036; // < WALL_THICKNESS
+  const box = wallPlacementBox("z-max", onZMax, { ...eket, opensWall: true }, sizeZ);
+  const spec = ROOM_SHELL.walls["z-max"];
+  assert.ok(Math.abs(box.max.z - (spec.innerFace + WALL_THICKNESS)) < 1e-9, "back must sit on the outer skin");
+  assert.ok(Math.abs(box.min.z - (spec.innerFace + WALL_THICKNESS - sizeZ)) < 1e-9, "front must be recessed by sizeZ from the outer skin");
+});
+
+test("wallPlacementBox's normal-axis centre always matches innerFace + outward * wallDepthOffset — the exact point the renderer seats the model at", () => {
+  for (const [wall, placement] of [["z-max", onZMax], ["x-min", onXMin]] as const) {
+    for (const [sizeZ, opensWall] of [[0.35, false], [0.218, true], [0.036, true]] as const) {
+      const box = wallPlacementBox(wall, placement, { ...eket, opensWall }, sizeZ);
+      const spec = ROOM_SHELL.walls[wall];
+      const expectedCentre = spec.innerFace + wallOutward(wall) * wallDepthOffset(sizeZ, opensWall);
+      const actualCentre = isXWall(wall) ? (box.min.x + box.max.x) / 2 : (box.min.z + box.max.z) / 2;
+      assert.ok(Math.abs(actualCentre - expectedCentre) < 1e-9, `${wall} sizeZ=${sizeZ} opensWall=${opensWall}`);
+      // And the box's full extent on that axis is exactly sizeZ.
+      const extent = isXWall(wall) ? box.max.x - box.min.x : box.max.z - box.min.z;
+      assert.ok(Math.abs(extent - sizeZ) < 1e-9);
+    }
   }
 });

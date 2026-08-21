@@ -29,7 +29,7 @@
 //   Three accents, three meanings, no overlap. Lavender = interactive (press this).
 //   Green = complete (you did this). Gold = earned (XP, score). If a fourth meaning shows up, it does NOT get a fourth colour — it gets a shape or a position.
 
-import { useWindowDimensions } from "react-native";
+import { StyleSheet, useWindowDimensions } from "react-native";
 import { createContext, useContext, useMemo } from "react";
 import type { TextStyle } from "react-native";
 import { ThemeId } from "@/src/game/core/type";
@@ -213,6 +213,24 @@ export const CREAM = {
 
 // The shadows for those same cream surfaces.
 // A separate scale from ELEVATION below, on purpose: that one is authored for the dark HUD (#000 at 0.35-0.45), and on cream a black shadow reads as grime rather than as height. These use a warm grey at low opacity instead. Four tiers, and the numbers are EXACTLY what the eight call sites had — this is an extraction, not a retune. KNOWN ODDITY 1: `panel` and `card` have IDENTICAL iOS shadows and differ only in Android `elevation` (6 vs 8). So on Android a purchase popup reads as floating above the shop panel it sits on, and on iOS the two read as the same height. One of those is wrong, and which one depends on the intent, so it is preserved here rather than guessed at. KNOWN ODDITY 2: `chip` uses #000 rather than the warm grey, because the close button it belongs to is itself the only dark thing on the cream.
+/** The catalogue card's edge and shadow, so the room's chrome — its bars, its bottom navigation, its
+ *  light buttons — reads as the same object as the cards on the build screen.
+ *
+ *  boxShadow is what actually draws the shadow on ANDROID: `elevation` ignores shadowColor and
+ *  shadowOpacity and paints its own grey ramp, which is why colour edits to those properties used to
+ *  change nothing on device. The shadowColor/Radius/Offset below are the iOS + old-architecture
+ *  fallback, and `elevation` only keeps Android's z-ordering honest. */
+export const CARD_CHROME = {
+  borderWidth: StyleSheet.hairlineWidth * 2,
+  borderColor: "rgba(60,50,40,0.12)",
+  boxShadow: "0px 5px 4px rgba(0,0,0,0.22)",
+  shadowColor: "#000",
+  shadowOpacity: 0.45,
+  shadowRadius: 2,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 6,
+} as const;
+
 export const CREAM_LIFT = {
   /** The popup frame: shop and inventory panels. */
   panel: {
@@ -491,19 +509,9 @@ export const SIZE = {
 // React Native has no font inheritance, so FONT has to appear in every text style. A style that sets fontWeight without FONT silently renders in the system font — that mismatch is the failure mode to watch for, not a missing font.
 export const FONT = "Lexend";
 
-/** The OpenDyslexic family name, as registered by the expo-font plugin in app.json. */
-export const READING_FONT = "OpenDyslexic";
-
-/**
- * The family for a READING surface — the objective line, a hint, a tutorial message.
- *
- * A hook rather than a constant, because it depends on a setting. Only the handful of components
- * where a player is genuinely reading call this; everything else keeps FONT, which stays a constant
- * so the other ~200 sheets are untouched.
- */
-export function useReadingFont(): string {
-  return useGameStore((s) => (s.settings.readingFont ? READING_FONT : FONT));
-}
+// The OpenDyslexic alternative and its `useReadingFont` hook were REMOVED 2026-08-19, along with
+// the setting that switched them on and the fonts themselves. Every reading surface — the objective
+// line, hints, the tutorial's messages, the questionnaire — takes FONT like everything else now.
 
 /** The named weights, as spreadable style fragments:
  *

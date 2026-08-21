@@ -26,6 +26,13 @@ const STEP_ADVANCE_DELAY_MS = 1200;
 // reward) cannot appear over an action that still looks unfinished.
 const EVENT_SETTLE_DELAY_MS: Partial<Record<TutorialEvent, number>> = {
   connector_tightened: 450,
+  // The tutorial's CLOSING event since the ceremonial reorient beat was removed (2026-08-19). It
+  // needs the pause more than the others did, not less: the fourth leg is recorded the moment it
+  // seats, while the part is still settling, and what follows is no longer another instruction card
+  // but the completion reward — which would otherwise land on top of a leg still visibly moving.
+  all_legs_installed: 500,
+  // Kept although no step waits on it any more: tutorial.tsx still raises it for ANY reorient
+  // action, and a furniture that reintroduces one should not also have to rediscover this delay.
   assembly_reoriented: 500,
 };
 

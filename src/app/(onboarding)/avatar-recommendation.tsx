@@ -192,7 +192,10 @@ const backdrop = require("@/src/assets/ui/profile-backdrop.jpg");
  *  load. Sampled from the art's own open area so the swap is invisible rather than a flash. */
 const BG_FALLBACK = "#E9E6DF";
 
-const mascot = require("../../assets/images/mascot/mascot.png");
+// The tutorial invitation's portrait: Modu at work, wrench on a screw — showing the player what the
+// tutorial IS rather than just who is asking. It replaces the plain bust this screen used to share
+// with create-account, which still has its own copy.
+const mascotAtWork = require("../../assets/images/mascot/modu-tool.png");
 // The room is the post-onboarding hub now that the home tab is gone.
 const homeRoute = "/room" as Href;
 
@@ -535,7 +538,11 @@ export default function AvatarRecommendationScreen() {
               </View>
             </View>
             <View style={styles.smallMascotCircle}>
-              <Image source={mascot} style={styles.smallMascot} />
+              {/* contain, not the Image default of cover: this art is a whole little SCENE — the
+                  mascot, the board, the screw and its motion lines — and cropping it to fill a
+                  square cuts the tool off the picture. The old portrait was a bust, so cover
+                  happened to suit it. */}
+              <Image source={mascotAtWork} style={styles.smallMascot} resizeMode="contain" />
             </View>
           </Animated.View>
         </View>
@@ -758,9 +765,11 @@ const makeStyles = (t: Theme, k = 1) =>
       backgroundColor: t.surface,
       marginLeft: -8,
     },
+    // 78, not 62: the artwork is padded to a square so nothing is cropped, so more of its box is
+    // empty than the old bust's was. Sized up to keep the same amount of drawn mark inside the same
+    // 88 circle. No borderRadius — it rounded the corners of a picture that no longer has any.
     smallMascot: {
-      width: Math.round(62 * k),
-      height: Math.round(62 * k),
-      borderRadius: Math.round(18 * k),
+      width: Math.round(78 * k),
+      height: Math.round(78 * k),
     },
   });

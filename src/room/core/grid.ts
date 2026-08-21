@@ -10,6 +10,8 @@ import {
   WALL_CELL_SIZE,
   WINDOW_BANDS,
   isXWall,
+  wallDepthOffset,
+  wallOutward,
   windowCellEntityName,
   type Vec3,
   type WallId,
@@ -413,6 +415,37 @@ export function topPlacementBox(
     min: { x: minX, y: ROOM_SHELL.floor.y + topHeight, z: minZ },
     max: { x: maxX, y: ROOM_SHELL.floor.y + topHeight + childHeight, z: maxZ },
   };
+}
+
+// The pickable VOLUME a wall placement occupies, in authored room units: its claimed cells across the wall's run and up its height, and — along the wall's OUTWARD normal — the item's true rendered depth, centred exactly where wallDepthOffset (roomShell) seats it for the renderer. A ray through a wall item's visible body used to be tested against the wall's inner-face PLANE instead, which is only ever true for something with zero depth: a real item's face sits sizeZ away from that plane (in front of it for a mount, through and past it for a hole-cutter — see wallDepthOffset's two policies), so pressing the part the player can actually see missed the wall grid's one thin cell entirely. sizeZ is the model's measured size.z at fitScale, matching floorPlacementBox's height contract; for wall items fitScale is always 1 (placeableItems.ts fitScale exempts anything that doesn't list "floor"), so callers may pass the raw measured size.z, but it is spelled out because nothing here should assume that exemption.
+export function wallPlacementBox(
+  wall: WallId,
+  placement: GridPlacement,
+  def: PlaceableItemDef,
+  sizeZ: number,
+): { min: Vec3; max: Vec3 } {
+  const spec = ROOM_SHELL.walls[wall];
+  const { w, d } = occupiedFootprint(placement, def);
+  const alongMin = spec.from + placement.cell.x * WALL_CELL_SIZE;
+  const alongMax = alongMin + w * WALL_CELL_SIZE;
+  const upMin = spec.bottom + placement.cell.y * WALL_CELL_SIZE;
+  const upMax = upMin + d * WALL_CELL_SIZE;
+  // The centre sits at innerFace + outward * offset (wallDepthOffset's own sign convention), and the box spans centre +/- sizeZ/2 along that same outward axis. outward can be -1 or +1, so the two endpoints are sorted into min/max explicitly rather than assumed ordered.
+  const outward = wallOutward(wall);
+  const centreOffset = wallDepthOffset(sizeZ, def.opensWall === true);
+  const normalA = spec.innerFace + outward * (centreOffset - sizeZ / 2);
+  const normalB = spec.innerFace + outward * (centreOffset + sizeZ / 2);
+  const normalMin = Math.min(normalA, normalB);
+  const normalMax = Math.max(normalA, normalB);
+  return isXWall(wall)
+    ? {
+        min: { x: normalMin, y: upMin, z: alongMin },
+        max: { x: normalMax, y: upMax, z: alongMax },
+      }
+    : {
+        min: { x: alongMin, y: upMin, z: normalMin },
+        max: { x: alongMax, y: upMax, z: normalMax },
+      };
 }
 
 // The centre of a wall placement — on the wall's inner face, so a frame hangs flat against it. Wall grids run at WALL_CELL_SIZE (0.25), the same pitch as the floor's cellSize — see roomShell.

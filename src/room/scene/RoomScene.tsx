@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { StyleSheet, View, useWindowDimensions } from "react-native";
+import { Dimensions, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import * as Haptics from "expo-haptics";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import {
@@ -20,6 +20,7 @@ import {
   useFilamentContext,
   useModel,
   type Entity,
+  type Mat4,
   type MaterialInstance,
 } from "react-native-filament";
 import { useSharedValue } from "react-native-worklets-core";
@@ -34,14 +35,11 @@ import {
 } from "../input/orbit";
 import {
   cellsFor,
-  floorPlacementBox,
   occupiedFootprint,
   resolveHost,
   rotatedFootprint,
   floorCellToRoom,
-  surfaceKey,
   topCellToRoom,
-  topPlacementBox,
   wallCellToRoom,
   windowCellNamesFor,
   type GridPlacement,
@@ -58,7 +56,13 @@ import {
 import { useVariantModelSource } from "./variantModel";
 import { GridOverlay } from "./GridOverlay";
 import { applySurfaceItem } from "./applySurfaceItem";
-import { SHELL_ORIGINAL } from "./shellMaterials";
+import {
+  SHELL_GRID,
+  SHELL_GRID_NODE,
+  SHELL_GRID_NODES,
+  SHELL_ORIGINAL,
+  shellGridWallNode,
+} from "./shellMaterials";
 import { useSurfaceTextures } from "./useSurfaceTextures";
 import { RoomAvatar } from "./RoomAvatar";
 import {
@@ -76,14 +80,11 @@ import {
   dragTopTarget,
   dragWallTarget,
   pickBoxAt,
+  placementPickBoxes,
   pointsAtSurface,
-  roomPointToScreen,
   screenPointToFloorCell,
-  screenPointToWallCell,
-  type PickBox,
   type TopTarget,
 } from "../input/picking";
-import { convexHull, type Pt } from "../core/gridOcclusion";
 import { anchorForCentre } from "../core/grid";
 import {
   CEILING_MATERIAL,
@@ -139,12 +140,37 @@ type OrbitState = {
   smoothed: { radius: number; phi: number; theta: number };
 };
 
+// Which editing grids belong on screen. Null while nothing is being placed; "floor" covers a tabletop ghost too, since a stacked piece is aimed at a host standing on the floor.
+type GridMode = "floor" | "wall" | null;
+
+// The plates to draw, given the mode and how visible each wall currently is. A wall ghost lights up EVERY wall the camera can see rather than only the one being dressed — a piece crosses corners while it is dragged, and a lattice that appeared only after the hand-off left the player nothing to aim at on the way there. Hidden walls are left out: their grid would hang in mid-air in front of a room whose wall has been culled out of the way.
+function gridNodesFor(mode: GridMode, byWall: Record<ShellWallId, number>): ReadonlySet<string> {
+  if (mode === null) return EMPTY_GRIDS;
+  if (mode === "floor") return FLOOR_GRID_ONLY;
+  const wanted = new Set<string>();
+  for (const wall of SHELL_WALL_IDS) {
+    if (byWall[wall] > WALL_GRID_MIN_ALPHA) wanted.add(shellGridWallNode(wall));
+  }
+  return wanted;
+}
+
+const EMPTY_GRIDS: ReadonlySet<string> = new Set();
+const FLOOR_GRID_ONLY: ReadonlySet<string> = new Set([SHELL_GRID_NODE]);
+// A wall carries its grid while it is more present than not. The plates are opaque and cannot fade with their wall, so this is a threshold rather than a ramp — set at the midpoint, where the wall is half gone and about to stop being somewhere the player can aim anyway.
+const WALL_GRID_MIN_ALPHA = 0.5;
+
+const sameSet = (a: ReadonlySet<string>, b: ReadonlySet<string>): boolean =>
+  a.size === b.size && [...a].every((v) => b.has(v));
+
 function RoomModel({
   onReady,
   orbit,
+  gridMode,
 }: {
   onReady: () => void;
   orbit: ReturnType<typeof useSharedValue<OrbitState>>;
+  /** Which family of editing grids to draw. Read through a ref by the per-frame culling loop, which is what decides which WALLS qualify. */
+  gridMode: GridMode;
 }) {
   // addToScene OFF, and it must stay off: this component decides what of the shell is in the scene, cell by cell, and useModel's own add is not a call it can sequence against. That add is `scene.addAssetEntities(asset)` — every node of the asset, unconditionally — dispatched from a WORKLET effect, i.e. queued onto the worklet thread while the effects below run synchronously on the JS thread. Whichever thread got there second won, so a shell that finished loading while the layout already held a window had its knocked-out cells put straight back, leaving the window buried in solid wall and every band showing its panel AND its 84 cells at once. Nothing healed it either: the effects below diff against the refs here, which still claimed the work was done.
   const model = useModel(ROOM_MODEL, { addToScene: false });
@@ -202,6 +228,10 @@ function RoomModel({
   }, [model, layout, activeEdit, scene]);
 
   // A wall with no window in it does not need its band diced at all. The shell ships BOTH forms — 84 cells and one solid Shell_Band_* panel covering the same volume — and exactly one of them is in the scene at a time. That matters: cells are the single largest draw-call cost in the room (4 walls x 84), and a typical layout has windows on at most one or two walls, so this is the difference between ~336 renderables and ~90. Both forms are geometrically identical, so the swap is invisible; leaving both in would z-fight. Which wall (if any) an active edit is dressing — read by the culling loop, which runs off the worklet's angle rather than React state and so cannot subscribe to the store itself.
+  // Read by the culling loop, which runs off the worklet's angle rather than React state and so cannot subscribe to anything itself.
+  const gridModeRef = useRef<GridMode>(null);
+  gridModeRef.current = gridMode;
+
   const editingWallRef = useRef<ShellWallId | null>(null);
   editingWallRef.current =
     activeEdit && activeEdit.placement.surface.kind === "wall"
@@ -327,9 +357,59 @@ function RoomModel({
           ]);
         }
       }
+      // The editing grids ride along here rather than in an effect of their own, because WHICH of them belongs on screen is a question about wall visibility — and this loop is the one place that knows it, fresh, off the smoothed angle. A wall ghost shows the grid on EVERY wall the camera can see, not only the wall being dressed: a piece is dragged from one wall to another across a corner, and a lattice that appeared only after the hand-off gave the player nothing to aim at on the way there. Hidden walls are excluded for the obvious reason — their grid would hang in mid-air in front of a room whose wall has been culled away.
+      const wanted = gridNodesFor(gridModeRef.current, byWall);
+      const shown = shownGrids.current;
+      const entities = gridEntities.current?.nodes;
+      if (entities && !sameSet(wanted, shown)) {
+        for (const [name, entity] of entities) {
+          const want = wanted.has(name);
+          if (want === shown.has(name)) continue;
+          if (want) scene.addEntity(entity);
+          else scene.removeEntity(entity);
+        }
+        shownGrids.current = wanted;
+      }
     });
     return () => cancelAnimationFrame(frame);
-  }, [model, orbit]);
+  }, [model, orbit, scene]);
+
+  // The editing grids. Ordinary shell geometry — five plates, one for the floor and one per wall, generated into the GLB by scripts/add-shell-grid.mts — so which one is showing is decided by putting that node's entity in the scene and taking the other four out.
+  //
+  // VISIBILITY IS ENTITY MEMBERSHIP, and it has to be: the plates are OPAQUE now (see add-shell-grid.mts for why they had to leave the transparent pass), so there is no alpha left to hide them with. All five share one material anyway, which could never have given five plates five alphas. Which plates are wanted is decided in the culling loop above, where wall visibility actually lives; this effect only takes the handles and settles the properties that never change.
+  //
+  // Drawn on the GPU rather than projected into the SVG overlay, which is what the floor grid used to do. That was not merely slower: an overlay has no depth buffer, so hiding the lines behind furniture meant clipping all 38 of them against the projected convex hull of every piece in the room, every frame, and it duplicated the camera — the grid projected through roomPointToScreen while the room was drawn by OrbitCameraRig, and the two disagree by the system-bar insets under edgeToEdge. Here Filament's own depth test does the occlusion exactly, for free, through the same camera the room is drawn with, and a piece hides the grid the way it hides everything else. On a WALL that property is worth even more than on the floor: a wall grid sits behind every piece already hanging there, and they occlude it without a line of code.
+  //
+  // NEVER lets a plate cast or receive a shadow. Not tidiness: these are unlit UI geometry standing 1 cm off the surfaces they describe, so a shadow-casting plate would print itself back onto that surface as hundreds of hard lines — and with the plates opaque, that shadow would be as solid as any wall's.
+  //
+  // Keyed on the ASSET, never on `model` — useModel rebuilds that as a fresh object literal on every render.
+  const gridEntities = useRef<{ asset: unknown; nodes: Map<string, Entity> } | null>(null);
+  const shownGrids = useRef<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    if (!asset) return;
+    // A shell built before the grid pass existed simply has no such material. The room is completely usable without it — a floor ghost still shows its own cells in the overlay — so this stays silent in production and says so once in dev, where it means the GLB needs rebuilding.
+    if (!shellMaterialsByName.current[SHELL_GRID]) {
+      if (__DEV__)
+        console.log(`[room] no "${SHELL_GRID}" material — rebuild the shell with npm run build:room`);
+      return;
+    }
+    const nodes = new Map<string, Entity>();
+    for (const name of SHELL_GRID_NODES) {
+      const entity = asset.getFirstEntityByName(name);
+      if (!entity) continue;
+      nodes.set(name, entity);
+      renderableManager.setCastShadow(entity, false);
+      renderableManager.setReceiveShadow(entity, false);
+      // addAssetEntities put every plate in the scene when the shell loaded. None of them belongs there until something is being placed, and the loop above only ever writes the DIFFERENCE against shownGrids — so the starting state has to be the empty one it believes in.
+      scene.removeEntity(entity);
+    }
+    gridEntities.current = { asset, nodes };
+    shownGrids.current = new Set();
+    return () => {
+      gridEntities.current = null;
+      shownGrids.current = new Set();
+    };
+  }, [asset, renderableManager, scene]);
 
   // The room's chosen surface items, as SAVED IDS. Through the viewing layer, same as `layout` above, so a visited room paints ITS finishes rather than the player's own.
   const finishes = usePlacementStore((s) => s.viewing?.finishes ?? s.finishes);
@@ -458,6 +538,26 @@ const RoomCeilingLight = memo(function RoomCeilingLight({
   return null;
 });
 
+// The LIVE placement of the host a stacked piece stands on: the ghost while that host is being dragged, so children ride the drag; null for a floor or wall piece, and for an orphan whose host is gone.
+//
+// THROUGH THE VIEWING LAYER, exactly as the scene's own `layout` selector is (see both call sites of `s.viewing?.layout ?? s.layout`), and that is the whole reason this lookup is shared rather than written out at each of its three call sites. Searching `s.layout` — the player's OWN room — meant that in a friend's room every stacked piece looked for its host among the visitor's furniture instead of the host's: instance ids are `itemId#n` and deterministic (see nextInstanceId), so the lookup either MISSED, orphaning a piece that is standing on something in plain sight, or — worse — hit the visitor's own same-named piece and positioned the child on a table that is not in the room.
+function useHostPlacement(placement: GridPlacement): GridPlacement | null {
+  const hostId =
+    placement.surface.kind === "furniture"
+      ? placement.surface.hostInstanceId
+      : null;
+  return usePlacementStore((s) =>
+    hostId === null
+      ? null
+      : s.activeEdit && s.activeEdit.placement.instanceId === hostId
+        ? s.activeEdit.placement
+        : ((s.viewing?.layout ?? s.layout).find((p) => p.instanceId === hostId) ?? null),
+  );
+}
+
+// Whether a placement needs a host at all — a furniture surface does, everything else stands on the room itself.
+const needsHost = (placement: GridPlacement): boolean => placement.surface.kind === "furniture";
+
 const RoomLit = memo(function RoomLit({
   placement,
   item,
@@ -473,13 +573,7 @@ const RoomLit = memo(function RoomLit({
       ? placement.surface.hostInstanceId
       : null;
   // Same live-host subscription LoadedItem uses: a lamp standing on a dragged table carries its light along, ghost included.
-  const hostPlacement = usePlacementStore((s) =>
-    hostId === null
-      ? null
-      : s.activeEdit && s.activeEdit.placement.instanceId === hostId
-        ? s.activeEdit.placement
-        : (s.layout.find((p) => p.instanceId === hostId) ?? null),
-  );
+  const hostPlacement = useHostPlacement(placement);
   const hostDef = hostPlacement
     ? getRoomItemDef(hostPlacement.itemId)
     : undefined;
@@ -610,8 +704,11 @@ const PlacedItem = memo(function PlacedItem({
     () => onLoaded?.(placement.instanceId),
     [onLoaded, placement.instanceId],
   );
+  // An orphan — a stacked piece whose host is not in the room being drawn — renders NOTHING, and it has to be refused here, before a model is ever loaded, rather than by the transform effect bailing further down. The effect cannot decline a piece it has already normalized: transformToUnitCube WRITES a transform, so a bail after it left the model standing at unit-cube scale, and the unit cube is not a small mistake — SCENE_SCALE normalizes the whole 5.3 m diorama to exactly those 2 units, so a 30 cm ornament drew at the size of the ROOM. That is the "objects got bigger" report: nothing was scaled up, an orphan was simply never scaled DOWN.
+  const host = useHostPlacement(placement);
   // No model yet — a bought item whose storage URL is still being probed (it has no bundled fallback) — must render NOTHING: useModel has no empty source, and feeding it the room shell would briefly draw a second whole room as the "piece".
   if (!item || !source) return null;
+  if (needsHost(placement) && !host) return null;
   return (
     <LoadedItem
       item={item}
@@ -670,25 +767,46 @@ const LoadedItem = memo(function LoadedItem({
     if (model.state === "loaded") onLoaded?.();
   }, [model.state, onLoaded]);
 
-  const hostId =
-    placement.surface.kind === "furniture"
-      ? placement.surface.hostInstanceId
-      : null;
   // The host's LIVE placement — the ghost while the host is being dragged, so children ride the drag; null for floor/wall items and for orphans whose host is gone. Subscribing here is what re-runs the transform effect on every host cell crossing.
-  const hostPlacement = usePlacementStore((s) =>
-    hostId === null
-      ? null
-      : s.activeEdit && s.activeEdit.placement.instanceId === hostId
-        ? s.activeEdit.placement
-        : (s.layout.find((p) => p.instanceId === hostId) ?? null),
-  );
+  const hostPlacement = useHostPlacement(placement);
+
+  // The unit-cube normalization for the model currently loaded here — see the effect below for why it is held rather than recomputed.
+  //
+  // Keyed on the SOURCE, which is what decides which GLB is loaded and therefore what its unit cube is. Not on the root entity: Filament's EntityManager recycles ids, so a colour swap that releases one asset and loads another can legitimately hand the new model the id the old one just gave up — and a cache that trusted that id would serve the previous GLB's normalization for the new mesh, which is the very class of wrong-size bug this is here to prevent.
+  const sourceKey = typeof source === "object" ? source.uri : String(source);
+  const unitBase = useRef<{ key: string; matrix: Mat4; data: number[] } | null>(null);
 
   useEffect(() => {
     if (model.state !== "loaded") return;
 
+    // Resolved BEFORE the unit-cube step below, and the ORDER is the load-bearing part: transformToUnitCube writes a transform, so a bail after it leaves the piece at unit-cube scale — the size of the whole room (see PlacedItem, where an orphan is refused a model in the first place). This is the second line of that defence, for a host that disappears between the two.
+    const hostDef = hostPlacement ? getRoomItemDef(hostPlacement.itemId) : undefined;
+    const hostItem = hostPlacement ? getRoomItem(hostPlacement.itemId) : null;
+    // Spelled out rather than via needsHost() so the dependency array can stay on `placement.surface` alone — depending on the whole placement would re-run this on every cell of a drag.
+    if (placement.surface.kind === "furniture" && (!hostPlacement || !hostDef || !hostItem)) return;
+
     // transformToUnitCube = scaling(2/maxExtent) · translation(-center) — a KNOWN matrix, used here as a normalization base so the algebra below is exact for any GLB origin.
-    transformManager.transformToUnitCube(model.rootEntity, model.boundingBox);
-    const unit = transformManager.getTransform(model.rootEntity);
+    //
+    // COMPUTED ONCE PER MODEL AND CACHED, and that is not an optimisation. transformToUnitCube does not RETURN the matrix, it WRITES it — and what it writes is the model scaled to two scene units, which is the size of the entire room (SCENE_SCALE normalises the whole 5.3 m diorama to exactly those 2 units). The real transform is written a few statements later, but Filament renders on its own thread, so any frame it samples between the two shows the piece at room scale. That is the "bought items glitch to very big and back" report: one frame, one piece, gone before you can look at it.
+    //
+    // It bit hardest while DRAGGING because this effect depends on `model`, which useModel rebuilds as a fresh object literal on every render — so the window was re-opened on every render of a ghost being dragged, not merely on every cell it crossed. Caching closes it for every update after the first: a drag now composes from a matrix that is already in hand and writes exactly one transform per move.
+    //
+    // Keyed on the ROOT ENTITY rather than on the component, because a colour swap loads a different GLB into the same LoadedItem and its unit cube is its own.
+    if (unitBase.current?.key !== sourceKey) {
+      transformManager.transformToUnitCube(model.rootEntity, model.boundingBox);
+      const matrix = transformManager.getTransform(model.rootEntity);
+      unitBase.current = { key: sourceKey, matrix, data: [...matrix.data] };
+    }
+    const unit = unitBase.current.matrix;
+
+    // Holding that base is only sound if composing from it leaves it alone. Mat4's scaling/rotate/translate are documented to RETURN a new matrix rather than modify the receiver, and every branch below chains all three off `unit` — so if the documentation were ever wrong, the base would accumulate a whole drag's worth of transforms and the piece would grow without bound instead of glitching once. That failure can only show up on device, so it says so there rather than being assumed away.
+    const apply = (transform: Mat4): void => {
+      transformManager.setTransform(model.rootEntity, transform);
+      const base = unitBase.current;
+      if (__DEV__ && base && base.matrix.data.some((v, i) => v !== base.data[i])) {
+        console.log("[room] unit-cube base was mutated by matrix composition — caching it is unsafe");
+      }
+    };
 
     const scale = fitScale(item) * SCENE_SCALE * arrivalScale;
     const unitScale = 2 / Math.max(item.size.x, item.size.y, item.size.z);
@@ -720,16 +838,12 @@ const LoadedItem = memo(function LoadedItem({
           anchor.y,
           anchor.z + (isXWall(wall) ? 0 : wallOutward(wall) * depthOffset),
         ]);
-      transformManager.setTransform(model.rootEntity, transform);
+      apply(transform);
       return;
     }
 
     if (placement.surface.kind === "furniture") {
-      // A stacked piece composes: host cell-box centre + host yaw over its host-local offset + top height, then its OWN yaw on top of the host's — topCellToRoom owns the maths so the grid and this transform can never disagree. An orphan (host gone mid-sync) renders nowhere rather than at a stale spot.
-      const hostDef = hostPlacement
-        ? getRoomItemDef(hostPlacement.itemId)
-        : undefined;
-      const hostItem = hostPlacement ? getRoomItem(hostPlacement.itemId) : null;
+      // A stacked piece composes: host cell-box centre + host yaw over its host-local offset + top height, then its OWN yaw on top of the host's — topCellToRoom owns the maths so the grid and this transform can never disagree. The orphan case is already refused above, before the unit-cube step, which is the only place it can be refused safely; this repeat is what narrows the three values for the compiler.
       if (!hostPlacement || !hostDef || !hostItem) return;
       const host = { placement: hostPlacement, def: hostDef };
       const topHeight = hostItem.size.y * fitScale(hostItem);
@@ -743,7 +857,7 @@ const LoadedItem = memo(function LoadedItem({
           [0, 1, 0],
         )
         .translate([centre.x, centre.y + (scale * item.size.y) / 2, centre.z]);
-      transformManager.setTransform(model.rootEntity, transform);
+      apply(transform);
       return;
     }
 
@@ -755,7 +869,7 @@ const LoadedItem = memo(function LoadedItem({
       .scaling([scale / unitScale, scale / unitScale, scale / unitScale])
       .rotate((placement.rotSteps * Math.PI) / 2, [0, 1, 0])
       .translate([centre.x, centre.y + (scale * item.size.y) / 2, centre.z]);
-    transformManager.setTransform(model.rootEntity, transform);
+    apply(transform);
   }, [
     hostPlacement,
     arrivalScale,
@@ -764,6 +878,7 @@ const LoadedItem = memo(function LoadedItem({
     placement.cell,
     placement.rotSteps,
     placement.surface,
+    sourceKey,
     transformManager,
   ]);
 
@@ -974,26 +1089,6 @@ function useSmoothedOrbit(
   return shown.current;
 }
 
-// A piece's screen-space silhouette: its eight box corners projected and hulled, for the grid overlay to dim its lines against (see ../core/gridOcclusion). Null when any corner falls behind the eye, which the overlay reads as "this piece hides nothing" — the conservative answer, and only reachable with the camera zoomed inside a piece.
-function boxHull(
-  box: PickBox,
-  viewport: { width: number; height: number },
-  angles: OrbitAngles,
-): Pt[] | null {
-  const corners: Pt[] = [];
-  for (const x of [box.min.x, box.max.x]) {
-    for (const y of [box.min.y, box.max.y]) {
-      for (const z of [box.min.z, box.max.z]) {
-        const p = roomPointToScreen({ x, y, z }, viewport, angles);
-        if (!p) return null;
-        corners.push(p);
-      }
-    }
-  }
-  const hull = convexHull(corners);
-  return hull.length >= 3 ? hull : null;
-}
-
 export function RoomScene({
   rotationY,
   zoom,
@@ -1008,7 +1103,53 @@ export function RoomScene({
   const hour = useGameStore((s) => s.roomTimeOfDay);
   const sun = sunPreset(hour);
   const handleReady = useCallback(() => setLoaded(true), []);
-  const { width, height } = useWindowDimensions();
+  const win = useWindowDimensions();
+  // THE VIEW'S OWN BOX, measured — not the window's.
+  //
+  // Everything the overlay draws and everything the picker inverts is projected through this
+  // viewport, and it has to be the box FILAMENT RENDERS INTO or the two cameras disagree. They are
+  // not the same rectangle: `edgeToEdgeEnabled` is on (app.json), so the scene draws behind the
+  // system bars while useWindowDimensions reports the window between them. The SVG overlay made
+  // that worse by being absoluteFill — filling the container — while sizing its own coordinate
+  // space from the window, so the grid was both offset AND scaled against the room it sits on.
+  //
+  // The window is the fallback for the frames before the first layout lands, which is the only time
+  // it is ever right by accident.
+  const [box, setBox] = useState<{ width: number; height: number } | null>(null);
+  const onLayout = useCallback(
+    (e: LayoutChangeEvent) => {
+      const { width: w, height: h } = e.nativeEvent.layout;
+      setBox((prev) => (prev && prev.width === w && prev.height === h ? prev : { width: w, height: h }));
+    },
+    [],
+  );
+  const width = box?.width ?? win.width;
+  const height = box?.height ?? win.height;
+
+  // ── TEMPORARY DIAGNOSTIC — remove once the room is confirmed correct on device ──
+  //
+  // Prints the three rectangles that have to agree. `screen` is the whole display, `window` is what
+  // React Native reports (and what the overlay used to project through), `view` is the box Filament
+  // actually renders into. If window and view differ, the grid is drawn for a camera the room is not
+  // being rendered with, and the difference IS the offset you can see.
+  //
+  // Logged once per distinct measurement rather than every render, so it does not flood Metro.
+  const loggedRef = useRef("");
+  useEffect(() => {
+    if (!box) return;
+    const scr = Dimensions.get("screen");
+    const key = `${box.width}x${box.height}`;
+    if (loggedRef.current === key) return;
+    loggedRef.current = key;
+    console.log(
+      "[room viewport]",
+      `screen ${scr.width}x${scr.height}`,
+      `| window ${win.width}x${win.height}`,
+      `| view ${box.width}x${box.height}`,
+      `| delta ${(win.width - box.width).toFixed(1)}x${(win.height - box.height).toFixed(1)}`,
+      `| aspect window ${(win.width / win.height).toFixed(4)} view ${(box.width / box.height).toFixed(4)}`,
+    );
+  }, [box, win.width, win.height]);
   const smallestSide = Math.min(width, height);
   const viewportRef = useRef({ width, height });
   viewportRef.current = { width, height };
@@ -1104,50 +1245,20 @@ export function RoomScene({
     orbit.value.raw.theta = clamped.theta;
   }, [orbit, rotationY, zoom]);
 
-  // The floor grid is drawn for a floor or tabletop ghost only — a wall ghost gets its feedback from the tinted model and the live hole preview instead.
+  // WHICH grid plate the scene should draw: the floor's for a floor or tabletop ghost, and the edited wall's own for a wall ghost. Exactly one at a time — the other surface's lattice is not something the player is aiming at, and drawing both would clutter the very view they are judging the fit in. Null whenever nothing is being placed.
+  //
+  // A wall ghost gets the grid on top of what it already had (the tinted model and the live hole preview), not instead of it: those say whether the piece fits, and the lattice is what lets the player line it up with what is already hanging there. The wall being edited is pinned visible for the length of the edit by the culling loop, so its plate cannot fade out from under the ghost.
+  const gridMode: GridMode =
+    activeEdit === null
+      ? null
+      : activeEdit.placement.surface.kind === "wall"
+        ? "wall"
+        : "floor";
+  // The SVG overlay's green/red cells stay a floor-and-tabletop affair: they are quads on a horizontal plane, and a wall ghost's fit is already reported by the tint on the model itself.
   const showGrid =
     activeEdit !== null && activeEdit.placement.surface.kind !== "wall";
-  // Everything below this line exists only while that grid is up, and follows the camera frame by frame so the grid stays welded to the floor through a drag, a pinch and the glide after both.
+  // The GHOST's own cells still follow the camera frame by frame, so they stay welded to the floor through a drag, a pinch and the glide after both. The grid lines themselves no longer need this — they are scene geometry now, drawn by the same camera as the room (see RoomModel) — so what this mirror feeds is a handful of quads rather than 38 lines clipped against every piece in the room.
   const gridAngles = useSmoothedOrbit(orbit, showGrid);
-
-  // The volumes that hide grid lines, in room units: every committed piece standing on the floor or on a top. Recomputed only when the layout or the catalog changes — the per-frame work is the projection below, not this. The GHOST is deliberately absent. It is not in `layout` anyway, but the rule matters: the piece under the finger must never dim the cells it is being aimed at, which are the whole point of the overlay.
-  const occluderBoxes = useMemo(() => {
-    if (!showGrid) return [];
-    const defs = roomItemDefs();
-    const boxes: PickBox[] = [];
-    for (const p of layout) {
-      const item = getRoomItem(p.itemId);
-      if (!item) continue;
-      const height = item.size.y * fitScale(item);
-      if (p.surface.kind === "floor") {
-        boxes.push(floorPlacementBox(p, item.def, height));
-      } else if (p.surface.kind === "furniture") {
-        const host = resolveHost(p.surface.hostInstanceId, layout, defs);
-        const hostItem = host ? getRoomItem(host.placement.itemId) : null;
-        if (!host || !hostItem) continue;
-        boxes.push(
-          topPlacementBox(
-            host,
-            p,
-            item.def,
-            hostItem.size.y * fitScale(hostItem),
-            height,
-          ),
-        );
-      }
-    }
-    return boxes;
-    // roomItems is a dep for its identity alone: it is what changes when the catalog sync lands, and a piece whose item row arrives late must start occluding then.
-  }, [layout, roomItems, showGrid]);
-
-  // Projected fresh every frame the camera moves, because the silhouettes turn with it. A dozen boxes at eight corners each is a few hundred multiplies — cheaper by far than the SVG diff it feeds.
-  const occluders = useMemo(
-    () =>
-      occluderBoxes
-        .map((box) => boxHull(box, { width, height }, gridAngles))
-        .filter((hull): hull is Pt[] => hull !== null),
-    [occluderBoxes, gridAngles, width, height],
-  );
 
   // While a ghost is active, the finger owns the ghost, not the camera: the same drag that orbited a moment ago now slides the piece cell to cell under the fingertip. A wall ghost slides on ITS wall and hops at the corner; which wall it lands on — and the hysteresis that keeps a finger near a corner from teleporting it — is dragWallTarget's job.
   const dragGhost = useCallback(
@@ -1330,79 +1441,28 @@ export function RoomScene({
       // screen and buzz for a piece nobody can see. editPlacement refuses too.
       if (state.activeEdit || state.viewing) return;
       const editableLayout = [...state.layout, ...state.reserved];
-      const hits = (
-        surface: GridPlacement["surface"],
-        pointed: { x: number; y: number } | null,
-      ) =>
-        pointed
-          ? editableLayout.find((p) => {
-              const def = getRoomItemDef(p.itemId);
-              if (!def || surfaceKey(p.surface) !== surfaceKey(surface))
-                return false;
-              return cellsFor(p, def).some(
-                (c) => c.x === pointed.x && c.y === pointed.y,
-              );
-            })
-          : undefined;
-      // Floor pieces are picked against their VOLUME, not the floor plane under the finger: a piece stands up out of its cells, so the ray through its visible body meets the floor one to three cells BEHIND it (one per 20 cm of height at the rest camera). Plane-picking therefore left only a ~52 x 26 px sliver at a piece's base live, which is what made the long-press feel broken — and, when the cell behind was occupied, picked up the wrong piece.
-      const boxes: { placement: GridPlacement; box: PickBox }[] = [];
-      for (const p of editableLayout) {
-        const item = getRoomItem(p.itemId);
-        if (!item) continue;
-        if (p.surface.kind === "floor") {
-          boxes.push({
-            placement: p,
-            box: floorPlacementBox(p, item.def, item.size.y * fitScale(item)),
-          });
-        } else if (p.surface.kind === "furniture") {
-          // A stacked piece's box stands on its host's top, which is what lets the ray hit IT before the larger host box beneath — no priority code, just geometry.
-          const host = resolveHost(
-            p.surface.hostInstanceId,
-            editableLayout,
-            roomItemDefs(),
-          );
-          const hostItem = host ? getRoomItem(host.placement.itemId) : null;
-          if (!host || !hostItem) continue;
-          boxes.push({
-            placement: p,
-            box: topPlacementBox(
-              host,
-              p,
-              item.def,
-              hostItem.size.y * fitScale(hostItem),
-              item.size.y * fitScale(item),
-            ),
-          });
-        }
-      }
-      const onFloor = pickBoxAt(
+      // Every piece a real pickable VOLUME, on every surface alike, in ONE pass — so pickBoxAt's nearest-wins rule reaches across surface kinds and a chair standing in front of a wall painting wins on distance rather than on a precedence rule. Why volume and never the plane under the finger — and what plane-picking does to a deep wall item like the eket cabinet — is in placementPickBoxes, along with why that function is tested rather than this callback.
+      const boxes = placementPickBoxes(
+        editableLayout,
+        (itemId) => {
+          const item = getRoomItem(itemId);
+          if (!item) return null;
+          const scale = fitScale(item);
+          return {
+            def: item.def,
+            size: { x: item.size.x * scale, y: item.size.y * scale, z: item.size.z * scale },
+          };
+        },
+        (wall) => wallAlpha(wall, orbit.value.smoothed.theta) > 0.5,
+      );
+      const picked = pickBoxAt(
         px,
         py,
         viewportRef.current,
         orbit.value.smoothed,
         boxes.map((b) => b.box),
       );
-      // Then every wall the camera can actually see — picking a HIDDEN wall would hand the player a piece they cannot look at. Wall items hang flat ON the plane this tests, so they need no volume of their own; the floor pass runs first because pieces stand in front of walls.
-      const visible = SHELL_WALL_IDS.filter(
-        (w) => wallAlpha(w, orbit.value.smoothed.theta) > 0.5,
-      );
-      const under =
-        (onFloor !== null ? boxes[onFloor].placement : undefined) ??
-        visible.reduce<GridPlacement | undefined>(
-          (found, wall) =>
-            found ??
-            hits(
-              { kind: "wall", wall },
-              screenPointToWallCell(
-                px,
-                py,
-                viewportRef.current,
-                orbit.value.smoothed,
-                wall,
-              ),
-            ),
-          undefined,
-        );
+      const under = picked !== null ? boxes[picked].placement : undefined;
       if (!under) return;
       // The hold has no other confirmation — no ghost appears until the store updates a frame later — so the pick-up announces itself the way every other grab in the app does.
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -1522,7 +1582,7 @@ export function RoomScene({
   );
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onLayout={onLayout}>
       <FilamentScene>
         <FilamentView style={styles.filament}>
           {/* No manipulator: OrbitCameraRig owns the eye every frame. The 68 mm lens is the
@@ -1572,7 +1632,7 @@ export function RoomScene({
           {/* The room's own ceiling light. Off at the three daylight hours by default and on after dark, with the player's switch overriding either way — see ceilingLightOn. */}
           {ceilingLight ? <RoomCeilingLight light={sun.interiorLight} /> : null}
           <RoomPostProcess />
-          <RoomModel onReady={handleReady} orbit={orbit} />
+          <RoomModel onReady={handleReady} orbit={orbit} gridMode={gridMode} />
           <RoomAvatar />
           {/* Committed pieces AND the ghost render from ONE array, and that is load-bearing: React keys only match within the same children array, so a ghost in its own sibling slot is a different element even with the same key — pick-up and confirm then unmount/remount the piece, and useModel reloads the whole GLB each time (useBuffer has no cache). That remount is what made a dragged piece invisible until seconds after settling, and where the old "Pointer FilamentAssetWrapper has already been manually released" race lived. In one array the key genuinely matches, the component morphs, and the model loads exactly once per piece.
               An id the catalog doesn't know (yet) has no model or dimensions — skip it. */}
@@ -1616,12 +1676,11 @@ export function RoomScene({
           <OrbitCameraRig orbit={orbit} />
         </FilamentView>
       </FilamentScene>
-      {/* The overlay draws the FLOOR grid, and the ghost's highlight quads on whatever plane the ghost stands on — the floor, or a host's tabletop. A wall ghost gets its feedback from the tinted model and the live hole preview instead, so the overlay stays down for walls only. */}
+      {/* The overlay draws the ghost's highlight quads ONLY — the floor grid itself is scene geometry (RoomModel). The two are split by which way each one needs occlusion to go: a grid line should be hidden by a piece standing over it, which is what the depth buffer does for free, while these quads must stay visible THROUGH the very piece being placed, since they are the answer to "will it fit here" and the ghost model stands directly on them. A wall ghost gets its feedback from the tinted model and the live hole preview instead, so the overlay stays down for walls only. */}
       {showGrid && activeEdit ? (
         <GridOverlay
           viewport={{ width, height }}
           angles={gridAngles}
-          occluders={occluders}
           ghostQuads={(() => {
             const p = activeEdit.placement;
             const def =

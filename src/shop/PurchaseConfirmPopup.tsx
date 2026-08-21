@@ -2,41 +2,61 @@
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 
 import { COIN_ICON } from "@/src/components/iconAssets";
+import {
+  FRAME_FILL,
+  FRAME_RADIUS,
+  FRAME_STROKE,
+  FRAME_STROKE_WIDTH,
+} from "@/src/components/ItemTileFrame";
+import { CatalogThumb } from "@/src/components/CatalogThumb";
+import { ItemSpinPreview } from "./ItemSpinPreview";
 import { CREAM, CREAM_LIFT, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 
-// Sage for accept, warm clay for decline, each with a darker stroke of its own hue
-const YES_FILL = "#C2CEB1";
-const YES_BORDER = "#919A85";
-const NO_FILL = "#E1C1B3";
-const NO_BORDER = "#A99186";
+
+const YES_FILL = "#8D7BA8";
+const YES_BORDER = "#605473";
+const NO_FILL = "#595551";
+const NO_BORDER = "#393837";
+const PANEL_STROKE = "#544F4B";
+const PANEL_STROKE_WIDTH = 1.2;
+const BUTTON_HEIGHT = 34;
+// Shared with the surface fallback, which sizes its picture from the frame
+const WELL_SIZE = { width: 200, height: 158 };
 const COIN_SIZE = 34;
 const PILL_HEIGHT = 22;
-// How far the price pill hides behind the coin, as on the item tiles
 const PRICE_TUCK = 22;
 
 export function PurchaseConfirmPopup({
+  itemId,
   name,
   price,
+  surface,
   onConfirm,
   onClose,
 }: {
+  itemId: string;
   name: string;
   price: number;
+  /** A wallpaper or a floor: it has no model to turn, so it shows its tile picture instead */
+  surface?: boolean;
   onConfirm: () => void;
   onClose: () => void;
 }) {
   const s = useFixedStyles(makeStyles);
   return (
     <View style={s.layer}>
-      {/* Tapping away declines, the same as No */}
+   
       <Pressable style={s.scrim} onPress={onClose} />
-
       <View style={s.card} accessibilityViewIsModal accessibilityRole="alert">
-        {/* Placeholder well, matching the grid tiles until item art exists */}
-        <View style={s.well} />
-
-        {/* A row, not one Text: the coin badge is a View and cannot be inlined into a string */}
+        {/* A surface has no model to turn, so it shows the same picture the grid tile does */}
+        {surface ? (
+          <View style={s.well}>
+            <CatalogThumb source="bought" itemId={itemId} surface size={WELL_SIZE.height} />
+          </View>
+        ) : (
+          <ItemSpinPreview itemId={itemId} size={WELL_SIZE.height} style={s.well} />
+        )}
         <View style={s.question}>
           <Text style={s.ask}>Purchase </Text>
           <Text style={[s.ask, s.askName]}>{name}</Text>
@@ -75,14 +95,12 @@ export function PurchaseConfirmPopup({
 
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
-    // Above the shop layer it sits on top of
     layer: {
       ...StyleSheet.absoluteFillObject,
       zIndex: 60,
       alignItems: "center",
       justifyContent: "center",
     },
-    // t.scrim: the same shading OverlaySheet uses, so every popup dims the same way
     scrim: {
       ...StyleSheet.absoluteFillObject,
       backgroundColor: t.scrim,
@@ -91,6 +109,8 @@ const makeStyles = (t: Theme) =>
       width: 460,
       maxWidth: "86%",
       borderRadius: 24,
+      borderWidth: PANEL_STROKE_WIDTH,
+      borderColor: PANEL_STROKE,
       backgroundColor: CREAM.card,
       paddingHorizontal: 30,
       paddingTop: 26,
@@ -99,12 +119,15 @@ const makeStyles = (t: Theme) =>
       ...CREAM_LIFT.card,
     },
     well: {
-      width: 200,
-      height: 158,
-      borderRadius: 6,
-      backgroundColor: "#FFFFFF",
-      borderWidth: 1,
-      borderColor: t.border,
+      ...WELL_SIZE,
+      alignItems: "center",
+      justifyContent: "center",
+      // Clips the turning model to the frame's rounded corners
+      overflow: "hidden",
+      borderRadius: FRAME_RADIUS,
+      backgroundColor: FRAME_FILL,
+      borderWidth: FRAME_STROKE_WIDTH,
+      borderColor: FRAME_STROKE,
     },
     question: {
       marginTop: 22,
@@ -125,13 +148,11 @@ const makeStyles = (t: Theme) =>
       flexDirection: "row",
       alignItems: "center",
     },
-    // zIndex keeps the coin on top of the pill tucked under it
     priceIcon: {
       zIndex: 2,
       width: COIN_SIZE,
       height: COIN_SIZE,
     },
-    // paddingLeft = tuck + paddingRight, so the number centres in the visible part
     pricePill: {
       marginLeft: -PRICE_TUCK,
       minWidth: 58,
@@ -154,16 +175,15 @@ const makeStyles = (t: Theme) =>
     actions: {
       marginTop: 20,
       flexDirection: "row",
-      gap: 22,
+      gap: 40,
     },
     button: {
       minWidth: 76,
-      height: 34,
-      borderRadius: 13,
-      borderWidth: 0.4,
+      height: BUTTON_HEIGHT,
+      borderRadius: BUTTON_HEIGHT / 2,
+      borderWidth: 0.8,
       alignItems: "center",
       justifyContent: "center",
-      // Barely there, so the buttons lift off the card without reading as raised chips
       ...CREAM_LIFT.control,
     },
     yes: {
@@ -180,6 +200,6 @@ const makeStyles = (t: Theme) =>
     buttonText: {
       ...LEXEND.regular,
       fontSize: 15,
-      color: CREAM.ink,
+      color: CREAM.card,
     },
   });

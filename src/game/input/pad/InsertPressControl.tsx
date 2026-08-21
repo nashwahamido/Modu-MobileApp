@@ -4,7 +4,7 @@ import { engageAxis } from "@/src/game/core/evaluation/engagement";
 import { stageShiftFor } from "@/src/game/core/model/staging";
 import { AssemblyAction } from "@/src/game/core/type";
 import { MALLET_TAPS, TIGHTEN_TOTAL_DEG, useGameStore } from "@/src/game/core/store";
-import { PressPad, pressPadStyles as styles } from "@/src/game/input/pad/PressPad";
+import { PressPad, pressPadStyles as styles, HAND_ICON } from "@/src/game/input/pad/PressPad";
 import type { OffsetDriver } from "../../scene/offsetDriver";
 import { useMirror } from "@/src/game/ui/system/handedness";
 
@@ -46,7 +46,7 @@ export function InsertPressControl({ action, sinkDriver }: Props) {
 
   return (
     <View style={m(styles.wrap)} pointerEvents="box-none">
-      <PressPad icon="✋" resetKey={action.actionId} onPress={press} />
+      <PressPad icon={HAND_ICON} resetKey={action.actionId} onPress={press} />
       <Text style={styles.hint}>
         Press to fit it in · {presses}/{MALLET_TAPS}
       </Text>
