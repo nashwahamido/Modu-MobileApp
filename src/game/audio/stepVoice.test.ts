@@ -2,7 +2,14 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
 import { stepVoicePath, VOICEOVER_BUCKET } from "./stepVoice";
-import type { Furniture } from "@/src/game/core/type";
+import { composeFurnitureActions } from "@/src/game/core/composition/composeActions";
+import { composeLabels } from "@/src/game/core/composition/composeLabels";
+import { applyStructure } from "@/src/game/core/model/liaisons";
+import { buildInstructions, instructionText } from "@/src/game/core/presentation/instructions";
+import { HARDWARE } from "@/src/game/content/hardware";
+import * as EKET from "@/src/game/content/furnitures/EKET/authored";
+import { PARTS as EKET_PARTS } from "@/src/game/content/furnitures/EKET/parts.gen";
+import type { ActionId, Furniture, PartDef } from "@/src/game/core/type";
 
 // A stand-in LACK: the real module requires GLBs and PNGs, which node cannot parse. What matters
 // here is the SHAPE — repeated actions sharing one line, in authored order — not the geometry.
@@ -87,6 +94,78 @@ test("the verified blocks start where the script says they do", () => {
   assert.equal(first("dalfred-stool", "simple"), "dalferd-simple/dalferd-simple-90.mp3");
   assert.equal(first("bekvam-stool", "standard"), "bekvam-standard/bekvam-standard-241.mp3");
   assert.equal(first("bekvam-stool", "simple"), "bekvam-simple/bekvam-simple-257.mp3");
+  // EKET is checked separately, against its REAL line list rather than the stand-in — see below.
+});
+
+// EKET, against the actual authored content instead of the stand-in above, because it is the block
+// that was wrong: both its levels were out by 20, and standard's wrong numbers were all real files,
+// so it played the wrong step twenty lines late rather than falling back. A first-line assertion
+// alone would not have caught that a re-worded step had moved the END of the block into the next
+// one, so this pins the LAST line too — which is the same thing as pinning the count.
+//
+// Composed the way instructionSim.test.ts composes its fixtures: exactly what EKET/index.ts does,
+// minus the GLB and thumbnail requires that node cannot parse. It is the same id as the real module,
+// which is the point — anything less would not be testing the numbers the app actually resolves.
+const eket = (() => {
+  const parts = applyStructure(EKET_PARTS, EKET.STRUCTURE);
+  return {
+    meta: { id: "eket-cabinet" },
+    parts,
+    actions: composeFurnitureActions(
+      EKET.AUTHORED_ACTIONS,
+      EKET.FASTENER_RULES,
+      parts,
+      HARDWARE,
+      EKET.CLUSTERS,
+    ),
+    clusters: EKET.CLUSTERS,
+    instructions: EKET.BEATS,
+    labels: composeLabels(EKET.LABELS, parts, HARDWARE),
+  } as unknown as Furniture;
+})();
+
+/** EKET's deduped line list, rebuilt here the same way linesFor does — action order, first
+ *  occurrence wins. Used to reach the LAST line without hard-coding which action says it. */
+function eketLines(level: "standard" | "simple"): ActionId[] {
+  const set = buildInstructions(
+    eket.actions,
+    eket.parts as Record<string, PartDef>,
+    eket.labels,
+    eket.instructions,
+    eket.clusters ?? {},
+  );
+  const seen = new Set<string>();
+  const firstSayers: ActionId[] = [];
+  for (const a of eket.actions) {
+    const text = instructionText(set, a.actionId, level);
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    firstSayers.push(a.actionId);
+  }
+  return firstSayers;
+}
+
+test("EKET standard covers script lines 377 to 420, one clip per distinct line", () => {
+  const lines = eketLines("standard");
+  // 44 distinct lines against 44 uploaded files. If this number moves, the script has been re-worded
+  // and the recordings need regenerating — the offset alone will no longer save it.
+  assert.equal(lines.length, 44);
+  assert.equal(stepVoicePath(eket, lines[0], "standard"), "eket-standard/eket-standard-377.mp3");
+  assert.equal(stepVoicePath(eket, lines[43], "standard"), "eket-standard/eket-standard-420.mp3");
+});
+
+test("EKET simple covers script lines 423 to 457, one clip per distinct line", () => {
+  const lines = eketLines("simple");
+  assert.equal(lines.length, 35);
+  assert.equal(stepVoicePath(eket, lines[0], "simple"), "eket-simple/eket-simple-423.mp3");
+  assert.equal(stepVoicePath(eket, lines[34], "simple"), "eket-simple/eket-simple-457.mp3");
+});
+
+test("a repeated EKET line resolves to ONE clip, at both levels", () => {
+  // The two runner brackets say the same simple line ("Add the Bracket.") while their standard
+  // wording differs by side — so simple has fewer clips than standard, and the dedupe is what keeps
+  // the two blocks numbered independently rather than one following the other's positions.
+  assert.ok(eketLines("simple").length < eketLines("standard").length);
 });
 
 test("the misspelled DALFRED folder is preserved, not corrected", () => {

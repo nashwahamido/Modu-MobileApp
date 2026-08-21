@@ -28,9 +28,14 @@ export const VOICEOVER_BUCKET = "Voiceover";
  *
  * THE OFFSETS ARE TRANSCRIBED FROM THE SCRIPT, not calculated. They were computed once by rebuilding
  * the file in code, and that rebuild was two lines short by DALFRED — close enough to look right and
- * wrong enough to play the wrong instruction. LACK and DALFRED below are now read off the file
- * itself, and so are BEKVAM's; EKET is still calculated and should be checked the same way before
- * its recordings are relied on.
+ * wrong enough to play the wrong instruction. All four blocks below are now read off the file
+ * itself; the calculated numbers were out by 2, 2, 6 and 20.
+ *
+ * HOW TO VERIFY A BLOCK, since every one checked so far has been wrong: rebuild the model's deduped
+ * line list (the same walk linesFor does below — dedupe instructionText in ACTION order, first
+ * occurrence wins) and match line 1 against the script. The offset is the script line of the block's
+ * FIRST instruction, minus one. Then check the COUNT: the number of distinct lines must equal the
+ * number of uploaded files, which is what catches an error that happens to line the first clip up.
  */
 const BLOCKS: Record<
   string,
@@ -51,11 +56,17 @@ const BLOCKS: Record<
     standard: { folder: "bekvam-standard", prefix: "bekvam-standard", offset: 240 },
     simple: { folder: "bekvam-simple", prefix: "bekvam-simple", offset: 256 },
   },
-  // UNVERIFIED — calculated, not read off the script. See the note above. The three blocks checked
-  // so far were out by 2, 2 and 6, so this one should be assumed wrong until it is read the same way.
+  // Read off the script (2026-08-21), replacing calculated offsets of 396 and 442 that were both out
+  // by 20. Standard runs script lines 377–420 and simple 423–457 — 44 and 35 lines, matching the 44
+  // and 35 uploaded files exactly, which is the count check the note above asks for.
+  //
+  // The 20 mattered differently at each level, and the standard case is why this was worth chasing:
+  // 397–440 are all real files, so nothing 404s and nothing falls back — EKET simply spoke the wrong
+  // step, twenty lines late, and past 420 it ran off the end of its own block into the simple one.
+  // Simple asked for 443–477, which mostly do not exist, so it dropped to the bundled clip instead.
   "eket-cabinet": {
-    standard: { folder: "eket-standard", prefix: "eket-standard", offset: 396 },
-    simple: { folder: "eket-simple", prefix: "eket-simple", offset: 442 },
+    standard: { folder: "eket-standard", prefix: "eket-standard", offset: 376 },
+    simple: { folder: "eket-simple", prefix: "eket-simple", offset: 422 },
   },
 };
 
