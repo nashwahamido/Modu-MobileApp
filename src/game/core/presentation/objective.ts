@@ -10,10 +10,10 @@ export interface ObjectiveInput {
   totalCount: number;
 }
 
-export function objectiveText(o: ObjectiveInput): string {
+export function objectiveText(o: ObjectiveInput): string | null {
+  if (o.mode === "free") return null;
   if (o.needsFocusChoice) return "Choose focus";
   if (o.totalCount > 0 && o.completedCount === o.totalCount) return "All done!";
-  if (o.mode === "free") return "Build it your way";
   return o.stepText ?? "Switch focus";
 }
 

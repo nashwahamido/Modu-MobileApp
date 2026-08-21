@@ -17,6 +17,7 @@ import {
   FilamentView,
   Light,
   RenderCallbackContext,
+  optionsToJSI,
   useFilamentContext,
   useModel,
   type Entity,
@@ -55,6 +56,7 @@ import {
 } from "../core/placeableItems";
 import { useVariantModelSource } from "./variantModel";
 import { GridOverlay } from "./GridOverlay";
+import { GRID_TUNING } from "./gridTuning";
 import { applySurfaceItem } from "./applySurfaceItem";
 import {
   SHELL_GRID,
@@ -141,6 +143,8 @@ type GridMode = "floor" | "wall" | null;
 function gridNodesFor(mode: GridMode, byWall: Record<ShellWallId, number>): ReadonlySet<string> {
   if (mode === null) return EMPTY_GRIDS;
   if (mode === "floor") return FLOOR_GRID_ONLY;
+  // Wall grids are suppressed wholesale while the floor's legibility is being tuned — see gridTuning.ts. Deliberately here rather than in the culling loop: this function is the single place that answers "which plates belong on screen", and the loop only ever writes the DIFFERENCE against what it last showed, so a plate withheld here is removed on the next frame like any other and nothing else has to know.
+  if (!GRID_TUNING.wallGrid) return EMPTY_GRIDS;
   const wanted = new Set<string>();
   for (const wall of SHELL_WALL_IDS) {
     if (byWall[wall] > WALL_GRID_MIN_ALPHA) wanted.add(shellGridWallNode(wall));
@@ -387,6 +391,11 @@ function RoomModel({
         console.log(`[room] no "${SHELL_GRID}" material — rebuild the shell with npm run build:room`);
       return;
     }
+    // The lines' colour, written at runtime rather than trusted from the GLB. It has to be a write to be tunable at all: the value is baked into the Grid material's baseColorFactor by the generator, and that generator (scripts/add-shell-grid.mts) is missing from the tree, so the shipped factor is frozen and editing a constant would change nothing. All five plates share the one material, so this is a single write for the whole grid. Alpha stays 1 — the plates are OPAQUE and their visibility is entity membership, never alpha; writing anything else here would not fade them, it would just be ignored.
+    shellMaterialsByName.current[SHELL_GRID]?.setFloat4Parameter("baseColorFactor", [
+      ...GRID_TUNING.lineRgb,
+      1,
+    ]);
     const nodes = new Map<string, Entity>();
     for (const name of SHELL_GRID_NODES) {
       const entity = asset.getFirstEntityByName(name);
@@ -977,6 +986,24 @@ function RoomPostProcess() {
     bloom.levels = 6;
     bloom.quality = "MEDIUM";
     view.setBloomOptions(bloom);
+
+    // ANTI-ALIASING IS A GRID QUESTION HERE, not an image-quality one, and both knobs live in gridTuning.ts with the evidence behind them. In short: the editing grid is 6 mm world-space geometry, which is about one pixel at the room's normal framing and less than one further away, so it aliases; FXAA is a post-process and cannot recover a line that never rasterised, TAA can because it jitters and accumulates. Filament defaults FXAA on, so stating it is itself a change — this is the first time the render path has said either way.
+    view.antiAliasing = GRID_TUNING.fxaa ? "FXAA" : "none";
+
+    // The one option object here that must NOT come from a view.create*Options() factory. Unlike AO and bloom above, `temporalAntiAliasingOptions` is a plain property whose binding takes a Record<string, number>, built by the package's own optionsToJSI — there is no createTemporalAntiAliasingOptions to call. Set unconditionally rather than only when enabled, so toggling it off in gridTuning actually turns it off on a Fast Refresh instead of leaving the last value latched on the native view.
+    view.temporalAntiAliasingOptions = optionsToJSI({
+      enabled: GRID_TUNING.taa,
+      // Eight sub-pixel sample positions, which is what buys the grid its coverage. X16 and X32 converge further on a still camera but take proportionally longer to settle after every orbit, and this camera is rarely still for long.
+      jitterPattern: "HALTON_23_X8",
+      // History weight, and Filament's own default — 0.12 accumulates ~19 samples in steady state. This is the ghosting/settling dial and the LAST one to touch: raising it cuts smear during a glide but costs exactly the sub-pixel coverage TAA is here for.
+      feedback: 0.12,
+      // Reject history the current frame contradicts, so furniture and the drag ghost do not trail. ACCURATE is the default; the cheaper modes are for debugging.
+      boxClipping: "ACCURATE",
+      historyReprojection: true,
+      // Built for thin high-contrast geometry that flickers between frames, which is this grid exactly.
+      preventFlickering: true,
+      // filterWidth is deliberately absent. It is in the TypeScript type, but RNFViewWrapper.cpp never reads that key — every other field is guarded by a find() and this one simply is not among them — so setting it does nothing at all, silently.
+    });
   }, [view]);
   return null;
 }

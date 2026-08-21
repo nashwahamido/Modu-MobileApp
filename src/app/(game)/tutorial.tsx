@@ -806,9 +806,8 @@ function TutorialScreen() {
               button now does, and the tutorial must teach the HUD the build actually has. */}
           <ObjectiveBar
             line={
-              profile === "control"
-                ? null
-                : settings.showInstructions
+              // NO profile gate here. Control used to be hard-wired to null, which made "Show instructions" a dead switch for that profile: a player who moved to Guided and turned the setting ON still got nothing, with no way to tell why. The gate was redundant anyway — Control ships showInstructions:false in PROFILE_DEFAULTS, so the default silence it was enforcing already comes from the setting it was overriding.
+              settings.showInstructions
                 ? collapsedLegGuide
                   ? repeatedAssemblyLabel
                   : guideCompleted

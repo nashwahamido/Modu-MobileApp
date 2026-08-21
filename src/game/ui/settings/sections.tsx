@@ -282,18 +282,29 @@ export function GuidanceSection({
           onValueChange={(v) => setSettings({ focusMode: v })}
         />
       ) : null}
-      <Row
-        label="Show instructions"
-        desc="Off: only the progress bar stays at the top"
-        value={settings.showInstructions}
-        onValueChange={(v) => setSettings({ showInstructions: v })}
-      />
-      <Row
-        label="Error hints"
-        desc="Nudge after a part flies back"
-        value={settings.softHints}
-        onValueChange={(v) => setSettings({ softHints: v })}
-      />
+      {/* Free mode has no instructions to show — objectiveText returns null there — so the toggle would be a switch for an empty bar. Written !== "free" rather than === "guide" so strict, live in the engine but unreachable from this panel, groups with guide. */}
+      {mode !== "free" ? (
+        <Row
+          label="Show instructions"
+          desc="Off: only the progress bar stays at the top"
+          value={settings.showInstructions}
+          onValueChange={(v) => setSettings({ showInstructions: v })}
+        />
+      ) : null}
+      {/* noteBlocked no-ops outside free mode AND in focus mode. Outside free the row is gone entirely, but focus mode DISABLES it instead of hiding it: focus mode is a thing the player just switched on and can switch straight back off, so the honest answer to "where did my error hints go" belongs here, on the row, rather than leaving them hunting for a switch that vanished. Its own desc carries the reason. */}
+      {mode === "free" ? (
+        <Row
+          label="Error hints"
+          desc={
+            settings.focusMode
+              ? "Off while Focus mode is on"
+              : "Nudge after a part flies back"
+          }
+          value={settings.softHints}
+          onValueChange={(v) => setSettings({ softHints: v })}
+          disabled={settings.focusMode}
+        />
+      ) : null}
       {showManualTools ? (
         <Row
           label="Choose tools"

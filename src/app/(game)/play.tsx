@@ -278,14 +278,18 @@ function GameScreen() {
   // Gated on the existing accessibility flag, so a profile that asks for a quiet build gets one.
   useAssemblySfx(settings.soundEffects);
   const hintGroup = useGameStore((s) => s.hintGroup);
+  const hintGroups = useGameStore((s) => s.hintGroups);
+  // The tray learns ONE concept. "?" highlights a set (hintGroups); Spot highlights its single card (hintGroup); they never both run, so the merge is a preference, not a union.
+  const highlightGroups = hintGroups.length ? hintGroups : hintGroup ? [hintGroup] : [];
   const hintPulse = useGameStore((s) => s.hintPulse);
-  // The Spot marker is a ONE-SHOT: it pulses for a few seconds and puts itself out. Keyed on hintPulse as well as the part, so pressing Spot twice for the same part restarts the window rather than being swallowed as "no change".
+  // The scene markers are a ONE-SHOT: they pulse for a few seconds and put themselves out. Keyed on hintPulse as well as the parts, so pressing the same button twice restarts the window rather than being swallowed as "no change". Covers Spot's single spotlight and the ? highlight's list alike — both are cleared by clearSpot.
   const spotPartId = useGameStore((s) => s.hintPartId);
+  const hintParts = useGameStore((s) => s.hintParts);
   useEffect(() => {
-    if (!spotPartId) return;
+    if (!spotPartId && !hintParts.length) return;
     const t = setTimeout(() => useGameStore.getState().clearSpot(), SPOT_MS);
     return () => clearTimeout(t);
-  }, [spotPartId, hintPulse]);
+  }, [spotPartId, hintParts, hintPulse]);
 
   // select tool
   const selectedTool = useGameStore((s) => s.selectedTool);
@@ -468,7 +472,7 @@ function GameScreen() {
           items={sceneState.trayItems}
           gestureFor={gestureFor}
           thumbs={furniture.thumbs}
-          highlightGroup={hintGroup}
+          highlightGroups={highlightGroups}
           highlightPulse={hintPulse}
           header={
             focus ? undefined : (
