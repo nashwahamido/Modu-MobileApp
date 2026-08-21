@@ -7,7 +7,7 @@ import { AssemblyAction, Vec3 } from "@/src/game/core/type";
 import type { ParkInfo } from "@/src/game/core/evaluation/engagement";
 import { lockShoveWord } from "@/src/game/core/presentation/instructions";
 import { CONTROL } from "@/src/game/ui/system/theme";
-import { PressPad, pressPadStyles } from "@/src/game/input/pad/PressPad";
+import { PressPad, pressPadStyles, HAND_ICON } from "@/src/game/input/pad/PressPad";
 import type { OffsetDriver } from "../../scene/offsetDriver";
 
 const TRACK = 140;
@@ -109,7 +109,7 @@ export function HookPressControl({ action, driver, park }: Props) {
   return (
     <View style={pressPadStyles.wrap} pointerEvents="box-none">
       {!hooked ? (
-        <PressPad icon="✋" resetKey={action.actionId} onPress={press} />
+        <PressPad icon={HAND_ICON} resetKey={action.actionId} onPress={press} />
       ) : (
         <GestureDetector gesture={pan}>
           <View style={vertical ? styles.trackV : styles.trackH}>

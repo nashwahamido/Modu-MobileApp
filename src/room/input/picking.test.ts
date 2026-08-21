@@ -1,21 +1,23 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { clampToSurface, floorCellToRoom, floorPlacementBox, topCellToRoom, wallCellToRoom } from "../core/grid";
+import { cellsFor, clampToSurface, floorCellToRoom, floorPlacementBox, roomPointToFloorCell, topCellToRoom, wallCellToRoom, wallPlacementBox } from "../core/grid";
 import type { GridPlacement, PlaceableItemDef } from "../core/grid";
-import { ORBIT } from "./orbit";
+import { ORBIT, eyeFor } from "./orbit";
 import {
   dragTopTarget,
   dragWallTarget,
   pickBoxAt,
+  placementPickBoxes,
   pointsAtSurface,
   roomPointToScreen,
+  type PickResolver,
   screenPointToFloorCell,
   screenPointToFloorScene,
   screenPointToTopCell,
   screenPointToWallCell,
 } from "./picking";
-import { FLOOR_CELLS, ROOM_SHELL, WALL_CELLS, sceneToRoom, type WallId } from "../core/roomShell";
+import { FLOOR_CELLS, ROOM_SHELL, ROOM_TARGET, WALL_CELLS, isXWall, roomToScene, sceneToRoom, type WallId } from "../core/roomShell";
 import { visibleWalls } from "../core/wallCulling";
 
 const VIEWPORT = { width: 1200, height: 800 };
@@ -301,4 +303,168 @@ test("dragTopTarget prefers the current host, else the first hit, else null", ()
   // Pointing at open floor clear of both desks: no target.
   const openFloor = roomPointToScreen({ x: ROOM_SHELL.floor.minX + 0.125, y: ROOM_SHELL.floor.y, z: ROOM_SHELL.floor.maxZ - 0.125 }, VIEWPORT, REST)!;
   assert.equal(dragTopTarget("a", openFloor.x, openFloor.y, VIEWPORT, REST, [a, b]), null);
+});
+
+// A wall-mounted piece with real depth — eket-cabinet's shape (0.5 x 0.5 m footprint, 0.75 m tall,
+// 0.35 m deep, mount: "wall", opens_wall: false). Anchored on z-max, which restTheta keeps visible.
+const cabinet: PlaceableItemDef = {
+  itemId: "eket-cabinet",
+  footprint: { w: 2, d: 2 },
+  topFootprint: { w: 4, d: 4 },
+  allowedSurfaces: ["wall"],
+  wallHeightCells: 3,
+};
+const CABINET_DEPTH = 0.35;
+const cabinetPlacement: GridPlacement = {
+  instanceId: "cab",
+  itemId: "eket-cabinet",
+  variation: null,
+  surface: { kind: "wall", wall: "z-max" },
+  cell: { x: 6, y: 2 },
+  rotSteps: 0,
+};
+
+// The cabinet's own FRONT FACE, in room space — the body the player actually sees and presses,
+// not its anchor cell on the wall plane. Found from the box itself: the wall's inner face is
+// always one of the two box corners on the normal axis for a mounted (non-opensWall) item (its
+// BACK, per wallDepthOffset), so the corner that ISN'T the inner face is the front.
+function cabinetFrontFacePoint() {
+  const wall: WallId = "z-max";
+  const box = wallPlacementBox(wall, cabinetPlacement, cabinet, CABINET_DEPTH);
+  const onX = isXWall(wall);
+  const innerFace = ROOM_SHELL.walls[wall].innerFace;
+  const [normalMin, normalMax] = onX ? [box.min.x, box.max.x] : [box.min.z, box.max.z];
+  const front = Math.abs(normalMin - innerFace) > Math.abs(normalMax - innerFace) ? normalMin : normalMax;
+  const alongMid = onX ? (box.min.z + box.max.z) / 2 : (box.min.x + box.max.x) / 2;
+  const upMid = (box.min.y + box.max.y) / 2;
+  return onX ? { x: front, y: upMid, z: alongMid } : { x: alongMid, y: upMid, z: front };
+}
+
+test("a press on a deep wall item's visible front face does NOT land on its own cell under the old plane-only pick", () => {
+  // This is the bug as reported: the plane pick tests the wall's INNER FACE, but a mounted item
+  // with real depth (opens_wall: false) has its visible body sizeZ away from that plane —
+  // wallDepthOffset seats a mounted piece's BACK on the face and its body into the room. Pressing
+  // where the cabinet is actually drawn should NOT resolve, via the plane, to the cabinet's own
+  // claimed wall cells.
+  const angles = { ...REST, theta: ORBIT.restTheta };
+  const screen = roomPointToScreen(cabinetFrontFacePoint(), VIEWPORT, angles);
+  assert.ok(screen, "the cabinet's front face projects behind the camera");
+  const planeCell = screenPointToWallCell(screen!.x, screen!.y, VIEWPORT, angles, "z-max");
+  const claimed = cellsFor(cabinetPlacement, cabinet).map((c) => `${c.x},${c.y}`);
+  const planeHitsCabinet = planeCell !== null && claimed.includes(`${planeCell.x},${planeCell.y}`);
+  assert.equal(planeHitsCabinet, false, "the plane pick unexpectedly landed on the cabinet's own cell");
+});
+
+test("a press on a deep wall item's visible front face picks it via its pick volume", () => {
+  const angles = { ...REST, theta: ORBIT.restTheta };
+  const screen = roomPointToScreen(cabinetFrontFacePoint(), VIEWPORT, angles);
+  assert.ok(screen, "the cabinet's front face projects behind the camera");
+  const box = wallPlacementBox("z-max", cabinetPlacement, cabinet, CABINET_DEPTH);
+  assert.equal(pickBoxAt(screen!.x, screen!.y, VIEWPORT, angles, [box]), 0);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THE ASSEMBLY, not the parts.
+//
+// The two tests above prove that wallPlacementBox + pickBoxAt can pick a deep wall item, and that
+// the plane pick cannot. Both kept passing on 2026-08-20 while the feature was broken in the app,
+// because pickUpAt had been reverted to plane-picking and nothing tested the thing that CHOOSES
+// which boxes to build. These drive placementPickBoxes — the extracted assembly pickUpAt now calls —
+// so that revert would fail here.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Everything the room can resolve, at real-world sizes. eket-cabinet is the reported case: 0.35 m deep, so its visible face is nearly two wall cells off its anchor.
+const RESOLVE: PickResolver = (itemId) =>
+  itemId === "eket-cabinet"
+    ? { def: cabinet, size: { x: 0.5, y: 0.75, z: CABINET_DEPTH } }
+    : null;
+const ALL_WALLS_VISIBLE = () => true;
+
+test("a long press on a deep wall item's visible body picks it up — the whole pickUpAt path, not just its parts", () => {
+  const angles = { ...REST, theta: ORBIT.restTheta };
+  const screen = roomPointToScreen(cabinetFrontFacePoint(), VIEWPORT, angles);
+  assert.ok(screen, "the cabinet's front face projects behind the camera");
+
+  const targets = placementPickBoxes([cabinetPlacement], RESOLVE, ALL_WALLS_VISIBLE);
+  assert.equal(targets.length, 1, "a visible wall piece must contribute a pick volume");
+  const hit = pickBoxAt(screen!.x, screen!.y, VIEWPORT, angles, targets.map((t) => t.box));
+  assert.notEqual(hit, null, "pressing the cabinet's own visible body must pick something");
+  assert.equal(targets[hit!].placement.instanceId, "cab");
+});
+
+test("the cabinet stays pickable all the way across its visible face, at every angle a player can reach", () => {
+  // The regression was not "never works" but "works in a band that moves with the camera", which is
+  // why it read as flaky. Sampling the face at several points and several poses is what distinguishes
+  // a real volume pick from a plane pick that happens to line up once.
+  const targets = placementPickBoxes([cabinetPlacement], RESOLVE, ALL_WALLS_VISIBLE);
+  const box = targets[0].box;
+  for (const angles of ANGLE_SAMPLES) {
+    // Skip poses where z-max has been orbited out of view; the room would not offer the piece then.
+    if (!visibleWalls(angles.theta).includes("z-max")) continue;
+    for (const fx of [0.2, 0.5, 0.8]) {
+      for (const fy of [0.2, 0.5, 0.8]) {
+        const point = {
+          x: box.min.x + (box.max.x - box.min.x) * fx,
+          y: box.min.y + (box.max.y - box.min.y) * fy,
+          // The front face: the corner furthest from the wall's inner face.
+          z: Math.min(box.min.z, box.max.z),
+        };
+        const screen = roomPointToScreen(point, VIEWPORT, angles);
+        if (!screen) continue;
+        assert.equal(
+          pickBoxAt(screen.x, screen.y, VIEWPORT, angles, [box]),
+          0,
+          `press at (${fx}, ${fy}) theta ${angles.theta.toFixed(2)} missed the cabinet`,
+        );
+      }
+    }
+  }
+});
+
+test("a piece on a wall the camera cannot see contributes no pick volume", () => {
+  // Picking a hidden wall would hand the player a piece they cannot look at.
+  const targets = placementPickBoxes([cabinetPlacement], RESOLVE, () => false);
+  assert.deepEqual(targets, []);
+});
+
+test("an item the catalog cannot resolve yet is simply not pickable, rather than throwing", () => {
+  const unknown: GridPlacement = { ...cabinetPlacement, instanceId: "ghosty", itemId: "not-in-catalog" };
+  assert.deepEqual(placementPickBoxes([unknown], RESOLVE, ALL_WALLS_VISIBLE), []);
+});
+
+test("a floor piece standing in front of a wall piece still picks the floor piece — nearest wins across surface kinds", () => {
+  // Adding wall boxes to the SAME pick pass as floor/furniture boxes (pickUpAt) makes picking
+  // nearest-wins across every surface kind, replacing "floor always wins outright". That is more
+  // correct — a floor piece between the camera and a wall piece genuinely occludes it — but the
+  // ordinary case must still hold: something standing nearer the camera, on the EXACT SAME ray as
+  // the wall item behind it, still wins. Constructed by walking back along that literal ray from
+  // the cabinet's front face toward the eye, so this is genuine occlusion, not two unrelated boxes
+  // that merely happen not to collide.
+  const angles = { ...REST, theta: ORBIT.restTheta };
+  const wallFront = cabinetFrontFacePoint();
+  const eyeScene = eyeFor(ROOM_TARGET, angles);
+  const wallFrontScene = roomToScene(wallFront);
+  const s = 0.85; // strictly between the eye and the cabinet's front face, on the identical ray
+  const nearerScene = {
+    x: eyeScene.x + s * (wallFrontScene.x - eyeScene.x),
+    y: eyeScene.y + s * (wallFrontScene.y - eyeScene.y),
+    z: eyeScene.z + s * (wallFrontScene.z - eyeScene.z),
+  };
+  const nearerRoom = sceneToRoom(nearerScene);
+  const cell = roomPointToFloorCell(nearerRoom);
+  const floorDef: PlaceableItemDef = { itemId: "obstacle", footprint: { w: 1, d: 1 }, topFootprint: { w: 2, d: 2 }, allowedSurfaces: ["floor"] };
+  const floorPlacement: GridPlacement = { instanceId: "obstacle", itemId: "obstacle", variation: null, surface: { kind: "floor" }, cell, rotSteps: 0 };
+  // Tall enough that the box's top clears the exact point on the ray this test aims at.
+  const height = nearerRoom.y - ROOM_SHELL.floor.y + 0.1;
+  const floorBox = floorPlacementBox(floorPlacement, floorDef, height);
+  const wallBox = wallPlacementBox("z-max", cabinetPlacement, cabinet, CABINET_DEPTH);
+  const screen = roomPointToScreen(wallFront, VIEWPORT, angles);
+  assert.ok(screen, "the cabinet's front face projects behind the camera");
+  // Order the wall box FIRST so a naive "first hit" pick (rather than nearest) would report it —
+  // this only passes because pickBoxAt is nearest-wins, not first-wins.
+  assert.equal(
+    pickBoxAt(screen!.x, screen!.y, VIEWPORT, angles, [wallBox, floorBox]),
+    1,
+    "the wall box behind won over the floor piece standing in front of it",
+  );
 });

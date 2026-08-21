@@ -9,12 +9,12 @@ import {
 } from "react-native";
 
 import { useGameStore } from "@/src/game/core/store";
-import { ACCENT_LIGHT, ELEVATION, Theme, useStyles } from "@/src/game/ui/system/theme";
+import { ACCENT_LIGHT, ELEVATION, Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 import { tutorialPresentationForProfile } from "./presentation";
 import { useTutorialStore } from "./store";
 
 export function MomentumAttentionOverlay() {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const profile = useGameStore((state) => state.profile);
   const presentation = tutorialPresentationForProfile(profile);
   const currentIndex = useTutorialStore((state) => state.currentIndex);
@@ -151,10 +151,17 @@ export function MomentumAttentionOverlay() {
         <View style={styles.attentionDot} />
         <View style={styles.copy}>
           <Text style={styles.title}>
-            {resumeVisible ? "Welcome back!" : "Ready when you are!"}
+            {resumeVisible
+              ? "Welcome back!"
+              : "Looks like you've stepped away from the tutorial."}
           </Text>
-          <Text style={styles.message} numberOfLines={2}>
-            {resumeVisible ? "Continue" : "Next"}: {stepLabel}
+          <Text style={styles.message}>
+            {resumeVisible
+              ? "Sparky is ready to keep building with you."
+              : "Sparky will be right here when you're ready to continue."}
+          </Text>
+          <Text style={styles.nextStep}>
+            Next, you can continue with: {stepLabel}
           </Text>
         </View>
         {resumeVisible ? (
@@ -188,23 +195,23 @@ const makeStyles = (theme: Theme) =>
       backgroundColor: "rgba(0,0,0,0.58)",
     },
     card: {
-      width: 310,
-      minHeight: 66,
+      width: 470,
+      minHeight: 116,
       flexDirection: "row",
       alignItems: "center",
-      gap: 10,
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-      borderRadius: 18,
+      gap: 14,
+      paddingHorizontal: 20,
+      paddingVertical: 16,
+      borderRadius: 20,
       borderWidth: 3,
       borderColor: theme.gold,
       backgroundColor: theme.surface,
       ...ELEVATION.card,
     },
     attentionDot: {
-      width: 12,
-      height: 12,
-      borderRadius: 6,
+      width: 14,
+      height: 14,
+      borderRadius: 7,
       backgroundColor: theme.gold,
     },
     copy: {
@@ -213,15 +220,23 @@ const makeStyles = (theme: Theme) =>
     },
     title: {
       color: theme.text,
-      fontSize: 14,
+      fontSize: 18,
+      lineHeight: 23,
       fontWeight: "900",
     },
     message: {
-      marginTop: 2,
+      marginTop: 5,
       color: theme.textDim,
-      fontSize: 11,
-      lineHeight: 15,
-      fontWeight: "800",
+      fontSize: 13,
+      lineHeight: 18,
+      fontWeight: "700",
+    },
+    nextStep: {
+      marginTop: 7,
+      color: theme.text,
+      fontSize: 13,
+      lineHeight: 18,
+      fontWeight: "900",
     },
     resumeButton: {
       paddingHorizontal: 13,

@@ -1,4 +1,4 @@
-// The room hub's bottom navigation: shop / inventory / assemble / visit friends / you
+// the room hub's bottom navigation:shop / inventory/ assemble/ visit friends /you
 import { useState } from 'react';
 import { router } from 'expo-router';
 import type { Href } from 'expo-router';
@@ -7,48 +7,70 @@ import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanim
 import Svg, { Circle, Path } from "react-native-svg";
 import { ChevronIcon } from '../../components/Icons';
 import { ASSEMBLE_ICON, INVENTORY_ICON, SHOP_ICON, VISIT_FRIENDS_ICON, YOU_ICON } from '../../components/iconAssets';
-import { CREAM, ELEVATION, useStyles, useTheme, LEXEND } from "@/src/game/ui/system/theme";
+import { CARD_CHROME, CREAM, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 import { useScreenInsets } from '../../hooks/use-safe-insets';
 
 
-// Reanimated, not RN's LayoutAnimation, which doesn't fire reliably on the New Architecture
-const BAR_LAYOUT = LinearTransition.duration(220);
+//  bar's outline shared with assemble collar and the chevron so the three read as one continuous edge.
+//  Taken from the catalogue cards, so the room's chrome and the build screen's tiles share a material.
+const BAR_STROKE = CARD_CHROME.borderColor;
+const BAR_STROKE_WIDTH = CARD_CHROME.borderWidth;
+const BAR_FILL = '#FBFAF3';
+// Content is ICON_SLOT + label gap + label line = 57, so this leaves ~3.5pt of air above the icons
+// and below the labels rather than letting them touch the bar's edges.
+const BAR_HEIGHT = 64;
+
+const BAR_SHADOW = CARD_CHROME;
+
+// animation on shrink down
+const BAR_LAYOUT= LinearTransition.duration(220);
 const BAR_ITEM_ENTERING = FadeIn.duration(160);
 const BAR_ITEM_EXITING = FadeOut.duration(120);
 
-// One box per glyph: each PNG fills its canvas differently, so a shared size wouldn't match
-const BAR_ICON_SIZE = 36;
-const SHOP_ICON_SIZE = 45;
-const VISIT_FRIENDS_ICON_SIZE = 43;
-const YOU_ICON_SIZE = 36;
-// Negative = left. The cart's basket carries the mass, so a centred box reads right of centre
-const SHOP_ICON_NUDGE_X = -4;
-// Fixed slot height keeps every label on one line. Must be >= the tallest icon
-const ICON_SLOT = 44;
-// How far the assemble button is lifted out of the bar; the label alignment is solved from it
-const ASSEMBLE_LIFT = 22;
 
-const ASSEMBLE_COLLAR_SIZE = 76;
-const ASSEMBLE_BUTTON_SIZE = 62;
-// Larger than the button on purpose — the PNG is mostly transparent margin
-const ASSEMBLE_ICON_SIZE = 86;
-// Negative = up. The wrench head sits above the hand, so the hand reads low when centred
+// The four icons are SOLVED, not picked, because equal boxes do NOT make equal-looking icons: each
+// PNG fills its own canvas differently (the cart draws 70% of its height, the avatar 75%, the cabinet
+// 86%, the friends 90%), and `contain` scales the whole canvas — margins included. So each box is
+// sized so the DRAWN part lands at the same 34pt height. Re-solve with box = 34 * max(canvasW,
+// canvasH) / drawnH if any of these files is re-exported.
+const BAR_ICON_SIZE = 40;
+const SHOP_ICON_SIZE = 49;
+const VISIT_FRIENDS_ICON_SIZE = 47;
+const ASSEMBLE_SPREAD = 12;
+const BAR_GAP= 30 - ASSEMBLE_SPREAD / 2;
+const YOU_ICON_SIZE= 45;
+const SHOP_ICON_NUDGE_X = -4;
+// The LABEL's anchor, not a clip: a box wider than this simply overflows it, and since the boxes above
+// carry transparent margin it is the drawing — 34pt tall, centred — that this has to leave room for.
+// Fixed, so resizing an icon never moves its label and never changes the bar's height.
+const ICON_SLOT = 44;
+// How far the button is lifted OUT of the bar. Everything else about the assemble slot is solved from
+// it — the label's offset, the wrap's height, and the collar arc's span — so lowering the circle
+// re-seats the label and re-cuts the arc without another edit.
+const ASSEMBLE_LIFT = 16;
+
+const ASSEMBLE_COLLAR_SIZE = 68;
+const ASSEMBLE_BUTTON_SIZE = 55;
+const ASSEMBLE_ICON_SIZE = 76;
 const ASSEMBLE_ICON_NUDGE_Y = -7;
-// Button centre relative to assembleWrap's top; the collar's position is solved from it
 const ASSEMBLE_CENTRE_OPEN = -ASSEMBLE_LIFT + ASSEMBLE_BUTTON_SIZE / 2;
 const ASSEMBLE_CENTRE_CLOSED = ASSEMBLE_BUTTON_SIZE / 2;
+const BAR_LABEL_LINE_HEIGHT = 13;
+const BAR_LABEL_GAP= 0;
+const ASSEMBLE_LABEL_TOP = BAR_LABEL_GAP + (ICON_SLOT - (ASSEMBLE_BUTTON_SIZE - ASSEMBLE_LIFT));
+const ASSEMBLE_WRAP_HEIGHT =
+  ASSEMBLE_BUTTON_SIZE - ASSEMBLE_LIFT + ASSEMBLE_LABEL_TOP + BAR_LABEL_LINE_HEIGHT;
 
-// The collar is stroked across its top only — the rest is buried in the pill
-const ASSEMBLE_COLLAR_ARC_HALF_SPAN_DEG = 65;
 const ASSEMBLE_COLLAR_ARC = (() => {
   const r = ASSEMBLE_COLLAR_SIZE / 2;
-  const half = (ASSEMBLE_COLLAR_ARC_HALF_SPAN_DEG * Math.PI) / 180;
+  const barTop = -(BAR_HEIGHT - ASSEMBLE_WRAP_HEIGHT) / 2 + BAR_STROKE_WIDTH / 2;
+  const rise = Math.min(ASSEMBLE_CENTRE_OPEN - barTop, r);
+  const half = Math.acos(rise / r);
   const dx = r * Math.sin(half);
-  const dy = r * Math.cos(half);
   const leftX = r - dx;
   const rightX = r + dx;
-  const y = r - dy;
+  const y = r - rise;
   return `M ${leftX} ${y} A ${r} ${r} 0 0 1 ${rightX} ${y}`;
 })();
 
@@ -61,13 +83,12 @@ export function RoomBottomBar({
   onOpenInventory: () => void;
   onOpenVisit: () => void;
 }) {
-  const s = useStyles(makeStyles);
-  // t.bg is the room's backdrop colour, used for the chevron's outline
-  const t = useTheme();
+  const s = useFixedStyles(makeStyles);
   // Immersive mode reports 0 insets, so these floors sit UNDER the design's own offsets
   const safe = useScreenInsets();
   const padL = 22 + safe.left;
-  const padBottom = 22 + safe.bottom;
+  // Design spacing only — safe.bottom is already floored, so lowering this cannot push the bar under the gesture pill
+  const padBottom = 10 + safe.bottom;
   const [barOpen, setBarOpen] = useState(true);
 
   return (
@@ -79,19 +100,18 @@ export function RoomBottomBar({
         barOpen ? s.bottomBarWrapOpen : [s.bottomBarWrapClosed, { left: padL }],
       ]}
     >
-      {!barOpen ? (
-        // Lifted, or the collar overhanging the collapsed pill paints over it
-        <Animated.View style={s.chevronLift} entering={BAR_ITEM_ENTERING} exiting={BAR_ITEM_EXITING} layout={BAR_LAYOUT}>
+      {barOpen ? (
+        <Animated.View entering={BAR_ITEM_ENTERING} exiting={BAR_ITEM_EXITING} layout={BAR_LAYOUT}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Expand menu"
-            accessibilityState={{ expanded: false }}
+            accessibilityLabel="Collapse menu"
+            accessibilityState={{ expanded: true }}
             hitSlop={12}
             style={s.chevronButton}
-            onPress={() => setBarOpen(true)}
+            onPress={() => setBarOpen(false)}
           >
-            <View style={s.chevronLeft}>
-              <ChevronIcon size={26} up color="#595551" outlineColor={t.bg} outlineWidth={0.5} />
+            <View style={s.chevronRight}>
+              <ChevronIcon size={26} up color={BAR_FILL} outlineColor={BAR_STROKE} outlineWidth={BAR_STROKE_WIDTH} />
             </View>
           </Pressable>
         </Animated.View>
@@ -109,7 +129,7 @@ export function RoomBottomBar({
               <View style={s.iconSlot}>
                 <Image source={SHOP_ICON} style={s.shopIcon} resizeMode="contain" />
               </View>
-              <Text style={s.barLabel}>shop</Text>
+              <Text style={s.barLabel}>Shop</Text>
             </Pressable>
           </Animated.View>
         ) : null}
@@ -125,23 +145,21 @@ export function RoomBottomBar({
               <View style={s.iconSlot}>
                 <Image source={INVENTORY_ICON} style={s.barIcon} resizeMode="contain" />
               </View>
-              <Text style={s.barLabel}>inventory</Text>
+              <Text style={s.barLabel}>Inventory</Text>
             </Pressable>
           </Animated.View>
         ) : null}
 
         <Animated.View layout={BAR_LAYOUT} style={s.assembleWrap}>
-          {/* Expanded: an SVG, since only the popped-out top arc is stroked. */}
-          {/* Collapsed: a View, so the border runs full circle and the shadow traces it. */}
           {barOpen ? (
             <Svg width={ASSEMBLE_COLLAR_SIZE} height={ASSEMBLE_COLLAR_SIZE} style={s.assembleCollar} pointerEvents="none">
               <Circle
                 cx={ASSEMBLE_COLLAR_SIZE / 2}
                 cy={ASSEMBLE_COLLAR_SIZE / 2}
                 r={ASSEMBLE_COLLAR_SIZE / 2}
-                fill="#FBFAF3"
+                fill={BAR_FILL}
               />
-              <Path d={ASSEMBLE_COLLAR_ARC} fill="none" stroke="#D7D1CE" strokeWidth={0.4} />
+              <Path d={ASSEMBLE_COLLAR_ARC} fill="none" stroke={BAR_STROKE} strokeWidth={BAR_STROKE_WIDTH} />
             </Svg>
           ) : (
             <View style={s.assembleCollarClosed} pointerEvents="none" />
@@ -154,7 +172,7 @@ export function RoomBottomBar({
           >
             <Image source={ASSEMBLE_ICON} style={s.assembleIcon} resizeMode="contain" />
           </Pressable>
-          {barOpen ? <Text style={[s.barLabel, s.assembleLabel]}>assemble</Text> : null}
+          {barOpen ? <Text style={[s.barLabel, s.assembleLabel]}>Assemble</Text> : null}
         </Animated.View>
 
         {barOpen ? (
@@ -168,7 +186,7 @@ export function RoomBottomBar({
               <View style={s.iconSlot}>
                 <Image source={VISIT_FRIENDS_ICON} style={s.friendsIcon} resizeMode="contain" />
               </View>
-              <Text style={s.barLabel}>visit friends</Text>
+              <Text style={s.barLabel}>Friends</Text>
             </Pressable>
           </Animated.View>
         ) : null}
@@ -184,24 +202,25 @@ export function RoomBottomBar({
               <View style={s.iconSlot}>
                 <Image source={YOU_ICON} style={s.youIcon} resizeMode="contain" />
               </View>
-              <Text style={s.barLabel}>you</Text>
+              <Text style={s.barLabel}>You</Text>
             </Pressable>
           </Animated.View>
         ) : null}
       </Animated.View>
 
-      {barOpen ? (
-        <Animated.View entering={BAR_ITEM_ENTERING} exiting={BAR_ITEM_EXITING} layout={BAR_LAYOUT}>
+      {/* Collapsed, the arrow FOLLOWS the shrunken pill; expanded, the collapse arrow leads it. */}
+      {!barOpen ? (
+        <Animated.View style={s.chevronLift} entering={BAR_ITEM_ENTERING} exiting={BAR_ITEM_EXITING} layout={BAR_LAYOUT}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Collapse menu"
-            accessibilityState={{ expanded: true }}
+            accessibilityLabel="Expand menu"
+            accessibilityState={{ expanded: false }}
             hitSlop={12}
             style={s.chevronButton}
-            onPress={() => setBarOpen(false)}
+            onPress={() => setBarOpen(true)}
           >
-            <View style={s.chevronRight}>
-              <ChevronIcon size={26} up color="#595551" outlineColor={t.bg} outlineWidth={0.5} />
+            <View style={s.chevronLeft}>
+              <ChevronIcon size={26} up color={BAR_FILL} outlineColor={BAR_STROKE} outlineWidth={BAR_STROKE_WIDTH} />
             </View>
           </Pressable>
         </Animated.View>
@@ -211,7 +230,6 @@ export function RoomBottomBar({
 }
 
 const makeStyles = (t: Theme) => StyleSheet.create({
-  // The chevron is a sibling of the pill, so it sits outside the pill's border
   bottomBarWrap: {
     position: 'absolute',
     zIndex: 14,
@@ -224,7 +242,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   },
   // Keeps the chevron clear of the collar, which overhangs the shrunken pill
   bottomBarWrapClosed: {
-    gap: 14,
+    gap: 0,
   },
   chevronLift: {
     zIndex: 2,
@@ -232,24 +250,19 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   bottomBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 70,
+    height: BAR_HEIGHT,
     paddingHorizontal: 24,
-    borderRadius: 22,
-    borderWidth: 0.4,
-    borderColor: '#D7D1CE',
-    backgroundColor: '#FBFAF3',
-    gap: 30,
-    ...ELEVATION.card,
-    shadowOpacity: 0.22,
-    shadowRadius: 18,
-    elevation: 6,
-    shadowColor: '#929292',
+    borderRadius: 32,
+    backgroundColor: BAR_FILL,
+    gap: BAR_GAP,
+    ...BAR_SHADOW,
   },
   bottomBarClosed: {
     height: 62,
     paddingHorizontal: 0,
     borderWidth: 0,
     backgroundColor: 'transparent',
+    boxShadow: '0px 0px 0px rgba(0,0,0,0)',
     shadowOpacity: 0,
     elevation: 0,
     gap: 0,
@@ -261,28 +274,29 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Points AWAY from the pill it expands: collapsed, the arrow sits on the pill's right
   chevronLeft: {
-    transform: [{ rotate: '270deg' }],
-  },
-  chevronRight: {
     transform: [{ rotate: '90deg' }],
   },
-  // Wide enough for "visit friends" at 12px
+  // Points AWAY from the bar it collapses: expanded, the arrow sits on the pill's left
+  chevronRight: {
+    transform: [{ rotate: '270deg' }],
+  },
+
   barItem: {
     width: 80,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Matched to the shop's category labels so both bars share a type scale
   barLabel: {
-    ...LEXEND.regular,
+    ...LEXEND.medium,
     fontSize: 10.5,
-    lineHeight: 13,
+    lineHeight: BAR_LABEL_LINE_HEIGHT,
     color: CREAM.ink,
-    marginTop: 4,
+    marginTop: BAR_LABEL_GAP,
     textAlign: 'center',
   },
-  // Fixed height, so resizing an icon never moves its label
+  
   iconSlot: {
     height: ICON_SLOT,
     alignItems: 'center',
@@ -305,21 +319,21 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     width: YOU_ICON_SIZE,
     height: YOU_ICON_SIZE,
   },
-  // Assemble has no icon slot, so it pads out the difference to keep its label in line
   assembleLabel: {
-    marginTop: 4 + (ICON_SLOT - (ASSEMBLE_BUTTON_SIZE - ASSEMBLE_LIFT)),
+    marginTop: ASSEMBLE_LABEL_TOP,
   },
   assembleWrap: {
+    marginHorizontal: ASSEMBLE_SPREAD,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Absolute, with its top solved from the button's centre so the two stay concentric
+ 
   assembleCollar: {
     position: 'absolute',
     alignSelf: 'center',
     top: ASSEMBLE_CENTRE_OPEN - ASSEMBLE_COLLAR_SIZE / 2,
   },
-  // Bigger than the button, so it is centred by offset — flex won't centre an overflowing child
+ 
   assembleIcon: {
     position: 'absolute',
     left: (ASSEMBLE_BUTTON_SIZE - ASSEMBLE_ICON_SIZE) / 2,
@@ -334,13 +348,18 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     marginTop: -ASSEMBLE_LIFT,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#D3CBD2',
+    backgroundColor: '#E6DCF5',
+    borderWidth: 0.6,
+    borderColor: '#9C9994',
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
-  // Collapsed there is no bar to pop out of, so the lift is dropped
   assembleButtonClosed: {
     marginTop: 0,
   },
-  // Free-standing: a View, so the border runs full circle and the shadow traces it
   assembleCollarClosed: {
     position: 'absolute',
     alignSelf: 'center',
@@ -348,13 +367,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     width: ASSEMBLE_COLLAR_SIZE,
     height: ASSEMBLE_COLLAR_SIZE,
     borderRadius: ASSEMBLE_COLLAR_SIZE / 2,
-    backgroundColor: '#FBFAF3',
-    borderWidth: 0.4,
-    borderColor: '#D7D1CE',
-    ...ELEVATION.card,
-    shadowOpacity: 0.22,
-    shadowRadius: 18,
-    elevation: 6,
-    shadowColor: '#929292',
+    backgroundColor: BAR_FILL,
+    ...BAR_SHADOW,
   },
 });

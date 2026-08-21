@@ -1,4 +1,4 @@
-import { Theme, useStyles } from "@/src/game/ui/system/theme";
+import { Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 import * as Haptics from "expo-haptics";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -10,7 +10,7 @@ interface Props {
 }
 
 export function QuickOrbitControls({ onOrbitBy, onRotateQuarter }: Props) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const press = (fn: () => void) => {
     fn();
     Haptics.selectionAsync();

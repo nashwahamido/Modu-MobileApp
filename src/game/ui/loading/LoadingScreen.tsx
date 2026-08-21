@@ -4,7 +4,7 @@ import { Animated, Image, StyleSheet, Text, View } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
 import { avatarForProfile } from "@/src/components/avatarAssets";
 import { ProgressBar } from "@/src/game/ui/system/Button";
-import { Theme, useStyles } from "@/src/game/ui/system/theme";
+import { Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 import { advance, type Milestone } from "./loadingProgress";
 
 /** Ring content: the onboarding mascot, or a profile initial (the assembly loader's avatar slot). */
@@ -42,7 +42,7 @@ export function LoadingScreen({
   fadeOnComplete = false,
   onComplete,
 }: Props) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const fontScale = useGameStore((s) => s.settings.fontScale);
   const profile = useGameStore((s) => s.profile);
   const mascotImage = avatarForProfile(profile);

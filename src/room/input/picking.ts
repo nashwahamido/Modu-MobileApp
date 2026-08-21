@@ -1,6 +1,6 @@
 // Screen point → floor cell, by analytic ray-vs-plane intersection — no physics raycaster. The camera is fully known (orbit state + the 68 mm lens + viewport), so a finger position maps to a grid cell with plain algebra. Pure math: testable by projecting a known cell centre to the screen and picking it back.
 import { eyeFor, ORBIT, type OrbitAngles } from "./orbit";
-import { hostTopExtent, roomPointToFloorCell, roomPointToTopCell, roomPointToWallCell, surfaceExtent, type Cell, type HostContext, type SurfaceId } from "../core/grid";
+import { floorPlacementBox, hostTopExtent, resolveHost, roomPointToFloorCell, roomPointToTopCell, roomPointToWallCell, surfaceExtent, topPlacementBox, wallPlacementBox, type Cell, type GridPlacement, type HostContext, type PlaceableItemDef, type SurfaceId } from "../core/grid";
 import { ROOM_SHELL, ROOM_TARGET, roomToScene, sceneToRoom, type Vec3, type WallId,
   isXWall,
 } from "../core/roomShell";
@@ -240,6 +240,57 @@ export function pickBoxAt(
     }
   });
   return best;
+}
+
+// What a piece has to be picked against: its resolved definition and its real-world size, already scaled by fitScale. Null for an id the catalog cannot resolve yet, which simply cannot be picked up.
+export type PickResolver = (
+  itemId: string,
+) => { def: PlaceableItemDef; size: Vec3 } | null;
+
+// EVERY PIECE IN THE ROOM AS A PICKABLE VOLUME, whatever surface it stands on.
+//
+// Extracted out of RoomScene's pickUpAt so it can be tested directly, and that is not incidental: this function's whole content is the answer to "which boxes get built", and when a merge on 2026-08-20 quietly reverted the wall arm of it to plane-picking, every test still passed. They passed because they exercised wallPlacementBox and pickBoxAt by hand, which is to say they tested the pieces this assembles rather than the assembly — so the one thing that had broken was the one thing nothing covered.
+//
+// A piece is picked against its VOLUME and never against the plane it sits on. A piece stands up out of its cells (or out of the wall), so the ray through the body the player can actually see meets that plane one to three cells BEHIND it — one per 20 cm of height or depth at the rest camera. Plane-picking therefore leaves only a thin sliver at a piece's base live, and for a wall item with real depth like the eket cabinet (0.35 m, nearly two cells) it leaves nothing reachable at all: the press lands on a wall cell the cabinet does not own and is refused. Worse, the offset's DIRECTION follows the camera azimuth, so the live band slides around as the room turns and the whole thing reads as the long-press being unreliable rather than as a geometry bug.
+//
+// Returning them in ONE array is what makes pickBoxAt's nearest-wins rule reach across surface kinds: a chair standing in front of a wall painting is genuinely nearer the camera than the painting, so it wins on distance rather than on a "floor beats wall" precedence rule that would be wrong exactly when the two overlap.
+export function placementPickBoxes(
+  layout: readonly GridPlacement[],
+  resolve: PickResolver,
+  // Only walls the camera can actually SEE — picking a hidden wall would hand the player a piece they cannot look at.
+  wallVisible: (wall: WallId) => boolean,
+): { placement: GridPlacement; box: PickBox }[] {
+  const defs = new Map<string, PlaceableItemDef>();
+  for (const p of layout) {
+    const resolved = resolve(p.itemId);
+    if (resolved) defs.set(p.itemId, resolved.def);
+  }
+
+  const out: { placement: GridPlacement; box: PickBox }[] = [];
+  for (const placement of layout) {
+    const resolved = resolve(placement.itemId);
+    if (!resolved) continue;
+    const { def, size } = resolved;
+    if (placement.surface.kind === "floor") {
+      out.push({ placement, box: floorPlacementBox(placement, def, size.y) });
+    } else if (placement.surface.kind === "wall") {
+      if (!wallVisible(placement.surface.wall)) continue;
+      out.push({
+        placement,
+        box: wallPlacementBox(placement.surface.wall, placement, def, size.z),
+      });
+    } else {
+      // A stacked piece's box stands on its host's top, which is what lets the ray hit IT before the larger host box beneath — no priority code, just geometry.
+      const host = resolveHost(placement.surface.hostInstanceId, layout, defs);
+      const hostSize = host ? resolve(host.placement.itemId) : null;
+      if (!host || !hostSize) continue;
+      out.push({
+        placement,
+        box: topPlacementBox(host, placement, def, hostSize.size.y, size.y),
+      });
+    }
+  }
+  return out;
 }
 
 // Forward projection — room point to screen — used by tests to prove pick(project(cell)) round-trips, and by any UI that wants to badge a placement.

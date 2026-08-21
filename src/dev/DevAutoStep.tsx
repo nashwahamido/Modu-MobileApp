@@ -1,22 +1,26 @@
-import { ELEVATION, FONT, RADIUS, SIZE, SPACE, useStyles } from "@/src/game/ui/system/theme";
-import { StyleSheet, Pressable, Text } from "react-native";
+import { ELEVATION, FONT, RADIUS, SIZE, SPACE, useFixedStyles } from "@/src/game/ui/system/theme";
+import { StyleSheet, Pressable, Text, View, Image } from "react-native";
 import { actionCluster } from "@/src/game/core/evaluation/clusters";
 import { engageAxis } from "@/src/game/core/evaluation/engagement";
 import { targetPositionForAction } from "@/src/game/core/scene/targets";
 import { HOVER_LIFT_M, looseDelta, spawnDelta } from "@/src/game/core/geometry/staging";
 import { TIGHTEN_TOTAL_DEG, useGameStore } from "@/src/game/core/store";
 import { animateDriver, OffsetDriver } from "@/src/game/scene/offsetDriver";
+import { useHudIcon } from "@/src/game/ui/hud/hudIcons";
 import type { Theme } from "@/src/game/ui/system/theme";
+import { SHOWCASE_ENABLED } from "@/src/dev/showcase";
 
 interface Props {
   heldDriver: OffsetDriver;
   sinkDriver: OffsetDriver;
 }
 
-/** DEV-only: performs the next assembly action through the real store/scene pipeline (pickup → glide → snap, or tighten). Lets the whole game be stepped through on an emulator where touch-gesture injection is flaky; also doubles as a demo mode. Ported from the on-release engine; `snapPart` → game's `placePart`, and the done set is passed to game's targetPositionForAction. Parts that need a follow-up (screw park / slide-press drive) complete on the NEXT press, since their tighten/drive is a separate available action. */
+/** DEV and SHOWCASE builds: performs the next assembly action through the real store/scene pipeline (pickup → glide → snap, or tighten). Lets the whole game be stepped through on an emulator where touch-gesture injection is flaky; also doubles as a demo mode. Ported from the on-release engine; `snapPart` → game's `placePart`, and the done set is passed to game's targetPositionForAction. Parts that need a follow-up (screw park / slide-press drive) complete on the NEXT press, since their tighten/drive is a separate available action. */
 export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
-  const styles = useStyles(makeStyles);
-  const heldActionId = useGameStore((s) => s.heldActionId);
+  const styles = useFixedStyles(makeStyles);
+  // Read with the other hooks: this component returns null when it is not showing, so the icon
+  // cannot be looked up down in the render.
+  const playIcon = useHudIcon("play");
   const step = () => {
     const store = useGameStore.getState();
     const furniture = store.furniture;
@@ -148,13 +152,28 @@ export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
     }
   };
 
-  if (!__DEV__) return null;
+  // Visible in DEV, and in SHOWCASE builds — which are release builds, where __DEV__ is false.
+  //
+  // That is the same reasoning showcase.ts already gives for not gating itself on __DEV__: a demo or
+  // a study session runs from a real APK with no Metro attached, and stepping the build without
+  // fighting touch injection is exactly what this is for. EXPO_PUBLIC_SHOWCASE is the switch, so a
+  // shipped build with SHOWCASE=0 still carries none of it.
+  if (!__DEV__ && !SHOWCASE_ENABLED) return null;
   return (
     <Pressable
       style={styles.btn}
       onPress={step}
     >
-      <Text style={styles.text}>▶ auto</Text>
+      {/* icon + word, matching the Spot/recenter chips on the row. The play glyph is the app's own
+          icon-play.png rather than the ▶ text character, so it renders in the UI font/weight. */}
+      <View style={styles.content}>
+        <Image
+          source={playIcon}
+          style={styles.icon}
+          resizeMode="contain"
+        />
+        <Text style={styles.text}>auto</Text>
+      </View>
     </Pressable>
   );
 }
@@ -172,5 +191,7 @@ const makeStyles = (t: Theme) =>
     backgroundColor: t.surface,
     ...ELEVATION.card,
   },
+  content: { flexDirection: "row", alignItems: "center", gap: SPACE.xs },
+  icon: { width: 16, height: 16 },
   text: { color: t.text, fontFamily: FONT, fontSize: 13, fontWeight: "800" },
   });

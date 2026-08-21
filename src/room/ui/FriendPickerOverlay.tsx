@@ -7,13 +7,13 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View
 import { avatarForProfile } from "@/src/components/avatarAssets";
 import { Button } from "@/src/game/ui/system/Button";
 import { OverlaySheet } from "@/src/game/ui/system/OverlaySheet";
-import { RADIUS, SIZE, SPACE, TYPE, useStyles, useTheme } from "@/src/game/ui/system/theme";
+import { RADIUS, SIZE, SPACE, TYPE, useFixedStyles, useTheme } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import type { Profile } from "@/src/data";
 
 export function FriendPickerOverlay({ onClose }: { onClose: () => void }) {
-  const s = useStyles(makeStyles);
+  const s = useFixedStyles(makeStyles);
   const t = useTheme();
   const repos = useRepos();
   const me = useCurrentUserId();

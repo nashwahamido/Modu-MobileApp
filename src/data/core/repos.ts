@@ -226,6 +226,11 @@ export type WorkshopDraftRow = {
     aim_pitch_deg?: number | null;
     aim_yaw_deg?: number | null;
   } | null;
+  // The draft's own colour axis, as the portal writes it (workshop_drafts.variants jsonb, 011_workshop.sql) —
+  // the same {variation, is_default} pairs the publish RPC later explodes into item_variants rows. Optional
+  // because listPlaceables selects `*` and a row written before a column existed simply arrives absent; a
+  // surface draft carries `[]` by DB constraint (workshop_drafts_kind_shape).
+  variants?: { variation: string | null; is_default?: boolean }[] | null;
 };
 
 // A MODEL draft (size present) -> PlaceableRoomRow, source "workshop". Flattens the one jsonb `light` field into the ten light_* columns toPlaceableRoomRow already knows how to read, then delegates to it entirely — see the WorkshopDraftRow comment above for why that split exists rather than re-deriving toPlaceableRoomRow's own mapping rules here.
@@ -257,7 +262,7 @@ export function workshopDraftToPlaceableRoomRow(r: WorkshopDraftRow): PlaceableR
   });
 }
 
-// listPlaceables fetches every status='testing' workshop_drafts row in one query and hands the whole batch here, rather than filtering server-side by category_id — the model/surface split is a fact the DB GUARANTEES about the row's SHAPE (workshop_drafts_kind_shape: a surface draft's size is null, full stop), and re-deriving it from category_id membership in ('floor','wall') here would mean trusting a second, driftable copy of that list instead of the one thing the constraint actually promises. A surface draft is silently excluded, not warned about — it belongs in the shop catalogue (see workshopSurfaceDraftsToShopItems, shop/items.ts), not here, and that is its ordinary, expected shape.
+// listPlaceables fetches every status='testing' workshop_drafts row in one query and hands the whole batch here, rather than filtering server-side by category_id — the model/surface split is a fact the DB GUARANTEES about the row's SHAPE (workshop_drafts_kind_shape: a surface draft's size is null, full stop), and re-deriving it from category_id membership in ('floor','wall') here would mean trusting a second, driftable copy of that list instead of the one thing the constraint actually promises. A surface draft is silently excluded, not warned about — it has no size to place by, and it reaches the player through the shop catalogue instead (workshopDraftsToShopItems, shop/items.ts, which maps model and surface drafts alike), so that is its ordinary, expected shape.
 export function workshopModelDraftsToPlaceableRoomRows(rows: WorkshopDraftRow[]): PlaceableRoomRow[] {
   return rows.filter((r) => r.size_x != null).map(workshopDraftToPlaceableRoomRow);
 }
@@ -268,6 +273,34 @@ export type ItemVariant = {
   variation: string | null;
   isDefault: boolean;
 };
+
+// A testing draft's own variants, as ItemVariants — the colour axis of something that has not been published.
+//
+// WHY THIS EXISTS. item_variants is written only by publish_workshop_draft, so a draft has no rows there at
+// all. Every consumer reads the axis from that table (variantStore.ts), and an item with no rows resolves to
+// an EMPTY list — which defaultVariation turns into null, which seg() turns into the literal 'default' path
+// segment (catalog/assets.ts). So a draft whose variations are NAMED had every asset URL point at
+// default.glb / default.png, files that do not exist: the model loader has no error state and CatalogThumb
+// renders nothing on a 404, so the item appeared as an empty tile with no colour picker and no model. The
+// only drafts that ever worked were the ones whose single variation was unnamed, and they worked by accident.
+//
+// Mapped rather than fetched-as-item_variants because the two carry the same facts in different shapes: the
+// draft holds one jsonb array on its own row, item_variants holds one row per variation with a synthesised
+// id. Only the two fields the picker actually reads are shared, so this converts those and nothing else.
+//
+// Not filtered to model drafts, unlike workshopModelDraftsToPlaceableRoomRows: a surface draft carries an
+// empty array by DB constraint, so it contributes nothing here without needing a rule of its own.
+export function workshopDraftsToItemVariants(rows: WorkshopDraftRow[]): ItemVariant[] {
+  return rows.flatMap((r) =>
+    (r.variants ?? []).map((v) => ({
+      itemId: r.id,
+      variation: v.variation ?? null,
+      // Coerced rather than passed through: absent on an older or hand-written row, and variantStore's
+      // default-first sort compares Number(isDefault), which would yield NaN for undefined.
+      isDefault: v.is_default === true,
+    })),
+  );
+}
 
 export interface VariantsRepo {
   // The WHOLE variant table in one round trip: it is reference data, a couple of rows per item, and every consumer (a tile, a placement swatch row) needs it synchronously — so it is cached client-side rather than queried per item. See variantStore.ts.

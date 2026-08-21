@@ -4,8 +4,9 @@ import { engageAxis } from "@/src/game/core/evaluation/engagement";
 import { stageShiftFor } from "@/src/game/core/model/staging";
 import { AssemblyAction } from "@/src/game/core/type";
 import { MALLET_TAPS, TIGHTEN_TOTAL_DEG, useGameStore } from "@/src/game/core/store";
-import { PressPad, pressPadStyles as styles } from "@/src/game/input/pad/PressPad";
+import { PressPad, pressPadStyles as styles, HAND_ICON } from "@/src/game/input/pad/PressPad";
 import type { OffsetDriver } from "../../scene/offsetDriver";
+import { useMirror } from "@/src/game/ui/system/handedness";
 
 const DEG_PER_TAP = TIGHTEN_TOTAL_DEG / MALLET_TAPS;
 
@@ -17,6 +18,7 @@ interface Props {
 
 /** Insert-press control for 3-phase fasteners (part.insertStage set): tap the pad to PRESS the fastener from its STAGE pose (fully outside the hole) into the LOOSE pose (partly in). Sibling of TapControl — that drives loose→flush on the tighten; this drives stage→loose on the insert. Each tap eases the sink offset from stage to loose; at full taps `addTightenDeg` commits the insertFastener. The carrier's staging offset is folded in so a dowel pressed into a still-staged rod stays with the rod. */
 export function InsertPressControl({ action, sinkDriver }: Props) {
+  const m = useMirror();
   const deg = useGameStore((s) => s.tightenDeg[action.actionId] ?? 0);
 
   const press = () => {
@@ -43,8 +45,8 @@ export function InsertPressControl({ action, sinkDriver }: Props) {
   const presses = Math.min(MALLET_TAPS, Math.round(deg / DEG_PER_TAP));
 
   return (
-    <View style={styles.wrap} pointerEvents="box-none">
-      <PressPad icon="✋" resetKey={action.actionId} onPress={press} />
+    <View style={m(styles.wrap)} pointerEvents="box-none">
+      <PressPad icon={HAND_ICON} resetKey={action.actionId} onPress={press} />
       <Text style={styles.hint}>
         Press to fit it in · {presses}/{MALLET_TAPS}
       </Text>

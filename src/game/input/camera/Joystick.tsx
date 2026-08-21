@@ -17,12 +17,21 @@ const ARROW = '#a796b4';
 // 75% opaque, so the workbench shows faintly through the dial.
 const CREAM = 'rgba(245,234,221,0.75)';
 const CREAM_EDGE = 'rgba(120,100,80,0.18)';
+// The dark-theme dial. Matched to the HUD's own chrome (Theme.surface / Theme.border in
+// ui/system/theme) rather than a dimmed cream: the joystick sits in the same row as the
+// recenter and undo buttons, and a pale dial beside dark chrome read as a hole in the HUD.
+// Written as literals because this component renders outside the themed tree — same reason
+// ACCENT_LIGHT is exported for the knob.
+const DIAL_DARK = 'rgba(43,37,35,0.92)';
+const DIAL_DARK_EDGE = 'rgba(243,239,232,0.16)';
+// The arrows have to lift off the dark dial the way the dark ones lift off cream.
+const ARROW_DARK = '#8d7ba8';
 
 interface Props {
   onStart: () => void;
   onMove: (x: number, y: number) => void;
   onEnd: () => void;
-  /** Kept for call-site compatibility; the dial now looks the same in both themes. */
+  /** Dark theme: the dial takes the HUD's dark chrome so it belongs to the same control set. */
   dark?: boolean;
 }
 
@@ -41,14 +50,14 @@ const DEADZONE = 0.14;
  */
 const CURVE = 2;
 
-function JoystickImpl({ onStart, onMove, onEnd }: Props) {
+function JoystickImpl({ onStart, onMove, onEnd, dark = false }: Props) {
   const tx = useSharedValue(0);
   const ty = useSharedValue(0);
 
   // MEMOISED, for the same reason the scene gestures and the part/cluster gesture caches are: the play screen re-renders throughout a drag (fit-state churn), and handing GestureDetector a fresh Gesture object makes gesture-handler reconfigure the native handler underneath an in-flight touch. The three callbacks are useCallback-stable in useOrbitCamera, so this rebuilds only when the manipulator itself swaps.
   const pan = useMemo(
-    () =>
-      Gesture.Pan()
+    () => {
+      const g = Gesture.Pan()
         .onBegin(() => {
           scheduleOnRN(onStart);
         })
@@ -74,7 +83,24 @@ function JoystickImpl({ onStart, onMove, onEnd }: Props) {
           tx.value = withSpring(0);
           ty.value = withSpring(0);
           scheduleOnRN(onEnd);
-        }),
+        });
+      /**
+       * NEVER YIELDS TO ANOTHER GESTURE.
+       *
+       * Two Pan handlers in separate detectors compete by default, and on Android the first to
+       * activate blocks the second outright — so a part held from the tray meant this stick reported
+       * nothing, and the camera could not be turned while hunting for a socket. iOS is more
+       * permissive natively, which is why it only ever appeared on Android.
+       *
+       * `manualActivation(false)` with `shouldCancelWhenOutside(false)` keeps this handler alive
+       * once it has begun, regardless of what else activates: the dial owns the finger that is
+       * inside it, and no other gesture has any claim on that finger.
+       *
+       * Not simultaneousWithExternalGesture, which needs a REF to the other gesture — the drag is
+       * built per part by gestureFor(action), so there is no single object to point at.
+       */
+      return g.shouldCancelWhenOutside(false);
+    },
     [onStart, onMove, onEnd, tx, ty],
   );
 
@@ -84,12 +110,12 @@ function JoystickImpl({ onStart, onMove, onEnd }: Props) {
 
   return (
     <GestureDetector gesture={pan}>
-      <View style={styles.base}>
+      <View style={[styles.base, dark && styles.baseDark]}>
         <GrainOverlay radius={BASE / 2} />
-        <Text style={[styles.arrow, styles.arrowUp]}>▲</Text>
-        <Text style={[styles.arrow, styles.arrowDown]}>▼</Text>
-        <Text style={[styles.arrow, styles.arrowLeft]}>◀</Text>
-        <Text style={[styles.arrow, styles.arrowRight]}>▶</Text>
+        <Text style={[styles.arrow, dark && styles.arrowDark, styles.arrowUp]}>▲</Text>
+        <Text style={[styles.arrow, dark && styles.arrowDark, styles.arrowDown]}>▼</Text>
+        <Text style={[styles.arrow, dark && styles.arrowDark, styles.arrowLeft]}>◀</Text>
+        <Text style={[styles.arrow, dark && styles.arrowDark, styles.arrowRight]}>▶</Text>
         <Animated.View style={[styles.thumb, thumbStyle]}>
           <GrainOverlay radius={THUMB / 2} />
           {/* A lighter cap over the top half reads as a gloss highlight. */}
@@ -121,11 +147,15 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 3,
   },
+  // The dial in dark theme: the HUD's own surface and hairline, so it reads as one of the controls
+  // rather than a cream disc sitting on a dark scene.
+  baseDark: { backgroundColor: DIAL_DARK, borderColor: DIAL_DARK_EDGE },
   arrow: {
     position: 'absolute',
     color: ARROW,
     fontSize: 16,
   },
+  arrowDark: { color: ARROW_DARK },
   arrowUp: { top: 8 },
   arrowDown: { bottom: 8 },
   arrowLeft: { left: 10 },

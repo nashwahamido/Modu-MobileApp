@@ -9,12 +9,16 @@ import {
 
 import { avatarForProfile } from "@/src/components/avatarAssets";
 import { useGameStore } from "@/src/game/core/store";
-import { ELEVATION, Theme, useStyles } from "@/src/game/ui/system/theme";
+import { ELEVATION, Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 import { tutorialPresentationForProfile } from "./presentation";
 import { useTutorialStore } from "./store";
 
 const sparkySmile = avatarForProfile("momentum");
-const sparkyHappy = require("../../assets/images/avatars/sparky-happy.png");
+// One pose for now: sparky-happy.png is the PREVIOUS art style, and a celebration that swapped to
+// the old drawing mid-moment read worse than a celebration that keeps the current one. Restore the
+// two-pose swap the day a happy pose exists in the new style — the source line below is the only
+// thing that changes back.
+const sparkyHappy = sparkySmile;
 const confettiImage = require("../../assets/images/avatars/confetti.png");
 
 const FEEDBACK = [
@@ -33,7 +37,7 @@ export function momentumFeedbackForStep(index: number): string {
 }
 
 export function MomentumCompanion() {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const profile = useGameStore((state) => state.profile);
   const mapOpen = useGameStore((state) => state.mapOpen);
   const presentation = tutorialPresentationForProfile(profile);

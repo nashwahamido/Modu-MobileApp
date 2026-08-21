@@ -24,6 +24,8 @@ export type BrandId = "IKEA" | "Others";
 export type ToolId = "allenkey" | "mallet" | "hammer" | "screwdriver" | "hand";
 
 export type ThemeId = "light" | "dark" | "high_contrast";
+/** Which hand drives the build. NOT an accessibility SETTING: applyProfile replaces the settings object wholesale, so a handedness stored there would reset every time the player changed avatar. It sits beside theme and renderStyle as its own axis, for the same reason those do — it is a fact about the player, not a preference the profile has an opinion about. */
+export type Handedness = "left" | "right";
 /** How the furniture is rendered. Two mechanisms, one axis:
  *    realistic | cozy | cartoon   → the GLB is the look (Furniture.styleModels)
  *    toon | illustrated           → the MATERIAL is the look (scene/shaders.ts) */
@@ -33,7 +35,7 @@ export type RenderStyleId =
   | "cartoon"
   | "toon"
   | "illustrated";
-export type BackdropId = "studio" | "clear" | "cozy" | "cartoon";
+export type BackdropId = "grid" | "clear" | "calm" | "craft" | "garden";
 
 export type AssemblyMode = "free" | "guide" | "strict";
 export type TextLevel = "standard" | "simple";
@@ -92,6 +94,8 @@ export interface StructuralFields {
   lockTravel?: number;
   /** Force a plain snap placement even when a press/screw partner is already placed — the part just clicks home at drop with no drive gesture (EKET's suspension cover pushes over its bracket in the same motion that places it). */
   dropOn?: boolean;
+  /** Authored override for this part's drag hold/aim anchor, world-space at baked pose. Replaces the part's RESOLVED anchor outright (the value the multi-joint centroid would produce), not any individual frame — authoring is per-part while frames are per-liaison. None authored today: all four shipped furnitures derive cleanly. */
+  jointAnchor?: Vec3;
 }
 export interface FastenerFields {
   fastenerKind?: FastenerKind;
@@ -106,6 +110,24 @@ export interface FastenerFields {
   insertProud?: number;
 }
 export interface PartDef extends PartCore, StructuralFields, FastenerFields {}
+
+/** A part's world-space axis-aligned bounds at its BAKED pose. Harvested from Filament at model load; the unit the joint derivation works in. */
+export interface PartBox {
+  min: Vec3;
+  max: Vec3;
+}
+
+/** Where two parts actually meet, derived per liaison at baked pose. `anchor` is the shared world contact point; the per-endpoint offsets are what the drag uses as hold/aim points, each clamped into its own part's bounds. */
+export interface JointFrame {
+  liaison: LiaisonId;
+  anchor: Vec3;
+  offsetA: Vec3;
+  offsetB: Vec3;
+  /** How the anchor was found: a direct box overlap, or via a fastener bridging an air gap. */
+  via: "direct" | "bridge";
+  /** Unit direction the contact FACES, from part A's surface toward part B — the thin axis of the direct overlap slab (a contact is a thin sheet, and its normal is the slab's smallest dimension), or the center-to-center line for a bridged joint. Facing is what visibility gating needs: a socket whose facing points away from the camera is on the far side of its own part, invisible no matter what occludes it. */
+  facingA: Vec3;
+}
 
 export type RawPartDef = Omit<
   PartDef,
@@ -272,6 +294,11 @@ export interface Furniture {
   clusters?: Record<ClusterId, ClusterDef>;
   thumbs: ThumbMap;
   clusterThumbs?: ClusterThumbMap;
+  /** Sub-assembly art per finish, keyed exactly like `meta.variantThumbnails` — finish first, then
+   *  cluster. Hand-authored, so it lives beside the model rather than in the generated thumbs file.
+   *  A missing finish, or a finish missing one cluster, falls back to `clusterThumbs` for that
+   *  cluster alone (see presentation/finish.ts), so art can ship one stage at a time. */
+  clusterVariantThumbs?: Record<string, ClusterThumbMap>;
   audio?: AudioMap;
   styles?: StyleSet;
   styleModels?: Partial<Record<RenderStyleId, AssetSrc>>;

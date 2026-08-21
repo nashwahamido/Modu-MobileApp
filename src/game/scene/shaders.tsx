@@ -39,7 +39,8 @@ export const STYLE_SHADER: Record<RenderStyleId, ShaderStyleId> = {
 
 /** Metal fasteners keep their own finish under every style. */
 /** The metal map: brushed steel, gradient flattened so it tiles without banding. */
-const METAL_MAP = require("@/src/assets/textures/metal.png");
+/** .tex, not .png — PNG bytes, but the extension keeps it out of aapt's drawable table so Filament can find it in a release APK. See metro.config.js. */
+const METAL_MAP = require("@/src/assets/textures/metal.tex");
 
 /** Steel, not wood. LINEAR — a light neutral grey the map is tinted by. */
 const METAL_BASE: Vec3 = [0.52, 0.53, 0.56];
@@ -75,11 +76,11 @@ const METAL_GROUPS: readonly string[] = [
 // ── ink palette (LINEAR, not sRGB — Filament parameters are linear) ──────────
 /** The painted grain map. Multiplied by baseColor, so keep baseColor near white or the
  *  map's own colour gets tinted twice. */
-const GRAIN_MAP = require("@/src/assets/textures/wood_grain.png");
+const GRAIN_MAP = require("@/src/assets/textures/wood_grain.tex");
 /** The SIDE map: coarse 6-plank timber for the edge band and the legs. A table is made of
  *  two kinds of board — a panel for the top, solid stock for the legs — and using one map
  *  on everything is the tell that a thing was textured rather than built. */
-const SIDE_MAP = require("@/src/assets/textures/wood_grain_side.png");
+const SIDE_MAP = require("@/src/assets/textures/wood_grain_side.tex");
 
 /** Repeats per metre for the side map. 6 planks per tile at 1.4 → ~120 mm boards, wider
  *  than a 49 mm leg, so no seam can ever run down one. */

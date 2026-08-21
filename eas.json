@@ -7,6 +7,7 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "environment": "production",
       "env": {
         "EXPO_PUBLIC_DATA_BACKEND": "supabase",
         "EXPO_PUBLIC_SHOWCASE": "0",
@@ -15,6 +16,8 @@
     },
     "preview": {
       "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "environment": "production",
       "env": {
         "EXPO_PUBLIC_DATA_BACKEND": "supabase",
         "EXPO_PUBLIC_SHOWCASE": "1"
@@ -22,6 +25,7 @@
     },
     "production": {
       "autoIncrement": true,
+      "environment": "production",
       "env": {
         "EXPO_PUBLIC_DATA_BACKEND": "supabase",
         "EXPO_PUBLIC_SHOWCASE": "0"

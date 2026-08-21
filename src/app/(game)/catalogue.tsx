@@ -4,16 +4,21 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
 import Animated, {
   cancelAnimation,
+  runOnJS,
+  useAnimatedReaction,
+  Extrapolation,
+  interpolate,
+  useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
   withSequence,
+  withSpring,
   withTiming,
 } from "react-native-reanimated";
 import { StyleSheet,
   Image,
   Pressable,
-  ScrollView,
   Text,
   useColorScheme,
   View,
@@ -21,29 +26,30 @@ import { StyleSheet,
 
 // type
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
-import type { FurnitureMeta, ThumbSet } from "@/src/game/core/type";
+import type { FurnitureMeta, RenderStyleId, ThumbSet } from "@/src/game/core/type";
 import { type Milestone } from "@/src/game/ui/loading/loadingProgress";
 
 // data
 import { FURNITURE_METAS } from "@/src/game/content/furnitures/furnitures";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import { useCatalogRow, useCatalogStore } from "@/src/data/catalog/buildStore";
+import { useGameStore } from "@/src/game/core/store";
 import { useVariantStore } from "@/src/data/catalog/variantStore";
 import { brandFor } from "@/src/game/content/brands";
-import { ChevronIcon, ClockIcon, StagesIcon } from "@/src/components/Icons";
+import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
+import { ChevronIcon, ClockIcon } from "@/src/components/Icons";
 import { ConfettiRain } from "@/src/game/ui/celebration/Confetti";
 
 // styling
-import { ACCENT_LIGHT, RADIUS, SPACE, TYPE, ELEVATION, useStyles, FONT } from "@/src/game/ui/system/theme";
+import { ACCENT_LIGHT, RADIUS, SPACE, TYPE, useFixedStyles, FONT } from "@/src/game/ui/system/theme";
 import { Button, GrainOverlay } from "@/src/game/ui/system/Button";
 import { LoadingScreen } from "@/src/game/ui/loading/LoadingScreen";
 import type { Theme } from "@/src/game/ui/system/theme";
 
-import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 // The catalogue's copy is DB-authored.
 // needs loading screen
 function CatalogueLoading({ onBack }: { onBack: () => void }) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const status = useCatalogStore((s) => s.status);
   // 0.35 from the first frame: the fetch is already in flight, so the bar opens in creep rather than a stall.
   const milestone: Milestone = status === "empty" ? 0.35 : 1;
@@ -61,7 +67,7 @@ function CatalogueLoading({ onBack }: { onBack: () => void }) {
 }
 
 export default function CatalogueScreen() {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const router = useRouter();
   const safe = useSafeInsets();
   // The catalogue rows carry the display copy; the bundle only knows ids and counts. Reading the whole map here (not per-card) is what lets the category filter exist at all.
@@ -80,7 +86,13 @@ export default function CatalogueScreen() {
   const repos = useRepos();
   const status = useCatalogStore((s) => s.status);
   // Every entry in the catalog
-  const items = FURNITURE_METAS;
+  // Fewest stages first: the catalogue is a difficulty ladder, and a player choosing their first
+  // build should meet the shortest one at the top rather than hunting for it. Ties keep their
+  // authored order, so the list is stable between renders.
+  const items = useMemo(
+    () => [...FURNITURE_METAS].sort((a, b) => a.clusterCount - b.clusterCount),
+    [],
+  );
   const me = useCurrentUserId();
   // Which furniture this player has already finished. Read once per mount rather than per card: the grid renders every meta, so a per-card fetch would be one round trip per tile.
   const [completedIds, setCompletedIds] = useState<ReadonlySet<string>>(new Set());
@@ -108,6 +120,23 @@ export default function CatalogueScreen() {
     };
   }, [items, me, repos]);
   // The dropdown stays MOUNTED and animates on a shared value rather than mounting/unmounting with entering/exiting: an exit animation on an unmounting child races the state that removed it, and the closed menu still has to be untouchable and invisible to a screen reader either way.
+  // The hanging sign: drops in with a spring bounce on mount, and fades out as soon as the grid
+  // scrolls, so it never floats over the cards. It does NOT scroll with the content.
+  const signDrop = useSharedValue(-140);
+  const scrollY = useSharedValue(0);
+  useEffect(() => {
+    // Settles with a little overshoot — a sign on ropes should swing before it hangs still.
+    signDrop.value = withSpring(0, { damping: 12, stiffness: 110, mass: 0.9 });
+  }, [signDrop]);
+  const scrollHandler = useAnimatedScrollHandler((e) => {
+    scrollY.value = e.contentOffset.y;
+  });
+  const signStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: signDrop.value }],
+    // Gone within the first ~70px of scroll, well before the first card reaches it.
+    opacity: interpolate(scrollY.value, [0, 70], [1, 0], Extrapolation.CLAMP),
+  }));
+
   const menuOpen = useSharedValue(0);
   useEffect(() => {
     menuOpen.value = withTiming(pickerOpen ? 1 : 0, { duration: 170 });
@@ -144,18 +173,17 @@ export default function CatalogueScreen() {
   }
 
   return (
-    <View style={styles.root}>
-      {/* Diagonal, so neither end of the ramp sits flat behind a whole row of cards. */}
-      <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
-        <Defs>
-          <LinearGradient id="catalogueBg" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor={BG_FROM} />
-            <Stop offset="1" stopColor={BG_TO} />
-          </LinearGradient>
-        </Defs>
-        <Rect x="0" y="0" width="100%" height="100%" fill="url(#catalogueBg)" />
-      </Svg>
-      <ScrollView
+    // Rendered through SceneBackdrop — the SAME component the assembly screens use. The artwork is
+    // the screen ROOT (an ImageBackground), not a sibling <Image absoluteFill> layered behind it.
+    // That distinction is exactly what made the tutorial's backdrop read as zoomed-in; see the note
+    // at the top of SceneBackdrop.tsx.
+    <SceneBackdrop
+      source={require("@/src/assets/ui/catalogue-backdrop.jpg")}
+      style={styles.root}
+    >
+      <Animated.ScrollView
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
         contentContainerStyle={[
           styles.content,
           { paddingLeft: SPACE.xl + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN), paddingRight: SPACE.xl + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN), paddingTop: SPACE.xl + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN) },
@@ -175,8 +203,9 @@ export default function CatalogueScreen() {
               style={styles.homeIcon}
               resizeMode="contain"
             />
+            <Text style={styles.homeLabel}>Home</Text>
           </Pressable>
-          <Text style={styles.title}>Pick a Model to Assemble</Text>
+          {/* Spacer where the board hangs — the sign itself is pinned to the screen (see boardSign). */}
           <View style={styles.headerSpacer} />
           {/* Category filter. The list hangs off this pill so it can't push the grid down. */}
           <View style={styles.pickerWrap}>
@@ -248,8 +277,19 @@ export default function CatalogueScreen() {
             />
           ))}
         </View>
-      </ScrollView>
-    </View>
+      </Animated.ScrollView>
+      {/* Pinned to the SCREEN, not the scroll: the ropes run off the top edge and the sign hangs
+          beneath them. It fades on scroll rather than travelling with the grid. */}
+      <Animated.View style={[styles.boardSign, signStyle]} pointerEvents="none">
+        <Image
+          source={require("@/src/assets/ui/board-wooden.png")}
+          style={styles.board}
+          resizeMode="contain"
+          accessibilityRole="image"
+          accessibilityLabel="Furniture Catalogue"
+        />
+      </Animated.View>
+    </SceneBackdrop>
   );
 }
 
@@ -258,10 +298,67 @@ export default function CatalogueScreen() {
 const CELEBRATE_MS = 4200;
 
 /** This screen's backdrop. Deliberately its own pair rather than a shared token: each screen can be
- *  retuned without touching the others. Keep root.backgroundColor equal to BG_FROM — that is what
+ *  retuned without touching the others. The screen background is a flat cream (#F3ECE0) — what
  *  shows for the frame before the SVG paints. */
-const BG_FROM = ACCENT_LIGHT;
-const BG_TO = "#A9BFD9";
+
+
+/**
+ * The stage count as a difficulty band.
+ *
+ * One stage is a sitting: sage, the app's "complete" green, because it can be finished in one.
+ * Two or three is the sand from the avatar screen. Four or more is the clay — a warning about
+ * LENGTH, not a wall, so it stays the muted terracotta rather than a true red, which in this
+ * palette would read as an error.
+ */
+function stageBadgeColor(stages: number): string {
+  if (stages <= 1) return "#8FA876";
+  if (stages <= 2) return "#E8D48C";
+  return "#C98B76";
+}
+
+/** Trend-arrow art per difficulty band — same thresholds as stageBadgeColor, so the icon and the
+ *  badge colour can never disagree. */
+function stageTrendArrow(stages: number) {
+  if (stages <= 1) return require("@/src/assets/ui/icons/icon-trend-green.png");
+  if (stages <= 2) return require("@/src/assets/ui/icons/icon-trend-yellow.png");
+  return require("@/src/assets/ui/icons/icon-trend-red.png");
+}
+
+/** This screen's shadow, held locally rather than retuning the global ELEVATION scale (which every
+ *  other screen shares). Tighter and darker than ELEVATION.card: a smaller radius keeps the edge
+ *  legible instead of a soft haze, and the higher opacity holds up over the watercolour backdrop.
+ *  SHADOW = chrome (pills, cards); SHADOW_SM = the small action buttons that sit ON a card. */
+// RN 0.81 + new architecture supports `boxShadow`, which renders on ANDROID with a real colour and
+// alpha — unlike `elevation`, which ignores shadowColor/shadowOpacity and only draws its own soft
+// grey ramp. That is why the earlier opacity bumps changed nothing on device. Format is
+// "offsetX offsetY blur spread color".
+//
+// SHADOW = chrome (pills, cards). SHADOW_SM = the small action buttons that sit ON a card.
+// Darker: raise the alpha in rgba(). Sharper: lower the blur (the 3rd length).
+const SHADOW = {
+  boxShadow: "0px 5px 4px rgba(0,0,0,0.22)",
+  // iOS fallback for the old architecture; harmless where boxShadow is supported.
+  shadowColor: "#000",
+  shadowOpacity: 0.45,
+  shadowRadius: 2,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 6,
+} as const;
+
+const SHADOW_SM = {
+  boxShadow: "0px 3px 3px rgba(0,0,0,0.40)",
+  shadowColor: "#000",
+  shadowOpacity: 0.8,
+  shadowRadius: 1.5,
+  shadowOffset: { width: 0, height: 2 },
+  elevation: 4,
+} as const;
+
+/** The thumbnail groove. A SOLID mid grey rather than a translucent brown wash: the card beneath is
+ *  cream, so a low-alpha inset just tinted the cream and left a white finish with nothing to sit
+ *  against. Light enough to stay a recess rather than a grey panel — a white finish separates from
+ *  it without the tile reading as dark. */
+const THUMB_INSET = "#CFCAC2";
 
 /** The single text colour for this screen (wireframe ink). */
 const INK = "#231F20";
@@ -269,6 +366,23 @@ const INK = "#231F20";
 /** The finish carousel: how long a table sits still, and how long the slide to the next one takes.
  *  Together they set the loop's pace — four cells at 1.75s each is a ~7s cycle, slow enough to read
  *  as a showcase running in the background rather than something demanding attention. */
+/**
+ * What each carousel finish means to the BUILD.
+ *
+ * The assembly screen has exactly one lever for how a model looks — `renderStyle` — and it drives
+ * either a whole-model swap (cozy / cartoon ship their own GLB) or a material pass (illustrated is
+ * the wood-grain shader, shown as "Wooden" in settings). The DB's variations are a different axis:
+ * they dress the FINISHED piece in the room, and the build screen does not read them at all, which
+ * is why white and black land on the plain model here rather than silently doing nothing.
+ */
+const FINISH_STYLE: Record<string, RenderStyleId> = {
+  cozy: "cozy",
+  cartoon: "cartoon",
+  wooden: "illustrated",
+  white: "realistic",
+  black: "realistic",
+};
+
 const FINISH_HOLD_MS = 1100;
 const FINISH_SLIDE_MS = 650;
 
@@ -311,7 +425,7 @@ function FurnitureCard({
   onSelect: () => void;
   onStart: (variation: string | null) => void;
 }) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   // The finish list comes from item_variants (default first, already sorted by the store) but is narrowed to the finishes this build ships art for — so a variation authored in the DB ahead of its artwork simply doesn't appear, rather than rendering a missing image.
   const variants = useVariantStore((v) => v.byItem[meta.id]);
   const finishes = useMemo(() => {
@@ -331,12 +445,26 @@ function FurnitureCard({
     const t = setTimeout(() => setBurst(0), CELEBRATE_MS);
     return () => clearTimeout(t);
   }, [burst]);
-  // The build always uses the DEFAULT finish — the carousel is a showcase, not a picker, so a tap on Start mid-slide must not launch whatever frame was on screen.
+  // The DEFAULT finish, kept as the fallback for anything the carousel is showing that a build can't
+  // actually be started in.
   const buildFinish = finishes[0] ?? null;
-  // Cells: the alternates in reverse, then the default, then the FIRST cell again — so the pass opens and closes on the same finish (white for LACK). That repeat is also what makes a REPLAY seamless: the run ends parked on the last cell, and jumping back to cell 0 to start again lands on an identical image, so the reset is never seen.
+  // The carousel is a SHOWCASE, so it runs on the artwork a build ships, not on item_variants:
+  // "cartoon" and "cozy" are finishes the catalogue can display but nobody can buy or build, and
+  // gating the reel on the purchasable list meant three of the four models had nothing to show.
+  // buildFinish above still comes from the DB list, so what a tap on Start launches is unchanged.
+  const reel = useMemo(() => {
+    const art = meta.variantThumbnails;
+    if (!art) return [] as string[];
+    // THE META'S OWN ORDER, untouched. This used to hoist the DB default to the front, which quietly
+    // took the choice away from the meta: the pass opens on the reel's LAST entry, so reordering the
+    // list moved the opening finish somewhere nobody had asked for (every model opened on whatever
+    // happened to trail the default). The meta lists its finishes in the order it wants them shown.
+    return Object.keys(art);
+  }, [meta.variantThumbnails]);
+  // Cells: the alternates in reverse, then the first, then the LAST cell again — so the pass opens and closes on the meta's last-listed finish. That repeat is also what makes a REPLAY seamless: the run ends parked on the last cell, and jumping back to cell 0 to start again lands on an identical image, so the reset is never seen.
   const track = useMemo(
-    () => (finishes.length > 1 ? [...finishes.slice(1).reverse(), finishes[0], finishes[finishes.length - 1]] : []),
-    [finishes],
+    () => (reel.length > 1 ? [...reel.slice(1).reverse(), reel[0], reel[reel.length - 1]] : []),
+    [reel],
   );
   // `dark` survives here for the ARTWORK, not the styling: each meta ships a light and a dark thumbnail, and that choice can't come from a colour token.
   const pickThumb = (set: ThumbSet) => (dark ? set.dark : set.light) ?? set.light;
@@ -369,6 +497,41 @@ function FurnitureCard({
     slide.value = withSequence(...steps);
     return () => cancelAnimation(slide);
   }, [slide, track.length, selected]);
+  // WHICH finish is on the tile right now. The carousel is a picker as well as a showcase: a player
+  // who taps Start while Cozy is up expects to build the cozy one, so the visible cell has to exist
+  // on the JS side, not only on the UI thread. Rounded, because a tap mid-slide should launch the
+  // finish it is closest to rather than a half-scrolled neither.
+  const [shownIndex, setShownIndex] = useState(0);
+  useAnimatedReaction(
+    () => Math.round(slide.value),
+    (cell, prev) => {
+      if (cell !== prev) runOnJS(setShownIndex)(cell);
+    },
+    [],
+  );
+  const shownFinish = track.length ? track[Math.min(shownIndex, track.length - 1)] : null;
+
+  /**
+   * Start the build in the finish the tile is SHOWING.
+   *
+   * The carousel mixes two different things, and they launch differently:
+   *   - a DB VARIATION (wooden / white / black) is the build's own artwork — it travels as the
+   *     `variation` route param, exactly as the default did.
+   *   - a RENDER STYLE (cozy / cartoon) is a whole-model look owned by settings, not by the route,
+   *     so it is applied to the store before navigating.
+   * Anything the carousel can show but a build can't honour falls back to the default variation,
+   * so Start never launches something that doesn't exist.
+   */
+  const startShown = () => {
+    const shown = shownFinish;
+    // ALWAYS set it, including for the plain finishes: renderStyle is session state, so a player who
+    // built the cozy LACK and then starts the white one would otherwise get cozy again.
+    useGameStore.getState().setRenderStyle(shown ? FINISH_STYLE[shown] ?? "realistic" : "realistic");
+    // The variation still travels with the route: the build ignores it today, but it is the piece's
+    // finish once it reaches the room, and dropping it here would lose the player's choice there.
+    onStart(shown && finishes.includes(shown) ? shown : buildFinish);
+  };
+
   const trackStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: -slide.value * THUMB_CELL }],
   }));
@@ -419,17 +582,36 @@ function FurnitureCard({
         </View>
         <View style={styles.cardCopy}>
           <View style={styles.nameRow}>
-            <Text style={styles.name} numberOfLines={2}>{row?.name ?? "…"}</Text>
+            {/* adjustsFontSizeToFit with a floor: "BEKVÄM Step Stool" is the longest name in the
+                catalogue and sits right on the wrap boundary, so it flips between one and two lines
+                on the smallest width change. Letting it shrink a hair keeps every card's copy block
+                the same height instead of one of them being a line taller than the rest. */}
+            <Text
+              style={styles.name}
+              numberOfLines={2}
+              adjustsFontSizeToFit
+              minimumFontScale={0.85}
+            >
+              {row?.name ?? "…"}
+            </Text>
             {brand ? (
               <Image source={brand.logo} style={styles.brandLogo} resizeMode="contain" />
             ) : null}
           </View>
-          {/* Stages and time only — part count is build detail the player does not choose on. */}
+          {/* Stages and time only — part count is build detail the player does not choose on.
+              The stage count is the closest thing this app has to a difficulty rating, so it is
+              coloured like one: the number is the fact, and the colour is what it MEANS. */}
           <View style={styles.statRow}>
-            <StagesIcon size={22} color={INK} />
-            <Text style={styles.statText}>
-              {meta.clusterCount} {meta.clusterCount === 1 ? "stage" : "stages"}
-            </Text>
+            <Image
+              source={stageTrendArrow(meta.clusterCount)}
+              style={styles.trendArrow}
+              resizeMode="contain"
+            />
+            <View style={[styles.stageBadge, { backgroundColor: stageBadgeColor(meta.clusterCount) }]}>
+              <Text style={styles.stageBadgeText}>
+                {meta.clusterCount} {meta.clusterCount === 1 ? "stage" : "stages"}
+              </Text>
+            </View>
           </View>
           {row && row.durationMin > 0 ? (
             <View style={styles.statRow}>
@@ -460,7 +642,7 @@ function FurnitureCard({
       {/* Now a real target: the card body selects, this starts. Two jobs, two touch areas — a nested Pressable swallows its own touch, so it never falls through to selection. */}
       <Pressable
         style={({ pressed }) => [styles.startBtn, { backgroundColor: PILL_STYLE[state].bg }, pressed && styles.startBtnPressed]}
-        onPress={() => (armsFirst ? onSelect() : onStart(buildFinish))}
+        onPress={() => (armsFirst ? onSelect() : startShown())}
         accessibilityRole="button"
         accessibilityLabel={`${PILL_LABEL[state].replace(" ›", "")} ${row?.name ?? meta.id}`}
         accessibilityHint={armsFirst ? "Shows the available finishes. Tap again to start building." : undefined}
@@ -476,7 +658,7 @@ function FurnitureCard({
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
     // Screen palette, per the wireframe. Held here rather than in theme.ts so the rest of the app keeps its own tokens until these are promoted deliberately. INK is every text on the screen — one colour, no dimmed secondary tier, so the hierarchy comes from size/weight.
-    root: { flex: 1, backgroundColor: BG_FROM },
+    root: { flex: 1, backgroundColor: "#F3ECE0" },
     loadingWrap: { flex: 1 },
     // Matches the grid header's inset so the button doesn't jump when the catalogue lands.
     loadingBack: { position: "absolute", top: 56, left: SPACE.xl },
@@ -485,22 +667,44 @@ const makeStyles = (t: Theme) =>
       flexDirection: "row",
       alignItems: "center",
       gap: SPACE.md,
-      marginBottom: SPACE.xl,
+      // Bottom room so the first cards clear the pinned sign while the page is at rest.
+      marginBottom: 40,
       // The dropdown hangs out of this row; without this its menu is clipped by the ScrollView.
       zIndex: 10,
     },
     homeBtn: {
-      width: 44,
-      height: 44,
-      borderRadius: RADIUS.control,
+      flexDirection: "row",
       alignItems: "center",
-      justifyContent: "center",
+      gap: SPACE.sm,
+      height: 44,
+      paddingHorizontal: SPACE.md,
+      borderRadius: RADIUS.pill,
       backgroundColor: "#FBF8F3",
       borderWidth: 1,
       borderColor: t.border,
-      ...ELEVATION.card,
+      ...SHADOW,
     },
-    homeIcon: { width: 28, height: 28 },
+    homeIcon: { width: 26, height: 26 },
+    homeLabel: { ...TYPE.label, fontWeight: "600", color: INK },
+    // The board sits BETWEEN the two pills and takes the middle. overflow hidden + the image's
+    // negative marginTop is what clips the rope-tops, so they read as running off the screen edge.
+    headerSpacer: { flex: 1 },
+    // The sign hangs from the top of the SCREEN. Centered across the full width; pinned so the grid
+    // scrolls underneath and the sign fades out instead of following it.
+    boardSign: {
+      position: "absolute",
+      top: 0,
+      // The extra right inset pushes the centred sign slightly LEFT of true centre. Increase it to
+      // shift further left; drop it back to 0 to re-centre.
+      left: 0,
+      right: 28,
+      alignItems: "center",
+      zIndex: 5,
+    },
+    // 2.77:1 art. The negative marginTop cancels the transparent cap above the ropes in the PNG, so
+    // the rope-tops meet the screen edge. Tune height to resize; width follows the aspect ratio.
+    board: { width: "100%", maxWidth: 360, height: 140, aspectRatio: 1109 / 401, marginTop: -44 },
+    trendArrow: { width: 24, height: 24 },
     pressedSurface: { backgroundColor: t.surfaceRaised },
     pickerWrap: { position: "relative", zIndex: 20 },
     picker: {
@@ -513,7 +717,7 @@ const makeStyles = (t: Theme) =>
       backgroundColor: "#FBF8F3",
       borderWidth: 1,
       borderColor: t.border,
-      ...ELEVATION.card,
+      ...SHADOW,
     },
     pickerText: { ...TYPE.label, color: INK },
     pickerMenu: {
@@ -526,16 +730,13 @@ const makeStyles = (t: Theme) =>
       backgroundColor: "#FBF8F3",
       borderWidth: 1,
       borderColor: t.border,
-      ...ELEVATION.card,
+      ...SHADOW,
     },
     pickerItem: { paddingVertical: SPACE.sm, paddingHorizontal: SPACE.lg },
     // The current filter, marked on the row rather than by the label alone — weight is easy to miss at this size.
     pickerItemSelected: { backgroundColor: t.surfaceRaised },
     pickerItemText: { ...TYPE.body, color: INK },
     pickerItemActive: { color: INK, fontFamily: FONT, fontWeight: "700" },
-    headerSpacer: { flex: 1 },
-    // Tracked-out slightly: this is a screen label, not a page title competing with the cards. Ink, not cream: cream measures 1.78:1 against the blue end of the gradient, and ink clears both ends (4.29 lavender, 8.65 blue).
-    title: { fontFamily: FONT, fontSize: 20, fontWeight: "800", color: INK, letterSpacing: 0.4 },
     subtitle: {
       ...TYPE.body,
       color: INK,
@@ -559,19 +760,30 @@ const makeStyles = (t: Theme) =>
       padding: SPACE.lg,
       borderWidth: StyleSheet.hairlineWidth * 2,
       borderColor: t.border,
-      ...ELEVATION.card,
+      ...SHADOW,
     },
     cardPressed: { backgroundColor: t.surfaceRaised },
     burstClip: { ...StyleSheet.absoluteFillObject, borderRadius: RADIUS.panel, overflow: "hidden" },
     // The colour comes from PILL_STYLE at the call site, so the outline and the button always agree about which state the card is in — one signal in two places, never two signals.
-    cardSelected: { borderWidth: 3 },
+    // The selected outline is 3pt where the resting one is a hairline, so selecting a card USED TO
+    // narrow its content box by ~4pt. Every card shifted a little; BEKVÄM's title sits right at the
+    // wrap boundary, so those few points tipped it onto a second line and shoved the stage pill,
+    // duration and logo down with it. Giving the padding back keeps the inner width identical in
+    // both states, so nothing reflows on selection.
+    cardSelected: {
+      borderWidth: 3,
+      padding: SPACE.lg - (3 - StyleSheet.hairlineWidth * 2),
+    },
     cardBody: { flexDirection: "row", gap: SPACE.md },
     thumbWrap: {
       width: 118,
       height: 118,
       borderRadius: RADIUS.control,
-      // Inset, like every other groove in the palette — the thumbnail sits IN the card.
-      backgroundColor: t.surfaceInset,
+      // Inset, like every other groove in the palette — the thumbnail sits IN the card. Held LOCALLY
+      // and darker than t.surfaceInset (0.10): these tiles carry white and pale-wood furniture, and
+      // at the theme's value a white LACK dissolved into its own groove. Every other inset in the
+      // app sits behind text or controls, which is why the token stays where it is.
+      backgroundColor: THUMB_INSET,
       alignItems: "center",
       justifyContent: "center",
       // The carousel is wider than the frame; without this the off-screen cells spill over the card.
@@ -580,7 +792,15 @@ const makeStyles = (t: Theme) =>
     thumbTrack: { position: "absolute", left: 0, top: 0, bottom: 0, flexDirection: "row" },
     thumbCell: { width: THUMB_CELL, alignItems: "center", justifyContent: "center" },
     thumb: { width: "82%", height: "82%" },
-    // Matches StagesIcon/ClockIcon so the three stat rows share one optical size.
+    stageBadge: {
+      paddingHorizontal: SPACE.sm,
+      paddingVertical: 2,
+      borderRadius: RADIUS.pill,
+    },
+    // INK on every band: all three colours are light enough to carry it (7.5:1 or better), and one
+    // text colour keeps the badges reading as one set rather than three separate marks.
+    stageBadgeText: { ...TYPE.labelSm, color: INK },
+    // Matches the trend arrow/ClockIcon so the three stat rows share one optical size.
     xpIcon: { width: 22, height: 22 },
     cardCopy: { flex: 1, gap: SPACE.xs },
     // Centre, not flex-start: the logo now matches the title's cap height, so aligning on the text baseline row is what makes the pair read as one line.
@@ -597,6 +817,7 @@ const makeStyles = (t: Theme) =>
       height: 36,
       justifyContent: "center",
       borderRadius: RADIUS.pill,
+      ...SHADOW_SM,
     },
     // A dim rather than a colour: the resting fill is per state, so one pressed tint can't serve all three.
     startBtnPressed: { opacity: 0.78 },

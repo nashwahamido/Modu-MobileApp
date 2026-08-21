@@ -1,7 +1,6 @@
 import {
   action,
   FastenerRule,
-  tightenActionIds,
 } from "@/src/game/core/composition/composeActions";
 import { StructureOverlay } from "@/src/game/core/model/liaisons";
 import { asGroupId } from "@/src/game/core/ids";
@@ -12,9 +11,6 @@ import {
   InstructionSet,
   LabelMap,
 } from "@/src/game/core/type";
-import { PARTS } from "./parts.gen";
-
-const P = PARTS;
 
 export const LABELS = {
   legL: { standard: "Left side panel", simple: "Left side" },
@@ -28,7 +24,7 @@ export const LABELS = {
 } as LabelMap;
 
 export const CLUSTERS = {
-  whole: { id: "whole", label: "Step stool" },
+  whole: { id: "whole", label: "Step Stool" },
 } as Record<ClusterId, ClusterDef>;
 
 export const STRUCTURE = {
@@ -66,21 +62,10 @@ export const AUTHORED_ACTIONS: DraftAction[] = [
   place("backTopRail", 1),
   // ── stage 2: top on, everything screwed home, stand it up ──
   place("topPlane", 2),
-  action({
-    actionId: "finishing_checks",
-    type: "reorient",
-    stage: 2,
-    requires: [
-      ...tightenActionIds(P, asGroupId("dowel101350")),
-      ...tightenActionIds(P, asGroupId("screw105215")),
-      ...tightenActionIds(P, asGroupId("screw105111")),
-    ],
-  }),
-];
+]; 
 
-export const BEATS = {
-  finishing_checks: {
-    text: "Stand the stool upright and press down on both steps to check it sits firm.",
-    simpleText: "Stand the stool up and give it a wobble test.",
-  },
-} as InstructionSet;
+// The ceremonial `finishing_checks` beat was REMOVED 2026-08-19. It moved no part — the pieces
+// were already at their baked poses and the free camera makes a literal flip unnecessary — so it
+// was a swipe card standing between the player and a finished build. The last real assembly step
+// is the last step now. Its instruction copy went with it.
+export const BEATS = {} as InstructionSet;

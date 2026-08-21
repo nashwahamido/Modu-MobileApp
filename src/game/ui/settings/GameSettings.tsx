@@ -1,5 +1,6 @@
 // In-game settings: a gear button that opens the shared SettingsControls in a cream modal card. Same controls as the homepage /settings screen — one source of truth, one look (adopted from the on-release engine).
 import { router } from "expo-router";
+import { useHudIcon } from "@/src/game/ui/hud/hudIcons";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
@@ -13,14 +14,14 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useSafeInsets } from "@/src/hooks/use-safe-insets";
-import { ELEVATION, RADIUS, Theme, useStyles, FONT } from "@/src/game/ui/system/theme";
+import { ELEVATION, RADIUS, Theme, useFixedStyles, FONT } from "@/src/game/ui/system/theme";
+import { useMirror } from "@/src/game/ui/system/handedness";
 import {
   SettingsControls,
   type SettingsFocusTarget,
 } from "@/src/game/ui/settings/SettingsControls";
 import { GrainOverlay } from "@/src/game/ui/system/Button";
 
-const SETTINGS_ICON = require("@/src/assets/ui/icons/icon-settings.png");
 
 interface GameSettingsProps {
   headerContent?: ReactNode;
@@ -41,7 +42,9 @@ export function GameSettings({
   tutorialTarget = null,
   onTutorialTargetActivated,
 }: GameSettingsProps = {}) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
+  const m = useMirror();
+  const settingsIcon = useHudIcon("settings");
   const [open, setOpen] = useState(false);
   const [tutorialTargetY, setTutorialTargetY] = useState<number | null>(null);
   const scrollRef = useRef<ScrollView>(null);
@@ -86,7 +89,7 @@ export function GameSettings({
     <>
       {/* Settings icon — rounded-square chip with a minimalist sliders glyph. subject to change*/}
       <Pressable
-        style={({ pressed }) => [styles.gear, pressed && { opacity: 0.6 }]}
+        style={({ pressed }) => [m(styles.gear), pressed && { opacity: 0.6 }]}
         onPress={() => {
           if (tutorialTarget) {
             tutorialWasOpen.current = true;
@@ -99,7 +102,7 @@ export function GameSettings({
       >
         <GrainOverlay radius={RADIUS.control} />
         <Image
-          source={SETTINGS_ICON}
+          source={settingsIcon}
           style={[styles.icon]}
           resizeMode="contain"
         />

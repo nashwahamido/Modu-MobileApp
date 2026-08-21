@@ -36,7 +36,7 @@ const PRESENTATION_BY_PROFILE: Record<ProfileId, TutorialPresentation> = {
   },
   clearPath: {
     showChecklist: false,
-    showMilestoneConfirmation: true,
+    showMilestoneConfirmation: false,
     emphasizeTarget: true,
     showMomentumCompanion: false,
     showVisualDemo: false,

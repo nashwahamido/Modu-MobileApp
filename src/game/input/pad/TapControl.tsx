@@ -4,8 +4,9 @@ import { engageAxis } from "@/src/game/core/evaluation/engagement";
 import { AssemblyAction } from "@/src/game/core/type";
 import { MALLET_TAPS, TIGHTEN_TOTAL_DEG, useGameStore } from "@/src/game/core/store";
 import { playTapSfx } from "@/src/game/audio/useAssemblySfx";
-import { PressPad, pressPadStyles as styles } from "@/src/game/input/pad/PressPad";
+import { PressPad, pressPadStyles as styles, HAND_ICON } from "@/src/game/input/pad/PressPad";
 import type { OffsetDriver } from "../../scene/offsetDriver";
+import { useMirror } from "@/src/game/ui/system/handedness";
 
 interface Props {
   action: AssemblyAction;
@@ -15,6 +16,7 @@ interface Props {
 
 /** Strike control: tap the target repeatedly; each hit drives the part one step toward flush (heavy haptic per hit). Counterpart of TightenControl's circular gesture for struck fasteners — reached via tool "mallet" OR motion "strike", so a bare-hand tap-in (BEKVÄM's wood dowel) lands here too and shows a hand instead of the mallet. Motion "press" is the ONE-shot variant: a single press seats it (EKET's rear cam locks + pins, already resting flush via insertProud 0). */
 export function TapControl({ action, sinkDriver }: Props) {
+  const m = useMirror();
   const struck = action.tool === "mallet" || action.tool === "hammer";
   const single = action.motion === "press";
   const taps = single ? 1 : MALLET_TAPS;
@@ -38,8 +40,8 @@ export function TapControl({ action, sinkDriver }: Props) {
   const hits = Math.min(taps, Math.round(deg / degPerTap));
 
   return (
-    <View style={styles.wrap} pointerEvents="box-none">
-      <PressPad icon={struck ? "🔨" : "✋"} resetKey={action.actionId} onPress={press} />
+    <View style={m(styles.wrap)} pointerEvents="box-none">
+      <PressPad icon={struck ? "🔨" : HAND_ICON} resetKey={action.actionId} onPress={press} />
       {/* hintInk: this control's caption is dark where its siblings' are cream. Kept as it was — see PressPad */}
       <Text style={[styles.hint, styles.hintInk]}>
         {single ? "Press it home" : `Tap to drive it in · ${hits}/${taps}`}

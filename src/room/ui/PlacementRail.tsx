@@ -7,7 +7,7 @@ import { BulbIcon, CheckIcon, RotateLeftIcon, RotateRightIcon, TrashIcon } from 
 import { getRoomItemDef } from "../core/placeableItems";
 import { usePlacementStore } from "../core/placement";
 import { ColourPicker } from "./ColourPicker";
-import { CREAM, useStyles, useTheme, FONT, LEXEND } from "@/src/game/ui/system/theme";
+import { CREAM, useFixedStyles, useTheme, FONT, LEXEND } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "../../hooks/use-safe-insets";
 
@@ -27,8 +27,27 @@ function blockedHint(reason: string | null): string {
   }
 }
 
-export function PlacementRail() {
-  const s = useStyles(makeStyles);
+export type PlacementGuideTarget =
+  | "style"
+  | "reposition"
+  | "rotate"
+  | "confirm";
+
+export interface PlacementGuideInteraction {
+  type: PlacementGuideTarget;
+  sequence: number;
+}
+
+interface PlacementRailProps {
+  guideTarget?: PlacementGuideTarget | null;
+  onGuideAction?: (type: PlacementGuideTarget) => void;
+}
+
+export function PlacementRail({
+  guideTarget = null,
+  onGuideAction,
+}: PlacementRailProps) {
+  const s = useFixedStyles(makeStyles);
   const t = useTheme();
   // The HUD is absolutely positioned, so each corner nudges itself in by the insets
   const safe = useSafeInsets();
@@ -62,7 +81,10 @@ export function PlacementRail() {
         },
       ]}
     >
-      <ColourPicker />
+      <ColourPicker
+        highlighted={guideTarget === "style"}
+        onSelect={() => onGuideAction?.("style")}
+      />
 
       <View style={[s.bar, blocked && s.barBlocked]}>
         <Text style={[s.hint, blocked && s.hintBlocked]}>{blockedHint(blockedReason)}</Text>
@@ -82,15 +104,21 @@ export function PlacementRail() {
         <View style={s.row}>
           <Pressable
             accessibilityLabel="Rotate furniture left"
-            style={s.roundButton}
-            onPress={() => rotateGhost(-1)}
+            style={[s.roundButton, guideTarget === "rotate" && s.guideTarget]}
+            onPress={() => {
+              rotateGhost(-1);
+              onGuideAction?.("rotate");
+            }}
           >
             <RotateLeftIcon size={21} />
           </Pressable>
           <Pressable
             accessibilityLabel="Rotate furniture right"
-            style={s.roundButton}
-            onPress={() => rotateGhost(1)}
+            style={[s.roundButton, guideTarget === "rotate" && s.guideTarget]}
+            onPress={() => {
+              rotateGhost(1);
+              onGuideAction?.("rotate");
+            }}
           >
             <RotateRightIcon size={21} />
           </Pressable>
@@ -114,9 +142,16 @@ export function PlacementRail() {
         {/* Full width of the rail: the primary action, and the only one that ends the placement well. */}
         <Pressable
           accessibilityLabel="Confirm furniture position"
-          style={[s.confirm, blocked && s.confirmDisabled]}
+          style={[
+            s.confirm,
+            blocked && s.confirmDisabled,
+            guideTarget === "confirm" && s.guideTarget,
+          ]}
           disabled={blocked}
-          onPress={confirmPlacement}
+          onPress={() => {
+            confirmPlacement();
+            onGuideAction?.("confirm");
+          }}
         >
           <CheckIcon size={27} color={t.onSuccess} />
         </Pressable>
@@ -199,5 +234,12 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   },
   confirmDisabled: {
     opacity: .35,
+  },
+  guideTarget: {
+    borderWidth: 3,
+    borderColor: t.accent,
+    shadowColor: t.accent,
+    shadowOpacity: .45,
+    shadowRadius: 8,
   },
 });

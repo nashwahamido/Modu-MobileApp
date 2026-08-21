@@ -5,13 +5,19 @@ import { StyleSheet, Pressable, ScrollView, Text, View } from "react-native";
 
 import { CatalogThumb } from "../../components/CatalogThumb";
 import { useItemVariants } from "../../data/catalog/variantStore";
-import { RADIUS, SPACE, TYPE, useStyles } from "@/src/game/ui/system/theme";
+import { variationLabel } from "../../data/catalog/variantLabel";
+import { RADIUS, SPACE, TYPE, useFixedStyles } from "@/src/game/ui/system/theme";
 import { roomItemSource } from "../core/placeableItems";
 import { usePlacementStore } from "../core/placement";
 import type { Theme } from "@/src/game/ui/system/theme";
 
-export function ColourPicker() {
-  const s = useStyles(makeStyles);
+interface ColourPickerProps {
+  highlighted?: boolean;
+  onSelect?: () => void;
+}
+
+export function ColourPicker({ highlighted = false, onSelect }: ColourPickerProps) {
+  const s = useFixedStyles(makeStyles);
   // Primitive selectors, like the rest of this screen's placement reads: the ghost's object identity changes on every cell it crosses, and the swatch row must not re-render with it.
   const itemId = usePlacementStore((p) => p.activeEdit?.placement.itemId ?? null);
   const selected = usePlacementStore((p) => p.activeEdit?.placement.variation ?? null);
@@ -21,17 +27,20 @@ export function ColourPicker() {
   if (!itemId || variants.length < 2) return null;
 
   return (
-    <View style={s.bar}>
+    <View style={[s.bar, highlighted && s.guideTarget]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.column}>
         {variants.map((variant) => {
           const active = variant.variation === selected;
           return (
             <Pressable
               key={variant.variation ?? "default"}
-              accessibilityLabel={`Colour ${variant.variation ?? "default"}`}
+              accessibilityLabel={`Colour ${variationLabel(variant.variation)}`}
               accessibilityState={{ selected: active }}
               style={({ pressed }) => [s.swatch, active && s.swatchActive, pressed && s.swatchPressed]}
-              onPress={() => setGhostVariation(variant.variation)}
+              onPress={() => {
+                setGhostVariation(variant.variation);
+                onSelect?.();
+              }}
             >
               <CatalogThumb
                 source={roomItemSource(itemId)}
@@ -40,7 +49,7 @@ export function ColourPicker() {
                 size={38}
               />
               <Text style={[s.label, active && s.labelActive]} numberOfLines={1}>
-                {variant.variation ?? "default"}
+                {variationLabel(variant.variation)}
               </Text>
             </Pressable>
           );
@@ -79,4 +88,11 @@ const makeStyles = (t: Theme) =>
     swatchPressed: { transform: [{ scale: 0.94 }] },
     label: { ...TYPE.labelSm, fontSize: 9.5, color: t.textFaint },
     labelActive: { color: t.text },
+    guideTarget: {
+      borderWidth: 3,
+      borderColor: t.accent,
+      shadowColor: t.accent,
+      shadowOpacity: 0.45,
+      shadowRadius: 8,
+    },
   });

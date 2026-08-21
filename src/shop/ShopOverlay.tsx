@@ -1,10 +1,10 @@
-// The shop, as a popup layer over the room rather than a route, so the scene stays mounted. Twin of InventoryOverlay, and separate on purpose: anything that must LOOK the same is a shared token or a shared helper, never a number copied between them. The conventions this file follows are listed at the top of game/ui/theme.ts. Read them before restyling.
+// shop, as a popup layer over the room rather than a route, so the scene stays mounted. Twin of InventoryOverlay, and separate on purpose: anything that must LOOK the same is a shared token or a shared helper, never a number copied between them. The conventions this file follows are listed at the top of game/ui/theme.ts. Read them before restyling.
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Animated, StyleSheet, Pressable, ScrollView, Text, View } from "react-native";
 
 import { CloseIcon } from "@/src/components/Icons";
 import { Button } from "@/src/game/ui/system/Button";
-import { CREAM, CREAM_LIFT, useStyles, useTheme, LEXEND } from "@/src/game/ui/system/theme";
+import { CREAM, CREAM_LIFT, useFixedStyles, useTheme, LEXEND } from "@/src/game/ui/system/theme";
 import { useSlideUpPresentation } from "@/src/game/ui/system/slideUp";
 import type { Theme } from "@/src/game/ui/system/theme";
 import { isSurfaceCategory, useCurrentUserId, useRepos, viewCatalogue } from "@/src/data";
@@ -12,34 +12,35 @@ import type { ShopCategory, ShopItem, ShopItemId } from "@/src/data";
 import { useProfileStore } from "@/src/data/player/profileStore";
 import { useShopStore } from "@/src/data/shop/store";
 import { useScreenInsets } from '@/src/hooks/use-safe-insets';
-import { ShopCategoryTabs } from "./ShopCategoryTabs";
+import { CategoryBoardTabs } from "@/src/components/CategoryBoardTabs";
 import { ShopItemTile } from "./ShopItemTile";
 import type { PurchaseBlock } from "./purchaseBlock";
 import { PurchaseConfirmPopup } from "./PurchaseConfirmPopup";
 import { PurchaseNoticePopup } from "./PurchaseNoticePopup";
+import { PurchasedPopup } from "./PurchasedPopup";
+import { usePlacementStore } from "@/src/room/core/placement";
+import { warmItemModel } from "./ItemSpinPreview";
 
 // Fixed four columns; the tile width is solved from the measured row width
 const GRID_COLUMNS = 4;
 const GRID_GAP = 22;
 // Side breathing room, subtracted before the columns are solved so tiles really do shrink
 const GRID_EDGE = 22;
+// How long a transient message stays up
+const NOTE_MS = 2400;
 
 export function ShopOverlay({ onClose }: { onClose: () => void }) {
-  const s = useStyles(makeStyles);
+  const s = useFixedStyles(makeStyles);
   const t = useTheme();
   const safe = useScreenInsets();
   const repos = useRepos();
   const me = useCurrentUserId();
-  // Slides up over the room and dims it, the way this surface did when it was a (presentation) route. requestClose replaces every direct onClose call, so the sheet is off-screen before the parent unmounts it.
   const { sheetStyle, scrimStyle, requestClose } = useSlideUpPresentation(onClose);
-
-  // The catalogue and the owned set are shared with the inventory popup (src/data/shop/store). So opening one after the other does not fetch the same reference data twice, and a purchase here is visible there without a refetch.
   const items = useShopStore((c) => c.items);
   const owned = useShopStore((c) => c.owned);
   const status = useShopStore((c) => c.status);
   const loading = status === "loading" || status === "empty";
   const loadError = status === "error";
-  // Coins and level come from the same store the room's HUD reads (src/data/player/profileStore), so spending here moves the pill behind the popup too.
   const profile = useProfileStore((p) => p.profile);
   const coins = profile?.coins ?? 0;
   const level = profile?.level ?? 1;
@@ -49,22 +50,25 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
   const [note, setNote] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ item: ShopItem; block: PurchaseBlock } | null>(null);
   const [confirm, setConfirm] = useState<ShopItem | null>(null);
-  // Measured, since the panel's inset varies per device.
+  // The just-bought item, while the player chooses where it goes
+  const [purchased, setPurchased] = useState<ShopItem | null>(null);
   const [gridWidth, setGridWidth] = useState(0);
   const tileWidth = Math.floor(
     (gridWidth - GRID_EDGE * 2 - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS,
   );
-
-  // load() is a no-op once this user's catalogue is in, so re-opening the popup costs nothing. The profile IS re-read on open, because a build finished elsewhere may have paid out since.
   useEffect(() => {
     void useShopStore.getState().load(repos, me);
     void useProfileStore.getState().load(repos, me);
   }, [me, repos]);
 
-  // Sorted by name: the popup has no sort control, so one stable order it is
+  // Sorted by name
   const visible = useMemo(() => viewCatalogue(items, category, "name"), [items, category]);
 
-  // A tap explains a block or asks to confirm. Nothing is bought on the tap itself
+  // Probe the models of whatever is on screen, so the purchase preview does not spend a round trip discovering the URL after the popup is already up. One HEAD per item per session; the answer is cached at module scope.
+  useEffect(() => {
+    for (const item of visible) warmItemModel(item.id);
+  }, [visible]);
+
   const requestBuy = (item: ShopItem) => {
     if (owned.has(item.id) || busyId) return;
     if (level < item.minLevel) return setNotice({ item, block: "level" });
@@ -80,18 +84,16 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
     try {
       const res = await repos.store.purchase(me, item.id);
       if (res.ok) {
-        // Both writes land on shared state: the inventory popup sees the new item, and the room's coin pill behind this popup sees the new balance. Neither needs a re-read.
         useShopStore.getState().markOwned(item.id);
         useProfileStore.getState().setCoins(res.coinsRemaining);
-        setNote(`Bought ${item.name}`);
+        setPurchased(item);
       } else if (res.reason === "level_locked" || res.reason === "insufficient_coins") {
-        // The server is authoritative, so echo its refusal
         setNotice({ item, block: res.reason === "level_locked" ? "level" : "coins" });
       } else {
         setNote("You already own that.");
       }
     } catch (err) {
-      // A throw is transport, not a refusal. Coins move server-side, so nothing was spent
+      
       console.warn("[shop] purchase failed:", (err as Error).message);
       setNote("Couldn't reach the shop. Nothing was charged — try again.");
     } finally {
@@ -99,25 +101,43 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
     }
   };
 
+  // Every message this screen shows is transient — it reports what just happened and then gets out of the way, rather than pushing the grid down for as long as the popup stays open.
+  useEffect(() => {
+    if (note === null) return;
+    const t = setTimeout(() => setNote(null), NOTE_MS);
+    return () => clearTimeout(t);
+  }, [note]);
+
+  // Leaves the shop and starts placing. startPlacing refuses an item with no room model, in which case the piece simply stays in the inventory and the player is told so.
+  const placeInRoom = (item: ShopItem) => {
+    setPurchased(null);
+    if (usePlacementStore.getState().startPlacing(item.id)) {
+      requestClose();
+      return;
+    }
+    setNote(`${item.name} is in your inventory`);
+  };
+
+  const keepInInventory = (item: ShopItem) => {
+    setPurchased(null);
+    setNote(`${item.name} is in your inventory`);
+  };
+
   const padTop = 18 + safe.top;
-  // Wider than the vertical inset, so the room still reads down both sides safe.side, not left or right: the panel is centred, so both edges take the LARGER inset or it sits off-centre
   const padSide = 62 + safe.side;
   const padBottom = 18 + safe.bottom;
 
   return (
     <View style={s.layer}>
-      {/* The dim fades in with the sheet. The Pressable is a child rather than the scrim itself, because an animated opacity belongs on a View. */}
+
       <Animated.View style={[s.scrim, scrimStyle]}>
-        {/* Also closes; unlabelled since the cross is the labelled affordance */}
         <Pressable style={StyleSheet.absoluteFill} onPress={requestClose} />
       </Animated.View>
 
       <Animated.View
         style={[s.panel, { top: padTop, bottom: padBottom, left: padSide, right: padSide }, sheetStyle]}
       >
-        <ShopCategoryTabs category={category} onCategory={setCategory} rightInset={GRID_EDGE} />
-
-        {note ? <Text style={s.note}>{note}</Text> : null}
+        <CategoryBoardTabs category={category} onCategory={setCategory} />
 
         {loading ? (
           <View style={s.center}>
@@ -142,7 +162,7 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
             showsVerticalScrollIndicator
             onLayout={(e) => setGridWidth(e.nativeEvent.layout.width)}
           >
-            {/* Held back until the row is measured, or the grid lays out wrong then reflows */}
+          
             {tileWidth > 0
               ? visible.map((item) => (
                   <ShopItemTile
@@ -152,6 +172,7 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
                     price={item.price}
                     width={tileWidth}
                     surface={isSurfaceCategory(item.category)}
+                    source={item.source}
                     owned={owned.has(item.id)}
                     lockLevel={level < item.minLevel ? item.minLevel : undefined}
                     onPress={() => requestBuy(item)}
@@ -163,7 +184,6 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
         )}
       </Animated.View>
 
-      {/* Outside the panel so it can straddle the corner, as in the mockup. Rides the same slide, or it would pop in against a moving sheet. */}
       <Animated.View style={[s.close, { top: padTop - 16, right: padSide - 16 }, sheetStyle]}>
         <Pressable
           accessibilityRole="button"
@@ -178,6 +198,8 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
 
       {notice ? (
         <PurchaseNoticePopup
+          itemId={notice.item.id}
+          surface={isSurfaceCategory(notice.item.category)}
           name={notice.item.name}
           price={notice.item.price}
           minLevel={notice.item.minLevel}
@@ -185,8 +207,24 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
           onClose={() => setNotice(null)}
         />
       ) : null}
+      {purchased ? (
+        <PurchasedPopup
+          name={purchased.name}
+          onRoom={() => placeInRoom(purchased)}
+          onInventory={() => keepInInventory(purchased)}
+          onClose={() => keepInInventory(purchased)}
+        />
+      ) : null}
+      {/* Floating, and over everything: it has to be readable after a popup closes, and it must not move the grid */}
+      {note ? (
+        <View style={s.noteWrap} pointerEvents="none">
+          <Text style={s.note}>{note}</Text>
+        </View>
+      ) : null}
       {confirm ? (
         <PurchaseConfirmPopup
+          itemId={confirm.id}
+          surface={isSurfaceCategory(confirm.category)}
           name={confirm.name}
           price={confirm.price}
           onConfirm={() => buy(confirm)}
@@ -199,19 +237,21 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
 
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
-    // Above every room HUD layer so the popup owns the screen while it is up
     layer: {
       ...StyleSheet.absoluteFillObject,
       zIndex: 40,
     },
-    // t.scrim: the same shading OverlaySheet uses, so every popup dims the same way
+    // t.scrim: the same shading OverlaySheet uses so every popup dims the same way
     scrim: {
       ...StyleSheet.absoluteFillObject,
       backgroundColor: t.scrim,
     },
+    // Same hairline as the room's bottom bar so the two surfaces share an edge
     panel: {
       position: "absolute",
       borderRadius: 28,
+      borderWidth: 1.2,
+      borderColor: "#544F4B",
       backgroundColor: CREAM.card,
       paddingTop: 18,
       paddingHorizontal: 22,
@@ -223,7 +263,6 @@ const makeStyles = (t: Theme) =>
       flexWrap: "wrap",
       gap: GRID_GAP,
       paddingHorizontal: GRID_EDGE,
-      // Inside the scroll content so it scrolls away instead of leaving a fixed band
       paddingTop: 20,
       paddingBottom: 24,
     },
@@ -239,13 +278,26 @@ const makeStyles = (t: Theme) =>
       color: t.textDim,
       textAlign: "center",
     },
+    noteWrap: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 46,
+      zIndex: 70,
+      alignItems: "center",
+    },
+    // A dark chip, not ink on cream: it floats over a cream panel and has to be found without being hunted for
     note: {
-      marginBottom: 8,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 16,
+      overflow: "hidden",
+      backgroundColor: CREAM.darkChip,
       ...LEXEND.regular,
       fontSize: 13,
-      color: CREAM.ink,
+      color: CREAM.card,
     },
-    // The animated wrapper: it carries the position, the disc and the shadow, and rides the sheet's slide.
+    // The animated wrapper
     close: {
       position: "absolute",
       width: 40,

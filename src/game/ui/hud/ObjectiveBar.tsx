@@ -3,7 +3,7 @@ import { useEffect, type ReactNode } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { ProgressBar } from "@/src/game/ui/system/Button";
-import { ELEVATION, RADIUS, SPACE, Theme, TYPE, useStyles, FONT } from "@/src/game/ui/system/theme";
+import { ELEVATION, FONT, RADIUS, SPACE, TYPE, Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 
 interface Props {
   /** The objective sentence; null hides the text row and collapses the bar to the slim fixed pill (instructions off). */
@@ -25,7 +25,8 @@ interface Props {
 const OBJECTIVE_WASH = "#C3D3E6";
 
 export function ObjectiveBar({ line, fontSize, value, total, xp, header }: Props) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
+  // The instruction IS the reading surface of the assembly screen.
   const expanded = line !== null || header != null;
   // Derived, not a constant: fontSize is already scaled by the caller's accessibility setting, so a fixed box height would clip the text at the larger scales.
   const lineHeight = Math.round(fontSize * 1.18);
@@ -86,13 +87,12 @@ export function ObjectiveBar({ line, fontSize, value, total, xp, header }: Props
         {/* Badge and total together on the left: they are one fact, and splitting them across the track made the track a divider between a picture and a number that belong to each other. */}
         <Text style={styles.xpLabel} numberOfLines={1}>{xp}</Text>
         <ProgressBar value={value} total={total} style={styles.xpTrack} />
-        {/* Step count as a ratio the eye can skip: the number that MOVES is full size in the text
-            colour, the one that never changes is smaller and muted. Same information as "0/18",
-            without two equal-weight numbers fighting over a slash. */}
-        <View style={styles.stepCount}>
-          <Text style={styles.stepNow}>{value}</Text>
-          <Text style={styles.stepTotal}>/{total}</Text>
-        </View>
+        {/* Progress as a PERCENTAGE, not a step ratio: "43%" answers "how far along am I"
+            directly, where "6/14" asks the player to do the division themselves. Whole
+            numbers only — decimal places would imply a precision the step count doesn't have. */}
+        <Text style={styles.stepPct}>
+          {total > 0 ? Math.round((value / total) * 100) : 0}%
+        </Text>
       </View>
     </View>
   );
@@ -137,7 +137,10 @@ const makeStyles = (t: Theme) =>
     objectiveText: {
       ...TYPE.body,
       flex: 1,
-      color: t.text,
+      // INK, not t.text: the pill behind it is OBJECTIVE_WASH, a fixed light blue in BOTH themes,
+      // so a theme-following colour turned the instruction near-white on pale blue in dark mode.
+      // The text has to answer to what it sits on, not to the app theme.
+      color: "#231F20",
       fontWeight: "800",
       textAlign: "left",
     },
@@ -145,7 +148,8 @@ const makeStyles = (t: Theme) =>
     structuredProgressGap: { marginTop: 3 },
 
     // The XP badge sits INSIDE the bar, on the progress track's left — a star that overlaps the track's start, with the running total beside it. (There is no level system in the data — just xpPerStep — so this shows the honest running total, not a fake N/500.)
-    progressRow: { flexDirection: "row", alignItems: "center", gap: SPACE.sm },
+    // gap xs, not sm: the row's width is fixed, so every point of gap is a point the track loses.
+    progressRow: { flexDirection: "row", alignItems: "center", gap: SPACE.xs },
     xpBadge: {
       width: 24,
       height: 24,
@@ -154,9 +158,16 @@ const makeStyles = (t: Theme) =>
       marginRight: -2,
     },
     xpTrack: { flex: 1 },
-    // minWidth on both flanks: without it the track resizes every time a number gains a digit, which is the same jitter one level down.
-    xpLabel: { ...TYPE.numeric, color: t.gold, minWidth: 26 },
-    stepCount: { flexDirection: "row", alignItems: "baseline", minWidth: 38, justifyContent: "flex-end" },
-    stepNow: { ...TYPE.numeric, color: t.text },
-    stepTotal: { ...TYPE.numeric, fontSize: 10, color: t.textDim },
+    // minWidth on both flanks: without it the track resizes every time a number gains a digit, which
+    // is the same jitter one level down. The two flanks are the SAME width so the track sits centred
+    // between them — 26 vs 44 put a visible hole between the bar and the percentage while the XP
+    // side sat tight against it. 40 fits the widest content either flank can hold ("100%").
+    // The XP number sits TIGHT against its badge — the two are one fact — so it takes its natural
+    // width with no reserved box: a minWidth here parks empty space between the number and the
+    // track, which is what pushed the track off centre.
+    xpLabel: { ...TYPE.numeric, color: t.gold },
+    // The percentage keeps a fixed box (so the track can't resize as 9% → 100%) but its text hugs
+    // the track, putting that reserved space on the OUTSIDE. With the XP tight on the left and the
+    // percentage tight on the right, the track has an equal gap on each side.
+    stepPct: { ...TYPE.numeric, color: t.text, minWidth: 34, textAlign: "left" },
   });

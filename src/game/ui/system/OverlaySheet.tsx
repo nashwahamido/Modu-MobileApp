@@ -4,7 +4,7 @@ import { Animated, Pressable, StyleSheet, Text, View, useWindowDimensions } from
 
 import { CloseIcon } from "@/src/components/Icons";
 import { SLIDE_UP } from "./slideUp";
-import { ELEVATION, RADIUS, SPACE, Theme, TYPE, useStyles, useTheme } from "./theme";
+import { ELEVATION, RADIUS, SPACE, Theme, TYPE, useFixedStyles, useTheme } from "./theme";
 import { GrainOverlay } from "@/src/game/ui/system/Button";
 
 // "panel" = a large near-full card (lists, grids). "dialog" = a small centered card (confirmations).
@@ -33,7 +33,7 @@ export function OverlaySheet({
   dismissOnBackdrop = true,
   children,
 }: PropsWithChildren<OverlaySheetProps>) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const t = useTheme();
   const { height } = useWindowDimensions();
 

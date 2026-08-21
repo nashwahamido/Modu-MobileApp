@@ -3,7 +3,7 @@ import type { PostgrestError } from "@supabase/supabase-js";
 import { supabase } from "@/src/config/supabase";
 import type { AssemblyMode, BrandId, FurnitureId } from "@/src/game/core/type";
 import type { BuildProgressRepo, CatalogRepo, FriendRequestsRepo, FriendsRepo, ItemVariant, PlaceableRoomRowInput, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo, VariantsRepo, WorkshopDraftRow } from "../core/repos";
-import { toPlaceableRoomRow, workshopModelDraftsToPlaceableRoomRows } from "../core/repos";
+import { toPlaceableRoomRow, workshopDraftsToItemVariants, workshopModelDraftsToPlaceableRoomRows } from "../core/repos";
 import type { BuildSave, FriendRequest, Profile, ProfilePatch, RoomLayout } from "../core/types";
 import { ROOM_LAYOUT_VERSION } from "../core/types";
 import type { ShopCategory, ShopItem, WorkshopDraftShopRow } from "../shop/items";
@@ -518,9 +518,31 @@ const variantsRepo: VariantsRepo = {
       .order("variation");
     check(error);
     type Row = { item_id: string; variation: string | null; is_default: boolean };
-    return ((data ?? []) as Row[]).map(
+    const live = ((data ?? []) as Row[]).map(
       (r): ItemVariant => ({ itemId: r.item_id, variation: r.variation, isDefault: r.is_default }),
     );
+
+    // DEV BUILDS ONLY, and the same gate the shop and placeable merges use — see workshopDraftsGate.ts for why
+    // the three must always move together. item_variants is written only by publish_workshop_draft, so without
+    // this a testing draft has no colour axis at all: the empty list resolves to the 'default' path segment and
+    // a draft with NAMED variations (white/grey/wooden) 404s on default.glb and default.png, both silently. That
+    // made "test it before publishing" impossible for exactly the uploads most worth testing.
+    if (!WORKSHOP_DRAFTS_MERGE_ENABLED) return live;
+    try {
+      // `*` for the same reason every other workshop_drafts query here uses it: an unknown column must not fail
+      // the fetch. No .order() — the draft's array is already in the order the portal's variant rows were in,
+      // and variantStore sorts the default to the front itself.
+      const { data: draftRows, error: draftError } = await supabase
+        .from("workshop_drafts")
+        .select("*")
+        .eq("status", "testing");
+      if (draftError) throw draftError;
+      return [...live, ...workshopDraftsToItemVariants((draftRows ?? []) as WorkshopDraftRow[])];
+    } catch (err) {
+      // A dev convenience is never worth taking the picker down — warn and fall back to the published axis only.
+      console.warn("[variants] workshop_drafts merge failed; testing uploads will show no colour options", err);
+      return live;
+    }
   },
 };
 

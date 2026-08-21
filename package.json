@@ -13,7 +13,7 @@
   "compress:room": "node scripts/compress-room-glb.mjs",
   "compress:furniture": "node scripts/compress-furniture-glb.mjs",
   "snapshot:glb": "node scripts/glb-snapshot.mjs",
-  "build:room": "node scripts/compress-room-glb.mjs src/assets/models/room/room_empty.glb src/assets/models/room/_pass1.glb && node scripts/set-shell-blend-modes.mjs src/assets/models/room/_pass1.glb src/assets/models/room/_pass2.glb && node scripts/set-ao-strength.mjs src/assets/models/room/_pass2.glb src/assets/models/room/_pass3.glb 0.6 && node scripts/declare-shell-map-slots.mjs src/assets/models/room/_pass3.glb src/assets/models/room/virtualroom_empty.glb && node -e \"for (const f of ['_pass1','_pass2','_pass3']) require('fs').rmSync(`src/assets/models/room/${f}.glb`, {force: true})\" && node scripts/extract-shell-defaults.mjs && tsx scripts/verify-room-glb.mts",
+  "build:room": "node scripts/compress-room-glb.mjs src/assets/models/room/room_empty.glb src/assets/models/room/_pass1.glb && node scripts/set-shell-blend-modes.mjs src/assets/models/room/_pass1.glb src/assets/models/room/_pass2.glb && node scripts/set-ao-strength.mjs src/assets/models/room/_pass2.glb src/assets/models/room/_pass3.glb 0.6 && node scripts/declare-shell-map-slots.mjs src/assets/models/room/_pass3.glb src/assets/models/room/_pass4.glb && tsx scripts/add-shell-grid.mts src/assets/models/room/_pass4.glb src/assets/models/room/virtualroom_empty.glb && node -e \"for (const f of ['_pass1','_pass2','_pass3','_pass4']) require('fs').rmSync(`src/assets/models/room/${f}.glb`, {force: true})\" && node scripts/extract-shell-defaults.mjs && tsx scripts/verify-room-glb.mts",
   "verify:room": "tsx scripts/verify-room-glb.mts",
   "upload:assembly": "tsx scripts/upload-assembly.mts",
   "test:unit": "node --import tsx --test \"src/game/**/*.test.ts\"",
@@ -28,7 +28,7 @@
  "dependencies": {
   "@react-native-async-storage/async-storage": "2.2.0",
   "@supabase/supabase-js": "^2.49.0",
-  "expo": "~54.0.34",
+  "expo": "~54.0.36",
   "expo-asset": "~12.0.13",
   "expo-audio": "~1.1.1",
   "expo-constants": "~18.0.13",

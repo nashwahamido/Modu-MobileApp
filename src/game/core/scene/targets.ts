@@ -93,11 +93,28 @@ export function targetRotationForAction(
   return parts[action.partId!].pose.rotation;
 }
 
+/** A lengthy part is held NEAR ITS SNAP ORIGIN, not at its visual center: the finger should own the end that engages the socket (a DALFRED leg's foot), not the middle of the shaft 27cm away from it. Parts whose center offset exceeds the trigger get their hold point clamped to HOLD_CLAMP_M from the origin along the same direction; everything shorter keeps the exact visual-center feel. The trigger sits above the clamp so mid-size parts aren't nudged by a few mm for nothing. */
+const HOLD_CLAMP_TRIGGER_M = 0.12;
+const HOLD_CLAMP_M = 0.08;
+
+/** Offset from a part's snap origin to the point the FINGER controls while dragging it. Both sides of the match must use this — the held part's pin (usePartDrag's grabOffset) and the candidates' hold points below — or the fit would measure fingertip against mid-shaft. A derived JOINT anchor wins when one exists: the clamp below assumes the node origin sits at the joint, and measured on LACK and DALFRED it does not — the origin is the leg's FOOT, leaving the clamped point 32-35cm from the joint it is being aimed into, further away than the unclamped visual center. The clamp stays as the fallback for parts with no frame (every fastener, whose visual center is within 3cm of its joint anyway). */
+export function holdOffsetFor(part: PartDef | undefined, anchors?: Record<PartId, Vec3>): Vec3 {
+  const anchored = part && anchors?.[part.partId];
+  // Copied, not returned by reference: every other path here hands back a fresh array, and an alias into the caller's anchor map is a trap the next mutation-shaped edit would spring.
+  if (anchored) return [anchored[0], anchored[1], anchored[2]];
+  const vco = part?.visualCenterOffset ?? [0, 0, 0];
+  const len = Math.hypot(vco[0], vco[1], vco[2]);
+  if (len <= HOLD_CLAMP_TRIGGER_M) return vco;
+  const k = HOLD_CLAMP_M / len;
+  return [vco[0] * k, vco[1] * k, vco[2] * k];
+}
+
 export interface GroupCandidate {
   action: AssemblyAction;
   position: Vec3;
   rotation: Quat;
-  visualPosition: Vec3;
+  /** position + holdOffsetFor(part) — where the finger must aim to seat this candidate. */
+  holdPosition: Vec3;
 }
 
 /** Every currently-available socket interchangeable with the picked representative: same action type and same part GROUP (e.g. all open leg sockets). Lets the player drop a grouped part on whichever match is nearest, not just the one the tray card happened to reference. */
@@ -106,6 +123,7 @@ export function groupCandidates(
   rep: AssemblyAction,
   parts: Parts,
   done?: ReadonlySet<ActionId>,
+  anchors?: Record<PartId, Vec3>,
 ): GroupCandidate[] {
   const repGroup = parts[rep.partId!].group;
   return avail
@@ -115,15 +133,15 @@ export function groupCandidates(
     .map((a) => {
       const part = parts[a.partId!];
       const position = targetPositionForAction(a, parts, done);
-      const visualOffset = part.visualCenterOffset ?? [0, 0, 0];
+      const holdOffset = holdOffsetFor(part, anchors);
       return {
         action: a,
         position,
         rotation: targetRotationForAction(a, parts),
-        visualPosition: [
-          position[0] + visualOffset[0],
-          position[1] + visualOffset[1],
-          position[2] + visualOffset[2],
+        holdPosition: [
+          position[0] + holdOffset[0],
+          position[1] + holdOffset[1],
+          position[2] + holdOffset[2],
         ],
       };
     });

@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { GrainOverlay } from "@/src/game/ui/system/Button";
 import { Image, StyleSheet, Text, View } from "react-native";
 import { GestureDetector, GestureType } from "react-native-gesture-handler";
+import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 import { availableActions } from "@/src/game/core/evaluation/availability";
 import {
   combineReady,
@@ -10,9 +11,10 @@ import {
 } from "@/src/game/core/evaluation/clusters";
 import { clusterParkInfo } from "@/src/game/core/evaluation/clusterCombine";
 import type { ParkInfo } from "@/src/game/core/evaluation/engagement";
+import { clusterThumbSet } from "@/src/game/core/presentation/finish";
 import { pickThumb } from "@/src/game/core/presentation/labels";
 import { useGameStore } from "@/src/game/core/store";
-import { Theme, useStyles } from "@/src/game/ui/system/theme";
+import { Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 import type { ActionId, AssemblyAction, ClusterId } from "@/src/game/core/type";
 import { clusterSink, type OffsetSink } from "@/src/game/scene/combineDriver";
 import type { ClusterDriver } from "@/src/game/scene/offsetDriver";
@@ -30,10 +32,13 @@ interface Props {
 
 /** The combine stage's tray: one card per FINISHED cluster, shown until that cluster's own combine is done. The seed cluster's card enables first (its combine gates the others via the derived requires); dragging a card spawns the real cluster — the seed drops into place, a slide-joined cluster parks along its travel axis and is driven home by SlideControl, telescoping its runners. During the build phase a finished cluster earns a celebration, not a card here (this tray only renders with no cluster focus). */
 export function ClusterTray({ clusterDriver, clusterGestureFor }: Props) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const furniture = useGameStore((s) => s.furniture);
   const completed = useGameStore((s) => s.completed);
   const combiningCluster = useGameStore((s) => s.combiningCluster);
+  const renderStyle = useGameStore((s) => s.renderStyle);
+  const hintClusters = useGameStore((s) => s.hintClusters);
+  const hintPulse = useGameStore((s) => s.hintPulse);
   const scheme = useColorScheme();
 
   const done = useMemo(() => new Set(completed), [completed]);
@@ -72,13 +77,28 @@ export function ClusterTray({ clusterDriver, clusterGestureFor }: Props) {
     return m;
   }, [furniture, cards, combineFor, done, clusterDriver, clusterGestureFor]);
 
+  const flash = useSharedValue(0);
+  // Keyed by VALUE, not array identity — the store hands back a fresh array each update and re-running the flash on every one would strobe.
+  const hintKey = hintClusters.join(" ");
+  useEffect(() => {
+    if (!hintKey) return;
+    // Three gentle accent pulses, matching the parts tray — enough to draw the eye without strobing. One shared value drives every highlighted card.
+    flash.value = 0;
+    flash.value = withRepeat(
+      withSequence(withTiming(1, { duration: 240 }), withTiming(0, { duration: 240 })),
+      3,
+    );
+  }, [hintKey, hintPulse, flash]);
+  const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value * 0.5 }));
+
   if (!furniture || cards.length === 0) return null;
   const theme = scheme === "dark" ? "dark" : "light";
 
   return (
     <View style={styles.container} pointerEvents="box-none">
       {cards.map((c) => {
-        const set = furniture.clusterThumbs?.[c];
+        // The same resolution the build map uses, so a card in the tray and its circle on the map are never two different finishes of one sub-assembly.
+        const set = clusterThumbSet(furniture, c, renderStyle);
         const thumb = set ? pickThumb(set, theme) : undefined;
         const g = gestures.get(c);
         const dragging = combiningCluster === c;
@@ -99,6 +119,9 @@ export function ClusterTray({ clusterDriver, clusterGestureFor }: Props) {
             <Text style={styles.label} numberOfLines={1}>
               {clusterLabel(furniture, c)}
             </Text>
+            {hintClusters.includes(c) ? (
+              <Animated.View pointerEvents="none" style={[styles.flashOverlay, flashStyle]} />
+            ) : null}
           </View>
         );
         return g ? (
@@ -125,9 +148,15 @@ const makeStyles = (t: Theme) =>
     paddingHorizontal: 8,
     alignItems: "center",
     gap: 4,
+    overflow: "hidden",
   },
   cardWaiting: { borderColor: t.borderStrong, opacity: 0.85 },
   cardDragging: { opacity: 0.4 },
   thumb: { width: 44, height: 44 },
   label: { fontSize: 11, fontWeight: "700", color: t.text, textAlign: "center" },
+  flashOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 12,
+    backgroundColor: t.accent,
+  },
   });

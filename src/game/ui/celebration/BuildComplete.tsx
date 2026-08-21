@@ -13,8 +13,10 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
+import { COIN_ICON } from "@/src/components/iconAssets";
 import { useGameStore } from "@/src/game/core/store";
-import { useStyles, FONT } from "@/src/game/ui/system/theme";
+import { modelThumbSet } from "@/src/game/core/presentation/finish";
+import { useFixedStyles, FONT } from "@/src/game/ui/system/theme";
 import { useRepos } from "@/src/data";
 import { usePlacementStore } from "@/src/room/core/placement";
 import { ConfettiRain } from "@/src/game/ui/celebration/Confetti";
@@ -123,7 +125,7 @@ function SlideIn({ delay, style, children }: { delay: number; style?: StyleProp<
  * the banner being unfurled, which a drop or a fade does not.
  */
 function CompletedRibbon({ label }: { label: string }) {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const reveal = useSharedValue(0);
   useEffect(() => {
     reveal.value = withDelay(STAGE.ribbon, withTiming(1, { duration: REVEAL_MS, easing: Easing.out(Easing.cubic) }));
@@ -165,10 +167,12 @@ function CompletedRibbon({ label }: { label: string }) {
  * placement route can be restored to the first one without touching the layout.
  */
 export function BuildComplete() {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const router = useRouter();
   const repos = useRepos();
   const furniture = useGameStore((s) => s.furniture);
+  // The look the build ran in — the catalogue set it when the player picked a finish, and settings can change it mid-build. It is what tells the art below which finish to wear.
+  const renderStyle = useGameStore((s) => s.renderStyle);
   const completed = useGameStore((s) => s.completed);
   const dismissed = useGameStore((s) => s.doneDismissed);
   const confirmed = useGameStore((s) => s.completeConfirmed);
@@ -249,10 +253,15 @@ export function BuildComplete() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.mainRow}>
-            {/* The finished piece — the reason the screen exists, so it gets the whole left half. */}
+            {/* The finished piece — the reason the screen exists, so it gets the whole left half.
+                In the FINISH IT WAS BUILT IN, resolved the same way the project map and the
+                catalogue resolve it (core/presentation/finish.ts). It used to take
+                meta.thumbnail.light, which is the model's default picture: a player who chose the
+                white EKET off the carousel, built it in white and watched it stand in white was
+                handed a plain grey render at the one moment the screen exists to celebrate. */}
             <PopIn delay={STAGE.piece} style={styles.pieceWrap}>
               <Image
-                source={furniture.meta.thumbnail.light}
+                source={modelThumbSet(furniture, renderStyle).light}
                 style={styles.previewImg}
                 resizeMode="contain"
               />
@@ -264,7 +273,7 @@ export function BuildComplete() {
                 <View style={styles.rewardRow}>
                   <View style={styles.rewardItem}>
                     <Image
-                      source={require("@/src/assets/ui/icons/icon-coins.png")}
+                      source={COIN_ICON}
                       style={styles.rewardIcon}
                       resizeMode="contain"
                     />
@@ -376,7 +385,9 @@ const makeStyles = (t: Theme) =>
 
     redoBtn: {
       position: "absolute",
-      top: 24,
+      // Higher on the card: at 24 it sat level with the title block rather than up in the corner
+      // where a secondary control belongs.
+      top: 12,
       left: 14,
       width: 30,
       height: 30,

@@ -27,6 +27,11 @@ export function quatFromAxisAngle(axis: Vec3, rad: number): Quat {
   ];
 }
 
+/** Conjugate = inverse for the unit quaternions all poses here use. */
+export function quatConjugate(q: Quat): Quat {
+  return [-q[0], -q[1], -q[2], q[3]];
+}
+
 export function quatMultiply(a: Quat, b: Quat): Quat {
   const [ax, ay, az, aw] = a;
   const [bx, by, bz, bw] = b;
@@ -121,16 +126,15 @@ export interface LookAt {
   up: Vec3;
 }
 
-/** Unproject a screen point through the camera and intersect the horizontal plane y = planeY. Returns the world point, or null when the ray runs parallel to the plane or away from it. fovYDeg is the full vertical field of view; screen coords share the viewport's units, origin top-left, y down. */
-export function screenPointOnPlane(
+/** The world-space ray a screen point aims along. `dir` is NOT normalized — its length is whatever the frustum maths produced, which is all any plane intersection needs. fovYDeg is the full vertical field of view; screen coords share the viewport's units, origin top-left, y down. */
+export function screenRay(
   look: LookAt,
   fovYDeg: number,
   viewW: number,
   viewH: number,
   screenX: number,
   screenY: number,
-  planeY: number,
-): [number, number, number] | null {
+): { eye: Vec3; dir: Vec3 } {
   const { eye, center, up } = look;
   const f: Vec3 = [center[0] - eye[0], center[1] - eye[1], center[2] - eye[2]];
   const fl = Math.hypot(f[0], f[1], f[2]) || 1;
@@ -158,6 +162,20 @@ export function screenPointOnPlane(
     fwd[2] + ndcX * tanH * right[2] + ndcY * tanV * u[2],
   ];
 
+  return { eye, dir };
+}
+
+/** Unproject a screen point through the camera and intersect the horizontal plane y = planeY. Returns the world point, or null when the ray runs parallel to the plane or away from it. */
+export function screenPointOnPlane(
+  look: LookAt,
+  fovYDeg: number,
+  viewW: number,
+  viewH: number,
+  screenX: number,
+  screenY: number,
+  planeY: number,
+): [number, number, number] | null {
+  const { eye, dir } = screenRay(look, fovYDeg, viewW, viewH, screenX, screenY);
   const t = (planeY - eye[1]) / dir[1];
   if (!Number.isFinite(t) || t <= 0) return null;
   return [eye[0] + t * dir[0], eye[1] + t * dir[1], eye[2] + t * dir[2]];

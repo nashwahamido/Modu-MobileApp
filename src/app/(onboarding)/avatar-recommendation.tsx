@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from "expo-router";
 import type { Href } from "expo-router";
 import * as Speech from "@/src/onboarding/speech";
-import { StyleSheet, Animated, Image, Pressable, Text, View } from "react-native";
+import { StyleSheet, Animated, Image, Pressable, Text, View, useWindowDimensions } from "react-native";
 import { useEffect, useRef, useState } from "react";
 import { avatarModes } from "@/src/onboarding/avatarModes";
 import type { ModeId } from "@/src/onboarding/questionnaire";
@@ -12,12 +12,12 @@ import { AVATAR_IMAGES } from "@/src/components/avatarAssets";
 import { useTutorialStore } from "@/src/game/tutorial/store";
 import { saveSelectedAvatarMode } from "@/src/services/onboarding";
 import { Button } from "@/src/game/ui/system/Button";
-import { ACCENT_LIGHT, RADIUS, SPACE, TYPE, useStyles, useTheme, FONT } from "@/src/game/ui/system/theme";
+import { ACCENT_LIGHT, FONT, RADIUS, SPACE, TYPE, useStyles, useTheme, useUiScale } from "@/src/game/ui/system/theme";
 import { CheckIcon, StarIcon } from "@/src/components/Icons";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import type { Theme } from "@/src/game/ui/system/theme";
 
-import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
+import Svg, { Defs, RadialGradient, Rect, Stop } from "react-native-svg";
 import Reanimated, {
   Easing,
   useAnimatedStyle,
@@ -29,6 +29,7 @@ import Reanimated, {
 } from "react-native-reanimated";
 import type { ReactNode } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
+import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
 
 /** This screen's backdrop. Deliberately its own pair rather than a shared token: each screen can
  *  be retuned without touching the others. Keep root.backgroundColor equal to BG_FROM — that is
@@ -180,10 +181,21 @@ const styles_halo = {
   borderColor: ACCENT_LIGHT,
 };
 
-const BG_FROM = "#E8D48C";
-const BG_TO = "#A9BFD9";
+/** The rim colour of the avatar circle — the gradient's outer stop, so the disc and the corners it
+ *  cannot reach agree. */
+const AVATAR_CIRCLE = "#EFE6D6";
+/** Shared with the profile screen — the two are the same moment either side of onboarding ("this is
+ *  who you are"), so they wear the same art rather than each tuning a ramp of its own. */
+const backdrop = require("@/src/assets/ui/profile-backdrop.jpg");
 
-const mascot = require("../../assets/images/mascot/mascot.png");
+/** What shows for the frame before the artwork decodes, and behind it if the asset ever fails to
+ *  load. Sampled from the art's own open area so the swap is invisible rather than a flash. */
+const BG_FALLBACK = "#E9E6DF";
+
+// The tutorial invitation's portrait: Modu at work, wrench on a screw — showing the player what the
+// tutorial IS rather than just who is asking. It replaces the plain bust this screen used to share
+// with create-account, which still has its own copy.
+const mascotAtWork = require("../../assets/images/mascot/modu-tool.png");
 // The room is the post-onboarding hub now that the home tab is gone.
 const homeRoute = "/room" as Href;
 
@@ -192,7 +204,11 @@ const modes = avatarModes.map((mode) => ({
   image: AVATAR_IMAGES[mode.id],
 }));
 
+// How far the tutorial popup's right edge sits from the screen's right edge. Absolute offsets do NOT scale (see SCALED_PROPS in ui/system/theme), so this is raw device points on every device — which is exactly why the popup needs the clamp below: its WIDTH does scale, and an unscaled anchor plus a scaled width has nothing keeping the far edge on screen. Shared between the sheet and the clamp so the two cannot drift.
+const POPUP_RIGHT = 92;
+
 export default function AvatarRecommendationScreen() {
+  const scale = useUiScale();
   const styles = useStyles(makeStyles);
   // The icons take their colour as a prop, so this screen needs the tokens as values, not just the sheet.
   const t = useTheme();
@@ -218,6 +234,9 @@ export default function AvatarRecommendationScreen() {
     return () => loop.stop();
   }, [badgePulse]);
   const safe = useSafeInsets();
+  // The widest the tutorial popup may be before it runs off the LEFT edge, in raw device points. It is right-anchored at POPUP_RIGHT, so everything it is allowed to occupy is what remains once that anchor and the left safe margin are taken off. Measured, not assumed: the sheet asks for 620 * k, which on an iPad Air 3 (1112pt wide, k capped at 1.75) came to 1085 and put the left edge 65pt off the screen.
+  const { width: windowWidth } = useWindowDimensions();
+  const popupMaxWidth = windowWidth - POPUP_RIGHT - safe.left;
   const params = useLocalSearchParams<{ mode?: string }>();
   const initialModeId = modes.some((mode) => mode.id === params.mode) ? (params.mode as ModeId) : "momentum";
   const [selectedModeId, setSelectedModeId] = useState<ModeId>(initialModeId);
@@ -293,20 +312,11 @@ export default function AvatarRecommendationScreen() {
   };
 
   return (
-    <View style={styles.screen}>
-      {/* The gradient owns a FULL-BLEED wrapper of its own. It used to sit inside the padded root,
-          where absolute positioning resolves against the padding box — which left the ramp floating
-          in the middle of the screen with a flat border all round it. A wrapper with no padding is
-          the only way to be sure the backdrop is the whole backdrop. */}
-      <Svg style={StyleSheet.absoluteFill} width="100%" height="100%" pointerEvents="none">
-        <Defs>
-          <LinearGradient id="avatarBg" x1="0" y1="0" x2="1" y2="0">
-            <Stop offset="0" stopColor={BG_FROM} />
-            <Stop offset="1" stopColor={BG_TO} />
-          </LinearGradient>
-        </Defs>
-        <Rect x="0" y="0" width="100%" height="100%" fill="url(#avatarBg)" />
-      </Svg>
+    // The artwork is FULL-BLEED, as the screen's root. It cannot be an absolute child of the padded
+    // root below: absolute positioning resolves against the padding box, which is what once left the
+    // old ramp floating in the middle with a flat border all round it. SceneBackdrop rather than an
+    // <Image absoluteFill>, which scales the same file differently and renders it zoomed.
+    <SceneBackdrop source={backdrop} style={styles.screen}>
       <View
         style={[
           styles.root,
@@ -363,11 +373,31 @@ export default function AvatarRecommendationScreen() {
             competing to be the thing you look at. */}
         <View style={styles.modeColumn}>
           <PopIn delay={STAGE.avatar} big animate={introPlaying}>
-            <View style={[styles.avatarCircle, { backgroundColor: selectedMode.color }]}>
+            {/* ONE circle colour for every mode. Per-mode tints made the four cards read as four
+                different components, and the avatars — which now carry their own colour — had to
+                sit on whatever hue the mode happened to own. Control's light lavender is the one
+                that worked against all four characters. */}
+            <View style={styles.avatarCircle}>
+              {/* White at the centre falling to cream at the rim, matching the tutorial portrait and
+                  the hint toast — one backing for a character wherever it appears. */}
+              <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+                <Defs>
+                  {/* The SAME three stops as the auth screen's character cards (dev/AccountPicker):
+                      a character sits on one backing wherever it is chosen. */}
+                  <RadialGradient id="avatarglow" cx="50%" cy="40%" r="62%">
+                    <Stop offset="0" stopColor="#FFFFFF" />
+                    <Stop offset="0.55" stopColor="#F7F1E6" />
+                    <Stop offset="1" stopColor="#DCCFB8" />
+                  </RadialGradient>
+                </Defs>
+                <Rect x="0" y="0" width="100%" height="100%" fill="url(#avatarglow)" />
+              </Svg>
               <Image
                 source={selectedMode.image}
                 style={styles.avatarImage}
-                resizeMode="cover"
+                // contain: these are FULL BODY portraits, and cropping them to fill the circle cut
+                // heads off — the head tiles elsewhere are cover because a head has no such problem.
+                resizeMode="contain"
               />
             </View>
             {/* Outside the circle's overflow:hidden, so the glints can sit ON its rim. */}
@@ -480,6 +510,7 @@ export default function AvatarRecommendationScreen() {
           <Animated.View
             style={[
               styles.highlightedPopup,
+              { maxWidth: popupMaxWidth },
               {
                 opacity: modeTipAnim,
                 transform: [
@@ -504,64 +535,73 @@ export default function AvatarRecommendationScreen() {
               </View>
             </View>
             <View style={styles.smallMascotCircle}>
-              <Image source={mascot} style={styles.smallMascot} />
+              {/* contain, not the Image default of cover: this art is a whole little SCENE — the
+                  mascot, the board, the screw and its motion lines — and cropping it to fill a
+                  square cuts the tool off the picture. The old portrait was a bust, so cover
+                  happened to suit it. */}
+              <Image source={mascotAtWork} style={styles.smallMascot} resizeMode="contain" />
             </View>
           </Animated.View>
         </View>
       )}
       </View>
-    </View>
+    </SceneBackdrop>
   );
 }
 
-const makeStyles = (t: Theme) =>
+// k is the device UI scale (see useUiScale): these layouts are authored in phone points,
+// and a tablet needs the same proportions at a larger size, not the same numbers.
+const makeStyles = (t: Theme, k = 1) =>
   StyleSheet.create({
     // The full-bleed layer. No padding here, ever: it is what the gradient measures against.
-    screen: { flex: 1, backgroundColor: BG_FROM },
+    screen: { flex: 1, backgroundColor: BG_FALLBACK },
     root: {
       flex: 1,
-      paddingHorizontal: 38,
-      paddingVertical: 18,
+      paddingHorizontal: Math.round(38 * k),
+      paddingVertical: Math.round(18 * k),
     },
     header: {
       position: "absolute",
       zIndex: 10,
       flexDirection: "row",
-      gap: 18,
+      gap: Math.round(18 * k),
     },
     navButton: {
-      width: 56,
-      height: 44,
+      width: Math.round(56 * k),
+      height: Math.round(44 * k),
       alignItems: "center",
       justifyContent: "center",
     },
-    navArrow: { width: 26, height: 26 },
+    navArrow: { width: Math.round(26 * k), height: Math.round(26 * k) },
     recommendationLayout: {
       flex: 1,
       flexDirection: "row",
       alignItems: "center",
-      gap: 34,
-      paddingBottom: 82,
+      gap: Math.round(34 * k),
+      paddingBottom: Math.round(82 * k),
     },
     audioButton: { position: "absolute", zIndex: 5 },
     // A column, not a card: width comes from the circle, and nothing draws a box around it.
     sparkLayer: { ...StyleSheet.absoluteFillObject },
     // Narrower than the copy column: a full-width primary action read as a banner rather than a button, and the halo needs room to swell without touching the text above it.
-    confirmWrap: { alignSelf: "center", width: 260, marginTop: SPACE.lg, alignItems: "center" },
+    confirmWrap: { alignSelf: "center", width: Math.round(260 * k), marginTop: SPACE.lg, alignItems: "center" },
     // stretch + auto margin puts the title on the column's BASE, which is where the Confirm button sits in the column beside it — so the two land on the same line.
-    modeColumn: { width: 220, alignItems: "center", alignSelf: "stretch", paddingTop: 12 },
+    modeColumn: { width: Math.round(220 * k), alignItems: "center", alignSelf: "stretch", paddingTop: Math.round(12 * k) },
     avatarCircle: {
-      width: 210,
-      height: 210,
+      width: Math.round(210 * k),
+      height: Math.round(210 * k),
       alignItems: "center",
       justifyContent: "center",
-      borderRadius: 105,
+      borderRadius: Math.round(105 * k),
       overflow: "hidden",
+      // The gradient above paints the disc; this is only what shows outside its bounds.
+      backgroundColor: AVATAR_CIRCLE,
     },
+    // Sized INSIDE the circle now (was 232 in a 210 circle, which relied on the crop). With contain
+    // the art fits the box, so the box has to sit within the rim or the character floats in a gap.
     avatarImage: {
-      width: 232,
-      height: 232,
-      borderRadius: 116,
+      width: Math.round(196 * k),
+      height: Math.round(196 * k),
     },
     // Straddling the circle's top edge. alignSelf centre plus a negative top pulls it back over the rim, so it reads as pinned to the avatar rather than floating above it.
     recommendedBadge: {
@@ -575,19 +615,19 @@ const makeStyles = (t: Theme) =>
     },
     recommendedBadgeText: {
       color: t.onSuccess,
-      fontFamily: FONT, fontSize: 9,
+      fontFamily: FONT, fontSize: Math.round(9 * k),
       fontWeight: "900",
     },
     recommendationCopy: {
       flex: 1,
-      minWidth: 0,
-      gap: 7,
+      minWidth: Math.round(0 * k),
+      gap: Math.round(7 * k),
     },
     title: {
       color: t.text,
-      fontFamily: FONT, fontSize: 20,
+      fontFamily: FONT, fontSize: Math.round(20 * k),
       fontWeight: "900",
-      lineHeight: 24,
+      lineHeight: Math.round(24 * k),
     },
     // Space above the primary action, so it is not the next thing after the last tick — a gap is what makes it read as the conclusion rather than a fourth list item.
     confirmButton: { width: "100%" },
@@ -595,36 +635,36 @@ const makeStyles = (t: Theme) =>
     traitChip: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 5,
+      gap: Math.round(5 * k),
       paddingHorizontal: SPACE.sm,
-      paddingVertical: 3,
+      paddingVertical: Math.round(3 * k),
       borderRadius: RADIUS.pill,
       backgroundColor: t.surface,
     },
     traitText: {
       color: t.text,
       fontFamily: FONT,
-      fontSize: 13,
+      fontSize: Math.round(13 * k),
       fontWeight: "800",
     },
     bulletList: {
-      gap: 5,
+      gap: Math.round(5 * k),
     },
     bulletRow: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 9,
+      gap: Math.round(9 * k),
     },
     bulletText: {
       flex: 1,
       color: t.text,
-      fontFamily: FONT, fontSize: 13,
+      fontFamily: FONT, fontSize: Math.round(13 * k),
       fontWeight: "700",
     },
     // Offsets come from the CALL SITE, not from here: absolute children are not inset by the parent's padding, so a literal here can never account for a device's safe insets.
     modeTabs: {
       position: "absolute",
-      height: 56,
+      height: Math.round(56 * k),
       flexDirection: "row",
       gap: SPACE.sm,
     },
@@ -633,11 +673,11 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       justifyContent: "center",
       borderColor: t.border,
-      borderRadius: 8,
+      borderRadius: Math.round(8 * k),
       borderWidth: 2,
       backgroundColor: t.surface,
       paddingHorizontal: SPACE.sm,
-      paddingVertical: 5,
+      paddingVertical: Math.round(5 * k),
     },
     modeTabSelected: {
       borderColor: t.accent,
@@ -655,9 +695,9 @@ const makeStyles = (t: Theme) =>
     },
     modeTabRecommended: {
       color: t.success,
-      fontFamily: FONT, fontSize: 9,
+      fontFamily: FONT, fontSize: Math.round(9 * k),
       fontWeight: "900",
-      marginTop: 1,
+      marginTop: Math.round(1 * k),
     },
     saveErrorText: {
       ...TYPE.labelSm,
@@ -672,17 +712,18 @@ const makeStyles = (t: Theme) =>
     },
     highlightedPopup: {
       position: "absolute",
-      right: 92,
+      right: POPUP_RIGHT,
       bottom: 58,
-      width: 620,
-      minHeight: 142,
+      // The CALL SITE clamps this with an inline maxWidth — see POPUP_RIGHT. A maxWidth here could not: the sheet is run through scaleSheet, which would multiply the cap by the very k that overflows it.
+      width: Math.round(620 * k),
+      minHeight: Math.round(142 * k),
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "flex-end",
       // No rim. The shadow already lifts this off the dimmed screen behind it, and an outline on top of that was drawing a box around something already clearly separated.
-      borderRadius: 28,
+      borderRadius: Math.round(28 * k),
       shadowColor: "#000",
-      shadowOffset: { width: 0, height: 8 },
+      shadowOffset: { width: Math.round(0 * k), height: Math.round(8 * k) },
       shadowOpacity: 0.26,
       shadowRadius: 16,
     },
@@ -690,40 +731,42 @@ const makeStyles = (t: Theme) =>
       flex: 1,
       borderRadius: RADIUS.panel,
       backgroundColor: t.surface,
-      paddingHorizontal: 20,
+      paddingHorizontal: Math.round(20 * k),
       paddingVertical: SPACE.lg,
     },
     noteTitle: {
       color: t.text,
-      fontFamily: FONT, fontSize: 21,
+      fontFamily: FONT, fontSize: Math.round(21 * k),
       fontWeight: "900",
-      marginBottom: 5,
+      marginBottom: Math.round(5 * k),
     },
     noteText: {
       color: t.text,
-      fontFamily: FONT, fontSize: 14,
+      fontFamily: FONT, fontSize: Math.round(14 * k),
       fontWeight: "700",
-      lineHeight: 19,
+      lineHeight: Math.round(19 * k),
     },
     taskActions: {
       flexDirection: "row",
-      gap: 10,
+      gap: Math.round(10 * k),
       marginTop: SPACE.md,
     },
     smallMascotCircle: {
-      width: 88,
-      height: 88,
+      width: Math.round(88 * k),
+      height: Math.round(88 * k),
       alignItems: "center",
       justifyContent: "center",
       borderColor: t.accent,
-      borderRadius: 44,
+      borderRadius: Math.round(44 * k),
       borderWidth: 1,
       backgroundColor: t.surface,
       marginLeft: -8,
     },
+    // 78, not 62: the artwork is padded to a square so nothing is cropped, so more of its box is
+    // empty than the old bust's was. Sized up to keep the same amount of drawn mark inside the same
+    // 88 circle. No borderRadius — it rounded the corners of a picture that no longer has any.
     smallMascot: {
-      width: 62,
-      height: 62,
-      borderRadius: 18,
+      width: Math.round(78 * k),
+      height: Math.round(78 * k),
     },
   });

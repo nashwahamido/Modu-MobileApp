@@ -2,31 +2,53 @@
 // PurchaseConfirmPopup — same card, same scrim, one button instead of two
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 
-import { COIN_ICON } from "@/src/components/iconAssets";
-import { CREAM, CREAM_LIFT, useStyles, LEXEND } from "@/src/game/ui/system/theme";
+import { COIN_ICON, STAR_ICON, levelIcon } from "@/src/components/iconAssets";
+import {
+  FRAME_FILL,
+  FRAME_RADIUS,
+  FRAME_STROKE,
+  FRAME_STROKE_WIDTH,
+  LockWash,
+} from "@/src/components/ItemTileFrame";
+import { CatalogThumb } from "@/src/components/CatalogThumb";
+import { ItemSpinPreview } from "./ItemSpinPreview";
+import { CREAM, CREAM_LIFT, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 import type { PurchaseBlock } from "./purchaseBlock";
 
+// The shop and inventory panels' edge, so every surface in this family shares one outline
+const PANEL_STROKE = "#544F4B";
+const PANEL_STROKE_WIDTH = 1.2;
+// Shared with the surface fallback, which sizes its picture from the frame
+const WELL_SIZE = { width: 200, height: 158 };
+const LOCK_STAR_SIZE = 86;
 const COIN_SIZE = 34;
 const PILL_HEIGHT = 22;
 // How far the price pill hides behind the coin, as on the item tiles
 const PRICE_TUCK = 22;
 
 export function PurchaseNoticePopup({
+  itemId,
   name,
   price,
   minLevel,
   block,
+  surface,
   onClose,
 }: {
+  itemId: string;
   name: string;
   price: number;
   minLevel: number;
   block: PurchaseBlock;
+  /** A wallpaper or a floor: it has no model to turn, so it shows its tile picture instead */
+  surface?: boolean;
   onClose: () => void;
 }) {
-  const s = useStyles(makeStyles);
-  const lead = block === "coins" ? "Not enough money to buy " : `Reach level ${minLevel} to buy `;
+  const s = useFixedStyles(makeStyles);
+  const locked = block === "level";
+  const lockStar = levelIcon(minLevel);
+  const lead = locked ? `Reach level ${minLevel} to buy ` : "Not enough money to buy ";
   return (
     <View style={s.layer}>
       {/* Tapping away dismisses, the same as Close */}
@@ -34,8 +56,27 @@ export function PurchaseNoticePopup({
 
       <View style={s.card} accessibilityViewIsModal accessibilityRole="alert">
         <View style={s.wellWrap}>
-          {/* Placeholder well, matching the grid tiles until item art exists */}
-          <View style={s.well} />
+          {/* A piece you cannot afford YET turns as usual — you are being shown what your coins would buy. One you have not reached the level for is held back on purpose: a still picture behind a wash, with the star that says how far off it is. */}
+          {locked || surface ? (
+            <View style={s.well}>
+              <CatalogThumb
+                source="bought"
+                itemId={itemId}
+                surface={surface}
+                size={WELL_SIZE.height}
+              />
+              {locked ? <LockWash /> : null}
+              {locked ? (
+                <View style={s.lockBadge} pointerEvents="none">
+                  {/* The numbered artwork where it exists; past it, the blank star carries the level as text */}
+                  <Image source={lockStar ?? STAR_ICON} style={s.lockStar} resizeMode="contain" />
+                  {lockStar ? null : <Text style={s.lockLevel}>{minLevel}</Text>}
+                </View>
+              ) : null}
+            </View>
+          ) : (
+            <ItemSpinPreview itemId={itemId} size={WELL_SIZE.height} style={s.well} />
+          )}
           {/* Overhangs the well's top-left corner, exactly as on a tile */}
           <View style={s.priceBadge}>
             <Image source={COIN_ICON} style={s.priceIcon} resizeMode="contain" />
@@ -81,6 +122,8 @@ const makeStyles = (t: Theme) =>
       width: 460,
       maxWidth: "86%",
       borderRadius: 24,
+      borderWidth: PANEL_STROKE_WIDTH,
+      borderColor: PANEL_STROKE,
       backgroundColor: CREAM.card,
       paddingHorizontal: 30,
       paddingTop: 26,
@@ -93,12 +136,32 @@ const makeStyles = (t: Theme) =>
       paddingTop: 14,
     },
     well: {
-      width: 200,
-      height: 158,
-      borderRadius: 6,
-      backgroundColor: "#FFFFFF",
-      borderWidth: 1,
-      borderColor: t.border,
+      ...WELL_SIZE,
+      alignItems: "center",
+      justifyContent: "center",
+      // Clips the turning model to the frame's rounded corners
+      overflow: "hidden",
+      borderRadius: FRAME_RADIUS,
+      backgroundColor: FRAME_FILL,
+      borderWidth: FRAME_STROKE_WIDTH,
+      borderColor: FRAME_STROKE,
+    },
+
+    lockBadge: {
+      ...StyleSheet.absoluteFillObject,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    lockStar: {
+      width: LOCK_STAR_SIZE,
+      height: LOCK_STAR_SIZE,
+    },
+    // Absolute, so it centres on the star
+    lockLevel: {
+      position: "absolute",
+      ...LEXEND.bold,
+      fontSize: 24,
+      color: CREAM.card,
     },
     priceBadge: {
       position: "absolute",

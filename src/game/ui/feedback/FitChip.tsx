@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { FitState } from "@/src/game/core/geometry/fit";
 import { screwSpinInfo } from "@/src/game/core/evaluation/engagement";
 import { useGameStore } from "@/src/game/core/store";
-import { Theme, useStyles, useTheme } from "@/src/game/ui/system/theme";
+import { Theme, useFixedStyles, useTheme } from "@/src/game/ui/system/theme";
 
 /** Fit feedback speaks in the palette's own three signals, and adds no fourth colour:
  *    accent  = in progress, keep going
@@ -26,16 +26,28 @@ const lookFor = (t: Theme): Record<FitState, { color: string; label: string } | 
 
 /** Color+text fit feedback near the objective bar (in-scene glow comes in M4). */
 export function FitChip() {
-  const styles = useStyles(makeStyles);
+  const styles = useFixedStyles(makeStyles);
   const t = useTheme();
   const fitState = useGameStore((s) => s.fitState);
+  const aimBlocked = useGameStore((s) => s.aimBlocked);
   const orientationActionId = useGameStore((s) => s.orientationActionId);
   const driveKind = useGameStore((s) => s.driveKind);
   const driveActionId = useGameStore((s) => s.driveActionId);
   const furniture = useGameStore((s) => s.furniture);
   const completed = useGameStore((s) => s.completed);
+  // A blocked part still drags (taking it away was worse than the mistake), but the chip must not
+  // coach "Find the spot" for a part that HAS no spot yet — that's two voices disagreeing, with
+  // the error toast already saying the true thing. availableForMode is recomputed here rather
+  // than read from a snapshot so the chip returns the moment the step becomes legal.
+  const heldBlocked = useGameStore(
+    (s) => !!s.heldActionId && !s.available().some((a) => a.actionId === s.heldActionId),
+  );
 
   let look = lookFor(t)[fitState];
+  // Facing gate feedback: the aim is on a socket the camera cannot see the contact side of. Coaching the camera turn out loud is half the feature — the gate alone reads as "snapping is broken" (the off-frame gate shipped silent and did exactly that).
+  if (fitState === "held" && aimBlocked) {
+    look = { color: FIT_CLOSE, label: "Try turning the camera" };
+  }
   if (driveKind === "slide") {
     look = { color: t.success, label: "Slide it into the groove" };
   } else if (driveKind === "press") {
@@ -57,6 +69,7 @@ export function FitChip() {
   }
 
   if (!look) return null;
+  if (heldBlocked) return null;
   return (
     <View
       style={[styles.chip, { backgroundColor: look.color }]}

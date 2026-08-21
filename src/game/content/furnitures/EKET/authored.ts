@@ -51,14 +51,14 @@ export const CLUSTERS = {
   cabinet: { id: "cabinet", label: "Cabinet", seed: true },
   drawerA: {
     id: "drawerA",
-    label: "Top drawer",
+    label: "Top Drawer",
     slideJoins: ["cabinet"],
     placeDir: [-1, 0, 0] as const,
     parkBackoff: 0.16,
   },
   drawerB: {
     id: "drawerB",
-    label: "Bottom drawer",
+    label: "Bottom Drawer",
     slideJoins: ["cabinet"],
     placeDir: [-1, 0, 0] as const,
     parkBackoff: 0.16,
@@ -95,8 +95,8 @@ const drawer = (s: string): StructureOverlay => ({
     lockDir: [0, -1, 0] as const,
   },
   // placeDir on every parked mover below: the centroid heuristic in travelAxis() guessed visibly wrong axes on-device — a groove's axis isn't derivable from poses, so it must be authored. World frame is documented once on STRUCTURE; the short version is FRONT = +X.
-  [`drawerSideL_${s}`]: { seed: true, placeDir: [1, 0, 0] as const, lockDir: [0, 1, 0] as const }, // its lockDir engages only when the front seeded first and this side becomes the mover (press forward, shove up — sideR's mirror); as the strict-order seed it just drops
-  [`drawerSideR_${s}`]: { directJoins: [pid(`drawerFront_${s}`)], placeDir: [1, 0, 0] as const, lockDir: [0, 1, 0] as const }, // not a seed — reachable via the front's directJoins once the front is down (replaces the front↔side bolt liaison that went away when bolt128918 merged into the sides); presses FORWARD so its bolts enter the front's keyholes, then shoves UP to lock (was: travelling inward +Z, wrong for a keyhole — the bolts enter along their own axis)
+  [`drawerSideL_${s}`]: { seed: true, directJoins: [pid(`drawerFront_${s}`)], placeDir: [1, 0, 0] as const, lockDir: [0, 1, 0] as const }, // its lockDir engages only when the front seeded first and this side becomes the mover (press forward, shove up — sideR's mirror); as the strict-order seed it just drops
+  [`drawerSideR_${s}`]: { seed: true, directJoins: [pid(`drawerFront_${s}`)], placeDir: [1, 0, 0] as const, lockDir: [0, 1, 0] as const }, // not a seed — reachable via the front's directJoins once the front is down (replaces the front↔side bolt liaison that went away when bolt128918 merged into the sides); presses FORWARD so its bolts enter the front's keyholes, then shoves UP to lock (was: travelling inward +Z, wrong for a keyhole — the bolts enter along their own axis)
   [`drawerBottom_${s}`]: {
     slideJoins: [pid(`drawerSideL_${s}`), pid(`drawerSideR_${s}`), pid(`drawerFront_${s}`)],
     placeDir: [1, 0, 0] as const, // enters through the still-open back (drawerBack is placed after it) and glides FORWARD along the grooves — forward is +X, so it parks behind its seat at x≈-0.07, level with the open back edge
@@ -314,7 +314,11 @@ export const AUTHORED_ACTIONS: DraftAction[] = [
   action({ actionId: "combine_drawerB", type: "combineClusters", stage: 4, cluster: "drawerB", requires: [] }),
   action({ actionId: "test_drawerA", type: "reorient", stage: 4, requires: ["combine_drawerA", "combine_drawerB"] }),
   action({ actionId: "test_drawerB", type: "reorient", stage: 4, requires: ["test_drawerA"] }),
-  action({ actionId: "finishing_checks", type: "reorient", stage: 4, requires: ["test_drawerB"] }),
+  // The ceremonial `finishing_checks` beat was REMOVED 2026-08-19 — it moved no part, so it was a
+  // swipe card standing between the player and a finished build. The last real assembly step is
+  // the last step now.
+  // test_drawerA / test_drawerB above are NOT ceremony and stay: their swipe runs the drawers'
+  // telescoping open and close (see pushOpen below), which nothing else drives.
 ];
 
 export const BEATS = {
@@ -337,10 +341,6 @@ export const BEATS = {
   test_drawerB: {
     text: "Now the bottom drawer: press to pop it open, pull it out, and push it home.",
     simpleText: "Press the bottom drawer, pull it out, push it back in.",
-  },
-  finishing_checks: {
-    text: "Secure the cabinet to the wall with the suspension fittings.",
-    simpleText: "Fix it to the wall.",
   },
 } as InstructionSet;
 
