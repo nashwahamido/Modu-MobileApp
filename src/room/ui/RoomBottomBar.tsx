@@ -51,6 +51,10 @@ const ICON_SLOT = 44;
 // re-seats the label and re-cuts the arc without another edit.
 const ASSEMBLE_LIFT = 16;
 
+// Kept in step with the phone's standalone button (RoomAssembleButton's DISC_FILL) by hand: the two
+// layouts do not share a component, so this is one of the places a change has to be made twice.
+const ASSEMBLE_DISC_FILL = '#D4CED9';
+
 const ASSEMBLE_COLLAR_SIZE = 68;
 const ASSEMBLE_BUTTON_SIZE = 55;
 const ASSEMBLE_ICON_SIZE = 76;
@@ -374,7 +378,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     marginTop: -ASSEMBLE_LIFT,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#E6DCF5',
+    backgroundColor: ASSEMBLE_DISC_FILL,
     borderWidth: 0.6,
     borderColor: '#9C9994',
     shadowColor: '#000',

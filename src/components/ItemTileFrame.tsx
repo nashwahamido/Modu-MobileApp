@@ -2,7 +2,7 @@
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import Svg, { Defs, RadialGradient, Rect, Stop } from "react-native-svg";
 
-import { CREAM, LEXEND } from "@/src/game/ui/system/theme";
+import { CARD_CHROME, CREAM, LEXEND } from "@/src/game/ui/system/theme";
 
 /** Well height as a fraction of the column width the grid hands down. */
 export const WELL_ASPECT = 0.88;
@@ -133,6 +133,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     // The price pill's fill, so the two badges on a tile read as the same component
     backgroundColor: CREAM.card,
+    // The room's chrome shadow, so the tab lifts off the frame the way the nav rail lifts off the
+    // scene. borderWidth is zeroed out of it: the tabs lost their outline, and CARD_CHROME carries one.
+    ...CARD_CHROME,
+    borderWidth: 0,
     alignItems: "center",
     justifyContent: "center",
   },

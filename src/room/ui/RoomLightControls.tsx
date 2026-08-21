@@ -19,6 +19,12 @@ const BAR_FILL = '#FBFAF3';
 const PANEL_HEIGHT = 40;
 /** The space between two discs. Exported because the settings button stacks above these and has to use the same one. */
 export const LIGHT_COLUMN_GAP = 16;
+/**
+ * The chips' corner. Rounder than RADIUS.control, which the assembly HUD's smaller buttons use — these
+ * are 48pt against that 36, and the same absolute radius reads squarer the bigger the tile gets.
+ * Exported for the same reason as the gap: the settings chip above has to match.
+ */
+export const ROOM_CHIP_RADIUS = 18;
 // The catalogue cards' edge, the same one the bottom bar and the HUD bars carry
 const BUTTON_STROKE = CARD_CHROME.borderColor;
 const BUTTON_STROKE_WIDTH = CARD_CHROME.borderWidth;
@@ -27,50 +33,68 @@ const BUTTON_STROKE_WIDTH = CARD_CHROME.borderWidth;
 // every one is CROPPED to its drawing rather than contained: morning.png in particular is a small
 // picture in the corner of a 2026x2000 canvas, which `contain` would render as a speck.
 //
-// The blocks are measured off each file's alpha channel at a THRESHOLD (alpha > 140), not at its full
-// bounds: these drawings carry a wide soft glow, and cropping to that leaves a ring of near-invisible
-// halo that reads as a gap between the artwork and the button's stroke.
+// The blocks are the DISC — the fully opaque circle, measured at alpha > 250 — NOT the file's full
+// alpha bounds.
+//
+// The circle is the object: it is 140px across in every one of these files, so cropping to it and
+// scaling to a fixed width renders all five at exactly the same size, centred, with no stretch. The
+// full bounds are 156px wide instead, because each drawing carries a faint halo — and that halo sits
+// differently in each file (night's spreads right, morning's below), so a crop that includes it puts
+// every disc at a different size and offset. That is what made them look unequal.
+//
+// The halo is not clipped: it simply overflows the window, which no longer hides its overflow.
 const HOUR_ART_SOURCE: Record<TimeOfDayId, ArtSource> = {
   morning: {
     src: require('@/src/assets/ui/icons/morning.png'),
-    canvas: { w: 2026, h: 2000 },
-    block: { x: 41, y: 1052, w: 172, h: 168 },
+    canvas: { w: 161, h: 154 },
+    block: { x: 9, y: 0, w: 139, h: 136 },
   },
   midday: {
     src: require('@/src/assets/ui/icons/midday.png'),
-    canvas: { w: 189, h: 188 },
-    block: { x: 8, y: 20, w: 172, h: 168 },
+    canvas: { w: 161, h: 156 },
+    block: { x: 8, y: 20, w: 140, h: 136 },
   },
   afternoon: {
     src: require('@/src/assets/ui/icons/afternoon.png'),
-    canvas: { w: 189, h: 188 },
-    block: { x: 8, y: 20, w: 172, h: 168 },
+    canvas: { w: 161, h: 156 },
+    block: { x: 8, y: 20, w: 140, h: 136 },
   },
   sunset: {
     src: require('@/src/assets/ui/icons/sunset.png'),
-    canvas: { w: 228, h: 211 },
-    block: { x: 27, y: 7, w: 172, h: 168 },
+    canvas: { w: 156, h: 152 },
+    block: { x: 8, y: 0, w: 140, h: 138 },
   },
   night: {
     src: require('@/src/assets/ui/icons/night.png'),
-    canvas: { w: 172, h: 168 },
-    block: { x: 0, y: 0, w: 172, h: 168 },
+    canvas: { w: 140, h: 136 },
+    block: { x: 0, y: 0, w: 140, h: 136 },
   },
 };
 
 // The hour's own colour, worn by the slider's filled track and its knob. Runs the day: pale yellow at
 // dawn, full yellow at noon, warm through the afternoon, orange at sunset, navy after dark — so the
 // control says which hour it is holding without reading the label.
+// Muted, not pure: each is its original hue at about two thirds the saturation. The track sits on a
+// cream panel over a warm room, and at full chroma the yellows read as a highlighter rather than as
+// the hour. HUE and LIGHTNESS are untouched, so the run still goes pale dawn -> noon -> warm -> orange
+// -> navy; only the intensity comes down.
 const HOUR_COLOUR: Record<TimeOfDayId, string> = {
-  morning: '#F3E3A6',
-  midday: '#F5D040',
-  afternoon: '#EFAE33',
-  sunset: '#E0762F',
-  night: '#2F3B60',
+  morning: '#E7DCB2',
+  midday: '#D8BF5D',
+  afternoon: '#D1A551',
+  sunset: '#C47C4B',
+  night: '#373F58',
 };
 
-// A touch over 1, so a drawing bleeds to the stroke instead of stopping a hair short of it; the button clips the remainder.
-const HOUR_ART_OVERSCAN = 1.06;
+// 1, not over: the hour artwork used to bleed to the edge of a round button and be clipped by it. In a
+// chip it is an icon ON a tile, like the gear and the bulb, and steps back by LIGHT_CHIP_ART instead.
+const HOUR_ART_OVERSCAN = 1;
+// The bulb steps back from its chip's edge — it is an icon ON a tile, not a picture filling a disc
+const LIGHT_CHIP_ART = 0.95;
+// The HOURS get their own, smaller fraction. Their drawings run the full width of their canvases — a
+// horizon line reaching both edges — so at the bulb's fraction they arrive within a point or two of
+// the chip's sides and read as cut off by it, even though the crop includes every pixel.
+const HOUR_CHIP_ART = 0.88;
 const HOUR_ART_WIDTH = (BUTTON - BUTTON_STROKE_WIDTH * 2) * HOUR_ART_OVERSCAN;
 
 type ArtSource = {
@@ -78,6 +102,35 @@ type ArtSource = {
   canvas: { w: number; h: number };
   block: { x: number; y: number; w: number; h: number };
 };
+
+/**
+ * The HOURS' solve: ONE scale on both axes, so nothing is distorted.
+ *
+ * An earlier version mapped each block onto a square, which made the drawings rounder but stretched
+ * them 10-15% on one axis. Keeping the aspect means the window's height follows its own drawing, so
+ * the five differ slightly in height — that is the artwork's shape, not an inconsistency.
+ *
+ * SAME SIZE means same WIDTH here, and it comes for free: all five blocks are 156px wide, so one
+ * window width renders all five drawings at the same width. Their HEIGHTS differ — morning and sunset
+ * carry a glow below the sun that midday does not — and that is the artwork's own shape. Forcing the
+ * heights to match is precisely the stretch this solve exists to avoid.
+ *
+ * Centring is the button's: the window is a single child of a centred container, so whatever height
+ * it resolves to, it sits in the middle of the chip.
+ */
+function solveHourArt({ src, canvas, block }: ArtSource) {
+  const scale = HOUR_ART_WIDTH / block.w;
+  return {
+    src,
+    window: { width: HOUR_ART_WIDTH, height: block.h * scale },
+    image: {
+      left: -block.x * scale,
+      top: -block.y * scale,
+      width: canvas.w * scale,
+      height: canvas.h * scale,
+    },
+  };
+}
 
 // The window's size, and the oversized image's offset inside it. Solved once per drawing.
 function solveArt({ src, canvas, block }: ArtSource) {
@@ -111,8 +164,8 @@ const LIGHT_ART = {
 
 // Solved once per preset: the window's size, and the oversized image's offset inside it.
 const HOUR_ART = Object.fromEntries(
-  (Object.keys(HOUR_ART_SOURCE) as TimeOfDayId[]).map((id) => [id, solveArt(HOUR_ART_SOURCE[id])]),
-) as Record<TimeOfDayId, ReturnType<typeof solveArt>>;
+  (Object.keys(HOUR_ART_SOURCE) as TimeOfDayId[]).map((id) => [id, solveHourArt(HOUR_ART_SOURCE[id])]),
+) as Record<TimeOfDayId, ReturnType<typeof solveHourArt>>;
 // The hour slider's geometry. TRACK is the distance the KNOB'S CENTRE travels, so the strip is TRACK + KNOB wide overall and a stop sits on each end rather than inset from it.
 const KNOB = 20;
 const TRACK = 140;
@@ -206,11 +259,15 @@ export function RoomLightControls({
         accessibilityLabel="Ceiling light"
         accessibilityState={{ checked: lightOn }}
         hitSlop={8}
-        style={[s.button, s.buttonArtwork]}
+        style={[s.button, s.buttonChip]}
         onPress={onToggleLight}
       >
-        <View style={[s.hourArtWindow, scaleBox(light.window, k)]}>
-          <Image source={light.src} style={[s.hourArtImage, scaleBox(light.image, k)]} resizeMode="stretch" />
+        <View style={[s.hourArtWindow, scaleBox(light.window, k * LIGHT_CHIP_ART)]}>
+          <Image
+            source={light.src}
+            style={[s.hourArtImage, scaleBox(light.image, k * LIGHT_CHIP_ART)]}
+            resizeMode="stretch"
+          />
         </View>
       </Pressable>
 
@@ -222,11 +279,20 @@ export function RoomLightControls({
           accessibilityLabel={`Time of day: ${preset.label}`}
           accessibilityState={{ expanded: hoursOpen }}
           hitSlop={8}
-          style={[s.button, s.buttonArtwork, s.hourButton]}
+          style={[s.button, s.buttonChip, s.hourButton]}
           onPress={() => setHoursOpen((open) => !open)}
         >
-          <View style={[s.hourArtWindow, scaleBox(art.window, k)]}>
-            <Image source={art.src} style={[s.hourArtImage, scaleBox(art.image, k)]} resizeMode="stretch" />
+          {/* The ring traces the artwork's own edge: these drawings are a circular scene inscribed in a
+              square window, so a circular border on that window lands on the picture's rim. A bitmap
+              cannot be stroked in RN — this is the nearest honest thing to an outline. */}
+          {/* hourArtBleed, not hourArtWindow: the crop is the disc, so the halo lies OUTSIDE it and
+              would be sliced off at the circle's edge by a window that hides its overflow. */}
+          <View style={[s.hourArtBleed, scaleBox(art.window, k * HOUR_CHIP_ART)]}>
+            <Image
+              source={art.src}
+              style={[s.hourArtImage, scaleBox(art.image, k * HOUR_CHIP_ART)]}
+              resizeMode="stretch"
+            />
           </View>
         </Pressable>
 
@@ -337,6 +403,16 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   // An artwork button is its OWN face: no cream disc under it and no lift, because the drawing already
   // fills the circle and a plate behind it would only show as a rim. The stroke stays — it is what
   // makes the picture read as a button.
+  // The bulb sits in a rounded-square CHIP, like the small buttons on the assembly HUD. Its drawing
+  // does not fill a disc the way the hour art does, so a tile is the honest container for it.
+  buttonChip: {
+    borderRadius: ROOM_CHIP_RADIUS,
+    // The same cream as the settings chip above it (RoomExperience's ROOM_CHIP_FILL), rather than the
+    // theme's surface — the two are one pair, and t.surface is a shade warmer than the room's chrome.
+    backgroundColor: BAR_FILL,
+    ...CARD_CHROME,
+    borderWidth: 0,
+  },
   // Keeps the disc UNDER the artwork: the hour drawings fill it, but the bulb does not, and it reads
   // as a lamp on a face rather than a lamp floating on the room.
   buttonArtwork: {
@@ -351,6 +427,8 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   hourArtImage: {
     position: 'absolute',
   },
+  // The hours' window: the same box as hourArtWindow, but it lets the halo bleed past the disc
+  hourArtBleed: {},
   // SHORTER than the disc, and square on the left: a pill as tall as the button leaves a crescent of
   // background either side of its rounded left cap, because a circle is narrower than its own bounding
   // box everywhere but the middle. At this height the straight left edge — which sits on the disc's

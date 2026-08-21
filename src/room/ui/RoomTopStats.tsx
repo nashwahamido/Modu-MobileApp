@@ -100,8 +100,8 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     gap: 18,
   },
   coinIcon: {
-    width: 54,
-    height: 54,
+    width: 48,
+    height: 48,
   },
   
   levelIcon: {

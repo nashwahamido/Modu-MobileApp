@@ -43,8 +43,8 @@ const SHOP_ICON_NUDGE_X = -4;
 // Fixed, so resizing an icon never moves its label. The icons overflow it — their transparent margin
 // does, at least — and that is fine: this anchors the LABEL, it does not clip the art.
 const ICON_SLOT = 44;
-// Wide enough for "Visit friends" on one line at this type size, and no wider — it is the longest
-// label by some way, so it alone sets how much of the room the rail covers.
+// Wide enough for the longest label on one line at this type size, and no wider — the widest word
+// alone sets how much of the room the rail covers.
 const ITEM_WIDTH = 72;
 const CHEVRON_SIZE = 26;
 const LABEL_LINE_HEIGHT = 13;
@@ -63,6 +63,11 @@ export function RoomNavRail({
   const s = useScaledStyles(makeStyles, k);
   const safe = useScreenInsets();
   const [railOpen, setRailOpen] = useState(true);
+  // The rail's height, remembered from the last time it was open. Collapsed, a spacer of exactly that
+  // height stands in for it — otherwise the wrap (which centres its children on the screen) would
+  // re-centre around the chevron alone and the arrow would jump to the middle of the screen. Measured
+  // rather than hardcoded: the rail's height follows its four items, its type and the tablet scale.
+  const [railHeight, setRailHeight] = useState(0);
 
   // The design offset scales; the device inset does not — an inset is a physical clearance
   const padRight = 14 * k + safe.right;
@@ -96,6 +101,7 @@ export function RoomNavRail({
           exiting={RAIL_ITEM_EXITING}
           layout={RAIL_LAYOUT}
           style={s.rail}
+          onLayout={(e) => setRailHeight(e.nativeEvent.layout.height)}
         >
           <RailItem
             s={s}
@@ -113,7 +119,7 @@ export function RoomNavRail({
           />
           <RailItem
             s={s}
-            label="Visit friends"
+            label="Friends"
             icon={VISIT_FRIENDS_ICON}
             iconStyle={s.friendsIcon}
             onPress={onOpenVisit}
@@ -126,7 +132,11 @@ export function RoomNavRail({
             onPress={() => router.push('/profile' as Href)}
           />
         </Animated.View>
-      ) : null}
+      ) : (
+        // Holds the arrow's place. Not interactive and not visible — it exists so the group's height,
+        // and therefore the chevron's position, is the same open or closed.
+        <View style={{ height: railHeight }} pointerEvents="none" />
+      )}
     </Animated.View>
   );
 }
@@ -149,8 +159,8 @@ function RailItem({
       <View style={s.iconSlot}>
         <Image source={icon} style={iconStyle} resizeMode="contain" />
       </View>
-      {/* One line, always: "Visit friends" is what sets the rail's width, and letting it wrap would make
-          that one item taller than the other three and break the even spacing down the column. */}
+      {/* One line, always: the longest label is what sets the rail's width, and letting it wrap would
+          make that one item taller than the other three and break the even spacing down the column. */}
       <Text style={s.label} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
         {label}
       </Text>

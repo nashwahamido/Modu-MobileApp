@@ -16,9 +16,9 @@ import { useCurrentUserId } from '../../data';
 import { RoomScene } from '../scene/RoomScene';
 import { FriendPickerOverlay } from './FriendPickerOverlay';
 import { RoomNavRail } from './RoomNavRail';
-import { RoomAssembleButton } from './RoomAssembleButton';
+import { ASSEMBLE_COLLAR_SIZE, RoomAssembleButton } from './RoomAssembleButton';
 import { RoomBottomBar } from './RoomBottomBar';
-import { LIGHT_COLUMN_GAP, RoomLightControls } from './RoomLightControls';
+import { LIGHT_COLUMN_GAP, ROOM_CHIP_RADIUS, RoomLightControls } from './RoomLightControls';
 import { useLeftColumnScale } from './roomScale';
 import { RoomLoadingOverlay } from './RoomLoadingOverlay';
 import { RoomFirstPlacementGuide } from './RoomFirstPlacementGuide';
@@ -35,8 +35,13 @@ import { ORBIT } from '../input/orbit';
 import type { Theme } from "@/src/game/ui/system/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from '../../hooks/use-safe-insets';
 
-// The gear's diameter, matched to the light buttons below it (RoomLightControls' BUTTON)
+// The gear's chip, matched to the light buttons below it (RoomLightControls' BUTTON)
 const SETTINGS_DISC = 48;
+// The chip's cream, shared with the room's other chrome
+const ROOM_CHIP_FILL = '#FBFAF3';
+// The artwork inside the chip. Short of the chip so the gear reads as sitting ON a tile rather than
+// filling it — the same relationship the assembly HUD's icons have to their chips.
+const SETTINGS_ICON_FRACTION = 0.92;
 
 const ROOM_EDIT_GUIDE_KEY = 'modu.room-edit-guide-seen.v1';
 const ROOM_WELCOME_GUIDE_KEY = 'modu.room-welcome-guide-seen.v1';
@@ -225,12 +230,20 @@ export function RoomExperience() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Settings"
-          style={[s.settingsButton, { width: SETTINGS_DISC * k, height: SETTINGS_DISC * k, borderRadius: (SETTINGS_DISC * k) / 2 }]}
+          // RADIUS.control, not half the width: this is the same rounded-square chip the light switch
+          // below it wears. Scaled here because the sheet's own radius is not — the inline value wins.
+          style={[
+            s.settingsButton,
+            { width: SETTINGS_DISC * k, height: SETTINGS_DISC * k, borderRadius: ROOM_CHIP_RADIUS * k },
+          ]}
           onPress={() => router.push("/settings" as Href)}
         >
           <Image
             source={SETTINGS_ICON}
-            style={{ width: SETTINGS_DISC * k, height: SETTINGS_DISC * k }}
+            style={{
+              width: SETTINGS_DISC * SETTINGS_ICON_FRACTION * k,
+              height: SETTINGS_DISC * SETTINGS_ICON_FRACTION * k,
+            }}
             resizeMode="contain"
           />
         </Pressable>
@@ -274,7 +287,13 @@ export function RoomExperience() {
           {editing ? null : (
             <RoomAssembleButton
               style={{
-                left: 18 * k + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+                // Aligned on CENTRES, not on left edges: this button's collar is wider than the discs
+                // above it, so sharing their left inset would push it half the difference to the right
+                // and break the column's line.
+                left:
+                  18 * k +
+                  Math.max(safe.raw.left, SCREEN_SIDE_MARGIN) -
+                  ((ASSEMBLE_COLLAR_SIZE - SETTINGS_DISC) / 2) * k,
                 bottom: 14 * k + Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN),
               }}
             />
@@ -386,10 +405,13 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     alignItems: 'flex-start',
     gap: LIGHT_COLUMN_GAP,
   },
-  // Sized TO the artwork, which is a disc: the shadow follows the view's box, so a 42pt box under a
-  // 48pt drawing would cast a circle smaller than the thing casting it. borderWidth is zeroed because
-  // the disc brings its own edge — only the shadow is wanted from CARD_CHROME.
+  // A rounded-square CHIP, matching the small buttons on the assembly HUD (game/ui/hud/hudChrome's
+  // IconButtonBare). The shadow fits now because it follows this container rather than the artwork:
+  // icon-settings.png draws its disc across only 174 of its 196px canvas and off-centre in it, so a
+  // shadow cast by the image's own box ringed the drawing instead of sitting under it.
   settingsButton: {
+    borderRadius: ROOM_CHIP_RADIUS,
+    backgroundColor: ROOM_CHIP_FILL,
     alignItems: 'center',
     justifyContent: 'center',
     ...CARD_CHROME,
