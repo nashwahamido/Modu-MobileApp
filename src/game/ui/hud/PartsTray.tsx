@@ -1,7 +1,7 @@
 import { Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 import { useMirror } from "@/src/game/ui/system/handedness";
 import { GrainOverlay } from "@/src/game/ui/system/Button";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 import {
   GestureDetector,
@@ -27,45 +27,45 @@ interface Props {
   header?: ReactNode;
   /** Per-group thumbnails, keyed by group (furniture.thumbs). May be sparse. */
   thumbs?: ThumbMap;
-  /** Card to flash after a ? hint that says "take out X" — scrolled into view first if the list has it clipped. */
-  highlightGroup?: GroupId | null;
-  /** Bumped per ? press so the same group can flash again. */
+  /** Cards to flash after a hint. A LIST because "?" highlights every actionable target at once; Spot's single card arrives as a one-element list. These groups also sort to the top of the tray and the list scrolls to show them — see `ordered` and the effect below. */
+  highlightGroups?: GroupId[];
+  /** Bumped per hint press so the same groups can flash again. */
   highlightPulse?: number;
 }
 
 /** Inventory column (right edge): everything the current stage uses, grouped with remaining counts. Long-press an enabled card to take one in hand and drag it into the scene; locked cards are waiting on other steps. */
-export function PartsTray({ items, gestureFor, header, thumbs, highlightGroup, highlightPulse }: Props) {
+export function PartsTray({ items, gestureFor, header, thumbs, highlightGroups, highlightPulse }: Props) {
   const styles = useFixedStyles(makeStyles);
   // The rail crosses to the other edge in left-hand mode; everything INSIDE a card keeps its own layout.
   const m = useMirror();
   const theme = useColorScheme() === "dark" ? "dark" : "light";
   const scrollRef = useRef<ScrollView>(null);
-  // Card positions within the list content, the current scroll offset, and the viewport height — enough to know when a card is clipped.
-  const cardLayouts = useRef<Record<string, { y: number; h: number }>>({});
-  const scrollY = useRef(0);
-  const viewportH = useRef(0);
   const flash = useSharedValue(0);
 
+  // Keyed by VALUE, not array identity: play.tsx rebuilds this list on every render, and re-running the flash on each one would strobe. Same reasoning as the offsetKey/rotationKey pattern in PartModel StaticEntity.
+  const highlightKey = (highlightGroups ?? []).join(" ");
   useEffect(() => {
-    if (!highlightGroup) return;
-    const box = cardLayouts.current[highlightGroup];
-    if (box) {
-      const top = scrollY.current;
-      const bottom = top + viewportH.current;
-      // Only move the list when the card is actually clipped — an in-view card just flashes in place.
-      if (box.y < top || box.y + box.h > bottom) {
-        scrollRef.current?.scrollTo({ y: Math.max(0, box.y - 8), animated: true });
-      }
-    }
-    // Three gentle accent pulses — enough to draw the eye without strobing.
+    const groups = highlightGroups ?? [];
+    if (!groups.length) return;
+    // The highlighted cards are now sorted to the top, so showing them is just showing the top of the list. This replaces the old clipped-card scroll: that logic aimed at ONE card's measured position and deliberately did nothing when several were lit, which left a multi-target hint pointing off-screen.
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+    // Three gentle accent pulses — enough to draw the eye without strobing. One shared value drives every highlighted card: one animation, N overlays.
     flash.value = 0;
     flash.value = withRepeat(
       withSequence(withTiming(1, { duration: 240 }), withTiming(0, { duration: 240 })),
       3,
     );
-  }, [highlightGroup, highlightPulse, flash]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightKey, highlightPulse, flash]);
 
   const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value * 0.5 }));
+
+  // Highlighted cards sort to the TOP so a "?" press puts its targets under the player's eye instead of somewhere down a scrolled list. Stable within each half: everything keeps its relative order, the highlighted ones simply move ahead — so the tray never reshuffles beyond what the highlight itself justifies.
+  const ordered = useMemo(() => {
+    if (!highlightGroups?.length) return items;
+    const lit = new Set(highlightGroups);
+    return [...items].sort((a, b) => Number(lit.has(b.group)) - Number(lit.has(a.group)));
+  }, [items, highlightGroups]);
 
   if (items.length === 0 && !header) return null;
   return (
@@ -75,23 +75,14 @@ export function PartsTray({ items, gestureFor, header, thumbs, highlightGroup, h
         style={styles.scroll}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
-        onLayout={(e) => (viewportH.current = e.nativeEvent.layout.height)}
-        onScroll={(e) => (scrollY.current = e.nativeEvent.contentOffset.y)}
-        scrollEventThrottle={16}
       >
         {header}
-        {items.map((item) => {
+        {ordered.map((item) => {
           const thumb = thumbs ? thumbFor(thumbs, item.group, theme) : undefined;
           const card = (
             <View
               key={item.group}
               style={[styles.card, !item.enabled && styles.cardDisabled]}
-              onLayout={(e) => {
-                cardLayouts.current[item.group] = {
-                  y: e.nativeEvent.layout.y,
-                  h: e.nativeEvent.layout.height,
-                };
-              }}
             >
               <GrainOverlay radius={12} />
               {thumb ? (
@@ -107,7 +98,7 @@ export function PartsTray({ items, gestureFor, header, thumbs, highlightGroup, h
                   <Text style={styles.badgeText}>×{item.remaining}</Text>
                 </View>
               ) : null}
-              {item.group === highlightGroup ? (
+              {highlightGroups?.includes(item.group) ? (
                 <Animated.View pointerEvents="none" style={[styles.flashOverlay, flashStyle]} />
               ) : null}
             </View>

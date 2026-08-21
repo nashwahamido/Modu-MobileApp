@@ -25,7 +25,9 @@ export const SHELL_GRID_NODES: readonly string[] = [
   SHELL_GRID_NODE,
   ...SHELL_WALL_IDS.map(shellGridWallNode),
 ];
-// The grid lines' colour. A flat unlit grey rather than the translucent white the SVG overlay used, because the plates had to leave the transparent pass to stop the window band drawing over them (the reasoning is in add-shell-grid.mts). One consequence is worth knowing: a blended white read very differently on a dark wall than on cream plaster — stark on one, nearly invisible on the other — where a fixed grey reads much the same against both. Tune it here; it is the only place the value lives.
+// The grid lines' colour. A flat unlit grey rather than the translucent white the SVG overlay used, because the plates had to leave the transparent pass to stop the window band drawing over them (the reasoning is in add-shell-grid.mts). One consequence is worth knowing: a blended white read very differently on a dark wall than on cream plaster — stark on one, nearly invisible on the other — where a fixed grey reads much the same against both.
+//
+// DO NOT TUNE IT HERE, whatever this comment used to claim. Nothing reads this constant. The value that actually reaches the screen was baked into the Grid material's baseColorFactor by the generator, and RoomScene now overwrites that at load time from GRID_TUNING.lineRgb in ./gridTuning — which is where on-device legibility is being settled. This stays as the permanent home the tuning file is meant to collapse back into: when gridTuning.ts is deleted, move the settled value here and point RoomScene's write at it.
 export const SHELL_GRID_RGB: readonly [number, number, number] = [0.72, 0.72, 0.72];
 
 // A glTF material's parameter names in gltfio's ubershader. occlusionMap is deliberately absent and must stay absent: that slot holds the room's baked AO on TEXCOORD_1, and a tiled AO map from a texture pack would fight it.
