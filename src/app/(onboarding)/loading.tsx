@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getCurrentSession } from "@/src/services/auth";
 import { createProfileIfMissing } from "@/src/services/profile";
 import { getLatestHandedness, getLatestOnboardingMode } from "@/src/services/onboarding";
-import { useGameStore } from "@/src/game/core/store";
+import { hydrateSettings, useGameStore } from "@/src/game/core/store";
 import type { ProfileId } from "@/src/game/core/profile";
 import { LoadingScreen } from "@/src/game/ui/loading/LoadingScreen";
 import { type Milestone } from "@/src/game/ui/loading/loadingProgress";
@@ -24,6 +24,10 @@ export default function LoadingScreenRoute() {
     let active = true;
     (async () => {
       try {
+        // BEFORE the profile is applied. The gate calls applyProfile below, which lays the profile's
+        // defaults down and keeps only the keys the player has touched — and it can only know which
+        // those are once they have been read back from storage.
+        await hydrateSettings();
         const session = await getCurrentSession();
         const user = session?.user;
         if (user) {

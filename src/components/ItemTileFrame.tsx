@@ -6,6 +6,17 @@ import { CREAM, LEXEND } from "@/src/game/ui/system/theme";
 
 /** Well height as a fraction of the column width the grid hands down. */
 export const WELL_ASPECT = 0.88;
+
+/** How much of the well a MODEL thumbnail may use, as a fraction of its height.
+ *
+ *  Not 1: these renders are framed tight — between 80% and 95% of their own canvas — so at the
+ *  well's full height they ran to its edges while the bought items beside them sat comfortably
+ *  inside, and a grid of both read as two different sizes of picture. Surfaces are exempt: a
+ *  wallpaper or a floor IS its tile and fills the frame (see CatalogThumb's `surface`).
+ *
+ *  Here rather than in either grid, because the shop and the inventory are the same picture in two
+ *  places and drifting apart is exactly what ItemTileFrame exists to prevent. */
+export const GRID_THUMB_FILL = 0.78;
 /** Room above the well for a badge to overhang without clipping — the shop's price, the inventory's brand mark. Shared, so both grids' wells start on the same line. */
 export const WELL_TOP_PAD = 14;
 export const FRAME_FILL = "#EFE9E0";

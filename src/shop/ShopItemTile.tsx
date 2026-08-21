@@ -1,17 +1,16 @@
 // One purchasable tile in the shop popup: price badge, picture well, name
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 
-import { CatalogThumb } from "@/src/components/CatalogThumb";
-import type { ItemSource } from "@/src/data/catalog/assets";
+import { CatalogThumb, gridThumbFill, gridVariation } from "@/src/components/CatalogThumb";
 import { COIN_ICON, STAR_ICON, levelIcon } from "@/src/components/iconAssets";
 import {
   FRAME_FILL,
   FRAME_RADIUS,
   FRAME_STROKE,
   FRAME_STROKE_WIDTH,
+  ItemNameTab,
   LockWash,
   TILE_ROW_GAP,
-  ItemNameTab,
   WELL_ASPECT,
   WELL_TOP_PAD,
 } from "@/src/components/ItemTileFrame";
@@ -37,29 +36,18 @@ export function ShopItemTile({
   price,
   width,
   surface,
-  source = "bought",
   owned,
   lockLevel,
   onPress,
   disabled,
 }: {
-  /** Catalog id, for the well's picture */
+  /** Catalog id, for the well's picture. Source is "bought" by construction: the shop IS the item_buy catalogue */
   itemId: string;
   name: string;
   price: number;
   width: number;
   /** A wallpaper or a floor, whose picture is its own tile image rather than a variation's render */
   surface?: boolean;
-  /**
-   * Which room/<source>/ subtree this item's picture lives under. Defaults to "bought", which every item_buy
-   * row is — and which used to be hardcoded here, on the reasoning that "the shop IS the item_buy catalogue".
-   * That stopped being true when getShopItems started appending testing workshop_drafts: their assets sit
-   * under room/workshop/, so the hardcoded value built a URL into the published subtree for something that has
-   * not been published, 404'd, and CatalogThumb rendered nothing. ShopItem.source has carried the right answer
-   * the whole time (see its own comment in data/shop/items.ts, which predicts exactly this failure) — the tile
-   * simply was not asking for it.
-   */
-  source?: ItemSource;
   owned?: boolean;
   lockLevel?: number;
   onPress?: () => void;
@@ -90,7 +78,22 @@ export function ShopItemTile({
           style={[s.art, { height: wellHeight - FRAME_STROKE_WIDTH * 2 }]}
           pointerEvents="none"
         >
-          <CatalogThumb source={source} itemId={itemId} surface={surface} size={wellHeight} />
+          {/* The GRID face for this item (components/CatalogThumb) — an agreed portrait per model
+              rather than whichever finish the catalog row calls default, which was "wooden" for all
+              four built models and put a row of near-identical wood renders in the grid.
+
+              size is inset for the BUILT models only (gridThumbFill) — their assembly-pipeline
+              render is framed tight where a bought item's already carries its own air, so the four
+              ran to the edges of their wells while everything around them sat inside. Bought items
+              are unchanged and still fill. The colour picker and the purchase popups pass a real
+              variation and their own size. */}
+          <CatalogThumb
+            source="bought"
+            itemId={itemId}
+            variation={gridVariation(itemId)}
+            surface={surface}
+            size={Math.round(wellHeight * gridThumbFill(itemId))}
+          />
         </View>
 
         {/* A tint, not a blur — RN has no blur without a native module */}

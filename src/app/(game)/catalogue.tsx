@@ -98,6 +98,9 @@ export default function CatalogueScreen() {
   const [completedIds, setCompletedIds] = useState<ReadonlySet<string>>(new Set());
   // Furniture with a resumable save. complete() DELETES the save as it records the completion, so this and completedIds are disjoint for anything built once and not restarted.
   const [inProgressIds, setInProgressIds] = useState<ReadonlySet<string>>(new Set());
+  // How many actions each resumable save has finished. The save already carries the completed list —
+  // it is the source of truth for how far a build got — so the card's XP line costs no extra read.
+  const [doneSteps, setDoneSteps] = useState<Readonly<Record<string, number>>>({});
   // The XP each furniture pays out. buildReward is per-furniture, so this is one read per tile — fine at four items, wrong at twenty. The fix then is an xp column on BuildCatalogRow, which arrives with the rest of the row in a single fetch.
   const [rewardXp, setRewardXp] = useState<Readonly<Record<string, number>>>({});
   useEffect(() => {
@@ -111,6 +114,7 @@ export default function CatalogueScreen() {
         if (!alive) return;
         setCompletedIds(new Set(ids));
         setInProgressIds(new Set(saves.map((b) => b.furnitureId)));
+        setDoneSteps(Object.fromEntries(saves.map((b) => [b.furnitureId, b.completed.length])));
         setRewardXp(Object.fromEntries(rewards));
       })
       // A failed read means every card renders as un-built — the wrong label, but never a wrong action, since all three states lead to the same build screen.
@@ -256,7 +260,7 @@ export default function CatalogueScreen() {
               key={m.id}
               meta={m}
               dark={scheme === "dark"}
-              // In-progress WINS over completed: a rebuild of a finished item is still a build in flight, and offering "assemble again" mid-build would read as a restart. It also keeps the earned XP hidden until the run it belongs to is over.
+              // In-progress WINS over completed: a rebuild of a finished item is still a build in flight, and offering "Re-assemble" mid-build would read as a restart.
               state={
                 inProgressIds.has(m.id)
                   ? "inProgress"
@@ -265,6 +269,9 @@ export default function CatalogueScreen() {
                     : "new"
               }
               xp={rewardXp[m.id] ?? 0}
+              // Steps finished, not XP: the card turns it into XP against the model's own stepCount,
+              // so the two numbers in "120/310" can never come from different denominators.
+              doneSteps={doneSteps[m.id] ?? 0}
               selected={selectedId === m.id}
               onSelect={() => setSelectedId((cur) => (cur === m.id ? null : m.id))}
               // Straight to the build. The experience/profile is set by onboarding (and adjustable in Settings) — not a per-item chooser. The finish rides along as a param. play.tsx does not read it yet — the assembly model is still the one baked GLB — so this is the tile half of the feature only.
@@ -395,7 +402,7 @@ type CardState = "new" | "inProgress" | "done";
 const PILL_LABEL: Record<CardState, string> = {
   new: "Start ›",
   inProgress: "Continue ›",
-  done: "Assemble again ›",
+  done: "Re-assemble ›",
 };
 
 /** A colour per state, so the pill says which of the three it is before the label is read.
@@ -413,6 +420,7 @@ function FurnitureCard({
   dark,
   state,
   xp,
+  doneSteps,
   selected,
   onSelect,
   onStart,
@@ -421,11 +429,27 @@ function FurnitureCard({
   dark: boolean;
   state: CardState;
   xp: number;
+  /** Actions finished on the resumable save, or 0. Steps rather than XP — see the call site. */
+  doneSteps: number;
   selected: boolean;
   onSelect: () => void;
   onStart: (variation: string | null) => void;
 }) {
   const styles = useFixedStyles(makeStyles);
+  // What the XP row's first number says, per state:
+  //   new         0        nothing started
+  //   inProgress  a share  steps finished against this model's own stepCount
+  //   done        the lot  a finished build has been paid in full
+  //
+  // `done` is asserted rather than derived: complete() DELETES the save as it records the
+  // completion, so a finished furniture has no `completed` list left to count and deriving it would
+  // read 0 on exactly the card that has earned everything.
+  const earnedXp =
+    state === "done"
+      ? xp
+      : state === "inProgress" && meta.stepCount > 0
+        ? Math.floor((xp * Math.min(doneSteps, meta.stepCount)) / meta.stepCount)
+        : 0;
   // The finish list comes from item_variants (default first, already sorted by the store) but is narrowed to the finishes this build ships art for — so a variation authored in the DB ahead of its artwork simply doesn't appear, rather than rendering a missing image.
   const variants = useVariantStore((v) => v.byItem[meta.id]);
   const finishes = useMemo(() => {
@@ -582,15 +606,24 @@ function FurnitureCard({
         </View>
         <View style={styles.cardCopy}>
           <View style={styles.nameRow}>
-            {/* adjustsFontSizeToFit with a floor: "BEKVÄM Step Stool" is the longest name in the
-                catalogue and sits right on the wrap boundary, so it flips between one and two lines
-                on the smallest width change. Letting it shrink a hair keeps every card's copy block
-                the same height instead of one of them being a line taller than the rest. */}
+            {/* ONE LINE, shrunk to fit. The longest names in the catalogue sit right on the wrap
+                boundary, so they flipped between one and two lines on the smallest width change —
+                and a card whose title took two lines pushed its whole copy block a line lower than
+                the card beside it.
+
+                numberOfLines={2} was the reason the shrink never helped: adjustsFontSizeToFit only
+                shrinks as far as it needs to fit the lines it is ALLOWED, so with two available it
+                wrapped at full size rather than reducing. Capping at one is what makes the scale do
+                the work.
+
+                The floor is 0.75 rather than 0.85 for the same reason — at 0.85 a name that does
+                not fit has nowhere left to go and gets truncated with an ellipsis, which is worse
+                than a slightly smaller title. 17pt down to ~13pt is still comfortably readable. */}
             <Text
               style={styles.name}
-              numberOfLines={2}
+              numberOfLines={1}
               adjustsFontSizeToFit
-              minimumFontScale={0.85}
+              minimumFontScale={0.75}
             >
               {row?.name ?? "…"}
             </Text>
@@ -619,15 +652,25 @@ function FurnitureCard({
               <Text style={styles.statText}>{row.durationMin} mins</Text>
             </View>
           ) : null}
-          {/* Past tense, and only once built: the reward is granted exactly once per furniture, so a rebuild pays nothing and must not read as if it will. */}
-          {state === "done" && xp > 0 ? (
+          {/* ALWAYS, as earned-of-total. It used to appear only once a build was finished, which made
+              the XP line itself the reward announcement — so an unstarted card said nothing about
+              what it was worth, and a card mid-build hid the progress the player had just made.
+              Reading "0/310" before, "120/310" during and "310/310" after turns the same row into
+              the answer to "what do I get" and "how far am I", from one number.
+
+              The middle number is derived from STEPS rather than tracked as XP, so it is always a
+              share of this model's own reward and cannot drift from the total beside it. Rounded
+              down: a build one step in should not read as though it has banked more than it has. */}
+          {xp > 0 ? (
             <View style={styles.statRow}>
               <Image
                 source={require("@/src/assets/ui/icons/icon-xp.png")}
                 style={styles.xpIcon}
                 resizeMode="contain"
               />
-              <Text style={styles.statText}>{xp} earned</Text>
+              <Text style={styles.statText}>
+                {earnedXp}/{xp} XP
+              </Text>
             </View>
           ) : null}
         </View>
