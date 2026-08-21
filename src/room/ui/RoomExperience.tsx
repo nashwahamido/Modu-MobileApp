@@ -31,10 +31,6 @@ import { usePlacementStore } from '../core/placement';
 import { ORBIT } from '../input/orbit';
 import type { Theme } from "@/src/game/ui/system/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from '../../hooks/use-safe-insets';
-import { useAvatarModeNotice } from './avatarModeNotice';
-import { CLEAR_PATH_BED_ITEM_ID, clearPathBedPlacement } from '../character/clearPathBed';
-import { roomItemDefs, useRoomCatalogStore } from '../core/placeableItems';
-import { saveSelectedAvatarMode } from '@/src/services/onboarding';
 
 const ROOM_EDIT_GUIDE_KEY = 'modu.room-edit-guide-seen.v1';
 const ROOM_WELCOME_GUIDE_KEY = 'modu.room-welcome-guide-seen.v1';
@@ -69,67 +65,15 @@ export function RoomExperience() {
   const [lightOverride, setLightOverride] = useState<CeilingLightOverride>(null);
   const ceilingLight = ceilingLightOn(hour, lightOverride);
   const roomGuideMascot = avatarForProfile(useGameStore((s) => s.profile));
-  const pendingClearPath = useAvatarModeNotice((n) => n.pendingClearPath);
-  const pebblePrompt = useAvatarModeNotice((n) => n.pebblePrompt);
-  const markClearPathReady = useAvatarModeNotice((n) => n.markClearPathReady);
-  const dismissPebblePrompt = useAvatarModeNotice((n) => n.dismissPebblePrompt);
-  const cancelClearPathRequest = useAvatarModeNotice(
-    (n) => n.cancelClearPathRequest,
-  );
-  const completeClearPathRequest = useAvatarModeNotice(
-    (n) => n.completeClearPathRequest,
-  );
-  const applyProfile = useGameStore((s) => s.applyProfile);
-  const [placingPebble, setPlacingPebble] = useState(false);
   // Placement is shared state (src/room/core/placement) so any route can start it and the scene can render the layout. This screen owns only the HUD: the ghost's drag lives in the scene's gesture layer, where the finger is converted to grid cells by ray picking.
   const me = useCurrentUserId();
   const hydrate = usePlacementStore((p) => p.hydrate);
   const hydrated = usePlacementStore((p) => p.hydrated);
   const editing = usePlacementStore((p) => p.activeEdit !== null);
-  const roomLayout = usePlacementStore((p) => p.layout);
-  const clearPathBedDef = useRoomCatalogStore(
-    (c) => c.items[CLEAR_PATH_BED_ITEM_ID]?.def,
-  );
   const placedFurnitureCount = usePlacementStore((p) => p.layout.length);
   useEffect(() => {
     hydrate(me);
   }, [hydrate, me]);
-  useEffect(() => {
-    if (
-      !pendingClearPath ||
-      pebblePrompt !== null ||
-      !hydrated ||
-      editing ||
-      !clearPathBedDef
-    )
-      return;
-    if (
-      clearPathBedPlacement(roomLayout, clearPathBedDef, roomItemDefs())
-    ) {
-      markClearPathReady();
-    }
-  }, [
-    clearPathBedDef,
-    editing,
-    hydrated,
-    markClearPathReady,
-    pebblePrompt,
-    pendingClearPath,
-    roomLayout,
-  ]);
-  const placePebbleBed = async () => {
-    if (placingPebble) return;
-    setPlacingPebble(true);
-    try {
-      await saveSelectedAvatarMode('clearPath');
-      completeClearPathRequest();
-      applyProfile('clearPath');
-    } catch (error) {
-      console.warn('[profile] could not switch to Clear Path', error);
-    } finally {
-      setPlacingPebble(false);
-    }
-  };
   const [unavailableFeature, setUnavailableFeature] = useState<string | null>(null);
   const [shopOpen, setShopOpen] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(open === 'inventory');
@@ -328,46 +272,7 @@ export function RoomExperience() {
         </OverlaySheet>
       ) : null}
 
-      {pebblePrompt === 'needsSpace' ? (
-        <OverlaySheet size="dialog" onClose={dismissPebblePrompt}>
-          <Image
-            source={avatarForProfile('clearPath')}
-            style={s.roomGuideMascot}
-            resizeMode="contain"
-          />
-          <Text style={s.roomGuideTitle}>Pebble needs a little more room</Text>
-          <Text style={s.roomGuideBody}>
-            Pebble needs space for a bed. Move some furniture and try again.
-          </Text>
-          <Button
-            label="I'll make space"
-            variant="primary"
-            style={s.roomGuideButton}
-            onPress={dismissPebblePrompt}
-          />
-        </OverlaySheet>
-      ) : null}
-
-      {pebblePrompt === 'ready' ? (
-        <OverlaySheet size="dialog" onClose={cancelClearPathRequest}>
-          <Image
-            source={avatarForProfile('clearPath')}
-            style={s.roomGuideMascot}
-            resizeMode="contain"
-          />
-          <Text style={s.roomGuideTitle}>That spot works perfectly!</Text>
-          <Text style={s.roomGuideBody}>Shall I bring my bed in?</Text>
-          <Button
-            label={placingPebble ? "Bringing it in…" : "Place my bed"}
-            variant="primary"
-            style={s.roomGuideButton}
-            disabled={placingPebble}
-            onPress={placePebbleBed}
-          />
-        </OverlaySheet>
-      ) : null}
-
-      {showRoomEditGuide && pebblePrompt === null ? (
+      {showRoomEditGuide ? (
         <OverlaySheet size="dialog" onClose={dismissRoomEditGuide}>
           <Image
             source={roomGuideMascot}
@@ -387,7 +292,7 @@ export function RoomExperience() {
         </OverlaySheet>
       ) : null}
 
-      {showRoomWelcomeGuide && pebblePrompt === null ? (
+      {showRoomWelcomeGuide ? (
         <OverlaySheet size="dialog" onClose={dismissRoomWelcomeGuide}>
           <Image
             source={roomGuideMascot}

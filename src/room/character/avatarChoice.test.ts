@@ -11,7 +11,10 @@ test("Visual mode places Lumi in the room", () => {
   assert.equal(roomAvatarKindForProfile("visual"), "lumi");
 });
 
-test("Momentum and the Clear Path fallback use Sparky", () => {
+test("Momentum mode places Sparky in the room", () => {
   assert.equal(roomAvatarKindForProfile("momentum"), "sparky");
-  assert.equal(roomAvatarKindForProfile("clearPath"), "sparky");
+});
+
+test("Clear Path mode places Pebble in the room", () => {
+  assert.equal(roomAvatarKindForProfile("clearPath"), "pebble");
 });

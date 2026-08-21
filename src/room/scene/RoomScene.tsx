@@ -65,11 +65,6 @@ import {
 } from "./shellMaterials";
 import { useSurfaceTextures } from "./useSurfaceTextures";
 import { RoomAvatar } from "./RoomAvatar";
-import {
-  CLEAR_PATH_BED_INSTANCE_ID,
-  CLEAR_PATH_BED_ITEM_ID,
-  clearPathBedPlacement,
-} from "../character/clearPathBed";
 import { useCurrentUserId, useRepos } from "../../data";
 import { useShopStore } from "../../data/shop/store";
 import { setCameraAzimuth, usePlacementStore } from "../core/placement";
@@ -738,29 +733,6 @@ const LoadedItem = memo(function LoadedItem({
 }) {
   const model = useModel(source);
   const { renderableManager, transformManager, scene } = useFilamentContext();
-  const isClearPathBed =
-    placement.instanceId === CLEAR_PATH_BED_INSTANCE_ID;
-  const [arrivalScale, setArrivalScale] = useState(
-    isClearPathBed ? 0.05 : 1,
-  );
-
-  // The profile fixture is the only furniture that enters by itself rather
-  // than under the player's drag. Let it grow gently out of the floor instead
-  // of popping into existence in one React commit. Moving it later keeps the
-  // same key/component and therefore never replays this arrival.
-  useEffect(() => {
-    if (!isClearPathBed || model.state !== "loaded") return;
-    let frame = 0;
-    const startedAt = performance.now();
-    const tick = (now: number) => {
-      const t = Math.min(1, (now - startedAt) / 420);
-      const eased = t * t * (3 - 2 * t);
-      setArrivalScale(0.05 + eased * 0.95);
-      if (t < 1) frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [isClearPathBed, model.state]);
 
   // Parsed — not yet transformed or painted, both of which happen in effects below, in the same commit. Depends on model.STATE rather than on `model`, which useModel rebuilds as a fresh object literal every render.
   useEffect(() => {
@@ -808,7 +780,7 @@ const LoadedItem = memo(function LoadedItem({
       }
     };
 
-    const scale = fitScale(item) * SCENE_SCALE * arrivalScale;
+    const scale = fitScale(item) * SCENE_SCALE;
     const unitScale = 2 / Math.max(item.size.x, item.size.y, item.size.z);
 
     if (placement.surface.kind === "wall") {
@@ -872,7 +844,6 @@ const LoadedItem = memo(function LoadedItem({
     apply(transform);
   }, [
     hostPlacement,
-    arrivalScale,
     item,
     model,
     placement.cell,
@@ -1164,41 +1135,17 @@ export function RoomScene({
   const activeEdit = usePlacementStore((s) => s.activeEdit);
   // Subscribed (not getState) so pieces whose item rows arrive with the catalog sync appear then.
   const roomItems = useRoomCatalogStore((s) => s.items);
-  const profile = useGameStore((s) => s.profile);
-  const reservedFixtures = usePlacementStore((s) => s.reserved);
+  const reservedFixtureCount = usePlacementStore((s) => s.reserved.length);
+  const editingReservedFixture = usePlacementStore((s) => s.activeEdit?.reserved === true);
   const setReserved = usePlacementStore((s) => s.setReserved);
-  const initialClearPathBed = useMemo(
-    () =>
-      profile === "clearPath" && !viewing && layoutSettled
-        ? clearPathBedPlacement(
-            baseLayout,
-            roomItems[CLEAR_PATH_BED_ITEM_ID]?.def,
-            roomItemDefs(),
-          )
-        : null,
-    [baseLayout, layoutSettled, profile, roomItems, viewing],
-  );
+  const cancelPlacement = usePlacementStore((s) => s.cancel);
   useEffect(() => {
-    if (profile !== "clearPath" || viewing) {
-      if (reservedFixtures.length > 0) setReserved([]);
-      return;
-    }
-    const editingBed =
-      activeEdit?.reserved === true &&
-      activeEdit.placement.instanceId === CLEAR_PATH_BED_INSTANCE_ID;
-    // Seed the fixture once per Clear Path room session. Once moved, its store
-    // position is authoritative; recomputing from the saved layout would snap
-    // it back to a corner after every render or catalogue update.
-    if (!editingBed && reservedFixtures.length === 0 && initialClearPathBed) {
-      setReserved([initialClearPathBed]);
-    }
-  }, [activeEdit, initialClearPathBed, profile, reservedFixtures, setReserved, viewing]);
-  useEffect(() => () => setReserved([]), [setReserved]);
-  const reserved = profile === "clearPath" && !viewing ? reservedFixtures : [];
-  const layout = useMemo(
-    () => (reserved.length > 0 ? [...baseLayout, ...reserved] : baseLayout),
-    [baseLayout, reserved],
-  );
+    // Clear stale non-persisted fixtures left by a Fast Refresh from the former
+    // Pebble-bed implementation. New avatars never reserve furniture cells.
+    if (editingReservedFixture) cancelPlacement();
+    if (reservedFixtureCount > 0) setReserved([]);
+  }, [cancelPlacement, editingReservedFixture, reservedFixtureCount, setReserved]);
+  const layout = baseLayout;
   // The ghost re-renders through the store on every cell change; committed pieces only when the layout itself changes.
   const editing = activeEdit !== null;
 

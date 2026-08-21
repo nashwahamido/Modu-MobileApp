@@ -301,7 +301,8 @@ export default function AvatarRecommendationScreen() {
     setSavingChoice(true);
     setSaveError(null);
     try {
-      await saveSelectedAvatarMode(selectedMode.id as ModeId);
+      const result = await saveSelectedAvatarMode(selectedMode.id as ModeId);
+      if (result.skipped) throw new Error("Sign in again to save your avatar choice.");
       // Keep the already-mounted room in sync when the player returns home in
       // this session; the next cold start hydrates the same value from the DB.
       useGameStore.getState().applyProfile(selectedMode.id as ProfileId);

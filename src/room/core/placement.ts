@@ -64,7 +64,7 @@ export interface ActiveEdit {
   check: PlacementCheck;
   // True only when a completed build sends the player's first furniture here — drives the mascot coach mark.
   firstPlacementGuide: boolean;
-  // True for a profile-owned fixture such as Clear Path's bed. It uses the
+  // True for a profile-owned fixture. It uses the
   // ordinary edit controls, but confirm/cancel return it to `reserved` and
   // never save it as the player's furniture.
   reserved: boolean;
@@ -73,7 +73,7 @@ export interface ActiveEdit {
 interface PlacementState {
   ownerId: UserId | null;
   layout: GridPlacement[];
-  // Profile-owned, non-persisted fixtures (currently Clear Path's bed). They
+  // Profile-owned, non-persisted fixtures. They
   // render and block placement like furniture but never enter the saved room.
   reserved: GridPlacement[];
   // The room's chosen surface items. Separate from `layout` because they are not placements — nothing occupies a cell — but persisted in the SAME row, so they ride the same save.
@@ -441,7 +441,7 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
   remove() {
     const s = get();
     if (!s.activeEdit) return;
-    // The Clear Path bed is part of the room profile, not owned inventory. The
+    // A reserved fixture is part of the room profile, not owned inventory. The
     // delete control therefore behaves like cancel: it may be moved/rotated,
     // but cannot be permanently removed or persisted.
     if (s.activeEdit.reserved) {

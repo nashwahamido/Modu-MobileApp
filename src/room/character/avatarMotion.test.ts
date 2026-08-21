@@ -5,6 +5,8 @@ import {
   avatarMotionPhase,
   chooseDistinctSpecialAction,
   POST_PATH_STANDING_MS,
+  shouldPlaySpecialAction,
+  SPECIAL_ACTION_PROBABILITY,
   TURN_IN_PLACE_THRESHOLD,
 } from "./avatarMotion";
 
@@ -40,8 +42,15 @@ test("a one-shot action plays only when stopped and safe", () => {
   );
 });
 
-test("a character stands for at least five seconds after completing a path", () => {
-  assert.equal(POST_PATH_STANDING_MS, 5_000);
+test("a character stands for three seconds after completing a path", () => {
+  assert.equal(POST_PATH_STANDING_MS, 3_000);
+});
+
+test("walking is chosen more often than a special action", () => {
+  assert.equal(SPECIAL_ACTION_PROBABILITY, 0.3);
+  assert.equal(shouldPlaySpecialAction(0.29), true);
+  assert.equal(shouldPlaySpecialAction(0.3), false);
+  assert.equal(shouldPlaySpecialAction(0.9), false);
 });
 
 test("the next one-shot action differs from the previous action", () => {

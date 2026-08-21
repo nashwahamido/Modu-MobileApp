@@ -1,5 +1,10 @@
 export const TURN_IN_PLACE_THRESHOLD = Math.PI / 6;
-export const POST_PATH_STANDING_MS = 5_000;
+export const POST_PATH_STANDING_MS = 3_000;
+export const SPECIAL_ACTION_PROBABILITY = 0.3;
+
+export function shouldPlaySpecialAction(randomValue = Math.random()): boolean {
+  return randomValue < SPECIAL_ACTION_PROBABILITY;
+}
 
 export type AvatarSpecialAction = {
   index: number;

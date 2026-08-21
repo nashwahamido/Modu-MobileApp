@@ -11,31 +11,45 @@ export function Stepper<T extends string>({
   value,
   options,
   onChange,
+  disabled = false,
 }: {
   label: string;
   desc?: string;
   value: T;
   options: { value: T; label: string }[];
   onChange: (v: T) => void;
+  disabled?: boolean;
 }) {
   const styles = useFixedStyles(makeSettingsStyles);
   const idx = Math.max(0, options.findIndex((o) => o.value === value));
   const go = (dir: number) =>
     onChange(options[(idx + dir + options.length) % options.length].value);
   return (
-    <View style={styles.stepperRow}>
+    <View style={[styles.stepperRow, disabled && styles.controlIdle]}>
       <View style={styles.rowText}>
         <Text style={styles.rowLabel}>{label}</Text>
         {desc ? <Text style={styles.rowDesc}>{desc}</Text> : null}
       </View>
       <View style={styles.stepper}>
-        <Pressable onPress={() => go(-1)} style={styles.arrow} hitSlop={8}>
+        <Pressable
+          onPress={() => go(-1)}
+          style={styles.arrow}
+          hitSlop={8}
+          disabled={disabled}
+          accessibilityState={{ disabled }}
+        >
           <Text style={styles.arrowText}>‹</Text>
         </Pressable>
         <Text style={styles.stepperValue} numberOfLines={1}>
           {options[idx].label}
         </Text>
-        <Pressable onPress={() => go(1)} style={styles.arrow} hitSlop={8}>
+        <Pressable
+          onPress={() => go(1)}
+          style={styles.arrow}
+          hitSlop={8}
+          disabled={disabled}
+          accessibilityState={{ disabled }}
+        >
           <Text style={styles.arrowText}>›</Text>
         </Pressable>
       </View>
@@ -50,16 +64,18 @@ export function Segmented<T extends string>({
   value,
   options,
   onChange,
+  disabled = false,
 }: {
   label: string;
   desc?: string;
   value: T;
   options: { value: T; label: string }[];
   onChange: (v: T) => void;
+  disabled?: boolean;
 }) {
   const styles = useFixedStyles(makeSettingsStyles);
   return (
-    <View style={styles.segBlock}>
+    <View style={[styles.segBlock, disabled && styles.controlIdle]}>
       <Text style={styles.rowLabel}>{label}</Text>
       {desc ? <Text style={styles.rowDesc}>{desc}</Text> : null}
       <View style={styles.segRow}>
@@ -70,6 +86,8 @@ export function Segmented<T extends string>({
               key={o.value}
               onPress={() => onChange(o.value)}
               hitSlop={4}
+              disabled={disabled}
+              accessibilityState={{ selected: active, disabled }}
               style={[styles.segBtn, active && styles.segBtnActive]}
             >
               <Text
@@ -93,6 +111,7 @@ export function Choice<T extends string>(props: {
   value: T;
   options: { value: T; label: string }[];
   onChange: (v: T) => void;
+  disabled?: boolean;
 }) {
   return props.options.length < 3 ? <Segmented {...props} /> : <Stepper {...props} />;
 }
@@ -269,6 +288,7 @@ export const makeSettingsStyles = (t: Theme) =>
     marginTop: 4,
   },
   actionRowIdle: { opacity: 0.45 },
+  controlIdle: { opacity: 0.45 },
   actionText: { fontFamily: FONT, fontSize: 15, fontWeight: "700", color: t.danger },
   actionTextQuiet: { color: t.text },
   actionDesc: { fontFamily: FONT, fontSize: 12, color: t.textDim, marginTop: 2 },

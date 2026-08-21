@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   RenderCallbackContext,
   useAnimator,
@@ -13,6 +13,7 @@ import {
   avatarMotionPhase,
   chooseDistinctSpecialAction,
   POST_PATH_STANDING_MS,
+  shouldPlaySpecialAction,
 } from "../character/avatarMotion";
 import {
   roomAvatarKindForProfile,
@@ -23,14 +24,11 @@ import {
   cellsFor,
   floorCellToRoom,
   roomPointToFloorCell,
-  rotatedFootprint,
-  type GridPlacement,
 } from "../core/grid";
-import { fitScale, getRoomItemDef, useRoomCatalogStore } from "../core/placeableItems";
+import { getRoomItemDef } from "../core/placeableItems";
 import { usePlacementStore } from "../core/placement";
 import { FLOOR_CELLS, ROOM_SHELL, SCENE_SCALE, roomToScene } from "../core/roomShell";
 import { useGameStore } from "../../game/core/store";
-import { CLEAR_PATH_BED_INSTANCE_ID } from "../character/clearPathBed";
 
 const CAT_FOOTPRINT = { w: 1, d: 1 } as const;
 
@@ -50,30 +48,30 @@ type AvatarConfig = {
 const AVATAR_CONFIG: Record<RoomAvatarKind, AvatarConfig> = {
   felix: {
     model: require("../../assets/models/avatars/cute-cat.glb"),
-    size: { x: 0.667114, y: 0.979554, z: 0.506043 },
-    // Optimized Felix: NlaTrack is idle; NlaTrack.001 is walk.
-    // NlaTrack.001 is a 15.625s performance containing turns, not a clean walk
-    // loop. This measured sub-window has active legs, quiet torso motion and
-    // closely matching endpoints, so only it repeats while navigation moves.
-    animation: {
-      walk: 1,
-      idle: 0,
-      walkRate: 1.6,
-      walkWindow: { start: 9.417, end: 10.167 },
-    },
-    specials: [],
+    size: { x: 0.797974, y: 0.979004, z: 0.697937 },
+    // The refreshed export includes a clean, symmetric walk loop as
+    // NlaTrack.003, replacing the old measured sub-window workaround. Freeze
+    // the first frame of NlaTrack for a stable standing pose.
+    animation: { walk: 3, idle: 0, idleRate: 0 },
+    specials: [
+      { index: 1, duration: 2.25 },
+      { index: 2, duration: 3.708 },
+      { index: 4, duration: 15.375 },
+    ],
   },
   sparky: {
     model: require("../../assets/models/avatars/sparky.glb"),
     size: { x: 0.679871, y: 0.980042, z: 0.516876 },
-    // Optimized Sparky: the long NlaTrack is idle; NlaTrack.002 is the
-    // symmetric, seamless leg-driven walk cycle.
-    animation: { walk: 2, idle: 0 },
-    // Arm-led, seamless clips. They play only as complete one-shot actions
-    // while Sparky is safely stopped.
+    // The refreshed export preserves the previously verified walk cycle as
+    // NlaTrack (index 0). Freeze the first frame of the arm-led long clip for
+    // a stable standing pose instead of letting an idle performance twitch.
+    animation: { walk: 0, idle: 2, idleRate: 0 },
+    // Complete one-shot actions. Unified scheduling keeps them out of walking,
+    // turning and furniture-edit states and prevents immediate repetition.
     specials: [
       { index: 1, duration: 2.083 },
-      { index: 3, duration: 3.208 },
+      { index: 3, duration: 15.625 },
+      { index: 4, duration: 2.208 },
     ],
   },
   lumi: {
@@ -88,6 +86,19 @@ const AVATAR_CONFIG: Record<RoomAvatarKind, AvatarConfig> = {
       { index: 2, duration: 17.625 },
     ],
   },
+  pebble: {
+    model: require("../../assets/models/avatars/pebble.glb"),
+    size: { x: 0.827881, y: 0.97937, z: 0.674011 },
+    // NlaTrack.003 is the short, leg-led locomotion cycle. Keep the long,
+    // subtle NlaTrack.004 on its first frame while standing; the remaining
+    // clips are complete one-shot actions governed by the shared scheduler.
+    animation: { walk: 3, idle: 4, idleRate: 0 },
+    specials: [
+      { index: 0, duration: 2.625 },
+      { index: 1, duration: 2.25 },
+      { index: 2, duration: 9.125 },
+    ],
+  },
 };
 
 // This GLB's authored forward axis already matches the yaw convention below:
@@ -99,6 +110,7 @@ const TURN_SPEED = 7;
 const ARRIVAL_EPSILON = 0.025;
 const ANIMATION_CROSS_FADE_SECONDS = 0.18;
 const FLOOR_CLEARANCE_METRES = 0.005;
+const HIDDEN_SCENE_Y = -10;
 
 type Point = { x: number; z: number };
 type Motion = {
@@ -122,128 +134,10 @@ const pointForCell = (cell: { x: number; y: number }): Point => {
 export function RoomAvatar() {
   const profile = useGameStore((state) => state.profile);
   const avatarKind = roomAvatarKindForProfile(profile);
-  const viewing = usePlacementStore((state) => state.viewing !== null);
-  const clearPathBed = usePlacementStore((state) => {
-    const edited = state.activeEdit;
-    if (
-      edited?.reserved &&
-      edited.placement.instanceId === CLEAR_PATH_BED_INSTANCE_ID
-    ) {
-      return edited.placement;
-    }
-    return state.reserved.find(
-      (placement) => placement.instanceId === CLEAR_PATH_BED_INSTANCE_ID,
-    );
-  });
-
-  // Pebble is a Clear Path room fixture, not a roaming avatar. It is mounted
-  // only after its non-persisted bed has found a legal corner, and never follows
-  // the player into a friend's room.
-  if (profile === "clearPath") {
-    return !viewing && clearPathBed ? (
-      <PebbleBedAvatar key={clearPathBed.instanceId} bed={clearPathBed} />
-    ) : null;
-  }
 
   // A recommendation change must create fresh native model/animator state rather
   // than asking one Filament wrapper to change the asset underneath itself.
   return <WalkingRoomAvatar key={avatarKind} avatarKind={avatarKind} />;
-}
-
-const PEBBLE_MODEL = require("../../assets/models/avatars/pebble.glb");
-const PEBBLE_SIZE = { x: 0.76812, y: 0.97937, z: 0.63098 } as const;
-// The bed's measured height includes its headboard, so the mattress cannot be
-// derived from size.y / 2. These two values are visual seating policy for this
-// exact bed/avatar pair: Pebble sinks slightly into the mattress so its tail's
-// large bounds do not hold the body visibly in the air.
-const PEBBLE_MATTRESS_HEIGHT_RATIO = 0.34;
-const PEBBLE_MAX_MATTRESS_HEIGHT = 0.4;
-const PEBBLE_BED_SINK = 0.14;
-
-function PebbleBedAvatar({ bed }: { bed: GridPlacement }) {
-  const item = useRoomCatalogStore((state) => state.items[bed.itemId] ?? null);
-  const model = useModel(PEBBLE_MODEL);
-  const asset = model.state === "loaded" ? model.asset : null;
-  const animator = useAnimator(asset ?? undefined);
-  const { transformManager } = useFilamentContext();
-  const baseTransform = useRef<Mat4 | null>(null);
-  const [arrivalScale, setArrivalScale] = useState(0.05);
-
-  // The bed arrives first; Pebble follows after it has had time to settle.
-  // This component keeps the bed instance as its key, so dragging that bed
-  // later updates the transform without replaying the entrance.
-  useEffect(() => {
-    if (!asset) return;
-    let frame = 0;
-    let delay = 0;
-    const delayStartedAt = performance.now();
-    const begin = () => {
-      const startedAt = performance.now();
-      const tick = (now: number) => {
-        const t = Math.min(1, (now - startedAt) / 360);
-        const eased = t * t * (3 - 2 * t);
-        setArrivalScale(0.05 + eased * 0.95);
-        if (t < 1) frame = requestAnimationFrame(tick);
-      };
-      frame = requestAnimationFrame(tick);
-    };
-    const wait = (now: number) => {
-      if (now - delayStartedAt >= 460) begin();
-      else delay = requestAnimationFrame(wait);
-    };
-    delay = requestAnimationFrame(wait);
-    return () => {
-      cancelAnimationFrame(delay);
-      cancelAnimationFrame(frame);
-    };
-  }, [asset]);
-
-  RenderCallbackContext.useRenderCallback(
-    () => {
-      "worklet";
-      if (!animator) return;
-      // Freeze on the authored first frame. Applying a fixed time keeps the
-      // intended posed skeleton without playing the arm-heavy clip, which read
-      // as twitching while the character was meant to be resting.
-      animator.applyAnimation(0, 0);
-      animator.updateBoneMatrices();
-    },
-    [animator],
-  );
-
-  useEffect(() => {
-    if (!asset || model.state !== "loaded" || !item) return;
-    transformManager.transformToUnitCube(model.rootEntity, model.boundingBox);
-    baseTransform.current = transformManager.getTransform(model.rootEntity);
-
-    const footprint = rotatedFootprint(item.def.footprint, bed.rotSteps);
-    const roomCentre = floorCellToRoom(bed.cell, footprint);
-    const centre = roomToScene(roomCentre);
-    const maxExtent = Math.max(PEBBLE_SIZE.x, PEBBLE_SIZE.y, PEBBLE_SIZE.z);
-    const unitScale = 2 / maxExtent;
-    const bedScale = fitScale(item);
-    const mattressY =
-      Math.min(PEBBLE_MAX_MATTRESS_HEIGHT, item.size.y * PEBBLE_MATTRESS_HEIGHT_RATIO) *
-      bedScale;
-    const bedYaw = (bed.rotSteps * Math.PI) / 2;
-    // Keep Pebble centred on the mattress, but turn its head and feet through
-    // 180 degrees relative to the previous pose. Position and height stay fixed.
-    const pebbleYaw = bedYaw;
-    const pebbleScale = (SCENE_SCALE / unitScale) * arrivalScale;
-    const transform = baseTransform.current
-      .scaling([pebbleScale, pebbleScale, pebbleScale])
-      .rotate(pebbleYaw, [0, 1, 0])
-      .rotate(-Math.PI / 2, [1, 0, 0])
-      .translate([
-        centre.x,
-        centre.y +
-          (mattressY + PEBBLE_SIZE.z / 2 - PEBBLE_BED_SINK) * SCENE_SCALE,
-        centre.z,
-      ]);
-    transformManager.setTransform(model.rootEntity, transform);
-  }, [arrivalScale, asset, bed.cell, bed.rotSteps, item, model, transformManager]);
-
-  return null;
 }
 
 function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
@@ -405,16 +299,19 @@ function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
       if (animationIndex.value !== index) animationIndex.value = index;
     };
 
-    const recoverFromCollision = (now: number): boolean => {
+    const recoverFromCollision = (
+      now: number,
+    ): "clear" | "recovered" | "unavailable" => {
       const currentCell = roomPointToFloorCell({ ...motion.current.position });
-      if (!blocked.has(cellKey(currentCell))) return false;
+      if (!blocked.has(cellKey(currentCell))) return "clear";
       const safeCell = nearestWalkable(currentCell, blocked, bounds);
       motion.current.path = [];
       motion.current.special = null;
       motion.current.specialEligible = false;
       motion.current.idleUntil = now + 500;
-      if (safeCell) motion.current.position = pointForCell(safeCell);
-      return true;
+      if (!safeCell) return "unavailable";
+      motion.current.position = pointForCell(safeCell);
+      return "recovered";
     };
 
     const choosePath = (): boolean => {
@@ -441,7 +338,7 @@ function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
       return false;
     };
 
-    const paint = () => {
+    const paint = (visible = true) => {
       const state = motion.current;
       const centre = roomToScene({ x: state.position.x, y: ROOM_SHELL.floor.y, z: state.position.z });
       const transform = baseTransform.current!
@@ -449,7 +346,9 @@ function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
         .rotate(state.yaw + MODEL_FORWARD_OFFSET, [0, 1, 0])
         .translate([
           centre.x,
-          centre.y + ((config.size.y / 2) + FLOOR_CLEARANCE_METRES) * SCENE_SCALE,
+          visible
+            ? centre.y + ((config.size.y / 2) + FLOOR_CLEARANCE_METRES) * SCENE_SCALE
+            : HIDDEN_SCENE_Y,
           centre.z,
         ]);
       transformManager.setTransform(model.rootEntity, transform);
@@ -461,7 +360,12 @@ function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
       const dt = Math.min(0.05, Math.max(0, (now - previous) / 1_000));
       previous = now;
       const state = motion.current;
-      const recovering = recoverFromCollision(now);
+      const recovery = recoverFromCollision(now);
+      if (recovery === "unavailable") {
+        setAnimation(config.animation.idle);
+        paint(false);
+        return;
+      }
       if (editing) {
         state.special = null;
         state.specialEligible = false;
@@ -469,7 +373,7 @@ function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
         paint();
         return;
       }
-      if (recovering) {
+      if (recovery === "recovered") {
         setAnimation(config.animation.idle);
         paint();
         return;
@@ -497,16 +401,18 @@ function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
         if (now >= state.idleUntil) {
           if (state.specialEligible && config.specials.length > 0) {
             state.specialEligible = false;
-            const action = chooseDistinctSpecialAction(
-              config.specials,
-              state.lastSpecialIndex,
-            );
-            if (action) {
-              state.lastSpecialIndex = action.index;
-              state.special = { index: action.index, until: now + action.duration * 1_000 };
-              setAnimation(action.index);
-              paint();
-              return;
+            if (shouldPlaySpecialAction()) {
+              const action = chooseDistinctSpecialAction(
+                config.specials,
+                state.lastSpecialIndex,
+              );
+              if (action) {
+                state.lastSpecialIndex = action.index;
+                state.special = { index: action.index, until: now + action.duration * 1_000 };
+                setAnimation(action.index);
+                paint();
+                return;
+              }
             }
           }
           if (!choosePath()) state.idleUntil = now + 1_000;
@@ -558,11 +464,11 @@ function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
       blocked.has(cellKey(roomPointToFloorCell(point))),
     );
     if (pathInvalid) motion.current.path = [];
-    recoverFromCollision(now);
+    const initialRecovery = recoverFromCollision(now);
     if (motion.current.idleUntil === 0) {
       motion.current.idleUntil = now + POST_PATH_STANDING_MS;
     }
-    paint();
+    paint(initialRecovery !== "unavailable");
     frame = requestAnimationFrame(tick);
     return () => {
       stopped = true;

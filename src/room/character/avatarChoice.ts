@@ -1,7 +1,13 @@
 import type { ProfileId } from "@/src/game/core/profile";
 
-export type RoomAvatarKind = "felix" | "sparky" | "lumi";
+export type RoomAvatarKind = "felix" | "sparky" | "lumi" | "pebble";
 
-/** Each recommendation gets its own room companion; Clear Path overrides this with Pebble-in-bed. */
+/** Each recommendation gets its own roaming room companion. */
 export const roomAvatarKindForProfile = (profile: ProfileId): RoomAvatarKind =>
-  profile === "control" ? "felix" : profile === "visual" ? "lumi" : "sparky";
+  profile === "control"
+    ? "felix"
+    : profile === "visual"
+      ? "lumi"
+      : profile === "clearPath"
+        ? "pebble"
+        : "sparky";

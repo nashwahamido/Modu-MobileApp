@@ -27,3 +27,11 @@ test("nearestWalkable recovers when furniture appears under the avatar", () => {
   const blocked = new Set(["3,3", "4,3", "2,3", "3,2"]);
   assert.deepEqual(nearestWalkable({ x: 3, y: 3 }, blocked, bounds), { x: 3, y: 4 });
 });
+
+test("nearestWalkable reports when no avatar-sized space remains", () => {
+  const blocked = new Set<string>();
+  for (let x = 0; x < bounds.w; x += 1) {
+    for (let y = 0; y < bounds.h; y += 1) blocked.add(`${x},${y}`);
+  }
+  assert.equal(nearestWalkable({ x: 3, y: 3 }, blocked, bounds), null);
+});
