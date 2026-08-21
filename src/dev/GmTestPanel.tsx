@@ -3,11 +3,24 @@ import type { Href } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { AccountSwitcher } from "./AccountSwitcher";
+import { useGameStore } from "@/src/game/core/store";
+import { useTutorialStore } from "@/src/game/tutorial/store";
+import type { ProfileId } from "@/src/game/core/profile";
 
 type GmTarget = {
   label: string;
   route: Href;
   note: string;
+  /**
+   * Applied to the game store BEFORE navigating.
+   *
+   * The tutorial builds its step list from `useGameStore.profile` — Lumi's run is a hand-written
+   * list returned only for `visual`, and the other three share the composed one. Onboarding sets the
+   * profile on its way out (avatar-recommendation calls applyProfile), so the tutorial it opens
+   * always matches the avatar just chosen; jumping here set nothing, so you got whatever the store
+   * happened to hold and the tutorial looked like the wrong version of itself.
+   */
+  profile?: ProfileId;
 };
 
 const targets: GmTarget[] = [
@@ -18,7 +31,13 @@ const targets: GmTarget[] = [
     route: "/avatar-recommendation?mode=momentum&secondary=visual" as Href,
     note: "Recommendation result",
   },
-  { label: "Tutorial", route: "/tutorial" as Href, note: "Mascot guide task" },
+  // FOUR entries, not one. The four profiles run genuinely different tutorials — Lumi's is her own
+  // list, the other three are composed and differ again by mode and by softHints — so a single
+  // button could only ever test one of them, and silently.
+  { label: "Tut · Lumi", route: "/tutorial" as Href, note: "Visual", profile: "visual" },
+  { label: "Tut · Sparky", route: "/tutorial" as Href, note: "Momentum", profile: "momentum" },
+  { label: "Tut · Pebble", route: "/tutorial" as Href, note: "Clear Path", profile: "clearPath" },
+  { label: "Tut · Felix", route: "/tutorial" as Href, note: "Control", profile: "control" },
   { label: "Task", route: "/catalogue" as Href, note: "Task catalogue" },
   { label: "Room", route: "/room" as Href, note: "Virtual room" },
   { label: "Profile", route: "/profile" as Href, note: "Profile & friends" },
@@ -39,9 +58,16 @@ export function GmTestPanel() {
   const maxPanelHeight = Math.max(180, height - PANEL_BOTTOM_INSET - PANEL_TOP_GUTTER);
 
   // The catalogue picks the furniture now, so nothing here needs the old "/play + an id chosen from the active profile" special case — that guessed one piece when the point was to choose.
-  const jumpTo = (route: Href) => {
+  const jumpTo = (target: GmTarget) => {
     setOpen(false);
-    router.replace(route);
+    if (target.profile) {
+      // Same two calls onboarding makes, in the same order: applyProfile rewrites the settings and
+      // the mode for that profile, and resetTutorial clears any run already in progress so the
+      // screen configures from scratch rather than resuming someone else's script.
+      useGameStore.getState().applyProfile(target.profile);
+      useTutorialStore.getState().resetTutorial();
+    }
+    router.replace(target.route);
   };
 
   return (
@@ -67,7 +93,7 @@ export function GmTestPanel() {
               {targets.map((target) => (
                 <Pressable
                   key={target.label}
-                  onPress={() => jumpTo(target.route)}
+                  onPress={() => jumpTo(target)}
                   style={styles.targetButton}
                   hitSlop={4}
                 >

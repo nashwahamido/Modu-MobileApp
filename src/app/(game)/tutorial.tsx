@@ -55,7 +55,6 @@ import { GameSettings } from "@/src/game/ui/settings/GameSettings";
 import type { SettingsFocusTarget } from "@/src/game/ui/settings/SettingsControls";
 import {
   BuildMap,
-  MapButton,
 } from "@/src/game/ui/hud/ClusterFocusControl";
 import {
   SpotButton,
@@ -80,8 +79,10 @@ import {
 import { MomentumCompanion } from "@/src/game/tutorial/MomentumCompanion";
 import { MomentumAttentionOverlay } from "@/src/game/tutorial/MomentumAttentionOverlay";
 import { useTutorialStore } from "@/src/game/tutorial/store";
+import { useTutorialEvents } from "@/src/game/tutorial/useTutorialEvents";
 import { useTutorialHaptics } from "@/src/game/tutorial/useTutorialHaptics";
 import { useBuildPersistence } from "@/src/hooks/useBuildPersistence";
+import { DevAutoStep } from "@/src/dev/DevAutoStep";
 import {
   TUTORIAL_STEP_REWARD_TOKENS,
   type ToolTutorialKind,
@@ -130,6 +131,10 @@ function TutorialScreen() {
   const lastScale = useRef(1);
   const joystickTutorialStartedAt = useRef<number | null>(null);
   const [guideCollapsed, setGuideCollapsed] = useState(false);
+  // Stable, so the events subscription below never re-subscribes. A store subscription that is torn
+  // down and rebuilt mid-gesture is a store subscription that misses the transition it was written
+  // to catch.
+  const collapseGuideForPickup = useCallback(() => setGuideCollapsed(true), []);
   const [undoPreviewActive, setUndoPreviewActive] = useState(false);
   const undoPreviewProgress = useRef(new Animated.Value(0)).current;
 
@@ -186,6 +191,12 @@ function TutorialScreen() {
 
   const handleTutorialUndo = useCallback(() => {
     const tutorial = useTutorialStore.getState();
+    // A step the player is only READING closes on this press — the undo/recenter card names this
+    // button, so using it is an acknowledgement. The undo itself still happens below: the step is
+    // explaining what the control does, not asking the player to leave it alone.
+    if (tutorial.steps[tutorial.currentIndex]?.event === "controls_acknowledged") {
+      tutorial.completeEvent("controls_acknowledged");
+    }
     if (tutorial.steps[tutorial.currentIndex]?.id !== "hud-undo") {
       useGameStore.getState().undoLastAction();
       return;
@@ -251,71 +262,10 @@ function TutorialScreen() {
     };
   }, []);
 
-  useEffect(
-    () =>
-      useGameStore.subscribe((state, previous) => {
-        const tutorial = useTutorialStore.getState();
-        const settingsTutorialActive =
-          tutorial.steps[tutorial.currentIndex]?.targetId === "settings";
-        if (!previous.heldActionId && state.heldActionId) {
-          const currentStepId =
-            tutorial.steps[tutorial.currentIndex]?.id;
-          if (
-            currentStepId === "install-four-legs" ||
-            currentStepId === "place-connector"
-          ) {
-            setGuideCollapsed(true);
-          }
-          tutorial.completeEvent("part_picked_up");
-        }
-        if (state.completed.length < previous.completed.length) {
-          tutorial.completeEvent("step_undone");
-        }
-        if (state.completed.length > previous.completed.length) {
-          const added = state.completed.slice(previous.completed.length);
-          for (const id of added) {
-            const action = state.furniture?.actions.find(
-              (candidate) => candidate.actionId === id,
-            );
-            if (action?.type === "placePart") {
-              if (previous.driveActionId === id) {
-                tutorial.completeEvent("tool_used");
-              } else {
-                tutorial.completeEvent("part_snapped");
-              }
-            }
-            if (action?.type === "tightenFastener") {
-              tutorial.completeEvent("tool_used");
-            }
-            if (action?.type === "reorient") {
-              tutorial.completeEvent("assembly_reoriented");
-            }
-          }
-        }
-        // hintPulse increments on every Spot press, including repeated presses for the same part.
-        if (state.hintPulse > previous.hintPulse) {
-          tutorial.completeEvent("spot_used");
-        }
-        if (
-          !settingsTutorialActive &&
-          state.settings.focusMode !== previous.settings.focusMode
-        ) {
-          tutorial.completeEvent("focus_mode_toggled");
-        }
-        if (!settingsTutorialActive && state.backdrop !== previous.backdrop) {
-          tutorial.completeEvent("backdrop_changed");
-        }
-        if (
-          !settingsTutorialActive &&
-          (state.settings.textLevel !== previous.settings.textLevel ||
-            state.settings.showInstructions !==
-              previous.settings.showInstructions)
-        ) {
-          tutorial.completeEvent("instruction_preferences_changed");
-        }
-      }),
-    [],
-  );
+  // The build's own transitions, turned into tutorial events by one subscription — see
+  // game/tutorial/useTutorialEvents. It used to live here, inline, which is a large part of why this
+  // screen had to be a fork of the assembly screen rather than a layer over it.
+  useTutorialEvents(collapseGuideForPickup);
 
   const furniture = useGameStore((s) => s.furniture);
   // Subscribe to `completed` by REFERENCE and derive in a useMemo, rather than rebuilding `new Set(s.completed)` and walking the graph inside the selector on every store write. Matters most during a drag, where setDragFit fires per frame — same fix as play.tsx.
@@ -448,6 +398,16 @@ function TutorialScreen() {
     targetId: TutorialTargetId;
     message: string;
   } | null>(() => {
+    // NOT FOR LUMI. This guide rewrites the last step's card to name whatever action comes next —
+    // "Tighten bolt 2 of 4", "Long-press leg 3" — which is right for the profiles that want to be
+    // walked through every remaining action.
+    //
+    // For the visual profile it broke the step. LACK alternates bolt, tighten, leg, so a card that
+    // follows the next action swung back to tighten guidance the moment a bolt came up, and the step
+    // read as though the tutorial had gone backwards to step 6. It also retargets to `tool`, which
+    // filters the tray to nothing, so the parts column vanished. Lumi's step says "Continue
+    // assembling." and means it: one card, one arrow at the tray, until the table is done.
+    if (profile === "visual") return null;
     if (tutorialStepId !== "install-four-legs") return null;
     const nextAction = furniture?.actions.find(
       (action) => action.actionId === firstAvailable,
@@ -479,7 +439,7 @@ function TutorialScreen() {
       };
     }
     return null;
-  }, [firstAvailable, furniture, installedLegCount, tutorialStepId]);
+  }, [firstAvailable, furniture, installedLegCount, profile, tutorialStepId]);
   const collapsedLegGuide =
     guideCollapsed && tutorialStepId === "install-four-legs";
   const collapsedActionGuide =
@@ -487,6 +447,29 @@ function TutorialScreen() {
     (tutorialStepId === "install-four-legs" ||
       tutorialStepId === "place-connector");
   const tutorialTrayItems = useMemo(() => {
+    // LUMI KEEPS HER TRAY — with ONE exception.
+    //
+    // The filtering below walks the player through a single action at a time, which is right for a
+    // script that names each one and wrong for Lumi's, which does not. It emptied the tray on
+    // `view-under-table` and reduced it to the next card alone on `install-four-legs` — empty
+    // whenever that next action is a tighten. Both read as the parts column vanishing mid-step.
+    //
+    // The exception is the bolt step. Its arrow is drawn at the TOP of the tray, because the tray is
+    // measured as one column and the cue has no card of its own to aim at — so with the full tray
+    // showing it pointed at whatever happened to be first, which is the Leg. Narrowing to fasteners
+    // puts the bolt at the top, which is the thing the step is asking for. The original code did the
+    // same here and said why: the tutorial must not ask for a bolt while rendering a tray without
+    // one.
+    if (profile === "visual") {
+      if (tutorialStepId === "place-connector") {
+        return sceneState.allTrayItems.filter(
+          (item) =>
+            item.action?.type === "placeFastener" ||
+            item.action?.type === "insertFastener",
+        );
+      }
+      return sceneState.trayItems;
+    }
     if (
       tutorialAdvancing &&
       (tutorialStepId === "install-four-legs" ||
@@ -526,6 +509,7 @@ function TutorialScreen() {
     sceneState.allTrayItems,
     sceneState.trayItems,
     firstAvailable,
+    profile,
     tutorialAdvancing,
     tutorialStepId,
   ]);
@@ -824,11 +808,26 @@ function TutorialScreen() {
         </View>
         <CenterDropRing />
         <FitChip />
-        <HintToast />
+        {/* NOT during a step that is teaching Spot. Spot's own toast ("Try: …") lands in the same
+            band as the mascot's card and says the same thing a beat later, so the player reads the
+            instruction twice and the second copy covers the first.
+
+            Spot itself is untouched — the ghost still travels into its socket, the tray still
+            flashes, and `spot_used` still advances the step. Only the words are withheld, and only
+            here: the toast is exactly right in a real build, which is why this is a condition on
+            the tutorial's own render rather than a change to what Spot does. */}
+        {tutorialStep?.id === "visual-stuck-help" ? null : <HintToast />}
         <UndoButton onPress={handleTutorialUndo} />
         <TutorialTarget
           id="undo"
           style={styles.undoTarget}
+          pointerEvents="none"
+        />
+        {/* The pair under one rectangle, for the step that teaches them together. Measured always,
+            like every other target — only the step that names it lights it. */}
+        <TutorialTarget
+          id="undoRecenter"
+          style={styles.undoRecenterTarget}
           pointerEvents="none"
         />
         <GameSettings
@@ -841,6 +840,14 @@ function TutorialScreen() {
                 .completeEvent(tutorialStep.event);
             }
           }}
+          // The BROWSE step's close. Gated on the event rather than the step id, and separate from
+          // the callback above because that one only fires when the player changed the setting the
+          // tutorial pointed at — this step points at none and asks for no change.
+          onClosed={() => {
+            if (tutorialStep?.event === "settings_browsed") {
+              useTutorialStore.getState().completeEvent("settings_browsed");
+            }
+          }}
         />
         <TutorialTarget
           id="settings"
@@ -849,6 +856,15 @@ function TutorialScreen() {
         />
         {/* Ungated: play.tsx renders ToggleChips for every profile, so the tutorial showing them to only two was teaching a HUD the build does not have. */}
         <View style={styles.togglesRow}>
+          {/* Auto, in the same row and the same order as play.tsx — it was missing here, which made
+              the "or Auto for support" step name a button that was not on the screen. It renders
+              itself away outside __DEV__ and showcase builds, so this changes nothing in production.
+
+              Its own measured target, so the stuck-help step can ring Auto and Spot without ringing
+              the Focus chip between them. */}
+          <TutorialTarget id="auto" pointerEvents="box-none">
+            <DevAutoStep heldDriver={heldDriver} sinkDriver={sinkDriver} />
+          </TutorialTarget>
           <TutorialTarget id="focus" pointerEvents="auto">
             <FocusToggleButton />
           </TutorialTarget>
@@ -856,9 +872,13 @@ function TutorialScreen() {
             <SpotButton />
           </TutorialTarget>
         </View>
-        {/* One Map button where the cluster discs were — the same control, in the same slot, that the
-            build screen shows. */}
-        {mode !== "strict" ? <MapButton /> : null}
+        {/* NO MAP during the tutorial. The map is for choosing which stage of a build to work on, and
+            the tutorial IS the stage — there is nothing on it to choose. Worse, opening it stops the
+            script: the mascot hides while the map is up (see MascotGuideOverlay's mapOpen guard), so
+            a player who taps it mid-step loses the instruction they were following.
+
+            The BuildMap itself is still mounted below for momentum's overview; only the way in is
+            withheld. */}
         <PartsTray
           items={tutorialTrayItems}
           gestureFor={gestureFor}
@@ -971,9 +991,15 @@ function TutorialScreen() {
             enabled={sceneHasParts}
             onPress={() => {
               resetCamera();
-              useTutorialStore
-                .getState()
-                .completeEvent("camera_recentered");
+              const t = useTutorialStore.getState();
+              t.completeEvent("camera_recentered");
+              // …and closes a step the player is only READING. The undo/recenter card names both
+              // buttons; pressing either is at least as good an acknowledgement as tapping the
+              // dimmed area, and demanding a tap elsewhere after the player has already done the
+              // thing reads as the tutorial not noticing.
+              if (t.steps[t.currentIndex]?.event === "controls_acknowledged") {
+                t.completeEvent("controls_acknowledged");
+              }
             }}
           />
         </TutorialTarget>

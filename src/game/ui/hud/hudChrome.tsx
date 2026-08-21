@@ -116,7 +116,10 @@ export function SpokenStepsButton({ style }: { style?: StyleProp<ViewStyle> }) {
       // not disabled — it is the way back.
       source={audio ? SOUND_ON : SOUND_OFF}
       onPress={() => setSettings({ audio: !audio })}
-      size={20}
+      // 24, the same glyph size the settings gear draws inside its own 36 chip. The chips were
+      // already identical; at 20 the speaker just sat smaller inside its own, which reads as a
+      // smaller button next to the gear rather than a quieter one.
+      size={24}
       style={style}
       accessibilityLabel={audio ? "Turn spoken steps off" : "Turn spoken steps on"}
     />
@@ -180,8 +183,13 @@ export const hudChrome = {
   // The row owns the position; the ObjectiveBar is just a flex child of it.
   topRow: {
     position: "absolute",
-    // top:3 puts the pause icon's centre on the same line as the settings gear and hint, whose centres sit at 8 + their box height. Tuned so pause reads as level with the top-left grid.
-    top: 3,
+    // 8 — the SAME top as everything else on this line: the gear (8), the audio and hint chips
+    // (8) and the Map slot (8), so the row's top edges agree.
+    //
+    // It was 3, tuned so a PAUSE button that used to live in this row read as level with the
+    // top-left grid. That button is gone; the 5pt lift it needed stayed behind and left the
+    // objective bar sitting proud of everything beside it.
+    top: 8,
     alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
@@ -220,7 +228,14 @@ export const tutorialChrome = {
     height: "52%",
   },
   // The pill itself is the shared ObjectiveBar (ui/ObjectiveBar); this just centres it, as in play.tsx.
-  objectiveWrap: { position: "absolute", top: 10, alignSelf: "center" },
+  // 8, matching topRow above and every chip on that line — the gear, the audio and hint buttons and
+  // the Map slot all sit at top:8, so this has to as well.
+  //
+  // The tutorial uses THIS wrapper for every profile but momentum, where play.tsx uses topRow. That
+  // is why the two were 10 and 3: each was tuned against its own screen and neither against the
+  // other. Both are 8 now, which also means the bar does not jump when a player moves between the
+  // tutorial and a real build.
+  objectiveWrap: { position: "absolute", top: 8, alignSelf: "center" },
   // Must match PartsTray's own `column` (right:14, top:70, bottom:70, width:86) so the spotlight frames the tray exactly, not a larger box around it.
   partsTrayTarget: {
     position: "absolute",
@@ -253,6 +268,17 @@ export const tutorialChrome = {
     left: 14,
     width: 36,
     height: 36,
+  },
+  // BOTH buttons under one spotlight: undo at top 54 and recenter at top 102, each 36 tall, so the
+  // span runs 54 to 138. The tutorial teaches them as a pair — "go back a step, reset the angle" is
+  // one idea — and a step can only name one target, so the pair needs a rectangle of its own rather
+  // than two consecutive steps saying half of it each.
+  undoRecenterTarget: {
+    position: "absolute",
+    top: 54,
+    left: 14,
+    width: 36,
+    height: 102 + 36 - 54,
   },
   // Match the real gear in GameSettings (left:14, top:8, 36×36). left:92 pointed the spotlight at the hint slot instead of the gear.
   settingsTarget: {

@@ -31,6 +31,9 @@ interface GameSettingsProps {
   onConfirm?: () => void;
   tutorialTarget?: SettingsFocusTarget | null;
   onTutorialTargetActivated?: () => void;
+  /** Fired on EVERY close, changed or not. For a tutorial step that asks the player to look through
+   *  Settings rather than to change something in it. */
+  onClosed?: () => void;
 }
 
 export function GameSettings({
@@ -41,6 +44,7 @@ export function GameSettings({
   onConfirm,
   tutorialTarget = null,
   onTutorialTargetActivated,
+  onClosed,
 }: GameSettingsProps = {}) {
   const styles = useFixedStyles(makeStyles);
   const m = useMirror();
@@ -63,6 +67,11 @@ export function GameSettings({
     if (shouldAdvanceTutorial) {
       requestAnimationFrame(() => onTutorialTargetActivated?.());
     }
+    // EVERY close, whether or not anything was changed — Done, the backdrop, the hardware back.
+    // `onTutorialTargetActivated` above is the other kind of report: it fires only when the player
+    // committed to a setting the tutorial pointed at. A step that just asks them to look around
+    // needs to hear about the close itself.
+    requestAnimationFrame(() => onClosed?.());
   };
 
   useEffect(() => {
