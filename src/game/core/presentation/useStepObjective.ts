@@ -33,7 +33,7 @@ export function useStepObjective({
   audioOn,
   completedCount,
   totalCount,
-}: StepObjectiveInput): string {
+}: StepObjectiveInput): string | null {
   const objective = objectiveText({
     mode,
     needsFocusChoice,

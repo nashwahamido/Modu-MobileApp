@@ -32,10 +32,8 @@ import type { ClusterDriver, OffsetDriver } from "./offsetDriver";
 import { useShaderOverride, useShaderStyle } from "./shaders";
 import type { PartMode } from "./useSceneState";
 
-// dev-setting
-/** Ghost colors follow the PDD color language; emissive glow is used because the DALFRED materials are opaque near-black glTF — runtime alpha is ignored and base-color tints are swallowed by the dark albedo. */
 const FIT_GLOW: Record<FitState, [number, number, number]> = {
-  // ORANGE, not the old blue: this is the "here is the next slot" cue, and it has to win the player's eye against a warm cream HUD and a teal work plane — a cool blue sat back into both. Green still means seated, so the approach → land transition stays readable. Three tiers on the way in: ORANGE while hunting, BLUE once the right socket is close, GREEN the moment it would land. Warm → cool → go, so the change of hue alone tells the player they are getting warmer without reading a word.
+  // ORANGE while hunting, BLUE once the right socket is close, GREEN the moment it would land.
   idle: [1.0, 0.42, 0.0],
   held: [1.0, 0.42, 0.0],
   approaching: [0.15, 0.5, 0.95],
@@ -43,14 +41,10 @@ const FIT_GLOW: Record<FitState, [number, number, number]> = {
   nearRotation: [0.95, 0.45, 0.08],
   wrongTarget: [0.85, 0.12, 0.12],
 };
-/** Static-socket mode: the marker pulsing at every open socket. ORANGE — this is the cue that
- *  has to be found, and the old teal-green sank into the teal work plane instead of standing
- *  off it. Slightly deeper than FIT_GLOW.idle so the proximity-MATCHED socket still reads as
- *  the brighter of the two. */
+/** Static-socket mode: the marker pulsing at every open socket. ORANGE — this is the cue that has to be found. Slightly deeper than FIT_GLOW. */
 const GLOW_MARK: [number, number, number] = [0.85, 0.33, 0.0];
 
-/** Turns a fastener makes across one pass of the Spot demo. Enough to read as screwing rather than
- *  jittering; not so many it becomes a drill. */
+/** Turns a fastener makes across one pass of the Spot demo.  */
 const DEMO_TURNS = 1.5;
 /** How far back the demo starts a STRUCTURAL part. Fasteners use their own baked insert distance. */
 const DEMO_BACKOFF_M = 0.14;
@@ -65,18 +59,7 @@ function visualCentre(p: PartDef): Vec3 {
 }
 
 /**
- * Where the Spot demo starts the ghost from.
- *
- * Fasteners bake their own insertion axis (engageDir), so looseDelta already gives the right
- * back-off and the screw retreats exactly the way it drives in.
- *
- * STRUCTURAL parts have no engageDir at all — which is why the first version of this demo did not
- * move: looseDelta defaults its axis to [0,0,0] and every leg travelled zero distance. Their
- * approach has to be derived, and the physical truth is that a part comes in from the side away
- * from whatever it attaches to. Hence: back off along (part centre − centroid of its joins).
- * With no joins recorded, fall back to straight down from above, which is how a tabletop or a seat
- * actually goes on.
- */
+ * Where the Spot demo starts the ghost from.*/
 function demoApproach(
   def: PartDef,
   parts: Record<string, PartDef>,
@@ -86,18 +69,15 @@ function demoApproach(
   // 1. Fasteners bake their own insertion axis (engageDir), so looseDelta already gives the right back-off and the screw retreats exactly the way it drives in.
   const baked = looseDelta(def, engageAxis(def, done));
   if (baked[0] || baked[1] || baked[2]) return baked;
-  // 2. An AUTHORED placeDir is the direction the part travels to its seat, so the ghost starts the same distance back along its reverse. Authored beats derived: someone decided this.
+  // 2. An AUTHORED placeDir is the direction the part travels to its seat, so the ghost starts the same distance back along its reverse. 
   if (def.placeDir) {
     const d = def.placeDir;
     const back = def.parkBackoff ?? DEMO_BACKOFF_M;
     return [-d[0] * back, -d[1] * back, -d[2] * back];
   }
-  // 3. Derived. A part comes in from the side away from whatever it would collide with — its joins if it records any, otherwise whatever is already standing. NEAREST, not the centroid: the centroid of a half-built chair sits low, which sent the seat plate down through the seat it mounts under. The nearest placed part is the thing actually in the way.
+  // 3. Derived. A part comes in from the side away from whatever it would collide with
   const centre = visualCentre(def);
-  // STRUCTURAL joins first, and screw joins only if there are none. A screwJoin records what fastens
-  // a part, not the path it arrives along, and treating the two alike is what sent DALFRED's pole in
-  // from above: it joins the seatPlate ABOVE it (0.154 away) but is screwed to the supportPin BELOW
-  // it (0.075 away), so "nearest of all joins" picked the pin and reversed the approach.
+  // STRUCTURAL joins first, and screw joins only if there are none. A screwJoin records what fastens a part, not the path it arrives along, and treating the two alike is what sent DALFRED's pole in from above: it joins the seatPlate ABOVE it (0.154 away) but is screwed to the supportPin BELOW it (0.075 away), so "nearest of all joins" picked the pin and reversed the approach.
   const structural = [
     ...(def.directJoins ?? []),
     ...(def.slideJoins ?? []),
@@ -255,6 +235,46 @@ function useInstanceEntity(
     return instance.getEntities()[idx] ?? null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [model.state, meshName, instanceIndex]);
+}
+
+/** Drives a marker glow on an ALREADY-RENDERED entity: steady when `pulse` is false, breathing otherwise, and restores `restore` to every primitive the instant `color` goes null so an unmarked part does not stay frozen at whatever fractional pulse value it last wrote — the marker is a one-shot cue and has to be able to put itself out. Lifted out of Ghost so the same treatment can mark a REAL placed part on instance 0 — Ghost renders from instance 1 and cannot, because a ghost at a placed part's own pose reads as a doubled copy of it. */
+function useMarkerGlow(
+  entity: ReturnType<typeof useInstanceEntity>,
+  renderableManager: ReturnType<typeof useFilamentContext>["renderableManager"],
+  color: [number, number, number] | null,
+  pulse: boolean,
+  restore: [number, number, number],
+): void {
+  useEffect(() => {
+    if (!entity) return;
+    const primitives = renderableManager.getPrimitiveCount(entity);
+    const setEmissive = (rgb: [number, number, number]) => {
+      for (let i = 0; i < primitives; i++) {
+        const mi = renderableManager.getMaterialInstanceAt(entity, i);
+        try {
+          mi.setFloat3Parameter("emissiveFactor", rgb);
+        } catch {}
+      }
+    };
+    if (!color) {
+      setEmissive(restore);
+      return;
+    }
+    if (!pulse) {
+      setEmissive(color);
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout>;
+    const t0 = Date.now();
+    const tick = () => {
+      const k = 0.5 + 0.5 * Math.sin(((Date.now() - t0) / 1000) * 2.6);
+      const s = 0.25 + 0.75 * k;
+      setEmissive([color[0] * s, color[1] * s, color[2] * s]);
+      timer = setTimeout(tick, 70);
+    };
+    tick();
+    return () => clearTimeout(timer);
+  }, [entity, renderableManager, color, pulse, restore]);
 }
 
 /** Glowing ghost of a part at its baked (or loose) pose, rendered from the second model instance so it can coexist with the primary copy. */
@@ -617,6 +637,15 @@ function StaticEntity({
   const entity = useInstanceEntity(model, def.meshName, 0);
   const material = usePartMaterial(def);
   const shaderStyle = useShaderStyle();
+  // A placed part is MARKED, never ghosted: Spot's tighten target and the "?" scene highlights are both already sitting at their pose, and a ghost on top of them reads as a doubled copy (see the note in SocketHintGhost).
+  const hintPartId = useGameStore((s) => s.hintPartId);
+  const hintParts = useGameStore((s) => s.hintParts);
+  const marked = hintPartId === def.partId || hintParts.includes(def.partId);
+  // What an unmarked part's emissive is reset TO: the theme's own emissive when the material params define one, else forced to unlit black. That fallback is NOT what applyThemeMaterial does — it skips emissiveFactor entirely when params define none, leaving whatever the GLB baked — so a part shipping a non-zero baked emissive would be darkened by the restore rather than returned to it. Nothing in the codebase currently sets MaterialParams.emissive, so black is the only baseline in practice; revisit here if a furniture GLB ever bakes one. Memoized by material identity (usePartMaterial is itself memoized) so an unmarked part's restore write doesn't refire this effect every render.
+  const restoreEmissive = useMemo<[number, number, number]>(() => {
+    const e = material?.emissive;
+    return e ? [e[0], e[1], e[2]] : [0, 0, 0];
+  }, [material]);
 
   useEffect(() => {
     if (!entity) return;
@@ -648,6 +677,9 @@ function StaticEntity({
 
   // Declared AFTER the theme-material effect so the shader swap wins.
   useShaderOverride(entity, def, shaderStyle, material);
+
+  // The marker does NOT survive useShaderOverride's material-instance swaps because it is declared after it — useShaderOverride can replace the material instance itself via setMaterialInstanceAt on a later async commit, and effect declaration order only sequences effects within a single commit, not across commits. What actually keeps the marker visible is that its pulse re-fetches getMaterialInstanceAt and rewrites emissiveFactor every 70ms, so any instance swap gets patched over within a tick.
+  useMarkerGlow(entity, renderableManager, marked ? GLOW_MARK : null, marked, restoreEmissive);
 
   return null;
 }
