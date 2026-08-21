@@ -64,6 +64,11 @@ function TapCue({ label, resuming }: { label: string; resuming: boolean }) {
 }
 
 /** Plain sheet: the cue takes no theme — it is one fixed accent either way. */
+/** The panel cream shared by this card and the build-completion screen — the two are the same kind
+ *  of surface (a summary floating over a build) and drifting apart is what makes an app look
+ *  assembled from parts. */
+const PANEL_CREAM = "#FBF8F3";
+
 /** The stage circle's diameter, and the Start/Resume pill's height — the pill is centred on the
  *  circle's bottom edge, so both numbers have to agree with the `circle` style below. */
 const CIRCLE = 92;
@@ -722,7 +727,11 @@ const makeStyles = (t: Theme) =>
       maxHeight: "100%",
       // The CELEBRATION screen's panel colour, and no outline: the accent border made the map read
       // as an alert, where it is really the same kind of surface as the finish summary.
-      backgroundColor: "#E3DACD",
+      //
+      // #FBF8F3, the app's lightest cream — was #E3DACD, a step darker. Both cards float over a
+      // build that may be running in dark mode, and the darker cream sat close enough to the scrim
+      // to read as part of it rather than as a panel on top of it.
+      backgroundColor: PANEL_CREAM,
       borderRadius: 22,
       paddingTop: 10,
       paddingBottom: 10,

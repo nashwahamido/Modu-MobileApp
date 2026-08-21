@@ -387,7 +387,8 @@ const makeStyles = (t: Theme) =>
     card: {
       width: "100%",
       maxWidth: 520,
-      backgroundColor: "#E3DACD",
+      // #FBF8F3, matching the project map's card (ClusterFocusControl.PANEL_CREAM). Was #E3DACD.
+      backgroundColor: "#FBF8F3",
       borderRadius: 22,
       borderWidth: 3,
       borderColor: MAUVE,
