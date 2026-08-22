@@ -835,13 +835,24 @@ const makeStyles = (t: Theme) =>
       right: 0,
       minWidth: 190,
       paddingVertical: SPACE.xs,
+      // Horizontal padding to match the vertical, so a full-width row is inset on all four sides and
+      // its own radius can follow the panel's curve. Without it the selected row ran edge to edge and
+      // its square corners cut outside the rounded panel.
+      paddingHorizontal: SPACE.xs,
       borderRadius: RADIUS.control,
       backgroundColor: "#FBF8F3",
       borderWidth: 1,
       borderColor: t.border,
       ...SHADOW,
     },
-    pickerItem: { paddingVertical: SPACE.sm, paddingHorizontal: SPACE.lg },
+    // THE PANEL'S INNER RADIUS (its 14 minus the 4 of padding), so the selected row's fill follows the
+    // panel's corner instead of squaring it off. Rows are inset by the padding above, so the label
+    // keeps its distance from the edge with lg reduced to md here.
+    pickerItem: {
+      paddingVertical: SPACE.sm,
+      paddingHorizontal: SPACE.md,
+      borderRadius: RADIUS.control - SPACE.xs,
+    },
     // The current filter, marked on the row rather than by the label alone — weight is easy to miss at this size.
     pickerItemSelected: { backgroundColor: t.surfaceRaised },
     pickerItemText: { ...TYPE.body, color: INK },

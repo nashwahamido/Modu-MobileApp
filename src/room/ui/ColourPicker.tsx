@@ -6,7 +6,7 @@ import { StyleSheet, Pressable, ScrollView, Text, View } from "react-native";
 import { CatalogThumb } from "../../components/CatalogThumb";
 import { useItemVariants } from "../../data/catalog/variantStore";
 import { variationLabel } from "../../data/catalog/variantLabel";
-import { CARD_CHROME, CREAM, LEXEND, RADIUS, SPACE, useFixedStyles } from "@/src/game/ui/system/theme";
+import { CARD_CHROME, CREAM, LEXEND, SPACE, useFixedStyles } from "@/src/game/ui/system/theme";
 import { roomItemSource } from "../core/placeableItems";
 import { usePlacementStore } from "../core/placement";
 import type { Theme } from "@/src/game/ui/system/theme";
@@ -28,7 +28,16 @@ export function ColourPicker({ highlighted = false, onSelect }: ColourPickerProp
 
   return (
     <View style={[s.bar, highlighted && s.guideTarget]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.column}>
+      {/* The SCROLLER is what clips, and it clips SQUARE. The swatches match the bar's inner radius,
+          but a ScrollView's own bounds are a rectangle, so the first and last swatch were squared off
+          exactly where the bar's corner curves away. Rounding the scroller makes the clip follow the
+          bar. Safe to do here where it was not on the bar itself: the ScrollView carries no shadow to
+          lose. */}
+      <ScrollView
+        style={s.scroll}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={s.column}
+      >
         {variants.map((variant) => {
           const active = variant.variation === selected;
           return (
@@ -77,11 +86,19 @@ const makeStyles = (t: Theme) =>
       ...CARD_CHROME,
       borderWidth: 0,
     },
+    // The bar's INNER radius, the same number the swatches use — the two curves have to agree or one
+    // of them shows through the other.
+    scroll: { borderRadius: 22 - SPACE.xs },
     column: { flexDirection: "column", alignItems: "center", gap: SPACE.xs },
     swatch: {
       width: 58,
       paddingVertical: SPACE.xs,
-      borderRadius: RADIUS.control,
+      // THE BAR'S INNER RADIUS, not RADIUS.control. A rounded box inside a rounded box has to match
+      // `outer - padding` or its corners cut outside the parent's curve: at 14 against the bar's 22
+      // minus 4 of padding, the top and bottom swatches showed square shoulders poking past the
+      // rail. Nothing here can be clipped away instead — `overflow: hidden` on the bar would take
+      // CARD_CHROME's shadow with it on Android.
+      borderRadius: 22 - SPACE.xs,
       borderWidth: 2,
       // Transparent, not absent: the selected border must not change the swatch's size.
       borderColor: "transparent",
