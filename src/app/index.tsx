@@ -23,7 +23,7 @@ import Animated, {
 import { Button } from "@/src/game/ui/system/Button";
 import { useAuth } from "@/src/hooks/useAuth";
 import { SESSION_REQUIRED, SIGN_IN_ROUTE } from "@/src/hooks/useSessionGate";
-import { SPACE, Theme, useStyles } from "@/src/game/ui/system/theme";
+import { CARD_CHROME, SPACE, Theme, useStyles } from "@/src/game/ui/system/theme";
 import { useSafeInsets } from "@/src/hooks/use-safe-insets";
 
 // Sampled from the reference mockup, not eyeballed. One-off (the landing predates the theme, and
@@ -33,26 +33,29 @@ const BG_CREAM = "#F3ECE0";
 const clayPattern = require("@/src/assets/ui/landing/clay-pattern.png");
 const wordmark = require("@/src/assets/ui/brand/logo-modu.png");
 const figure = require("@/src/assets/images/mascot/modu-mascot.png");
+const figureShadow = require("@/src/assets/ui/landing/disk.png");
 const wavyLeft1 = require("@/src/assets/ui/landing/wavy-left-1.png");
 const wavyLeft2 = require("@/src/assets/ui/landing/wavy-left-2.png");
 const wavyLeft3 = require("@/src/assets/ui/landing/wavy-left-3.png");
 const wavyRight1 = require("@/src/assets/ui/landing/wavy-right-1.png");
 const wavyRight2 = require("@/src/assets/ui/landing/wavy-right-2.png");
 const wavyRight3 = require("@/src/assets/ui/landing/wavy-right-3.png");
+// The traced dashed line in each top corner (their fainter dotted echoes were removed).
+const lineLeft1 = require("@/src/assets/ui/landing/line-left-1.png");
+const lineRight2 = require("@/src/assets/ui/landing/line-right-2.png");
 
 /** The art's aspect (600x133 after trimming), so the height follows the width instead of being a
  *  second number that has to be kept in step with it. */
-const WORDMARK_W = 260;
+const WORDMARK_W = 300;
 const WORDMARK_H = Math.round(WORDMARK_W * (133 / 600));
 /** Same footprint modu-figure.png held (that asset was 915x941, near-square) — kept as-is when
  *  swapped for modu-mascot.png so the brand box doesn't reflow. `contain` below fits the new
  *  art's own aspect inside this box without distorting it. */
 const FIGURE_W = 216;
 const FIGURE_H = Math.round(FIGURE_W * (941 / 915));
-// Flattened ellipse "ground shadow" the mascot stands on, sampled from the reference mockup.
-const FIGURE_SHADOW_COLOR = "#C7D9EA";
+// disk.png is 748x196, the flattened "ground shadow" ellipse the mascot stands on.
 const FIGURE_SHADOW_W = Math.round(FIGURE_W * 1.05);
-const FIGURE_SHADOW_H = Math.round(FIGURE_SHADOW_W * 0.22);
+const FIGURE_SHADOW_H = Math.round(FIGURE_SHADOW_W * (196 / 748));
 /** Houses both the wordmark and the figure, centred on the same point, so the swap between them
  *  is a cross-fade in place rather than a layout jump. */
 const BRAND_BOX = Math.max(WORDMARK_H, FIGURE_H) + 12;
@@ -84,6 +87,9 @@ const WAVE_ASSETS = {
   leftBack: { w: 1216, h: 1436, frac: 0.35 },
   leftFront: { w: 972, h: 1192, frac: 0.3 },
   leftAccent: { w: 768, h: 872, frac: 0.23 },
+  // The traced corner lines, top-left and top-right.
+  lineLeftMain: { w: 2200, h: 1700, frac: 0.57 },
+  lineRightMain: { w: 1472, h: 1424, frac: 0.39 },
 } as const;
 
 function useWaveSizes() {
@@ -112,6 +118,9 @@ export default function App() {
   const wordmarkScale = useSharedValue(1);
   const figureOpacity = useSharedValue(0);
   const figureScale = useSharedValue(0.85);
+  // 0 while the wordmark alone is on screen (dead-centre); animates to -GROUP_LIFT alongside the
+  // figure swap, since the lift only exists to counterbalance the buttons that appear after it.
+  const groupLift = useSharedValue(0);
 
   // Stage 3: the two entry buttons.
   const actionsOpacity = useSharedValue(0);
@@ -124,12 +133,16 @@ export default function App() {
   const leftFront = useWaveIn(WAVE_START + 1 * WAVE_STAGGER, -90);
   const rightAccent = useWaveIn(WAVE_START + 2 * WAVE_STAGGER, 60);
   const leftAccent = useWaveIn(WAVE_START + 2 * WAVE_STAGGER, -60);
+  // The traced lines come in last, one beat after the accents they sit alongside.
+  const lineRight = useWaveIn(WAVE_START + 3 * WAVE_STAGGER, 60);
+  const lineLeft = useWaveIn(WAVE_START + 3 * WAVE_STAGGER, -60);
 
   useEffect(() => {
     wordmarkOpacity.value = withDelay(STILL_MS, withTiming(0, { duration: SWAP_MS, easing: WAVE_EASE }));
     wordmarkScale.value = withDelay(STILL_MS, withTiming(0.85, { duration: SWAP_MS, easing: WAVE_EASE }));
     figureOpacity.value = withDelay(STILL_MS, withTiming(1, { duration: SWAP_MS, easing: WAVE_EASE }));
     figureScale.value = withDelay(STILL_MS, withTiming(1, { duration: SWAP_MS, easing: WAVE_EASE }));
+    groupLift.value = withDelay(STILL_MS, withTiming(-GROUP_LIFT, { duration: SWAP_MS, easing: WAVE_EASE }));
 
     actionsOpacity.value = withDelay(BUTTONS_DELAY, withTiming(1, { duration: BUTTONS_MS, easing: WAVE_EASE }));
     actionsY.value = withDelay(BUTTONS_DELAY, withTiming(0, { duration: BUTTONS_MS, easing: WAVE_EASE }));
@@ -137,13 +150,18 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const brandBoxStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: groupLift.value }],
+  }));
   const wordmarkStyle = useAnimatedStyle(() => ({
     opacity: wordmarkOpacity.value,
     transform: [{ scale: wordmarkScale.value }],
   }));
   const figureStyle = useAnimatedStyle(() => ({
     opacity: figureOpacity.value,
-    transform: [{ scale: figureScale.value }],
+    // The fixed +10 (after the scale) settles the mascot's feet a bit further into the shadow
+    // disk beneath it, instead of hovering just above it.
+    transform: [{ scale: figureScale.value }, { translateY: 10 }],
   }));
   // Fades in with the figure but doesn't share its scale — a ground shadow should stay put
   // while the mascot pops in above it, not grow in lockstep.
@@ -163,34 +181,36 @@ export default function App() {
       <Animated.Image source={wavyRight2} style={[styles.waveRightBack, waveSize.rightBack, rightBack]} resizeMode="contain" />
       <Animated.Image source={wavyRight1} style={[styles.waveRightFront, waveSize.rightFront, rightFront]} resizeMode="contain" />
       <Animated.Image source={wavyRight3} style={[styles.waveRightAccent, waveSize.rightAccent, rightAccent]} resizeMode="contain" />
+      <Animated.Image source={lineRight2} style={[styles.lineRightMain, waveSize.lineRightMain, lineRight]} resizeMode="contain" />
 
       {/* Left corner, back to front. */}
       <Animated.Image source={wavyLeft2} style={[styles.waveLeftBack, waveSize.leftBack, leftBack]} resizeMode="contain" />
       <Animated.Image source={wavyLeft1} style={[styles.waveLeftFront, waveSize.leftFront, leftFront]} resizeMode="contain" />
       <Animated.Image source={wavyLeft3} style={[styles.waveLeftAccent, waveSize.leftAccent, leftAccent]} resizeMode="contain" />
+      <Animated.Image source={lineLeft1} style={[styles.lineLeftMain, waveSize.lineLeftMain, lineLeft]} resizeMode="contain" />
 
       {/* Centred on the full screen, independent of `actions` below — sizing or hiding that row
           must never shift this. That coupling (a flex column centering the pair as a group) was
           the bug: with `actions` reserving height before it faded in, the wordmark sat off-centre. */}
-      <View style={styles.brandBox} pointerEvents="none">
+      <Animated.View style={[styles.brandBox, brandBoxStyle]} pointerEvents="none">
         <Animated.Image source={wordmark} style={[styles.wordmark, wordmarkStyle]} resizeMode="contain" />
-        <Animated.View style={[styles.figureShadow, figureShadowStyle]} />
+        <Animated.Image source={figureShadow} style={[styles.figureShadow, figureShadowStyle]} resizeMode="contain" />
         <Animated.Image source={figure} style={[styles.figure, figureStyle]} resizeMode="contain" />
-      </View>
+      </Animated.View>
 
       <Animated.View
         style={[
           styles.actions,
           actionsStyle,
-          { bottom: 56 + safe.bottom + GROUP_LIFT, left: safe.left, right: safe.right },
+          { bottom: 56 + safe.bottom + 28, left: safe.left, right: safe.right },
         ]}
       >
         <Link href="/auth" asChild>
           {/* The ONE primary action on the screen: first-run onboarding (auth → questionnaire → avatar → home). */}
-          <Button label="New User" variant="primary" pill />
+          <Button label="New User" variant="primary" pill style={styles.actionButton} />
         </Link>
         <Link href={homeRoute} asChild>
-          <Button label="Choose Account" variant="primary" pill />
+          <Button label="Choose Account" variant="primary" pill style={styles.actionButton} />
         </Link>
       </Animated.View>
 
@@ -238,7 +258,6 @@ const makeStyles = (t: Theme) =>
     height: BRAND_BOX,
     marginLeft: -Math.max(WORDMARK_W, FIGURE_W) / 2,
     marginTop: -BRAND_BOX / 2,
-    transform: [{ translateY: -GROUP_LIFT }],
     alignItems: "center",
     justifyContent: "center",
   },
@@ -251,8 +270,6 @@ const makeStyles = (t: Theme) =>
     bottom: 6,
     width: FIGURE_SHADOW_W,
     height: FIGURE_SHADOW_H,
-    borderRadius: FIGURE_SHADOW_H / 2,
-    backgroundColor: FIGURE_SHADOW_COLOR,
   },
   actions: {
     position: "absolute",
@@ -260,6 +277,19 @@ const makeStyles = (t: Theme) =>
     alignItems: "center",
     justifyContent: "center",
     gap: SPACE.lg,
+  },
+  // Equal, fixed width — sized to comfortably fit "Choose Account" — regardless of label length,
+  // so the pair reads as two matched pills, not chips stretched to fill the row.
+  // Shadow matched to the room nav rail's white pill (`CARD_CHROME`), not the Button component's
+  // own default — the two chrome elements should read as the same weight of "lifted".
+  actionButton: {
+    width: 172,
+    boxShadow: CARD_CHROME.boxShadow,
+    shadowColor: CARD_CHROME.shadowColor,
+    shadowOpacity: CARD_CHROME.shadowOpacity,
+    shadowRadius: CARD_CHROME.shadowRadius,
+    shadowOffset: CARD_CHROME.shadowOffset,
+    elevation: CARD_CHROME.elevation,
   },
   // Position (anchor corner) only — width/height come from `useWaveSizes`, computed in real
   // pixels against the actual window so the art is never stretched off its native aspect.
@@ -269,4 +299,7 @@ const makeStyles = (t: Theme) =>
   waveLeftBack: { position: "absolute", bottom: 0, left: 0 },
   waveLeftFront: { position: "absolute", bottom: 0, left: 0 },
   waveLeftAccent: { position: "absolute", bottom: -10, left: -7 },
+  // The traced lines, top corners.
+  lineRightMain: { position: "absolute", top: 210, right: -50 },
+  lineLeftMain: { position: "absolute", top: -130, left: -120},
   });
