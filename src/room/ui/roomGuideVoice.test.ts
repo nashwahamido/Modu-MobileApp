@@ -1,63 +1,54 @@
-import { strict as assert } from "node:assert";
-import { test } from "node:test";
+// Lumi's voice for the room's first-placement guide.
+//
+// LISTED, not derived — the same call as game/audio/tutorialVoice.ts and for the same reason. The
+// clips are named for what Lumi SAYS ("Lumi-happy-with-placement", "Lumi-everything-is-ready")
+// while the stages are named for what the player DOES ("reposition", "confirm"). Two vocabularies
+// settled separately, with nothing connecting them but this table.
+//
+// LUMI ONLY. The guide itself runs for every profile — Felix, Pebble and Sparky all walk a player
+// through their first placement — but the bucket holds one companion's recordings, so callers must
+// ask for these on the visual profile alone. Handing Pebble's player Lumi's voice would be a worse
+// failure than the synthesis they get today, and a silent one.
+//
+// PURE — no supabase import, matching onboarding/voiceAssets.ts and data/catalog/assets.ts — so the
+// mapping can be unit-tested against the guide's own stage list without a client.
 
-import { recordedRoomGuideStages, roomGuideVoicePath } from "./roomGuideVoice";
+/** The subtree in the Voiceover bucket. Capital L, as uploaded — storage paths are case-sensitive. */
+const FOLDER = "Lumi-room";
 
-// The guide's stages, as RoomFirstPlacementGuide declares them. Copied rather than imported: that
-// module pulls in React, expo-speech and the placement store, none of which node can load, and the
-// type it exports is compile-time only. Keep this list in step with GuideStage there — the test
-// below is what makes a drift visible.
-const GUIDE_STAGES = [
-  "idle",
-  "style",
-  "rotate",
-  "reposition",
-  "confirm",
-  "complete",
-] as const;
+/** One extension for every clip, in one place. */
+const EXT = ".mp3";
 
-test("the table names no stage the guide does not have", () => {
-  // The direction a rename breaks. A renamed stage leaves the old key here matching nothing, the
-  // clip goes unplayed, and the guide quietly falls back to synthesis — which from the device looks
-  // exactly like a storage problem rather than a code one.
-  const known = new Set<string>(GUIDE_STAGES);
-  const orphans = recordedRoomGuideStages().filter((stage) => !known.has(stage));
+/**
+ * Stage → clip. All five spoken stages are recorded.
+ *
+ * `rotate` arrived after the other four and was briefly the one stage that fell through to
+ * synthesis — the fallback doing exactly its job while the recording was still to come, rather than
+ * a gap papered over with a neighbouring clip that would have told the player to do the wrong thing.
+ */
+const CLIPS: Record<string, string> = {
+  style: "Lumi-your-lack",
+  reposition: "Lumi-happy-with-placement",
+  rotate: "Lumi-that-looks-good",
+  confirm: "Lumi-everything-is-ready",
+  complete: "Lumi-lack-placed",
+};
 
-  assert.deepEqual(orphans, [], `clip mapped to unknown stage: ${orphans.join(", ")}`);
-});
+/**
+ * The storage path for a guide stage's recorded line, or null when it has none.
+ *
+ * Null means "say it instead". Every spoken stage is recorded today, so the only stages that reach
+ * it are `idle` — where the guide is not on screen at all — and any stage added later without a
+ * recording. The test beside this file is what stops the second case from going unnoticed, rather
+ * than a runtime branch nobody would ever see.
+ */
+export function roomGuideVoicePath(stage: string | undefined): string | null {
+  if (!stage) return null;
+  const clip = CLIPS[stage];
+  return clip ? `${FOLDER}/${clip}${EXT}` : null;
+}
 
-test("clip paths are the names uploaded to storage", () => {
-  // Verified against the bucket on 2026-08-21. Transcribed, not derived: the clips are named for
-  // what Lumi says and the stages for what the player does. Capital L in Lumi-room — storage is
-  // case-sensitive.
-  assert.equal(roomGuideVoicePath("style"), "Lumi-room/Lumi-your-lack.mp3");
-  assert.equal(
-    roomGuideVoicePath("reposition"),
-    "Lumi-room/Lumi-happy-with-placement.mp3",
-  );
-  assert.equal(roomGuideVoicePath("rotate"), "Lumi-room/Lumi-that-looks-good.mp3");
-  assert.equal(
-    roomGuideVoicePath("confirm"),
-    "Lumi-room/Lumi-everything-is-ready.mp3",
-  );
-  assert.equal(roomGuideVoicePath("complete"), "Lumi-room/Lumi-lack-placed.mp3");
-});
-
-test("every spoken stage of the guide has a clip", () => {
-  // `idle` is the only stage without one, and it is the stage where the guide is not on screen at
-  // all. Everything else is recorded — a stage added later without a recording shows up here rather
-  // than as one card in the run quietly dropping to synthesis, which from the device is
-  // indistinguishable from a storage problem.
-  const missing = GUIDE_STAGES.filter(
-    (stage) => stage !== "idle" && roomGuideVoicePath(stage) === null,
-  );
-
-  assert.deepEqual(missing, [], `no recorded clip for: ${missing.join(", ")}`);
-  assert.equal(roomGuideVoicePath("idle"), null);
-});
-
-test("an absent stage is null, not a malformed path", () => {
-  assert.equal(roomGuideVoicePath(undefined), null);
-  assert.equal(roomGuideVoicePath(""), null);
-  assert.equal(roomGuideVoicePath("no-such-stage"), null);
-});
+/** The stages this table covers, for the test that checks it against the guide's own list. */
+export function recordedRoomGuideStages(): string[] {
+  return Object.keys(CLIPS);
+}

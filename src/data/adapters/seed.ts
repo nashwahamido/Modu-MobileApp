@@ -18,10 +18,11 @@ const SEED_TS = "2026-01-01T00:00:00.000Z";
 
 export function seedProfiles(): Profile[] {
   return [
+    // mapCoachSeen is FALSE for DEMO_ME on purpose: it is the signed-in user on the in-memory adapter, so the Map coach can actually be exercised without a backend. The friends are never "me", and theirs is set only to satisfy the type.
     // title (from level), xpIntoLevel/xpForNextLevel (from the level curve), itemsAssembled (from seedCompleted) and likes (from seedRoomLikes) are all derived on read — the values here are placeholders the adapter overwrites. level must agree with xp under seedLevelRows(), the way the reward path keeps them: 340 -> 2, 980 -> 4, 150 -> 1.
-    { userId: DEMO_ME, username: "You", avatarMode: "control", level: 2, coins: 120, xp: 340, onboardingCompleted: true, title: null, xpIntoLevel: 0, xpForNextLevel: null, itemsAssembled: 0, likes: 0 },
-    { userId: DEMO_FRIEND_A, username: "Astrid", avatarMode: "visual", level: 4, coins: 410, xp: 980, onboardingCompleted: true, title: null, xpIntoLevel: 0, xpForNextLevel: null, itemsAssembled: 0, likes: 0 },
-    { userId: DEMO_FRIEND_B, username: "Noah", avatarMode: "momentum", level: 1, coins: 60, xp: 150, onboardingCompleted: true, title: null, xpIntoLevel: 0, xpForNextLevel: null, itemsAssembled: 0, likes: 0 },
+    { userId: DEMO_ME, username: "You", avatarMode: "control", level: 2, coins: 120, xp: 340, onboardingCompleted: true, mapCoachSeen: false, title: null, xpIntoLevel: 0, xpForNextLevel: null, itemsAssembled: 0, likes: 0 },
+    { userId: DEMO_FRIEND_A, username: "Astrid", avatarMode: "visual", level: 4, coins: 410, xp: 980, onboardingCompleted: true, mapCoachSeen: true, title: null, xpIntoLevel: 0, xpForNextLevel: null, itemsAssembled: 0, likes: 0 },
+    { userId: DEMO_FRIEND_B, username: "Noah", avatarMode: "momentum", level: 1, coins: 60, xp: 150, onboardingCompleted: true, mapCoachSeen: true, title: null, xpIntoLevel: 0, xpForNextLevel: null, itemsAssembled: 0, likes: 0 },
   ];
 }
 

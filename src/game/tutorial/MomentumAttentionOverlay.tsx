@@ -204,7 +204,9 @@ const makeStyles = (theme: Theme) =>
       paddingVertical: 16,
       borderRadius: 20,
       borderWidth: 3,
-      borderColor: theme.gold,
+      // LAVENDER, matching the build screen's check-in (hud/IdleCheckIn) and the palette's own rule:
+      // gold is for EARNED, and this card is not a reward.
+      borderColor: theme.accent,
       backgroundColor: theme.surface,
       ...ELEVATION.card,
     },
