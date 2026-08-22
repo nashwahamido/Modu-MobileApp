@@ -23,7 +23,7 @@ import Animated, {
 import { Button } from "@/src/game/ui/system/Button";
 import { useAuth } from "@/src/hooks/useAuth";
 import { SESSION_REQUIRED, SIGN_IN_ROUTE } from "@/src/hooks/useSessionGate";
-import { CARD_CHROME, SPACE, Theme, useStyles } from "@/src/game/ui/system/theme";
+import { CARD_CHROME, SPACE, Theme, useIsTablet, useStyles, useUiScale } from "@/src/game/ui/system/theme";
 import { useSafeInsets } from "@/src/hooks/use-safe-insets";
 
 // Sampled from the reference mockup, not eyeballed. One-off (the landing predates the theme, and
@@ -62,8 +62,24 @@ const BRAND_BOX = Math.max(WORDMARK_H, FIGURE_H) + 12;
 /** The figure sits dead-centre on screen while the buttons are pinned a fixed distance off the
  *  bottom edge (see `brandBox`/`actions` below) — two independent anchors, not a flex group, so
  *  the pair reads as bottom-heavy rather than centred as a unit. This lifts both by the same
- *  amount so the whole composition's visual centre lands on the screen's centre. */
+ *  amount so the whole composition's visual centre lands on the screen's centre.
+ *
+ *  In base (phone) units — multiplied by `useUiScale()` where it's used below. This is a JS
+ *  number driving a reanimated value and a raw style offset, neither of which goes through
+ *  `useStyles`'s automatic scaling, so unlike the wordmark/figure/button sizes above it has to be
+ *  scaled by hand. A full-page screen like this one takes the scale straight, unlike the room's
+ *  HUD (see `roomScale.ts`), which deliberately trims it — this isn't a diorama you look into. */
 const GROUP_LIFT = 56;
+/** Extra clearance below the button row, past the safe-area inset — same base-unit/manual-scale
+ *  reasoning as `GROUP_LIFT`. */
+const ACTIONS_BOTTOM_GAP = 56 + 28;
+/** Tablet-only extra lift on the button row, on top of `ACTIONS_BOTTOM_GAP * k`.
+ *
+ *  A tablet's landscape screen is much taller (not just wider) than a phone's, so the gap between
+ *  the mascot and the bottom-anchored buttons opens up far more than `k` alone accounts for — `k`
+ *  tracks the UI's scale, not the screen's spare height. Phone is untouched: this is added only
+ *  when `useIsTablet()` is true. */
+const TABLET_ACTIONS_LIFT = 46;
 
 // ── timeline ─────────────────────────────────────────────────────────────────
 const STILL_MS = 1800; // state 1 holds, untouched, for exactly this long
@@ -109,6 +125,8 @@ export default function App() {
   const styles = useStyles(makeStyles);
   const safe = useSafeInsets();
   const waveSize = useWaveSizes();
+  const k = useUiScale();
+  const isTablet = useIsTablet();
   const { user } = useAuth();
   // useSessionGate would bounce a signed-out Home tap anyway, but only AFTER the room mounts and fires its first query. Pointing the link straight at sign-in means that wasted round-trip never happens.
   const homeRoute = SESSION_REQUIRED && !user ? SIGN_IN_ROUTE : "/room";
@@ -142,7 +160,7 @@ export default function App() {
     wordmarkScale.value = withDelay(STILL_MS, withTiming(0.85, { duration: SWAP_MS, easing: WAVE_EASE }));
     figureOpacity.value = withDelay(STILL_MS, withTiming(1, { duration: SWAP_MS, easing: WAVE_EASE }));
     figureScale.value = withDelay(STILL_MS, withTiming(1, { duration: SWAP_MS, easing: WAVE_EASE }));
-    groupLift.value = withDelay(STILL_MS, withTiming(-GROUP_LIFT, { duration: SWAP_MS, easing: WAVE_EASE }));
+    groupLift.value = withDelay(STILL_MS, withTiming(-GROUP_LIFT * k, { duration: SWAP_MS, easing: WAVE_EASE }));
 
     actionsOpacity.value = withDelay(BUTTONS_DELAY, withTiming(1, { duration: BUTTONS_MS, easing: WAVE_EASE }));
     actionsY.value = withDelay(BUTTONS_DELAY, withTiming(0, { duration: BUTTONS_MS, easing: WAVE_EASE }));
@@ -181,7 +199,11 @@ export default function App() {
       <Animated.Image source={wavyRight2} style={[styles.waveRightBack, waveSize.rightBack, rightBack]} resizeMode="contain" />
       <Animated.Image source={wavyRight1} style={[styles.waveRightFront, waveSize.rightFront, rightFront]} resizeMode="contain" />
       <Animated.Image source={wavyRight3} style={[styles.waveRightAccent, waveSize.rightAccent, rightAccent]} resizeMode="contain" />
-      <Animated.Image source={lineRight2} style={[styles.lineRightMain, waveSize.lineRightMain, lineRight]} resizeMode="contain" />
+      <Animated.Image
+        source={lineRight2}
+        style={[styles.lineRightMain, waveSize.lineRightMain, isTablet && styles.lineRightMainTablet, lineRight]}
+        resizeMode="contain"
+      />
 
       {/* Left corner, back to front. */}
       <Animated.Image source={wavyLeft2} style={[styles.waveLeftBack, waveSize.leftBack, leftBack]} resizeMode="contain" />
@@ -202,15 +224,31 @@ export default function App() {
         style={[
           styles.actions,
           actionsStyle,
-          { bottom: 56 + safe.bottom + 28, left: safe.left, right: safe.right },
+          {
+            bottom: ACTIONS_BOTTOM_GAP * k + (isTablet ? TABLET_ACTIONS_LIFT * k : 0) + safe.bottom,
+            left: safe.left,
+            right: safe.right,
+          },
         ]}
       >
         <Link href="/auth" asChild>
           {/* The ONE primary action on the screen: first-run onboarding (auth → questionnaire → avatar → home). */}
-          <Button label="New User" variant="primary" pill style={styles.actionButton} />
+          <Button
+            label="New User"
+            variant="primary"
+            pill
+            style={[styles.actionButton, isTablet && styles.actionButtonTablet]}
+            labelStyle={isTablet && styles.actionLabelTablet}
+          />
         </Link>
         <Link href={homeRoute} asChild>
-          <Button label="Choose Account" variant="primary" pill style={styles.actionButton} />
+          <Button
+            label="Choose Account"
+            variant="primary"
+            pill
+            style={[styles.actionButton, isTablet && styles.actionButtonTablet]}
+            labelStyle={isTablet && styles.actionLabelTablet}
+          />
         </Link>
       </Animated.View>
 
@@ -291,6 +329,42 @@ const makeStyles = (t: Theme) =>
     shadowOffset: CARD_CHROME.shadowOffset,
     elevation: CARD_CHROME.elevation,
   },
+  // Tablet only. `actionButton`'s `width: 172` is fixed so the two pills read as matched chips at
+  // the phone label size (14pt) — but the tablet label is bigger (16pt, scaled further by `k`),
+  // and "Choose Account" doesn't fit that width on one line at that size.
+  //
+  // Still a fixed `width`, not `minWidth`: `minWidth` let each pill size to its OWN label, which
+  // made "New User" and "Choose Account" different widths — the opposite of "same length and
+  // size" for both. 220 is sized to comfortably fit "Choose Account" (the longer label) at 16pt
+  // on one line, and both buttons take it regardless of their own text, so they stay matched.
+  //
+  // `minHeight` overrides `Button`'s own internal 44pt (`SIZE.controlHeight`), which — like its
+  // label — doesn't go through `useStyles` and so never grew with the rest of this screen's
+  // tablet scale, unlike everything driven from this sheet. `Button` centres its label on both
+  // axes regardless of height (`alignItems`/`justifyContent: "center"` on the Pressable), so
+  // taller here doesn't touch the horizontal centring `actionLabelTablet` already fixes.
+  actionButtonTablet: { width: 220, minWidth: undefined, minHeight: 52, paddingHorizontal: SPACE.xl },
+  // Tablet only. `Button`'s own label (`TYPE.label`, 14pt) doesn't go through `useStyles` — it's
+  // a shared component with its own fixed styles — so unlike `actionButton` above it never grew
+  // with the rest of this screen's tablet scale. This is a plain `StyleSheet` entry, though, so
+  // `fontSize` still passes through `useStyles`'s own scaling here (14 → 16 → up to 16 * k).
+  // `textAlign: "center"` is load-bearing at this size: the pill's fixed `actionButton.width`
+  // only grows by `k`, while this label grew by `k` AND the 14→16 step, so "Choose Account" can
+  // wrap to two lines here where it never did at 14pt — and RN left-aligns wrapped text by
+  // default, which is what read as off-centre rather than the label sitting in the wrong place.
+  //
+  // `includeFontPadding: false` + a tight `lineHeight` fix the text sitting low in the pill:
+  // Android's default font padding adds extra space BELOW the glyphs (not above), so a Text
+  // block that's centred as a whole still reads bottom-heavy inside it — bigger and more visible
+  // at 16pt than it was at 14. `lineHeight` close to the glyph size (not the font's own, looser
+  // default) is what makes that padding removal take effect.
+  actionLabelTablet: {
+    fontSize: 16,
+    lineHeight: 18,
+    textAlign: "center",
+    includeFontPadding: false,
+    textAlignVertical: "center",
+  },
   // Position (anchor corner) only — width/height come from `useWaveSizes`, computed in real
   // pixels against the actual window so the art is never stretched off its native aspect.
   waveRightBack: { position: "absolute", top: 0, right: 0 },
@@ -302,4 +376,8 @@ const makeStyles = (t: Theme) =>
   // The traced lines, top corners.
   lineRightMain: { position: "absolute", top: 210, right: -50 },
   lineLeftMain: { position: "absolute", top: -130, left: -120},
+  // Tablet only: a fixed `top` offset doesn't reach the bottom edge on a landscape tablet's much
+  // taller screen (a phone's short side, not its `top`, was what made it land there) — anchoring
+  // to `bottom` instead makes it reach regardless of how tall the specific tablet is.
+  lineRightMainTablet: { top: undefined, bottom: -20, right: -50 },
   });
