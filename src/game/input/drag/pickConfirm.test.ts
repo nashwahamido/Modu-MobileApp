@@ -29,43 +29,43 @@ const base = { heldSet: new Set<string>(), anchorAxialDepthM: 1.0, anchorEuclidD
 
 test("hitting the receiver AT the socket confirms visible — the hole is a feature of the panel's near face", () => {
   // Frontmost surface 2mm in front of the anchor: the bore face a countersunk screw seats on.
-  const v = judgePick({ ...base, hit: { partId: "backPanel" as never, ghost: false, depth: bufAt(0.998) }, burialM: 0.004 });
+  const v = judgePick({ ...base, hit: { partId: "backPanel" as never, ghost: false, depth: bufAt(0.998) } });
   assert.equal(v, "visible");
 });
 
 test("the SAME receiver through its far side stays blocked — the case every identity rule died on", () => {
   // Rear cam lock viewed from the front: frontmost surface is the back panel's FRONT face, 15mm before the anchor, against a 4mm burial allowance. pickEntity without depth returns the same entity in both tests.
-  const v = judgePick({ ...base, hit: { partId: "backPanel" as never, ghost: false, depth: bufAt(0.985) }, burialM: 0.004 });
+  const v = judgePick({ ...base, hit: { partId: "backPanel" as never, ghost: false, depth: bufAt(0.985) } });
   assert.equal(v, "blocked");
 });
 
 test("open background is a clear sightline", () => {
-  assert.equal(judgePick({ ...base, hit: null, burialM: 0 }), "visible");
+  assert.equal(judgePick({ ...base, hit: null }), "visible");
 });
 
 test("a hit at or past the anchor is the socket's own surface, not an occluder", () => {
-  const v = judgePick({ ...base, hit: { partId: "leg_1" as never, ghost: false, depth: bufAt(1.01) }, burialM: 0 });
+  const v = judgePick({ ...base, hit: { partId: "leg_1" as never, ghost: false, depth: bufAt(1.01) } });
   assert.equal(v, "visible");
 });
 
 test("the held part covering the pixel teaches nothing", () => {
-  const v = judgePick({ ...base, heldSet: new Set(["screw105251_1"]), hit: { partId: "screw105251_1" as never, ghost: false, depth: bufAt(0.5) }, burialM: 0 });
+  const v = judgePick({ ...base, heldSet: new Set(["screw105251_1"]), hit: { partId: "screw105251_1" as never, ghost: false, depth: bufAt(0.5) } });
   assert.equal(v, "ignore");
 });
 
 test("a ghost is never an occluder, whoever it belongs to", () => {
-  const v = judgePick({ ...base, hit: { partId: "circleUpp" as never, ghost: true, depth: bufAt(0.5) }, burialM: 0 });
+  const v = judgePick({ ...base, hit: { partId: "circleUpp" as never, ghost: true, depth: bufAt(0.5) } });
   assert.equal(v, "ignore");
 });
 
 test("the along-ray obliquity correction scales the axial gap", () => {
   // Anchor 1m axial but 2m euclid (a steep corner-of-screen ray): a 10mm axial gap is 20mm on the sightline — over a 6mm-slack threshold with zero burial, blocked; the same hit judged without the correction would pass.
-  const v = judgePick({ ...base, anchorEuclidDistM: 2.0, hit: { partId: "seat" as never, ghost: false, depth: bufAt(0.99) }, burialM: 0.01 });
+  const v = judgePick({ ...base, anchorEuclidDistM: 2.0, hit: { partId: "seat" as never, ghost: false, depth: bufAt(0.99) } });
   assert.equal(v, "blocked");
 });
 
 test("a hit outside the furniture (room shell) still occludes by its depth", () => {
-  const v = judgePick({ ...base, hit: { partId: null, ghost: false, depth: bufAt(0.5) }, burialM: 0 });
+  const v = judgePick({ ...base, hit: { partId: null, ghost: false, depth: bufAt(0.5) } });
   assert.equal(v, "blocked");
 });
 

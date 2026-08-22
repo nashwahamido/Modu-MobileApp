@@ -22,7 +22,23 @@ export function worldBoxFromObjectBox(
       if (w[k] > max[k]) max[k] = w[k];
     }
   }
-  return { min, max };
+  // The oriented box is the same object-space box carried through the transform WITHOUT re-bounding: each basis column's direction is an axis, its length scales that half-extent, and the centre is pushed through whole. Kept alongside min/max because the visibility gate needs the tight box and everything else the aligned one.
+  const axes: [[number, number, number], [number, number, number], [number, number, number]] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  const half: [number, number, number] = [0, 0, 0];
+  for (let k = 0; k < 3; k++) {
+    const cx = m[4 * k];
+    const cy = m[4 * k + 1];
+    const cz = m[4 * k + 2];
+    const s = Math.hypot(cx, cy, cz) || 1;
+    axes[k] = [cx / s, cy / s, cz / s];
+    half[k] = halfExtent[k] * s;
+  }
+  const obbCenter: [number, number, number] = [
+    m[0] * center[0] + m[4] * center[1] + m[8] * center[2] + m[12],
+    m[1] * center[0] + m[5] * center[1] + m[9] * center[2] + m[13],
+    m[2] * center[0] + m[6] * center[1] + m[10] * center[2] + m[14],
+  ];
+  return { min, max, obb: { center: obbCenter, axes, half } };
 }
 
 /** Answers, for each part asked about, where it is being DRAWN — and omits any part that is not on screen at all. Both halves matter: a part off at a staging offset has a box nowhere near its baked one, and a part the scene has hidden (another cluster's work while this one has focus) has a perfectly good baked transform behind an entity nobody is rendering. */
@@ -51,11 +67,11 @@ export function occluderBoxes(
   placedIds: Iterable<PartId>,
   live: Record<PartId, PartBox> | null,
   baked: Record<PartId, PartBox>,
-): { min: PartBox["min"]; max: PartBox["max"]; pid: string }[] {
-  const out: { min: PartBox["min"]; max: PartBox["max"]; pid: string }[] = [];
+): (PartBox & { pid: string })[] {
+  const out: (PartBox & { pid: string })[] = [];
   for (const pid of placedIds) {
     const bx = live ? live[pid] : baked[pid];
-    if (bx) out.push({ min: bx.min, max: bx.max, pid });
+    if (bx) out.push({ min: bx.min, max: bx.max, obb: bx.obb, pid });
   }
   return out;
 }

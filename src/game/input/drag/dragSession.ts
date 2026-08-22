@@ -10,7 +10,7 @@ export interface DragSession {
   base: Float3;
   /** Interchangeable sockets the held part may snap to (same part group). */
   /** matchVisual is where the fit is MEASURED — the park pose for a part that enters along an axis, the seated hold point for everything else. GroupCandidate's own position stays what the release path places at. */
-  candidates: (GroupCandidate & { matchVisual: Vec3; seatVisual: Vec3; burial: number })[];
+  candidates: (GroupCandidate & { matchVisual: Vec3; seatVisual: Vec3; parkVisual?: Vec3; burial: number })[];
   /** Live sockets outside the group, for wrong-target detection. */
   otherSockets: Vec3[];
   bakedPos: Vec3;

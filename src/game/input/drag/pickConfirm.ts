@@ -7,7 +7,7 @@ import type { ActionId, Vec3 } from "@/src/game/core/type";
 import type { PickHit } from "@/src/game/scene/pickProbe";
 import { VIS_GAP_SLACK_M } from "./dragPlane";
 
-/** Filament's depth buffer is reversed-Z with an infinite far plane: 1.0 at the near plane falling to 0.0 at infinity, so axial (view-space) depth is near/d. DEVICE-CHECK PENDING: this mapping is from View.h's documentation ("1 (near plane) to 0 (infinity)"); before trusting verdicts on-device, probe a pick against a surface at known camera distance and compare. */
+/** Filament's depth buffer is reversed-Z with an infinite far plane: 1.0 at the near plane falling to 0.0 at infinity, so axial (view-space) depth is near/d. DEVICE-VERIFIED 2026-08-22 (iPad 9th gen, EKET runner screw seen through sidePanelL): raw 0.1337 → 0.748 m against the anchor's projected 0.767 m, a 20 mm gap = the panel's thickness; tracked the zoom (raw 0.1469 → 0.681 vs 0.698). A wrong near plane would scale `ax` by a constant, an inverted convention would move it the wrong way with zoom; neither showed. */
 export function axialDepthFromBuffer(bufferValue: number, nearM: number): number {
   if (!(bufferValue > 0)) return Infinity;
   return nearM / bufferValue;
@@ -25,13 +25,11 @@ export interface PickJudgeInput {
   anchorAxialDepthM: number;
   /** Straight-line eye→anchor distance, to convert the axial gap onto the sightline so the threshold means the same thing it means in sightlineGapM. */
   anchorEuclidDistM: number;
-  /** The candidate's own burial (box-derived, computed at pickup) — its personal allowance, same as the box gate's. */
-  burialM: number;
   /** Camera near plane (metres). */
   nearM: number;
 }
 
-/** One sample, judged by the same rule as the box gate but on rendered geometry: the frontmost surface at the socket's pixel must sit within (burial + slack) of the anchor along the sightline. Open background = nothing in front at all = visible. */
+/** One sample, judged by the box gate's rule but on rendered geometry: the frontmost surface at the socket's pixel must sit within the slack of the anchor along the sightline. Open background = nothing in front at all = visible. No box burial in the allowance, deliberately: burial is the anchor's depth inside a BOX, an upper bound on its true recess (AABB ⊇ mesh), and that bound is only safe against a gap that is itself box-derived. Against the renderer's exact gap it loosens the gate in the one place it is meant to be precise — measured on BEKVAM's leg screw, whose head sits ON the splayed leg's surface but 17.9mm inside the leg's 64mm-fat box: the 24mm allowance that bought pardoned the true 18mm plank from the wrong side. The seat is the shaft mouth (targets.seatOffsetFor), so a true recess is at most a countersink, inside the slack. */
 export function judgePick(inp: PickJudgeInput): PickVerdict {
   if (inp.hit === null) return "visible";
   if (inp.hit.ghost || (inp.hit.partId !== null && inp.heldSet.has(inp.hit.partId))) return "ignore";
@@ -41,7 +39,17 @@ export function judgePick(inp: PickJudgeInput): PickVerdict {
   const oblique = inp.anchorEuclidDistM / inp.anchorAxialDepthM;
   const gapRayM = (inp.anchorAxialDepthM - hitAxial) * oblique;
   // A hit AT or BEHIND the anchor (gap <= 0) is the socket's own surface or something past it — clear sightline.
-  return gapRayM <= inp.burialM + VIS_GAP_SLACK_M ? "visible" : "blocked";
+  return gapRayM <= VIS_GAP_SLACK_M ? "visible" : "blocked";
+}
+
+/** One-line account of a judged sample for the `[drag]` probe — every number the verdict rests on, so a wrong verdict on device can be traced to its cause (wrong near plane: `ax` off from the true distance by a constant factor; wrong depth convention: inverted). `gap` is the along-ray gap the rule compares against `thr`. */
+export function describePick(inp: PickJudgeInput, verdict: PickVerdict): string {
+  if (inp.hit === null) return `${verdict} hit=bg anc=${inp.anchorAxialDepthM.toFixed(3)}`;
+  const hitAxial = axialDepthFromBuffer(inp.hit.depth, inp.nearM);
+  const oblique = inp.anchorAxialDepthM > 0 ? inp.anchorEuclidDistM / inp.anchorAxialDepthM : NaN;
+  const gapRayM = (inp.anchorAxialDepthM - hitAxial) * oblique;
+  const who = inp.hit.partId ?? "other";
+  return `${verdict} hit=${inp.hit.ghost ? "ghost:" : ""}${who} raw=${inp.hit.depth.toFixed(4)} ax=${Number.isFinite(hitAxial) ? hitAxial.toFixed(3) : "inf"} anc=${inp.anchorAxialDepthM.toFixed(3)} gap=${Number.isFinite(gapRayM) ? (gapRayM * 1000).toFixed(0) : "?"}mm thr=${(VIS_GAP_SLACK_M * 1000).toFixed(0)}mm`;
 }
 
 /** How many consecutive agreeing samples flip a verdict — one noisy pick (grazing pixel, mid-orbit frame) must not strobe the gate. */
@@ -65,6 +73,14 @@ export class PickConfirmCache {
   private entries = new Map<ActionId, Entry>();
   private inFlight = false;
   private lastFiredAt = 0;
+  /** Probe-only: the last judged sample (describePick) plus the streak it produced, read by the `[drag]` line's `pk=` field. */
+  lastDiag = "";
+
+  /** Probe-only: the live streak for a candidate, "verdict:streak" — what isConfirmedVisible is about to act on. */
+  streakOf(id: ActionId): string {
+    const e = this.entries.get(id);
+    return e ? `${e.verdict}:${e.streak}` : "none";
+  }
 
   /** Whether a candidate that the BOX called blocked may be acquired anyway: only on a live, confirmed-visible verdict from the current viewpoint. Missing/stale/blocked all answer no — the conservative box verdict stands. */
   isConfirmedVisible(id: ActionId, eye: Vec3, now: number): boolean {

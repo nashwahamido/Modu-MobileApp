@@ -2,11 +2,13 @@ import {
   ActionId,
   AssemblyAction,
   GroupId,
+  PartBox,
   PartDef,
   PartId,
   Quat,
   Vec3,
 } from "@/src/game/core/type";
+import { rayBoxInterval, type BoxLike } from "@/src/game/core/geometry/obb";
 import { looseDelta, stageDelta } from "@/src/game/core/geometry/staging";
 import { engageAxis } from "../evaluation/engagement";
 import { stageShiftFor } from "../model/staging";
@@ -79,8 +81,8 @@ export function targetPositionForAction(
 
 const add3 = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 
-/** How far this action's drop target moves because a sub-assembly is out of the furniture. Delegates the displacement itself to model/staging.ts so the ghost and this target cannot drift apart; the only thing decided here is the ACTION-level exemption — seating the finished sub-assembly aims at the real socket, because that gesture is precisely the journey home. */
-function stagingShiftFor(action: AssemblyAction, parts: Parts): Vec3 | undefined {
+/** How far this action's drop target moves because a sub-assembly is out of the furniture. Delegates the displacement itself to model/staging.ts so the ghost and this target cannot drift apart; the only thing decided here is the ACTION-level exemption — seating the finished sub-assembly aims at the real socket, because that gesture is precisely the journey home. Exported for the drag layer's seatVisual: the visibility gate must measure the hole where the part is actually DELIVERED, and when it built the seat from the raw baked pose alone the gate judged a spot 5cm from the staged socket (EKET stabiliser rod). */
+export function stagingShiftFor(action: AssemblyAction, parts: Parts): Vec3 | undefined {
   if (action.type === "placePart" || !action.partId) return undefined;
   const part = parts[action.partId];
   return part ? stageShiftFor(part, parts) : undefined;
@@ -107,6 +109,46 @@ export function holdOffsetFor(part: PartDef | undefined, anchors?: Record<PartId
   if (len <= HOLD_CLAMP_TRIGGER_M) return vco;
   const k = HOLD_CLAMP_M / len;
   return [vco[0] * k, vco[1] * k, vco[2] * k];
+}
+
+/** Offset from a part's baked origin to the point the VISIBILITY gate judges — the hole the player can actually see. A structural part's is its joint anchor (the contact slab), falling back to the visual centre. A fastener never gets a joint anchor — frames are per liaison, and a fastener realises a liaison rather than ending one — so it used to fall through to its visual centre, which for a screw is mid-SHAFT: the gate then asked whether a point buried half a screw-length in the wood was visible, and the answer was decided by screw length, not viewpoint (EKET's 13mm runner screw passed, its 41mm drawer-back screw was blocked from all 72 sweep cameras, looking straight at the head included). The mouth is where the shaft axis leaves the fastener's own box on the HEAD side — along the signed engage axis, which in this codebase is the WITHDRAWAL direction (the stage pose is +engageDir·insertStage, "fully out of the hole"), so it already points out toward the head; signing it by the placed endpoint puts a connector's mouth on whichever side it enters from. An authored jointAnchor still wins outright. Measured on EKET's drawer-back screw (box x −125…−83.5, origin −104.3, engageDir −x): the head sits at −125, the withdrawal end, and the −axis end was the tip 20.7mm inside the drawer side. */
+export function seatOffsetFor(
+  part: PartDef | undefined,
+  box: PartBox | undefined,
+  anchors?: Record<PartId, Vec3>,
+  done?: ReadonlySet<ActionId>,
+  receivers: readonly BoxLike[] = [],
+): Vec3 {
+  const anchored = part && anchors?.[part.partId];
+  if (anchored) {
+    // A structural part's joint anchor is the CENTRE of its contact slab — for a slider or press that is a point inside the receiver (DALFRED's support pin: 10.5mm into the 21mm plate, the middle of the hole), which no camera can see except straight down the bore. The hole the player sees is where the approach axis leaves the receiver, so the anchor is pushed back along −placeDir until it exits every placed box that contains it. Parts with no placeDir (drops) keep the slab centre; their burial is the slab's own thin half-width.
+    const seat: Vec3 = [part.pose.position[0] + anchored[0], part.pose.position[1] + anchored[1], part.pose.position[2] + anchored[2]];
+    const pd = part.placeDir;
+    const pl = pd ? Math.hypot(pd[0], pd[1], pd[2]) : 0;
+    if (pd && pl > 0) {
+      const back: Vec3 = [-pd[0] / pl, -pd[1] / pl, -pd[2] / pl];
+      let out = 0;
+      for (const r of receivers) {
+        const iv = rayBoxInterval(r, seat, back, -Infinity, Infinity);
+        if (iv && iv.lo < 0 && iv.hi > out) out = iv.hi;
+      }
+      return [anchored[0] + back[0] * out, anchored[1] + back[1] * out, anchored[2] + back[2] * out];
+    }
+    return [anchored[0], anchored[1], anchored[2]];
+  }
+  if (part?.type === "fastener" && box) {
+    const axis = done ? engageAxis(part, done) : (part.engageDir ?? [0, 0, 0]);
+    const len = Math.hypot(axis[0], axis[1], axis[2]);
+    if (len > 0) {
+      const u: Vec3 = [axis[0] / len, axis[1] / len, axis[2] / len];
+      // Ray-box exit from the origin along +axis (withdrawal): the first face of the fastener's aligned∩oriented box the head-side ray leaves through, i.e. the shaft's mouth — so a tilted screw's mouth is found along its real shaft rather than its world-aligned slab.
+      const iv = rayBoxInterval(box, part.pose.position, u, -Infinity, Infinity);
+      const t = iv?.hi ?? NaN;
+      if (Number.isFinite(t) && t > 0) return [u[0] * t, u[1] * t, u[2] * t];
+    }
+  }
+  const vco = part?.visualCenterOffset ?? [0, 0, 0];
+  return [vco[0], vco[1], vco[2]];
 }
 
 export interface GroupCandidate {

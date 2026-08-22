@@ -2,6 +2,7 @@
 // half of the part drag, kept pure so it can be tested against the projection that has to invert it
 // (dragPlane.test.ts). The hook owns the gesture; this owns the geometry.
 import { screenRay, type LookAt } from "@/src/game/core/geometry/math";
+import { pointDepthInBox, rayBoxInterval, type BoxLike } from "@/src/game/core/geometry/obb";
 import type { Vec3 } from "@/src/game/core/type";
 
 type Float3 = [number, number, number];
@@ -254,31 +255,15 @@ export function dragRayPoint(
 export function rayBoxEntryT(
   eye: Vec3,
   dir: Vec3,
-  boxes: readonly { min: Vec3; max: Vec3; pid?: string }[],
+  boxes: readonly BoxLike[],
 ): { t: number; by: string | null } {
   let best = Infinity;
   let by: string | null = null;
   for (const b of boxes) {
-    let lo = -Infinity;
-    let hi = Infinity;
-    let ok = true;
-    for (let k = 0; k < 3 && ok; k++) {
-      const d = dir[k];
-      if (Math.abs(d) < 1e-9) {
-        // Parallel to this slab: the ray either sits inside it for its whole length or misses the box entirely.
-        if (eye[k] < b.min[k] || eye[k] > b.max[k]) ok = false;
-        continue;
-      }
-      const t0 = (b.min[k] - eye[k]) / d;
-      const t1 = (b.max[k] - eye[k]) / d;
-      const a = Math.min(t0, t1);
-      const z = Math.max(t0, t1);
-      if (a > lo) lo = a;
-      if (z < hi) hi = z;
-      if (lo > hi) ok = false;
-    }
-    if (!ok || lo <= 0 || lo >= best) continue;
-    best = lo;
+    // Against the part's aligned∩oriented box (core/geometry/obb): t is the same parameter in both frames, so it is still the axial depth the unnormalised dir encodes.
+    const iv = rayBoxInterval(b, eye, dir, -Infinity, Infinity);
+    if (!iv || iv.lo <= 0 || iv.lo >= best) continue;
+    best = iv.lo;
     by = b.pid ?? null;
   }
   return { t: best, by };
@@ -290,21 +275,12 @@ export const VIS_GAP_SLACK_M = 0.006;
 /** How deep `target` sits inside the boxes that contain it — the distance to the nearest boundary of the tightest containing box, 0 when nothing contains it. An anchor buried d metres deep cannot possibly be seen closer than d, so d joins its visibility threshold: this is what lets ONE rule serve a flush screw head (d=0), a cam 4mm into its bore, and a bridge anchor at a dowel's centre, with no per-type exemptions. */
 export function burialDepthM(
   target: Vec3,
-  boxes: readonly { min: Vec3; max: Vec3 }[],
+  boxes: readonly BoxLike[],
 ): number {
   let d = 0;
   for (const b of boxes) {
-    if (
-      target[0] < b.min[0] || target[0] > b.max[0] ||
-      target[1] < b.min[1] || target[1] > b.max[1] ||
-      target[2] < b.min[2] || target[2] > b.max[2]
-    )
-      continue;
-    const toFace = Math.min(
-      target[0] - b.min[0], b.max[0] - target[0],
-      target[1] - b.min[1], b.max[1] - target[1],
-      target[2] - b.min[2], b.max[2] - target[2],
-    );
+    // Depth inside the part's aligned∩oriented box: a splayed leg is a 22mm plank in its own frame, so a screw head ON its surface reads as buried ~0 instead of 18mm inside the leg's world-aligned slab.
+    const toFace = pointDepthInBox(b, target);
     if (toFace > d) d = toFace;
   }
   return d;
@@ -314,32 +290,17 @@ export function burialDepthM(
 export function sightlineGapM(
   eye: Vec3,
   target: Vec3,
-  boxes: readonly { min: Vec3; max: Vec3; pid?: string }[],
+  boxes: readonly BoxLike[],
 ): { gap: number; by: string | null } {
   const seg: Vec3 = [target[0] - eye[0], target[1] - eye[1], target[2] - eye[2]];
   const len = Math.hypot(seg[0], seg[1], seg[2]) || 1;
   let tFirst = 1;
   let by: string | null = null;
   for (const b of boxes) {
-    let lo = 0;
-    let hi = 1;
-    let ok = true;
-    for (let k = 0; k < 3 && ok; k++) {
-      const d = seg[k];
-      if (Math.abs(d) < 1e-9) {
-        if (eye[k] < b.min[k] || eye[k] > b.max[k]) ok = false;
-        continue;
-      }
-      const t0 = (b.min[k] - eye[k]) / d;
-      const t1 = (b.max[k] - eye[k]) / d;
-      const a = Math.min(t0, t1);
-      const z = Math.max(t0, t1);
-      if (a > lo) lo = a;
-      if (z < hi) hi = z;
-      if (lo > hi) ok = false;
-    }
-    if (!ok || lo >= 1) continue;
-    const entry = Math.max(0, lo);
+    // Segment parameter 0..1 from eye to target, against the part's aligned∩oriented box — a tilted part stops casting its world-aligned shadow across sightlines that pass beside it.
+    const iv = rayBoxInterval(b, eye, seg, 0, 1);
+    if (!iv || iv.lo >= 1) continue;
+    const entry = Math.max(0, iv.lo);
     if (entry < tFirst) {
       tFirst = entry;
       by = b.pid ?? null;

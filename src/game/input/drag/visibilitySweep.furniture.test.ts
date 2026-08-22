@@ -12,8 +12,8 @@ import path from "node:path";
 import { applyStructure, buildLiaisons } from "@/src/game/core/model/liaisons";
 import { deriveJointFrames, partAnchorOffsets } from "@/src/game/core/model/jointFrames";
 import { composeFurnitureActions } from "@/src/game/core/composition/composeActions";
-import { holdOffsetFor } from "@/src/game/core/scene/targets";
-import { isPickupType } from "@/src/game/core/ids";
+import { seatOffsetFor, stagingShiftFor } from "@/src/game/core/scene/targets";
+import { isPickupType, placeId } from "@/src/game/core/ids";
 import { burialDepthM, sightlineGapM, VIS_GAP_SLACK_M } from "./dragPlane";
 import type { ClusterId, PartBox, PartId, Vec3 } from "@/src/game/core/type";
 
@@ -61,6 +61,8 @@ function glbBoxes(file: string): Record<string, PartBox> {
     const s = n.scale ?? [1, 1, 1];
     const min: number[] = [Infinity, Infinity, Infinity];
     const max: number[] = [-Infinity, -Infinity, -Infinity];
+    const lmin: number[] = [Infinity, Infinity, Infinity];
+    const lmax: number[] = [-Infinity, -Infinity, -Infinity];
     let any = false;
     for (const prim of json.meshes[n.mesh].primitives) {
       if (prim.attributes.POSITION == null) continue;
@@ -71,10 +73,25 @@ function glbBoxes(file: string): Record<string, PartBox> {
         for (let k = 0; k < 3; k++) {
           if (w[k] < min[k]) min[k] = w[k];
           if (w[k] > max[k]) max[k] = w[k];
+          if (v[k] < lmin[k]) lmin[k] = v[k];
+          if (v[k] > lmax[k]) lmax[k] = v[k];
         }
       }
     }
-    if (any) out[n.name] = { min: [min[0], min[1], min[2]], max: [max[0], max[1], max[2]] };
+    if (!any) continue;
+    // The oriented twin of scene/partBoxes.worldBoxFromObjectBox: the object-space box carried through the node's TRS whole — axes are the rotated unit basis, half-extents scaled, centre pushed through.
+    const lc: Vec3 = [((lmin[0] + lmax[0]) / 2) * s[0], ((lmin[1] + lmax[1]) / 2) * s[1], ((lmin[2] + lmax[2]) / 2) * s[2]];
+    const rc = rotQ(q, lc);
+    const axes = [rotQ(q, [1, 0, 0]), rotQ(q, [0, 1, 0]), rotQ(q, [0, 0, 1])] as [Vec3, Vec3, Vec3];
+    out[n.name] = {
+      min: [min[0], min[1], min[2]],
+      max: [max[0], max[1], max[2]],
+      obb: {
+        center: [rc[0] + t[0], rc[1] + t[1], rc[2] + t[2]],
+        axes,
+        half: [((lmax[0] - lmin[0]) / 2) * s[0], ((lmax[1] - lmin[1]) / 2) * s[1], ((lmax[2] - lmin[2]) / 2) * s[2]],
+      },
+    };
   }
   return out;
 }
@@ -130,12 +147,6 @@ for (const F of FURNITURES) {
     for (const a of actions) {
       if (isPickupType(a.type) && a.partId && parts[a.partId]) {
         const part = parts[a.partId];
-        const off = anchors[part.partId] ?? holdOffsetFor(part);
-        const seat: Vec3 = [
-          part.pose.position[0] + off[0],
-          part.pose.position[1] + off[1],
-          part.pose.position[2] + off[2],
-        ];
         // The runtime gate asks the renderer which placed parts are on screen and where (scene/partBoxes). Offline there is no renderer, so this replay reconstructs the same set from build state: a placed part stands at its baked pose exactly when it shares the candidate's cluster (both in focus), belongs to a cluster already combined in, or has no cluster at all. Another cluster's work is hidden or parked off-screen while this one has focus and cannot occlude anything. Note what this is NOT: the runtime used to run this same inference on `cluster.seed`, which is an authoring flag about which cluster STARTS the build — BEKVAM and LACK name their one cluster for the UI label and never set it, so every part of those furnitures was disqualified and the gate ran inert for the whole build. Cluster IDENTITY is the honest question; seed never was.
         const cl = parts[a.partId]?.cluster;
         const occluders = [...placed]
@@ -146,7 +157,21 @@ for (const F of FURNITURES) {
           })
           .map((pid) => ({ ...boxes[pid], pid }))
           .filter((b) => b.min);
+        // Same seat rule as the runtime (targets.seatOffsetFor): joint anchor pushed out to the receiver's surface for structure, shaft mouth for a fastener. The engage axis is signed by what is on the bench, so the replay hands it the placed set as the action ids it would have completed, and the occluders double as the receivers the anchor is pushed out of.
+        const done = new Set([...placed].map((pid) => placeId(pid)));
+        const off = seatOffsetFor(part, boxes[part.partId], anchors, done, occluders);
+        // Same staging displacement as the runtime seat (usePartDrag's seatVisual) — this replay must judge the hole where the part is actually delivered, or it re-encodes the bug the runtime just fixed.
+        const shift = stagingShiftFor(a, parts) ?? [0, 0, 0];
+        const seat: Vec3 = [
+          part.pose.position[0] + off[0] + shift[0],
+          part.pose.position[1] + off[1] + shift[1],
+          part.pose.position[2] + off[2] + shift[2],
+        ];
         const burial = burialDepthM(seat, occluders);
+        // The runtime's park-point second chance (usePartDrag's parkVisual): a parked part's drop target, the mouth backed off along −placeDir by parkBackoff, passes when its own sightline is clear.
+        const pd = part.placeDir;
+        const pl = pd ? Math.hypot(pd[0], pd[1], pd[2]) : 0;
+        const park: Vec3 | null = pd && pl > 0 && part.parkBackoff ? [seat[0] - (pd[0] / pl) * part.parkBackoff, seat[1] - (pd[1] / pl) * part.parkBackoff, seat[2] - (pd[2] / pl) * part.parkBackoff] : null;
         let best = Infinity;
         let bestBy: string | null = null;
         for (const eye of eyes) {
@@ -156,6 +181,10 @@ for (const F of FURNITURES) {
             bestBy = g.by;
           }
           if (best <= burial + VIS_GAP_SLACK_M) break;
+          if (park && sightlineGapM(eye, park, occluders).gap <= VIS_GAP_SLACK_M) {
+            best = 0;
+            break;
+          }
         }
         if (best > burial + VIS_GAP_SLACK_M) {
           failures.push(

@@ -8,6 +8,8 @@ import { useSharedValue, withTiming } from "react-native-reanimated";
 import {
   groupCandidates,
   holdOffsetFor,
+  seatOffsetFor,
+  stagingShiftFor,
   targetPositionForAction,
 } from "@/src/game/core/scene/targets";
 import type { GroupCandidate } from "@/src/game/core/scene/targets";
@@ -34,7 +36,7 @@ import { selectFirstDrop, useGameStore } from "@/src/game/core/store";
 import type { OrbitManipulator } from "../../scene/AssemblyScene";
 import { occluderBoxes, readLiveBoxes } from "../../scene/partBoxes";
 import { hasPickProber, probePick } from "../../scene/pickProbe";
-import { judgePick, PickConfirmCache } from "./pickConfirm";
+import { describePick, judgePick, PickConfirmCache } from "./pickConfirm";
 import {
   APPROACH_RADIUS_M,
   CARRY_CAP_EASE,
@@ -333,13 +335,15 @@ export function usePartDrag({
             const dir = cPart?.placeDir;
             const back = cPart?.parkBackoff ?? 0;
             // seatVisual is the candidate's FLUSH pose — the hole the player can actually see. For inserts, position/holdPosition are already the loose pose proud of the hole, so without this the whole match segment floats out along the screw axis and zoomed in it projects off-screen while the hole sits centered (measured: aim stuck at 0.167 with the finger dead on the hole).
-            // The joint anchor IS the visible hole, so it replaces the visual center here as well as in holdPosition — a segment measured anchor-to-visual-center would not describe any real approach line.
-            const off = (cPart && jointAnchors[cPart.partId]) ?? cPart?.visualCenterOffset ?? [0, 0, 0];
+            // Which point of the flush pose is the hole is targets.seatOffsetFor's call: a structural part's joint anchor, a fastener's shaft MOUTH — not its visual centre, which for a screw is mid-shaft and buried (the drawer-back screws were unassemblable from any angle because of it).
+            const off = seatOffsetFor(cPart, cPart ? partBoxes[cPart.partId] : undefined, jointAnchors, doneSet, placedBoxList);
+            // The seat rides the SAME staging displacement as the delivery target (targets.stagingShiftFor, exemptions included) — built from the raw baked pose alone, the gate judged visibility of a spot 5cm from a staged group's real socket (EKET stabiliser rod).
+            const sShift = stagingShiftFor(c.action, furniture.parts) ?? [0, 0, 0];
             const seatVisual: Vec3 = cPart
               ? [
-                  cPart.pose.position[0] + off[0],
-                  cPart.pose.position[1] + off[1],
-                  cPart.pose.position[2] + off[2],
+                  cPart.pose.position[0] + off[0] + sShift[0],
+                  cPart.pose.position[1] + off[1] + sShift[1],
+                  cPart.pose.position[2] + off[2] + sShift[2],
                 ]
               : c.holdPosition;
             // matchVisual only — position and holdPosition stay AS AUTHORED. The release path
@@ -348,6 +352,7 @@ export function usePartDrag({
             // down. Matching and placing are two different questions about the same socket.
             if (!dir || !back) return { ...c, matchVisual: c.holdPosition, seatVisual };
             const shift: Vec3 = [-dir[0] * back, -dir[1] * back, -dir[2] * back];
+            // parkVisual: the hole's mouth backed off to where the part PARKS before its drive — open air on the approach side. The visibility gate accepts it as a second chance when the mouth itself is box-blocked: a slider's hole is a feature of a face (DALFRED's pin hole is in the plate's top), invisible at a grazing angle, while the ghost 12cm above it is exactly what the player is aiming at. Directionally safe because it lies along −placeDir: from the wrong side of the receiver it is behind the receiver.
             return {
               ...c,
               matchVisual: [
@@ -356,6 +361,7 @@ export function usePartDrag({
                 c.holdPosition[2] + shift[2],
               ] as Vec3,
               seatVisual,
+              parkVisual: [seatVisual[0] + shift[0], seatVisual[1] + shift[1], seatVisual[2] + shift[2]] as Vec3,
             };
           });
           const candidatesWithFacing = candidates.map((c) => {
@@ -376,7 +382,7 @@ export function usePartDrag({
               ? `${c0.action.actionId} pos=${c0.position.map((v) => v.toFixed(3)).join(",")} hold=${c0.holdPosition.map((v) => v.toFixed(3)).join(",")} seat=${c0.seatVisual.map((v) => v.toFixed(3)).join(",")} match=${c0.matchVisual.map((v) => v.toFixed(3)).join(",")} anchor=${j ? j.map((v) => v.toFixed(3)).join(",") : "none"}`
               : `${action.actionId} NO-CANDIDATES`;
             console.log(
-              `[pickup] ${cand} placed=${placedIds.length} live=${liveBoxes0 ? Object.keys(liveBoxes0).length : "none"} boxes=${Object.keys(partBoxes).length} occN=${placedBoxList.length} pk=${hasPickProber() ? "on" : "off"} BUILD=noplane18`,
+              `[pickup] ${cand} placed=${placedIds.length} live=${liveBoxes0 ? Object.keys(liveBoxes0).length : "none"} boxes=${Object.keys(partBoxes).length} occN=${placedBoxList.length} pk=${hasPickProber() ? "on" : "off"} BUILD=noplane19`,
             );
           }
           const groupIds = new Set(candidates.map((c) => c.action.actionId));
@@ -552,7 +558,7 @@ export function usePartDrag({
             }
             let blockedPx = Infinity;
             // The nearest box-blocked candidate this frame — the one socket the player might actually be aiming at through box fat, and so the only one worth a renderer pick.
-            let probeCand: { id: ActionId; sx: number; sy: number; axial: number; euclid: number; burial: number } | null = null;
+            let probeCand: { id: ActionId; sx: number; sy: number; axial: number; euclid: number } | null = null;
             for (const c of s.candidates) {
               const d = distPx(c);
               // A socket the player cannot SEE cannot be aimed at — off-frame candidates are skipped for acquisition (a snap must never be earned against an invisible hole; measured: a seat at y=-88 was still inside the capture band near the top edge). The CURRENT match is not acquired here either — it is held through the more generous nearFrame test below, so a mid-drag orbit that nudges the socket just past the edge does not pop the magnet.
@@ -562,7 +568,10 @@ export function usePartDrag({
               if (laF) {
                 const g = sightlineGapM(laF[0], c.seatVisual, s.placedBoxes);
                 visStat = `${(g.gap * 1000).toFixed(0)}/${((c.burial + VIS_GAP_SLACK_M) * 1000).toFixed(0)}mm`;
-                if (g.gap > c.burial + VIS_GAP_SLACK_M) {
+                // Park point second chance (parkVisual): a parked part's drop target sits in open air on the approach side, so a clear sightline to it passes a mouth that is merely grazed — the side view of DALFRED's pin hole, where the plate's rim stands 60mm before the centre of its own top face.
+                const parkClear = !!c.parkVisual && sightlineGapM(laF[0], c.parkVisual, s.placedBoxes).gap <= VIS_GAP_SLACK_M;
+                if (parkClear && g.gap > c.burial + VIS_GAP_SLACK_M) visStat += "+park";
+                if (g.gap > c.burial + VIS_GAP_SLACK_M && !parkClear) {
                   // Renderer second opinion (layer 2, pickConfirm.ts): the box can only over-block — AABB ⊇ mesh — so a box-blocked socket earns a pickEntityWithDepth check of what is REALLY frontmost at its pixel. A live confirmed-visible verdict lets the candidate through; anything less keeps the conservative box verdict. The sweep counts 48 sockets reachable only through this path (round plates' corner air, hollow runner channels).
                   const confirmed = s.pickCache.isConfirmedVisible(c.action.actionId, laF[0], now);
                   if (!confirmed) {
@@ -577,7 +586,6 @@ export function usePartDrag({
                           sy: sp.y,
                           axial: sp.depth,
                           euclid: Math.hypot(c.seatVisual[0] - laF[0][0], c.seatVisual[1] - laF[0][1], c.seatVisual[2] - laF[0][2]),
-                          burial: c.burial,
                         };
                     }
                     continue;
@@ -601,8 +609,10 @@ export function usePartDrag({
                 const pc = probeCand;
                 pending
                   .then((hit) => {
-                    const v = judgePick({ hit, heldSet: s.heldSet, anchorAxialDepthM: pc.axial, anchorEuclidDistM: pc.euclid, burialM: pc.burial, nearM: CAMERA_NEAR_M });
+                    const inp = { hit, heldSet: s.heldSet, anchorAxialDepthM: pc.axial, anchorEuclidDistM: pc.euclid, nearM: CAMERA_NEAR_M };
+                    const v = judgePick(inp);
                     s.pickCache.record(pc.id, v, firedEye, Date.now());
+                    if (__DEV__) s.pickCache.lastDiag = `${describePick(inp, v)} st=${s.pickCache.streakOf(pc.id)}`;
                   })
                   .catch(() => s.pickCache.record(pc.id, "ignore", firedEye, Date.now()));
               }
@@ -840,7 +850,7 @@ export function usePartDrag({
             const nSeat = nearest?.seatVisual ? worldToScreen(nearest.seatVisual) : null;
             const nPark = nearest?.matchVisual ? worldToScreen(nearest.matchVisual) : null;
             console.log(
-              `[drag] f=(${e.absoluteX.toFixed(0)},${e.absoluteY.toFixed(0)}) part=(${hp ? `${hp.x.toFixed(0)},${hp.y.toFixed(0)}` : "?"}) gapPx=${gapPx} p=${p ? p.map((v) => v.toFixed(2)).join(",") : "null"} plane=${s.planeY.toFixed(2)} upright=${!!s.uprightAnchor} aim=${Number.isFinite(bestD) ? bestD.toFixed(3) : "inf"} pull=${Number.isFinite(pullD) ? pullD.toFixed(3) : "inf"} band=${band.toFixed(2)} cam=${camDist.toFixed(3)} reach=${s.holdReach.toFixed(3)} carry=${carryDepth} cap=${Number.isFinite(s.carryCap) ? s.carryCap.toFixed(3) : "-"} sock=${s.socketDepth?.toFixed(3) ?? "-"} blend=${s.depthBlend.toFixed(2)} tgt=${s.matchedActionId ?? "-"} blk=${aimBlockedNow ? 1 : 0} occ=${blockedBy ?? "-"} vis=${nearestVis} near=${nearest?.action.actionId ?? "-"} seat=(${nSeat ? `${nSeat.x.toFixed(0)},${nSeat.y.toFixed(0)}` : "?"}) park=(${nPark ? `${nPark.x.toFixed(0)},${nPark.y.toFixed(0)}` : "?"}) fit=${fs} BUILD=noplane18`,
+              `[drag] f=(${e.absoluteX.toFixed(0)},${e.absoluteY.toFixed(0)}) part=(${hp ? `${hp.x.toFixed(0)},${hp.y.toFixed(0)}` : "?"}) gapPx=${gapPx} p=${p ? p.map((v) => v.toFixed(2)).join(",") : "null"} plane=${s.planeY.toFixed(2)} upright=${!!s.uprightAnchor} aim=${Number.isFinite(bestD) ? bestD.toFixed(3) : "inf"} pull=${Number.isFinite(pullD) ? pullD.toFixed(3) : "inf"} band=${band.toFixed(2)} cam=${camDist.toFixed(3)} reach=${s.holdReach.toFixed(3)} carry=${carryDepth} cap=${Number.isFinite(s.carryCap) ? s.carryCap.toFixed(3) : "-"} sock=${s.socketDepth?.toFixed(3) ?? "-"} blend=${s.depthBlend.toFixed(2)} tgt=${s.matchedActionId ?? "-"} blk=${aimBlockedNow ? 1 : 0} occ=${blockedBy ?? "-"} vis=${nearestVis} near=${nearest?.action.actionId ?? "-"} seat=(${nSeat ? `${nSeat.x.toFixed(0)},${nSeat.y.toFixed(0)}` : "?"}) park=(${nPark ? `${nPark.x.toFixed(0)},${nPark.y.toFixed(0)}` : "?"}) fit=${fs} pk=${hasPickProber() ? s.pickCache.lastDiag || "none" : "OFF"} BUILD=noplane19`,
             );
           }
         })
