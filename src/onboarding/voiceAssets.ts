@@ -46,3 +46,22 @@ export function optionPath(index: number, optionIndex: number): string {
   const q = oneBased(index);
   return `${ROOT}/Q${q}/Q${q}-Opt${oneBased(optionIndex)}${EXT}`;
 }
+
+/** The companions' own subtree. Beside `onboarding` rather than inside it: the same four clips
+ *  introduce the avatars wherever that happens, and only the recommendation screen plays them today. */
+const AVATARS_ROOT = "avatars";
+
+/**
+ * A companion's introduction, spoken on the avatar recommendation screen.
+ *
+ * DERIVED from the name, because the four clips are named for the four companions exactly as
+ * avatarModes.ts spells them — Felix, Lumi, Pebble, Sparky — capital included. That is a real
+ * scheme rather than a coincidence, so a fifth companion needs a recording and no code.
+ *
+ * Takes the NAME and not the ModeId on purpose: the storage names follow the character, and mapping
+ * "clearPath" to "Pebble" here would put a second copy of that pairing next to the one avatarModes
+ * already owns. Callers hold the mode's own record and pass `avatarName` off it.
+ */
+export function avatarPath(avatarName: string): string {
+  return `${AVATARS_ROOT}/${avatarName}${EXT}`;
+}

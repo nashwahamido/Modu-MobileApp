@@ -38,6 +38,7 @@ import { hasTrayCard } from "@/src/game/core/evaluation/trayCard";
 import { hintText } from "@/src/game/core/presentation/hintText";
 import { instructionText } from "@/src/game/core/presentation/instructions";
 import { memberPlaceIdsForLead, componentBlockAtTail } from "@/src/game/core/model/components";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 /** Total clockwise rotation to fully tighten a fastener, in degrees. */
 export const TIGHTEN_TOTAL_DEG = 720;
@@ -228,6 +229,64 @@ const CLEARED = {
   hintClusters: [] as ClusterId[],
   hintTool: null as ToolId | null,
 };
+
+/**
+ * The settings the player has changed by hand, and where they are kept.
+ *
+ * `applyProfile` rewrites every default, and the loading gate calls it on every app start — so
+ * without this a deliberate choice survives only until the app is next opened. Remembering WHICH
+ * KEYS were touched, rather than the whole object, means a profile can still move its own defaults
+ * between releases and only the player's actual decisions are protected.
+ *
+ * Fire-and-forget: a write that fails costs a preference at next launch, which is not worth blocking
+ * a settings toggle for. Restored by `hydrateSettings`, called once at app start.
+ */
+const SETTINGS_KEY = "modu.settings.v1";
+const TOUCHED_KEY = "modu.settings.touched.v1";
+
+const touched = new Set<string>();
+
+async function persistSettings(settings: AccessibilitySettings): Promise<void> {
+  try {
+    await AsyncStorage.multiSet([
+      [SETTINGS_KEY, JSON.stringify(settings)],
+      [TOUCHED_KEY, JSON.stringify([...touched])],
+    ]);
+  } catch {
+    // Losing a preference is a small cost; a crashed settings screen is not.
+  }
+}
+
+/**
+ * Load the player's own settings back over the current defaults.
+ *
+ * Call ONCE at app start, and BEFORE the loading gate applies a profile — the gate reads the saved
+ * onboarding mode and calls applyProfile, which needs `touched` populated to know what to keep.
+ */
+export async function hydrateSettings(): Promise<void> {
+  try {
+    const [[, rawSettings], [, rawTouched]] = await AsyncStorage.multiGet([
+      SETTINGS_KEY,
+      TOUCHED_KEY,
+    ]);
+    if (rawTouched) {
+      for (const key of JSON.parse(rawTouched) as string[]) touched.add(key);
+    }
+    if (!rawSettings) return;
+    const saved = JSON.parse(rawSettings) as Partial<AccessibilitySettings>;
+    // Only the touched keys are laid back down. Anything else in the blob is a default from an older
+    // release, and the current default is the better answer.
+    const kept: Record<string, unknown> = {};
+    for (const key of touched) {
+      if (key in saved) kept[key] = (saved as Record<string, unknown>)[key];
+    }
+    useGameStore.setState((state) => ({
+      settings: { ...state.settings, ...(kept as Partial<AccessibilitySettings>) },
+    }));
+  } catch {
+    // A corrupt blob is not worth failing a launch over — the defaults are always valid.
+  }
+}
 
 export const useGameStore = create<GameState>()((set, get) => ({
   furniture: null,
@@ -618,14 +677,37 @@ export const useGameStore = create<GameState>()((set, get) => ({
   setCombiningCluster: (cluster) => set({ combiningCluster: cluster }),
   setPartBoxes: (boxes) => set({ partBoxes: boxes }),
 
-  setSettings: (patch) => set({ settings: { ...get().settings, ...patch } }),
+  setSettings: (patch) => {
+    set({ settings: { ...get().settings, ...patch } });
+    // EVERY key the player has touched, remembered. Not the whole settings object: a profile is
+    // allowed to move its own defaults between releases, and a snapshot of every value would freeze
+    // whatever they happened to be on the day this player first opened the app.
+    for (const key of Object.keys(patch)) touched.add(key);
+    void persistSettings(get().settings);
+  },
   setHandedness: (handedness) => set({ handedness }),
-  applyProfile: (profile) =>
-    set({
-      profile,
-      settings: settingsForProfile(profile),
-      mode: PROFILE_MODE[profile],
-    }),
+  applyProfile: (profile) => {
+    // The profile's defaults, WITH the player's own choices laid back over the top.
+    //
+    // This used to replace `settings` outright, and the loading gate calls it on every app start —
+    // so a toggle the player changed lived until they next opened the app and then quietly went
+    // back. Handedness was moved out of `settings` for exactly this reason; the rest of the object
+    // needed the same protection rather than the same escape hatch.
+    //
+    // Only KEYS THE PLAYER HAS TOUCHED survive. Switching profile still does what it says — it
+    // rewrites every default — but it cannot undo a deliberate choice, and a preference stays until
+    // it is changed back by hand.
+    const base = settingsForProfile(profile);
+    const kept: Partial<AccessibilitySettings> = {};
+    for (const key of touched) {
+      if (key in get().settings) {
+        (kept as Record<string, unknown>)[key] = (get().settings as unknown as Record<string, unknown>)[key];
+      }
+    }
+    const settings = { ...base, ...kept };
+    set({ profile, settings, mode: PROFILE_MODE[profile] });
+    void persistSettings(settings);
+  },
 }));
 
 /** The "first part" case: a part is held AND the cluster it belongs to has no structural part placed yet. The very first drop gets a simplified UX — drop on a centre ring instead of aiming at a socket ghost. Shared by the scene, the drag, and the centre-ring overlay so they agree. */

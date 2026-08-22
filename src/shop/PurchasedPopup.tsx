@@ -15,7 +15,10 @@ const TITLE_COLOUR = "#897B9E";
 const CHOICE_ICON_SIZE = 46;
 // The shop and inventory panels' edge, so every surface in this family shares one outline
 const PANEL_STROKE = "#544F4B";
-const PANEL_STROKE_WIDTH = 1.2;
+// 0 = no outline, matching the shop and inventory panels these cards open over. The cards are told
+// apart from the scrim by their fill and their lift, which is enough — an outline as well read as a
+// second border stacked on the panel behind.
+const PANEL_STROKE_WIDTH = 0;
 
 export function PurchasedPopup({
   name,

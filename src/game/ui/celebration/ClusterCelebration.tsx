@@ -119,7 +119,7 @@ const makeStyles = (t: Theme) =>
   StyleSheet.create({
     scrim: {
       ...StyleSheet.absoluteFillObject,
-      // The SAME dimmed backdrop the project map uses. Both panels are #E3DACD, but this one was
+      // The SAME dimmed backdrop the project map uses. Both panels are #FBF8F3, but this one was
       // sitting on an undimmed 3D scene — the identical cream reads warmer and lighter against a
       // bright workbench than against the map's darkened one, which is why they looked different.
       backgroundColor: t.scrim,
@@ -138,7 +138,10 @@ const makeStyles = (t: Theme) =>
       // The PROJECT MAP's panel colour, and no outline: these two cards are the same voice — one
       // opens a stage, the other closes it — and the green stroke made this one read as a system
       // confirmation rather than as a small celebration.
-      backgroundColor: "#E3DACD",
+      //
+      // #FBF8F3, moved with the map and the completion screen. Left behind it would have been the
+      // one panel of the three still on the old cream, and the comment above would have been wrong.
+      backgroundColor: "#FBF8F3",
       borderRadius: 20,
       paddingHorizontal: 20,
       paddingVertical: 20,

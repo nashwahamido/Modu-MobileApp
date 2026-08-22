@@ -62,6 +62,8 @@ import { ClusterCelebration } from "@/src/game/ui/celebration/ClusterCelebration
 import { UndoButton } from "@/src/game/ui/hud/UndoButton";
 import { GameSettings } from "@/src/game/ui/settings/GameSettings";
 import { ToggleChips } from "@/src/game/ui/hud/ToggleChips";
+import { IdleCheckIn } from "@/src/game/ui/hud/IdleCheckIn";
+import { MapCoach } from "@/src/game/ui/hud/MapCoach";
 import { BuildMap, MapButton } from "@/src/game/ui/hud/ClusterFocusControl";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 import { Button } from "@/src/game/ui/system/Button";
@@ -278,18 +280,14 @@ function GameScreen() {
   // Gated on the existing accessibility flag, so a profile that asks for a quiet build gets one.
   useAssemblySfx(settings.soundEffects);
   const hintGroup = useGameStore((s) => s.hintGroup);
-  const hintGroups = useGameStore((s) => s.hintGroups);
-  // The tray learns ONE concept. "?" highlights a set (hintGroups); Spot highlights its single card (hintGroup); they never both run, so the merge is a preference, not a union.
-  const highlightGroups = hintGroups.length ? hintGroups : hintGroup ? [hintGroup] : [];
   const hintPulse = useGameStore((s) => s.hintPulse);
-  // The scene markers are a ONE-SHOT: they pulse for a few seconds and put themselves out. Keyed on hintPulse as well as the parts, so pressing the same button twice restarts the window rather than being swallowed as "no change". Covers Spot's single spotlight and the ? highlight's list alike — both are cleared by clearSpot.
+  // The Spot marker is a ONE-SHOT: it pulses for a few seconds and puts itself out. Keyed on hintPulse as well as the part, so pressing Spot twice for the same part restarts the window rather than being swallowed as "no change".
   const spotPartId = useGameStore((s) => s.hintPartId);
-  const hintParts = useGameStore((s) => s.hintParts);
   useEffect(() => {
-    if (!spotPartId && !hintParts.length) return;
+    if (!spotPartId) return;
     const t = setTimeout(() => useGameStore.getState().clearSpot(), SPOT_MS);
     return () => clearTimeout(t);
-  }, [spotPartId, hintParts, hintPulse]);
+  }, [spotPartId, hintPulse]);
 
   // select tool
   const selectedTool = useGameStore((s) => s.selectedTool);
@@ -447,6 +445,10 @@ function GameScreen() {
         <CenterDropRing />
         <FitChip />
         <HintToast />
+        {/* Sparky's check-in after a long pause. Momentum only, and it renders itself away for the
+            other three — the profile test lives in the component so this screen cannot disagree with
+            any future caller about who it is for. */}
+        <IdleCheckIn />
         {/* Only speaks when Spot is running and its target is somewhere the player cannot see. */}
         <SpotOrbitCue manipulator={manipulator} />
         {/* Focus mode clears the workbench: everything below is chrome the task doesn't
@@ -468,11 +470,14 @@ function GameScreen() {
         {/* One Map button where the cluster discs were. Same visibility rule they had: hidden in
             focus mode and in strict, where the step is chosen for you. */}
         {!focus && mode !== "strict" ? <MapButton /> : null}
+        {/* Introduces the Map button the first time an account reaches a real build. Shows itself at
+            most once ever — the flag lives on the profile, not on the device. */}
+        <MapCoach />
         <PartsTray
           items={sceneState.trayItems}
           gestureFor={gestureFor}
           thumbs={furniture.thumbs}
-          highlightGroups={highlightGroups}
+          highlightGroup={hintGroup}
           highlightPulse={hintPulse}
           header={
             focus ? undefined : (

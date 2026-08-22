@@ -17,6 +17,11 @@ export interface Profile {
   coins: number;
   xp: number;
   onboardingCompleted: boolean;
+  // One-off HUD coach: this account has been shown that the Map button leads back to the project map
+  // and the catalogue. On the PROFILE rather than in AsyncStorage — the room's coaches are
+  // per-install and rerun on a second device, which for "here is where that button is" reads as the
+  // app having forgotten the player.
+  mapCoachSeen: boolean;
   // A short flavour rank shown under the avatar. DERIVED from level via the levels table (see levels.ts) and filled by the adapter on read — never stored per user.
   title: string | null;
   // How far xp has climbed into the current level. DERIVED from xp via the same levels table, and filled by the adapter on read exactly like title.
@@ -31,7 +36,7 @@ export interface Profile {
 
 // The directly-writable profile fields. Two groups are excluded, for two different reasons. Derived / cached aggregates (title, xpIntoLevel, xpForNextLevel, itemsAssembled, likes) are maintained by their own repos. coins/xp/level are ECONOMY state and deliberately NOT writable here: they move only through purchase_item and reward_build, which price the transaction server-side from auth.uid(). A client-writable patch would let a modded client mint its own balance, and the DB now revokes those columns to match (migration 009_grants.sql).
 export type ProfilePatch = Partial<
-  Pick<Profile, "username" | "avatarMode" | "onboardingCompleted">
+  Pick<Profile, "username" | "avatarMode" | "onboardingCompleted" | "mapCoachSeen">
 >;
 
 // Which grid a placement lives on. Walls are named for the PLANE they occupy in the shell (src/room/core/roomShell.ts), not by compass point — these strings persist. The furniture variant (a vase on a cabinet) is reserved so adding it later is not a data migration; nothing builds it yet.

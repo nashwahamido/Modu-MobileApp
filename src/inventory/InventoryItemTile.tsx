@@ -6,12 +6,12 @@ import {
   FRAME_RADIUS,
   FRAME_STROKE,
   FRAME_STROKE_WIDTH,
-  TILE_ROW_GAP,
   ItemNameTab,
+  TILE_ROW_GAP,
   WELL_ASPECT,
   WELL_TOP_PAD,
 } from "@/src/components/ItemTileFrame";
-import { CatalogThumb } from "@/src/components/CatalogThumb";
+import { CatalogThumb, gridThumbFill, gridVariation } from "@/src/components/CatalogThumb";
 import type { ItemSource } from "@/src/data/catalog/assets";
 import { brandFor } from "@/src/game/content/brands";
 import { useFixedStyles } from "@/src/game/ui/system/theme";
@@ -77,7 +77,22 @@ export function InventoryItemTile({
           style={[s.art, { height: wellHeight - FRAME_STROKE_WIDTH * 2 }]}
           pointerEvents="none"
         >
-          <CatalogThumb source={source} itemId={itemId} surface={surface} size={wellHeight} />
+          {/* The GRID face for this item (components/CatalogThumb) — an agreed portrait per model
+              rather than whichever finish the catalog row calls default, which was "wooden" for all
+              four built models and put a row of near-identical wood renders in the grid.
+
+              size is inset for the BUILT models only (gridThumbFill) — their assembly-pipeline
+              render is framed tight where a bought item's already carries its own air, so the four
+              ran to the edges of their wells while everything around them sat inside. Bought items
+              are unchanged and still fill. The colour picker and the purchase popups pass a real
+              variation and their own size. */}
+          <CatalogThumb
+            source={source}
+            itemId={itemId}
+            variation={gridVariation(itemId)}
+            surface={surface}
+            size={Math.round(wellHeight * gridThumbFill(itemId))}
+          />
         </View>
 
         {ikea ? (

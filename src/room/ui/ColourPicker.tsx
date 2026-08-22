@@ -6,7 +6,7 @@ import { StyleSheet, Pressable, ScrollView, Text, View } from "react-native";
 import { CatalogThumb } from "../../components/CatalogThumb";
 import { useItemVariants } from "../../data/catalog/variantStore";
 import { variationLabel } from "../../data/catalog/variantLabel";
-import { RADIUS, SPACE, TYPE, useFixedStyles } from "@/src/game/ui/system/theme";
+import { CARD_CHROME, CREAM, LEXEND, RADIUS, SPACE, useFixedStyles } from "@/src/game/ui/system/theme";
 import { roomItemSource } from "../core/placeableItems";
 import { usePlacementStore } from "../core/placement";
 import type { Theme } from "@/src/game/ui/system/theme";
@@ -59,18 +59,23 @@ export function ColourPicker({ highlighted = false, onSelect }: ColourPickerProp
   );
 }
 
+// The same three tokens the placement bar uses, so the two columns are one control
+const PICKER_FILL = "#FBFAF3";
+const PICKER_WELL = "#EFE9E0";
+const PICKER_ACTIVE = "#8D7BA8";
+
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
     // Laid out by the rail, so no position of its own. maxHeight is what makes the list scroll rather than grow past the band the rail was given — the rail has a definite height, so the percentage resolves against it.
     bar: {
       maxHeight: "100%",
-      borderRadius: RADIUS.panel,
-      backgroundColor: t.surface,
+      borderRadius: 22,
+      // Matched to the placement bar beside it — same cream, same shadow, no outline
+      backgroundColor: PICKER_FILL,
       paddingHorizontal: SPACE.xs,
       paddingVertical: SPACE.xs,
-      shadowColor: "#000",
-      shadowOpacity: 0.18,
-      shadowRadius: 8,
+      ...CARD_CHROME,
+      borderWidth: 0,
     },
     column: { flexDirection: "column", alignItems: "center", gap: SPACE.xs },
     swatch: {
@@ -80,14 +85,15 @@ const makeStyles = (t: Theme) =>
       borderWidth: 2,
       // Transparent, not absent: the selected border must not change the swatch's size.
       borderColor: "transparent",
-      backgroundColor: t.surfaceInset,
+      backgroundColor: PICKER_WELL,
       alignItems: "center",
       gap: 2,
     },
-    swatchActive: { borderColor: t.accent, backgroundColor: t.surfaceRaised },
+    // The lavender the room already uses for a chosen thing — the shop's locked star and the assemble disc
+    swatchActive: { borderColor: PICKER_ACTIVE, backgroundColor: PICKER_WELL },
     swatchPressed: { transform: [{ scale: 0.94 }] },
-    label: { ...TYPE.labelSm, fontSize: 9.5, color: t.textFaint },
-    labelActive: { color: t.text },
+    label: { ...LEXEND.semibold, fontSize: 9.5, color: CREAM.ink, opacity: 0.55 },
+    labelActive: { opacity: 1 },
     guideTarget: {
       borderWidth: 3,
       borderColor: t.accent,
