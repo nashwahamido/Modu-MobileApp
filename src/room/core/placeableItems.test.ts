@@ -76,8 +76,8 @@ test("a window row routes to the wall, hole-sized to the NEAREST fine cell", () 
   assert.equal(def.wallHeightCells, 5);
 });
 
-test("the bundled built set survives any catalog the DB sends", () => {
-  // A row list that lost an item must never strand an already-placed bundled piece invisible.
+test("the baked-in built rows survive any catalog the DB sends", () => {
+  // A row list that lost an item must never strand an already-placed piece unplaceable for want of its dimensions.
   registerPlaceables([]);
   for (const id of ["dalfred-stool", "lack-table", "eket-cabinet", "bekvam-stool"]) {
     assert.ok(getRoomItem(id), `${id} fell out of the registry`);
@@ -98,22 +98,22 @@ test("unknown items resolve to null, never to a default model", () => {
   assert.equal(getRoomItem(null), null);
 });
 
-test("asset subtree follows acquisition — the catalog row decides, the bundle is the fallback rule", () => {
-  // Every buildable furniture ships a model, store-only items never do.
+test("asset subtree follows acquisition — the catalog row decides, the built id list answers for the rest", () => {
   for (const id of ["dalfred-stool", "lack-table", "eket-cabinet", "bekvam-stool"]) {
     assert.equal(roomItemSource(id), "built", `${id} is buildable, so its assets are in room/built/`);
   }
   assert.equal(roomItemSource("malm-chest"), "bought");
-  // An id the catalog has never seen still resolves by the bundle rule.
+  // An id the catalog has never seen is not in the built list, so it resolves to the bought subtree.
   assert.equal(roomItemSource("some-future-item"), "bought");
 });
 
-test("built items need a colour for a storage path — no colour means the bundled model", () => {
-  // Null is the caller's signal to fall back (variantModel.ts). An id the room cannot place must never produce a path that would 404 at load time.
-  assert.equal(getRoomItemStoragePath("eket-cabinet", null), null);
-  assert.equal(getRoomItemStoragePath("eket-cabinet", undefined), null);
-  assert.equal(getRoomItemStoragePath("not-an-item", "black"), null);
+test("a built item resolves to storage exactly like a bought one — there is no bundled room model to fall back to", () => {
+  // This USED to return null for a colourless built item, on the rule "no colour picked means load the bundle". The bundle table is empty and staying that way, so the null was not a fallback signal any more, it was the piece rendering nothing at all: startPlacing from the Inventory passes no variation, and defaultVariationOf returns null for anything the variants store has not loaded yet. Built and bought now take the same path, and the item's real default colour is resolved upstream in placement.ts, not here.
+  assert.equal(getRoomItemStoragePath("eket-cabinet", null), "room/built/eket-cabinet/default.glb");
+  assert.equal(getRoomItemStoragePath("eket-cabinet", undefined), "room/built/eket-cabinet/default.glb");
   assert.equal(getRoomItemStoragePath("eket-cabinet", "black"), "room/built/eket-cabinet/black.glb");
+  // An id the room cannot place is the ONLY null left: there is no subtree to build a path in, and a guessed one would 404 at load time.
+  assert.equal(getRoomItemStoragePath("not-an-item", "black"), null);
 });
 
 test("a top_surface row exposes its top; unflagged and window rows do not", () => {

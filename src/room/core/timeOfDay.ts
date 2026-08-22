@@ -22,6 +22,14 @@ export type CeilingLight = {
   kelvin: number;
 };
 
+// The cool directional that keeps forms separated from the warm light inside the room. AUTHORED PER HOUR for exactly the reason interiorLight is: this light burns at every hour, so one figure that reads as a clean daylight fill reads as a blue wash after dark, when the sun is at zero and there is nothing else cool in the scene for it to sit against. It was a pair of hard-coded literals in the renderer until 2026-08-18, which is how a 4000 lux 6800 K light ended up as the coldest thing in a room lit by a 2800 K bulb — and why the complaint that surfaced it was "the ceiling light is too cold", a bug no edit to the ceiling light could have fixed.
+export type CounterFill = {
+  /** Strength in lux. NEVER ZERO — see the note on night's preset below. */
+  intensity: number;
+  /** Colour temperature. Must stay ABOVE the same hour's interiorLight.kelvin: it stops being a COUNTER-fill the moment it is warmer than the light it counters. */
+  kelvin: number;
+};
+
 /** The player's deviation from an hour's default, STAMPED WITH THE HOUR IT WAS MADE AT. The stamp is what makes "forget it when the hour changes" a derivation instead of an effect — a stale override is simply never read. Null means they have not touched the switch. */
 export type CeilingLightOverride = { hour: TimeOfDayId; on: boolean } | null;
 
@@ -40,6 +48,8 @@ export type SunPreset = {
   ambient: number;
   /** The room's own ceiling light at this hour. Authored per preset rather than shared, so night can be a low warm glow while midday is bright enough to be visible against a 135,000 lux sun. */
   interiorLight: CeilingLight;
+  /** The cool directional fill at this hour. Tracks the hour for the same reason interiorLight does — see CounterFill. */
+  counterFill: CounterFill;
 };
 
 // Every direction below has x > 0 and z < 0 — the quadrant that enters through x-min and z-max. Breaking that is what produces pools with no visible window; the test asserts it.
@@ -52,7 +62,8 @@ export const TIME_OF_DAY: Record<TimeOfDayId, SunPreset> = {
     intensity: 105_000,
     kelvin: 4_500,
     ambient: 6_000,
-    interiorLight: { defaultOn: false, lumens: 155_000, kelvin: 3_400 },
+    interiorLight: { defaultOn: false, lumens: 155_000, kelvin: 3_000 },
+    counterFill: { intensity: 4_000, kelvin: 6_800 },
   },
   // High and near-vertical: a short bright patch under each window and the flattest shadows of the day.
   midday: {
@@ -62,7 +73,8 @@ export const TIME_OF_DAY: Record<TimeOfDayId, SunPreset> = {
     intensity: 135_000,
     kelvin: 6_500,
     ambient: 7_500,
-    interiorLight: { defaultOn: false, lumens: 200_000, kelvin: 3_600 },
+    interiorLight: { defaultOn: false, lumens: 200_000, kelvin: 3_200 },
+    counterFill: { intensity: 4_000, kelvin: 6_800 },
   },
   // The reference look: dropping, golden, pools stretched across the floor.
   afternoon: {
@@ -72,18 +84,22 @@ export const TIME_OF_DAY: Record<TimeOfDayId, SunPreset> = {
     intensity: 120_000,
     kelvin: 4_500,
     ambient: 4_500,
-    interiorLight: { defaultOn: false, lumens: 165_000, kelvin: 3_200 },
+    interiorLight: { defaultOn: false, lumens: 165_000, kelvin: 2_900 },
+    counterFill: { intensity: 3_000, kelvin: 6_500 },
   },
   // Nearly horizontal and deep orange. Dim enough that a lamp would start to matter.
   sunset: {
     label: "Sunset",
     backdrop: "sunset",
     direction: { x: 0.3, y: -0.42, z: -0.92 },
-    intensity: 40_000,
+    // Raised from 40k on 2026-08-18. A nearly-horizontal sun throws a 6.7 m pool — longer than the room — so this is the hour where sun intensity buys the most drama per lux, and 40k was drawing that long rake too faintly to read as a sunset. It stays clearly the dimmest daylight hour (afternoon is 120k) because "dim enough that a lamp would start to matter" is the preset's whole identity; raise it much past this and sunset becomes a second afternoon with an orange filter.
+    intensity: 70_000,
     kelvin: 2_500,
     // Cut from 1500 when the ceiling light arrived. That figure was set while sunset had nothing but the probe to light it after the sun dropped; sunset now defaults a 120k ceiling light ON, so keeping the old fill on top of it lit the room twice and washed out the very contrast the low sun is here to draw. Same rule as night's, read backwards: a light is placed now, so the probe can go back to doing only a probe's job.
     ambient: 400,
-    interiorLight: { defaultOn: true, lumens: 120_000, kelvin: 2_900 },
+    interiorLight: { defaultOn: true, lumens: 190_000, kelvin: 2_500 },
+    // Backed well off the daylight figure: the low sun is already warm, and a 4000 lux cool fill on top of it was cancelling exactly the golden cast sunset exists to produce.
+    counterFill: { intensity: 800, kelvin: 5_000 },
   },
   // No sun at all. The ambient floor is deliberately generous rather than realistic: this is the screen a player arranges furniture on, and it has to stay workable. Lamps are what should make it inviting, not legible.
   night: {
@@ -94,7 +110,10 @@ export const TIME_OF_DAY: Record<TimeOfDayId, SunPreset> = {
     kelvin: 4_000,
     // 900 still read as daylight, because this probe is ~4.4x more potent per unit than the stock one (see the scale warning on `ambient`) — 900 here is roughly 4000 in stock terms. At 200 the probe does only what a probe should after dark: keep surfaces from crushing to pure black, while the LIGHTING placed in the room is what actually lights it. Do not raise this to fix "too dark"; place a light.
     ambient: 200,
-    interiorLight: { defaultOn: true, lumens: 100_000, kelvin: 2_800 },
+    // 2400 K is warm-incandescent, close to candlelight, and deliberately warmer than a real ceiling fitting would be — night is the hour this light exists for, and the counter-fill above is what stops it reading as a flat orange wash. The lumens rose WITH the warming rather than after it: amber reads as dimmer than neutral white at equal output, so warming a bulb without paying for it in lumens makes a room that was already reported too dark darker still.
+    interiorLight: { defaultOn: true, lumens: 170_000, kelvin: 2_400 },
+    // NOT ZERO, and do not make it zero. This is the hour the constant 4000 lux fill did its real damage — with the sun at 0 and ambient at 200 it was the brightest and coldest thing in the room — but the fix is to back it off, not to remove it: a faint cool rim is what gives the warm bulb something to read against, and a flat-warm room is the same failure as a flat-cold one in a different hue.
+    counterFill: { intensity: 300, kelvin: 4_500 },
   },
 };
 
