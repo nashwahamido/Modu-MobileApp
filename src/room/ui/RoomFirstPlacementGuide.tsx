@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import * as Speech from "@/src/onboarding/speech";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
@@ -21,6 +22,21 @@ import type {
   PlacementGuideInteraction,
   PlacementGuideTarget,
 } from "./PlacementRail";
+
+/**
+ * Shown ONCE, ever, after the tutorial's LACK table.
+ *
+ * The route param that arms this guide is only ever sent by the tutorial on completion, so it
+ * already means "this player just finished their first table". What it cannot survive is a second
+ * arrival with the same param — a back navigation, a params restore, a re-run of the tutorial — and
+ * the script is a beginner's walkthrough, not something to sit through again.
+ *
+ * AsyncStorage, matching the room's own coaches (RoomExperience's ROOM_EDIT_GUIDE_KEY and
+ * ROOM_WELCOME_GUIDE_KEY) rather than the profile flag the HUD's Map coach uses. This one is tied to
+ * a route the player passes through exactly once on this device; the Map coach is about a control
+ * they carry between devices.
+ */
+const FIRST_PLACEMENT_GUIDE_KEY = "modu.first-placement-guide-seen.v1";
 
 type GuideStage =
   | "idle"
@@ -102,17 +118,40 @@ export function RoomFirstPlacementGuide({
       return;
     }
 
+    // Claimed BEFORE the storage read, not after. The read is async and this effect re-runs on every
+    // store change in the meantime, so without it two passes can both get past the guard and start
+    // the placement twice.
     requestConsumed.current = true;
-    const started = usePlacementStore.getState().startPlacing(requestedItemId, {
-      firstPlacementGuide: true,
-    });
-    if (!started) {
-      requestConsumed.current = false;
-      return;
-    }
 
-    onSessionChange?.(true);
-    setStage("style");
+    let alive = true;
+    void AsyncStorage.getItem(FIRST_PLACEMENT_GUIDE_KEY)
+      .then((seen) => {
+        if (!alive || seen) return;
+        const started = usePlacementStore
+          .getState()
+          .startPlacing(requestedItemId, { firstPlacementGuide: true });
+        if (!started) {
+          requestConsumed.current = false;
+          return;
+        }
+        // Written on START, not on finish. A player who backgrounds the app or walks away mid-script
+        // has still had it; the opposite failure is a walkthrough that returns until it happens to be
+        // played to the end.
+        AsyncStorage.setItem(FIRST_PLACEMENT_GUIDE_KEY, "1").catch((err) =>
+          console.warn("[room] could not save first-placement guide state", err),
+        );
+        onSessionChange?.(true);
+        setStage("style");
+      })
+      // On a storage failure the guide simply does not run. Better than the alternative: a read that
+      // fails on every launch would replay the whole script on every launch.
+      .catch((err) =>
+        console.warn("[room] could not read first-placement guide state", err),
+      );
+
+    return () => {
+      alive = false;
+    };
   }, [activeEdit, hydrated, onSessionChange, requestedItemId, stage]);
 
   useEffect(() => {

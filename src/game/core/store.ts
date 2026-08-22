@@ -176,6 +176,17 @@ interface GameState {
   beginPickup: (actionId: ActionId) => void;
   setDragFit: (fitState: FitState, matchedActionId: ActionId | null) => void;
   releaseHeld: () => "snap" | "recover";
+  /** The action the player keeps failing to place, and how many times in a row they have failed it.
+   *  Reset by a successful snap, by moving to a different part, and by clearMisses. A run of these on
+   *  ONE action is the difference between fumbling a drag and not being able to see where the part
+   *  goes — which is what the recenter prompt is for. */
+  missActionId: ActionId | null;
+  missCount: number;
+  /** Called when a drag ENDS WITHOUT PLACING — the part was set down in float mode, or flew back in
+   *  auto-return. Not by releaseHeld: that only runs when a socket matched, so a counter living
+   *  there counted successes and never saw a single failure. */
+  noteMiss: (actionId: ActionId) => void;
+  clearMisses: () => void;
   cancelHeld: () => void;
 
   examinePart: (partId: PartId) => void;
@@ -289,6 +300,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
   activeCluster: null,
   combiningCluster: null,
   mapOpen: false,
+  missActionId: null as ActionId | null,
+  missCount: 0,
   mapSeen: false,
   doneDismissed: false,
   completeConfirmed: false,
@@ -639,7 +652,11 @@ export const useGameStore = create<GameState>()((set, get) => ({
     if (!heldActionId) return "recover";
     const ok = fitState === "nearCorrect";
     if (ok) get().completeAction(matchedActionId ?? heldActionId);
-    set({ ...CLEARED });
+    // ONLY the success side is handled here. This function runs when a socket matched, so its
+    // "recover" return means something else — see noteMiss for where a failed drag is actually
+    // counted. A snap clears the run, so a player who gets it on the third go starts the next part
+    // clean.
+    set({ ...CLEARED, ...(ok ? { missActionId: null, missCount: 0 } : {}) });
     return ok ? "snap" : "recover";
   },
   cancelHeld: () =>
@@ -657,6 +674,14 @@ export const useGameStore = create<GameState>()((set, get) => ({
   examineCluster: (cluster) =>
     set({ ...CLEARED, examine: { kind: "cluster", cluster } }),
   clearExamine: () => set({ examine: null }),
+  // A run is counted PER ACTION, and only while it stays the same one: putting a part down to try a
+  // different one is a change of plan, not a fourth failure at the same socket.
+  noteMiss: (actionId) =>
+    set((s) => ({
+      missActionId: actionId,
+      missCount: s.missActionId === actionId ? s.missCount + 1 : 1,
+    })),
+  clearMisses: () => set({ missActionId: null, missCount: 0 }),
   setMapOpen: (open) => set({ mapOpen: open }),
   setMapSeen: (seen) => set({ mapSeen: seen }),
   setDoneDismissed: (v) => set({ doneDismissed: v }),

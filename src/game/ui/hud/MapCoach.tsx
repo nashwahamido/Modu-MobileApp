@@ -18,8 +18,8 @@ import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { avatarHeadForProfile } from "@/src/components/avatarAssets";
 import { CompanionPortrait } from "@/src/game/ui/hud/CompanionPortrait";
+import { useBuildPaused } from "@/src/game/ui/hud/useBuildPaused";
 import { useCurrentUserId, useRepos } from "@/src/data";
-import { buildMapVisible } from "@/src/game/core/evaluation/clusters";
 import { useGameStore } from "@/src/game/core/store";
 import { useMirror } from "@/src/game/ui/system/handedness";
 import { ELEVATION, RADIUS, SIZE, SPACE, ThemeScope, TYPE, type Theme, useFixedStyles } from "@/src/game/ui/system/theme";
@@ -72,18 +72,9 @@ export function MapCoach() {
   const focus = useGameStore((s) => s.settings.focusMode);
   const mode = useGameStore((s) => s.mode);
   const heldActionId = useGameStore((s) => s.heldActionId);
-  // THE WHOLE MAP RULE, not the `mapOpen` flag. The map arrives three ways and only one of them sets
-  // that flag — see buildMapVisible. Watching the flag alone put this card straight over the STAGE
-  // CHOOSER, which is how the map opens on every multi-stage build.
-  const completed = useGameStore((s) => s.completed);
-  const activeCluster = useGameStore((s) => s.activeCluster);
-  const mapSeen = useGameStore((s) => s.mapSeen);
-  const mapOpen = useGameStore((s) => s.mapOpen);
-  const mapVisible = buildMapVisible(furniture, new Set(completed), {
-    activeCluster,
-    mapSeen,
-    mapOpen,
-  });
+  // THE WHOLE MAP RULE, not the `mapOpen` flag — shared with the idle and stuck cards and with the
+  // spoken step, so the four cannot disagree about whether the build is paused.
+  const mapVisible = useBuildPaused();
 
   const [visible, setVisible] = useState(false);
   const decided = useRef(false);

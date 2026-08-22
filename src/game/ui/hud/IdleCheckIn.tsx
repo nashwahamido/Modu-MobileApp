@@ -1,14 +1,22 @@
-
 import { useEffect, useRef, useState } from "react";
 import { Animated, AppState, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { avatarHeadForProfile } from "@/src/components/avatarAssets";
 import { CompanionPortrait } from "@/src/game/ui/hud/CompanionPortrait";
 import { useGameStore } from "@/src/game/core/store";
+import { useBuildPaused } from "@/src/game/ui/hud/useBuildPaused";
 import { ELEVATION, RADIUS, SPACE, ThemeScope, TYPE, type Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 
 const IDLE_MS = 20_000;
 const WELCOME_MS = 6_000;
+
+/** How long "Are you still here?" stays before it puts itself away.
+ *
+ *  SHORTER THAN THE GAP TO StuckCoach, deliberately. That card asks at 30s and this one at 20s, so
+ *  without a limit both would be on screen at once, saying different things about the same silence.
+ *  It is a check-in rather than a question, so nothing is waiting on an answer and letting it expire
+ *  costs the player nothing. */
+const ASK_VISIBLE_MS = 8_000;
 const CARD_CREAM = "#FBF8F3";
 const CARD_INK = "#231F20";
 
@@ -24,8 +32,9 @@ export function IdleCheckIn() {
   const driveActionId = useGameStore((s) => s.driveActionId);
   const orientationActionId = useGameStore((s) => s.orientationActionId);
   const activeCluster = useGameStore((s) => s.activeCluster);
-  const mapOpen = useGameStore((s) => s.mapOpen);
   const hintPulse = useGameStore((s) => s.hintPulse);
+
+  const paused = useBuildPaused();
 
   const [asking, setAsking] = useState(false);
   const [welcoming, setWelcoming] = useState(false);
@@ -38,13 +47,15 @@ export function IdleCheckIn() {
   const momentum = profile === "momentum";
 
   useEffect(() => {
-    if (!momentum || mapOpen || welcoming) return;
+    // The map is a pause: no check-in behind it, and no idle clock running either — time spent
+    // looking at the build map is not time spent stuck.
+    if (!momentum || paused || welcoming) return;
     setAsking(false);
     const timer = setTimeout(() => setAsking(true), IDLE_MS);
     return () => clearTimeout(timer);
   }, [
     momentum,
-    mapOpen,
+    paused,
     welcoming,
     completedCount,
     heldActionId,
@@ -77,6 +88,12 @@ export function IdleCheckIn() {
     return () => clearTimeout(timer);
   }, [welcoming]);
 
+  useEffect(() => {
+    if (!asking) return;
+    const timer = setTimeout(() => setAsking(false), ASK_VISIBLE_MS);
+    return () => clearTimeout(timer);
+  }, [asking]);
+
   // The same slow breath the tutorial's card uses, so the two read as one character rather than as
   // two different notifications from the same app.
   useEffect(() => {
@@ -95,7 +112,7 @@ export function IdleCheckIn() {
     return () => animation.stop();
   }, [pulse, asking, welcoming]);
 
-  if (!momentum || mapOpen || (!asking && !welcoming)) return null;
+  if (!momentum || paused || (!asking && !welcoming)) return null;
 
   const dismiss = () => {
     setAsking(false);

@@ -205,8 +205,9 @@ export function BuildComplete() {
     router.replace({ pathname: "/room", params: { open: "inventory" } });
   };
   // Straight into the room with the ghost already in hand; falls back to the inventory for the rare furniture with no room model (the tutorial).
+  // NO `firstPlacementGuide` FLAG. It reads like "start a placement", but RoomFirstPlacementGuide watches it and takes any edit carrying it as its cue to run Lumi's whole first-placement script — so every finished build re-ran a tutorial the player saw once, after their first table. The ghost still arrives in hand; startPlacing does that on its own.
   const placeInRoom = () => {
-    if (!furnitureId || !usePlacementStore.getState().startPlacing(furnitureId, { firstPlacementGuide: true })) {
+    if (!furnitureId || !usePlacementStore.getState().startPlacing(furnitureId)) {
       goToInventory();
       return;
     }
