@@ -1,46 +1,16 @@
-// "Are you still here?" — Sparky, after the build has sat untouched for a while.
-//
-// MOMENTUM ONLY, and deliberately so. The profile exists for players who lose the thread when
-// progress stalls or after an interruption, and this is the interruption. Every other profile is
-// built around not being nudged: Control asks for help when it wants it, Clear Path is already
-// showing exactly one next step, and Lumi is being read to. A check-in they did not ask for is an
-// interruption to them rather than a rescue.
-//
-// The tutorial's own version (tutorial/MomentumAttentionOverlay) is the model for the look, but not
-// for the behaviour, and the differences are the whole design:
-//
-//   - NO SCRIM. The tutorial dims the screen because the script is the only thing happening. Here
-//     there is a real build underneath that the player may be looking at while they think.
-//   - IT DOES NOT BLOCK. The tutorial's layer is `pointerEvents: auto`, which eats the first touch.
-//     A player returning to their build should not lose their first drag to a card asking whether
-//     they are there.
-//   - A MUCH LONGER FUSE. 12s is right for a tutorial step that names the exact next tap; it is far
-//     too twitchy for someone reading an instruction or looking through the tray.
+
 import { useEffect, useRef, useState } from "react";
 import { Animated, AppState, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { avatarHeadForProfile } from "@/src/components/avatarAssets";
 import { CompanionPortrait } from "@/src/game/ui/hud/CompanionPortrait";
 import { useGameStore } from "@/src/game/core/store";
-import { ELEVATION, RADIUS, SPACE, TYPE, type Theme, useFixedStyles } from "@/src/game/ui/system/theme";
+import { ELEVATION, RADIUS, SPACE, ThemeScope, TYPE, type Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 
-/**
- * How long the build sits untouched before Sparky asks.
- *
- * 20 SECONDS. Longer than the tutorial's 12, because the tutorial names the single tap the player
- * owes it and silence there really is being stuck, while here they may be reading the step or
- * hunting the right part. Shorter than the 45 this started at: for the profile built around losing
- * the thread when progress stalls, a check-in that waits three quarters of a minute arrives after
- * the moment it was meant to catch.
- *
- * The fuse restarts on ANY activity, touches included, so the only way to reach it is a genuinely
- * still screen.
- */
 const IDLE_MS = 20_000;
-
-/** How long the "welcome back" card stays before it fades itself out. It is a greeting, not a
- *  question, so nothing is waiting on an answer and it should not need dismissing. */
 const WELCOME_MS = 6_000;
+const CARD_CREAM = "#FBF8F3";
+const CARD_INK = "#231F20";
 
 export function IdleCheckIn() {
   const styles = useFixedStyles(makeStyles);
@@ -133,6 +103,11 @@ export function IdleCheckIn() {
   };
 
   return (
+    // LIGHT, always. This card floats OVER the build the way the map and the celebrations do, and
+    // play.tsx already scopes those three to light for the same reason: "Assemble in Dark Mode" is a
+    // setting about the build surface, not about the panels shown on top of it. Without this the
+    // portrait's rim resolved dark against a cream card.
+    <ThemeScope value="light">
     <View
       style={styles.layer}
       // BOX-NONE, so the build underneath stays live and the card never eats a touch.
@@ -175,6 +150,7 @@ export function IdleCheckIn() {
         </View>
       </Animated.View>
     </View>
+    </ThemeScope>
   );
 }
 
@@ -204,23 +180,27 @@ const makeStyles = (t: Theme) =>
       paddingHorizontal: 14,
       paddingVertical: 12,
       borderRadius: 16,
-      borderWidth: 3,
-      // LAVENDER, the app's one interactive accent. Gold means EARNED in this palette — XP and score —
-      // so a gold ring around a check-in read as a reward the player had just been given.
-      borderColor: t.accent,
-      backgroundColor: t.surface,
+      // NO STROKE. The card is separated from the scene by its fill and its shadow alone — an
+      // outline on a card that already sits on a shaped surface reads as a second edge.
+      // The app's floating-panel cream, not the theme surface, so it matches every other card that
+      // sits over the build rather than following the build's own theme.
+      backgroundColor: CARD_CREAM,
       ...ELEVATION.card,
     },
-    title: { ...TYPE.title, color: t.text },
+    title: { ...TYPE.title, color: CARD_INK },
     message: { ...TYPE.body, marginTop: 3, color: t.textDim },
+    // RIGHT-ALIGNED and FILLED with the accent: it is the one thing on this card that can be pressed,
+    // and lavender is the app's single "you can act on this" colour. As a quiet grey pill on the left
+    // it read as a label rather than a control.
     dismiss: {
-      alignSelf: "flex-start",
+      alignSelf: "flex-end",
       marginTop: SPACE.sm,
       paddingHorizontal: SPACE.md,
       paddingVertical: SPACE.sm,
       borderRadius: RADIUS.pill,
-      backgroundColor: t.surfaceRaised,
+      backgroundColor: t.accent,
     },
-    dismissPressed: { backgroundColor: t.border },
-    dismissText: { ...TYPE.label, color: t.text },
+    dismissPressed: { backgroundColor: t.accentPressed },
+    // onAccent, not text: the same label colour every filled button in the app uses (system/Button).
+    dismissText: { ...TYPE.label, color: t.onAccent },
   });

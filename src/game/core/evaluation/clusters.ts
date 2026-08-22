@@ -160,3 +160,34 @@ export function combineReady(
     : clustersOf(f.parts);
   return ids.every((cid) => clusterComplete(f, cid, done));
 }
+
+/**
+ * Whether the build map is on screen right now.
+ *
+ * ONE RULE, IN ONE PLACE — and it lives here rather than in the component because a second reader
+ * appeared and immediately got it wrong. The map arrives THREE ways and only one of them is the
+ * `mapOpen` flag:
+ *
+ *   mustChoose — several sub-assemblies and none picked yet. The map IS the chooser.
+ *   intro      — a single-cluster build showing what lies ahead, once per loaded furniture.
+ *   mapOpen    — opened deliberately, mid-build, from the Map button.
+ *
+ * Anything that needs to stay out of the map's way has to ask about all three. Testing `mapOpen`
+ * alone looks right and is wrong for the two commonest openings: the HUD coach that points AT the
+ * Map button drew itself straight over the chooser on any multi-stage build.
+ *
+ * `overviewOnly` is the tutorial's pause-only overview, which must never inherit the one-time intro.
+ */
+export function buildMapVisible(
+  f: Furniture | null | undefined,
+  done: ReadonlySet<ActionId>,
+  state: { activeCluster: ClusterId | null; mapSeen: boolean; mapOpen: boolean },
+  overviewOnly = false,
+): boolean {
+  if (!f) return false;
+  if (overviewOnly) return state.mapOpen;
+  const mustChoose =
+    requiresClusterFocus(f) && !state.activeCluster && !combineReady(f, done);
+  const intro = focusableClusterIds(f).length === 0 && !state.mapSeen;
+  return mustChoose || intro || state.mapOpen;
+}
