@@ -21,7 +21,7 @@ export const avatarModes: AvatarMode[] = [
       "For users who may find text-heavy instructions tiring and prefer visual demonstrations.",
     bullets: [
       "Visual-first instructions",
-      "Icon-based part matching",
+      "Lighter instructions",
       "Replay animation and 3D preview",
     ],
   },

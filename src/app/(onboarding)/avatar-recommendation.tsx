@@ -4,6 +4,7 @@ import * as Speech from "@/src/onboarding/speech";
 import { StyleSheet, Animated, Image, Pressable, Text, View, useWindowDimensions } from "react-native";
 import { useEffect, useRef, useState } from "react";
 import { avatarModes } from "@/src/onboarding/avatarModes";
+import { avatarPath } from "@/src/onboarding/voiceAssets";
 import type { ModeId } from "@/src/onboarding/questionnaire";
 import { VoiceButton } from "@/src/game/ui/hud/VoiceButton";
 import { useGameStore } from "@/src/game/core/store";
@@ -301,7 +302,15 @@ export default function AvatarRecommendationScreen() {
 
   const speakSelectedMode = () => {
     Speech.stop();
-    Speech.speak(
+    // THE COMPANION'S OWN RECORDING, with the assembled sentence as the fallback. speakLine plays
+    // the clip if storage has one and speaks the text if it does not, so a companion recorded later
+    // needs no change here — same contract the questionnaire's buttons already use.
+    //
+    // The fallback text is what this button said before, unchanged: it is not a transcript of the
+    // recording and does not need to be. If the clip is missing the player still hears which avatar
+    // they were given and why, which is the whole job of the button.
+    Speech.speakLine(
+      avatarPath(selectedMode.avatarName),
       `Your recommended avatar is ${selectedMode.avatarName} in ${selectedMode.title}. ${selectedMode.avatarName} is ${selectedMode.personality}. ${selectedMode.explanation}. ${selectedMode.bullets.join(". ")}.`,
       {
         language: "en-US",

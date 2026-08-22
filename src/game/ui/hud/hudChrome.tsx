@@ -19,8 +19,6 @@ import { SCENE_BACKGROUND } from "@/src/game/scene/lighting";
 // 24 inside the 36 chip: the art was nearly filling its container, which read as heavy against the scene. The chip size is unchanged, so the grid and the tap targets hold.
 export const HUD_ICON = 24;
 
-const SOUND_ON = require("@/src/assets/ui/icons/icon-sound-on.png");
-const SOUND_OFF = require("@/src/assets/ui/icons/icon-sound-off.png");
 
 /**
  * A HUD icon inside a container chip — surface fill, hairline border, rounded corners, the
@@ -108,13 +106,22 @@ export function SpokenStepsButton({ style }: { style?: StyleProp<ViewStyle> }) {
   const profile = useGameStore((s) => s.profile);
   const audio = useGameStore((s) => s.settings.audio);
   const setSettings = useGameStore((s) => s.setSettings);
+  // ABOVE the early return, like every other hook here — a hook called past a conditional return
+  // changes the hook order between the renders where this button shows and the ones where it does
+  // not, which React treats as a different component.
+  const icon = useHudIcon(audio ? "soundOn" : "soundOff");
   if (profile !== "visual") return null;
   return (
     <IconButtonBare
-      // The same pair VoiceButton uses, so "sound" looks like one idea across the app. The crossed
-      // speaker says WHAT is off; the chip's own disabled dimming is not used, because the button is
-      // not disabled — it is the way back.
-      source={audio ? SOUND_ON : SOUND_OFF}
+      // Through the icon registry, so the speaker follows the chrome it sits on: the cream art on
+      // the dark HUD, the original on cream. It was pinned to the light pair, which is a dark glyph
+      // — on the dark chip it went dark-on-dark while the gear beside it inverted correctly.
+      //
+      // Still the same pair VoiceButton draws, so "sound" looks like one idea across the app; that
+      // button lives on onboarding's cream and keeps the light art either way. The crossed speaker
+      // says WHAT is off; the chip's own disabled dimming is not used, because the button is not
+      // disabled — it is the way back.
+      source={icon}
       onPress={() => setSettings({ audio: !audio })}
       // 24, the same glyph size the settings gear draws inside its own 36 chip. The chips were
       // already identical; at 20 the speaker just sat smaller inside its own, which reads as a
