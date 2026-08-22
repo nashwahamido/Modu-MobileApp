@@ -431,16 +431,20 @@ export function MascotGuideOverlay({
             />
           ) : null}
           {/* The arrow, on every step that asks the player to take something OUT OF THE TRAY. That is
-              three steps, not one: the first part, the first bolt, and the legs. They all begin with
-              the same long-press on the same column, so they all want the same cue — it was keyed to
-              the first step alone, which taught the gesture once and then left the player to
-              remember it four screens later. */}
+              two steps: the first part and the first bolt. Both begin with the same long-press on the
+              same column, so both want the same cue — it was keyed to the first step alone, which
+              taught the gesture once and then left the player to remember it a few screens later.
+
+              NOT `install-four-legs`. That step is "Continue assembling": the teaching is over, the
+              player has already long-pressed the tray twice, and the step spans the whole rest of the
+              build rather than one action. An arrow pinned over the tray for all of it points at a
+              gesture they have shown they know, on top of the card and the part they are choosing
+              between. The two steps above are where the cue earns its place. */}
           {!undoPreviewActive &&
           presentation.showVisualDemo &&
           (step.id === 'long-press-part' ||
             step.id === 'visual-pickup-and-place' ||
-            step.id === 'place-connector' ||
-            step.id === 'install-four-legs') ? (
+            step.id === 'place-connector') ? (
             <VisualLongPressCue frame={frame} />
           ) : null}
           {!undoPreviewActive && presentation.showVisualDemo && step.id === 'view-under-table' ? (

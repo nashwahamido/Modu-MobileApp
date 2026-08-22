@@ -9,7 +9,16 @@
 import type { ImageSourcePropType } from "react-native";
 import { useThemeId } from "@/src/game/ui/system/theme";
 
-export type HudIconName = "pause" | "undo" | "recenter" | "settings" | "tools" | "play" | "focus";
+export type HudIconName =
+  | "pause"
+  | "undo"
+  | "recenter"
+  | "settings"
+  | "tools"
+  | "play"
+  | "focus"
+  | "soundOn"
+  | "soundOff";
 
 const LIGHT: Record<HudIconName, ImageSourcePropType> = {
   pause: require("@/src/assets/ui/icons/icon-pause.png"),
@@ -19,6 +28,10 @@ const LIGHT: Record<HudIconName, ImageSourcePropType> = {
   tools: require("@/src/assets/ui/icons/icon-tools.png"),
   play: require("@/src/assets/ui/icons/icon-play.png"),
   focus: require("@/src/assets/ui/icons/icon-focus.png"),
+  // The speaker pair. The LIGHT art is shared with VoiceButton, which draws it on onboarding's cream
+  // — the same glyph in both places is the point, so "sound" reads as one idea across the app.
+  soundOn: require("@/src/assets/ui/icons/icon-sound-on.png"),
+  soundOff: require("@/src/assets/ui/icons/icon-sound-off.png"),
 };
 
 const DARK: Record<HudIconName, ImageSourcePropType> = {
@@ -29,6 +42,8 @@ const DARK: Record<HudIconName, ImageSourcePropType> = {
   tools: require("@/src/assets/ui/icons/icon-tools-dark.png"),
   play: require("@/src/assets/ui/icons/icon-play-dark.png"),
   focus: require("@/src/assets/ui/icons/icon-focus-dark.png"),
+  soundOn: require("@/src/assets/ui/icons/icon-sound-on-dark.png"),
+  soundOff: require("@/src/assets/ui/icons/icon-sound-off-dark.png"),
 };
 
 /** The icon for a HUD control in the CURRENT theme. Dark art in dark mode, the original everywhere

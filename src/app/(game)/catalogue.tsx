@@ -285,16 +285,31 @@ export default function CatalogueScreen() {
           ))}
         </View>
       </Animated.ScrollView>
-      {/* Pinned to the SCREEN, not the scroll: the ropes run off the top edge and the sign hangs
-          beneath them. It fades on scroll rather than travelling with the grid. */}
+      {/* Pinned to the SCREEN, not the scroll: it fades on scroll rather than travelling with the
+          grid. Same drop-and-settle spring the wooden board hung on — only the sign itself changed. */}
       <Animated.View style={[styles.boardSign, signStyle]} pointerEvents="none">
-        <Image
-          source={require("@/src/assets/ui/board-wooden.png")}
-          style={styles.board}
-          resizeMode="contain"
-          accessibilityRole="image"
-          accessibilityLabel="Furniture Catalogue"
-        />
+        {/* TWO NESTED VIEWS, not one. The shadow and the rounded clip cannot share a node on
+            Android: `overflow: hidden` clips the shadow away with everything else outside the box.
+            So the outer view carries the radius and the shadow, the inner carries the radius and
+            the clip, and the art sits inside that. */}
+        <View style={styles.headerShadow}>
+          <View style={styles.headerPanel}>
+            <Image
+              source={require("@/src/assets/ui/cream-header.png")}
+              style={StyleSheet.absoluteFill}
+              // STRETCH, not contain: the view is already sized by the art's own aspect ratio, so
+              // the two agree exactly and this only guarantees the cream reaches the rounded edge.
+              // `contain` would letterbox on a rounding difference and show the fill colour beneath.
+              resizeMode="stretch"
+            />
+            {/* The title is TEXT now, where the wooden board had it painted into the PNG. It scales
+                with the reading-size setting, it can be read aloud, and rewording it costs nothing —
+                which is why the image no longer carries an accessibilityLabel. */}
+            <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit>
+              Furniture Catalogue
+            </Text>
+          </View>
+        </View>
       </Animated.View>
     </SceneBackdrop>
   );
@@ -369,6 +384,20 @@ const THUMB_INSET = "#CFCAC2";
 
 /** The single text colour for this screen (wireframe ink). */
 const INK = "#231F20";
+
+/** The header panel's size. 288 ÷ (985/222) is 65, so this PAIR reproduces the artwork's ratio
+ *  exactly at full width, with no squash. No `aspectRatio` in the style: Yoga ignores it once both
+ *  width and height are set, so stating the ratio there would have been a comment pretending to be
+ *  a rule. Change both together, or the stadium ends go oval.
+ *
+ *  Down from 360×81, which crowded the two pills either side of it and read as a banner rather than
+ *  as a title. The type did not shrink with it — the panel was the thing that was too big. */
+const HEADER_W = 288;
+const HEADER_H = 65;
+
+/** The header art's own top-band cream, sampled from cream-header.png. It sits UNDER the artwork and
+ *  is never seen — its job is to give the shadow view a background so Android rounds its outline. */
+const HEADER_CREAM = "#F3ECE0";
 
 /** The finish carousel: how long a table sits still, and how long the slide to the next one takes.
  *  Together they set the loop's pace — four cells at 1.75s each is a ~7s cycle, slow enough to read
@@ -732,21 +761,58 @@ const makeStyles = (t: Theme) =>
     // The board sits BETWEEN the two pills and takes the middle. overflow hidden + the image's
     // negative marginTop is what clips the rope-tops, so they read as running off the screen edge.
     headerSpacer: { flex: 1 },
-    // The sign hangs from the top of the SCREEN. Centered across the full width; pinned so the grid
-    // scrolls underneath and the sign fades out instead of following it.
+    // The panel hangs from the top of the SCREEN. Centered across the full width; pinned so the grid
+    // scrolls underneath and it fades out instead of following it.
     boardSign: {
       position: "absolute",
       top: 0,
       // The extra right inset pushes the centred sign slightly LEFT of true centre. Increase it to
-      // shift further left; drop it back to 0 to re-centre.
+      // shift further left; drop it back to 0 to re-centre. Unchanged from the wooden board, so the
+      // header lands exactly where the sign did.
       left: 0,
       right: 28,
       alignItems: "center",
       zIndex: 5,
     },
-    // 2.77:1 art. The negative marginTop cancels the transparent cap above the ropes in the PNG, so
-    // the rope-tops meet the screen edge. Tune height to resize; width follows the aspect ratio.
-    board: { width: "100%", maxWidth: 360, height: 140, aspectRatio: 1109 / 401, marginTop: -44 },
+    // Unlike the wooden board this art fills its own box — the PNG has no transparent cap to
+    // cancel, so there is no negative marginTop here. The small POSITIVE one is the gap from the
+    // screen edge: the board's ropes ran off the top, this panel does not.
+    //
+    // Radius is half the height, which is what makes the ends read as the stadium the art is drawn
+    // with. See HEADER_W/HEADER_H above for why the two are the numbers they are.
+    headerShadow: {
+      width: "100%",
+      maxWidth: HEADER_W,
+      height: HEADER_H,
+      marginTop: 18,
+      borderRadius: HEADER_H / 2,
+      // A BACKGROUND IS LOAD-BEARING HERE, not decoration. Android derives a view's shadow outline
+      // from its background drawable — with none, `elevation` falls back to the full rectangle and
+      // draws grey square corners around a rounded pill, which is what broke the left end. The
+      // colour is the art's own top cream, so nothing shows even at the antialiased edge.
+      backgroundColor: HEADER_CREAM,
+      ...SHADOW,
+    },
+    headerPanel: {
+      flex: 1,
+      borderRadius: HEADER_H / 2,
+      overflow: "hidden",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    // Sits on the art's LIGHTER upper band rather than dead centre: the PNG carries its own shading,
+    // with a darker sweep across the lower third, and text centred vertically straddled the two.
+    headerTitle: {
+      ...TYPE.title,
+      fontSize: 20,
+      // INK, the same colour every other word on this screen uses — 13.9:1 on the panel's cream. The
+      // umber it replaced was a second dark text colour for one title, which is the drift the theme
+      // header warns about; the header is not special enough to earn its own ink.
+      color: INK,
+      marginBottom: HEADER_H * 0.12,
+      paddingHorizontal: SPACE.lg,
+      textAlign: "center",
+    },
     trendArrow: { width: 24, height: 24 },
     pressedSurface: { backgroundColor: t.surfaceRaised },
     pickerWrap: { position: "relative", zIndex: 20 },

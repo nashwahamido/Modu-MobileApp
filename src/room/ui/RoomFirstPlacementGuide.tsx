@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { router } from "expo-router";
-import * as Speech from "expo-speech";
+import * as Speech from "@/src/onboarding/speech";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { avatarForProfile } from "@/src/components/avatarAssets";
@@ -16,6 +16,7 @@ import {
   useStyles,
 } from "@/src/game/ui/system/theme";
 import { usePlacementStore } from "../core/placement";
+import { roomGuideVoicePath } from "./roomGuideVoice";
 import type {
   PlacementGuideInteraction,
   PlacementGuideTarget,
@@ -166,7 +167,21 @@ export function RoomFirstPlacementGuide({
         ? `Your furniture is home. ${COMPLETE_COPY[mode]}`
         : STAGE_COPY[stage].speech;
     Speech.stop();
-    Speech.speak(message, { rate: 0.82 });
+    // LUMI'S RECORDING WHERE THERE IS ONE, synthesis everywhere else.
+    //
+    // Gated on the profile, not just on the clip existing: the bucket holds one companion's takes of
+    // this guide, and the guide runs for all four. Reading `Lumi-room` to a player who chose Pebble
+    // would hand them the wrong voice mid-sentence — worse than the synthesised line they get now,
+    // and silent about being wrong. The other three keep exactly the behaviour they have.
+    //
+    // `rotate` has no recording even for Lumi, so it falls through to speech here too. speakLine
+    // takes both and picks, so there is no branch to keep in step.
+    const clip = mode === "visual" ? roomGuideVoicePath(stage) : null;
+    if (clip) {
+      Speech.speakLine(clip, message, { rate: 0.82 });
+    } else {
+      Speech.speak(message, { rate: 0.82 });
+    }
     return () => {
       Speech.stop();
     };
