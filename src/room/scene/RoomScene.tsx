@@ -69,7 +69,8 @@ import { useSurfaceTextures } from "./useSurfaceTextures";
 import { useCurrentUserId, useRepos } from "../../data";
 import { useShopStore } from "../../data/shop/store";
 import { setCameraAzimuth, usePlacementStore } from "../core/placement";
-import { aimToDirection } from "../core/lightAim";
+import { AIM_DOWN, aimToDirection, aimTuple } from "../core/lightAim";
+import { CEILING_LIGHT_AT, CEILING_LIGHT_RIG, ceilingCone, fillLumens } from "../core/ceilingLight";
 import { useGameStore } from "../../game/core/store";
 import { sunDirection, sunPreset, type CeilingLight } from "../core/timeOfDay";
 import {
@@ -492,24 +493,10 @@ const LIT = {
   bulbAboveTopMetres: 0.28,
 };
 
-// The room's OWN light: a fixture, not a bought lamp, so it takes no placement and reads its look from the HOUR instead of from item_lights. Geometry is global and look is per-hour, and the split is deliberate — where a ceiling fitting hangs and how far it throws are facts about the room, while how bright and how warm it burns is what the player is choosing when they pick an hour. Derived from ROOM_SHELL rather than written out, because nothing in this codebase carries its own copy of a shell measurement: re-export the shell and this follows it.
-const CEILING_LIGHT = {
-  x: (ROOM_SHELL.floor.minX + ROOM_SHELL.floor.maxX) / 2,
-  z: (ROOM_SHELL.floor.minZ + ROOM_SHELL.floor.maxZ) / 2,
-  // Just under the wall band's top, so the source sits inside the room rather than buried in the ceiling slab.
-  y: ROOM_SHELL.walls["x-min"].top - 0.1,
-  // UNLIKE the brightness, this one IS derived: the farthest thing to light is a floor corner, hypot(2.25, 2.2495) = 3.18 m out and 2.82 m down, so 4.25 m of slant distance. 6 leaves the corners inside the falloff instead of sitting on its edge.
-  reachMetres: 6,
-};
+// Scene space, resolved once: the position is a module constant in ../core/ceilingLight and this light never moves, so there is nothing here for a hook to recompute. Everything ELSE about the fitting — cone, reach, the key/fill split — lives in that module too, because it is geometry rather than rendering; only this conversion is the renderer's business.
+const CEILING_LIGHT_SCENE = roomToScene(CEILING_LIGHT_AT);
 
-// Scene space, resolved once: ROOM_SHELL is a module constant and this light never moves, so there is nothing here for a hook to recompute.
-const CEILING_LIGHT_AT = roomToScene({
-  x: CEILING_LIGHT.x,
-  y: CEILING_LIGHT.y,
-  z: CEILING_LIGHT.z,
-});
-
-// Simpler than RoomLit in the one way that matters: RoomLit has to chase a piece being dragged across the room, so it creates its entity once and moves it with setPosition. This one never moves, so it is a plain create-on-mount, destroy-on-unmount. The effect's dependency on `light` is what makes an hour change rebuild the entity — lumens and kelvin are CREATION parameters of createLightEntity, and TIME_OF_DAY is a module constant, so each preset's interiorLight is a stable object identity and a different hour is a genuinely different reference. No key prop needed; this is the same mechanism RoomLit relies on for item.light.
+// Simpler than RoomLit in the one way that matters: RoomLit has to chase a piece being dragged across the room, so it creates its entities once and moves them with setPosition. This one never moves, so it is a plain create-on-mount, destroy-on-unmount — for BOTH entities, and both must be destroyed or every hour change strands one. The effect's dependency on `light` is what makes an hour change rebuild them: lumens and kelvin are CREATION parameters of createLightEntity, and TIME_OF_DAY is a module constant, so each preset's interiorLight is a stable object identity and a different hour is a genuinely different reference. No key prop needed; this is the same mechanism RoomLit relies on for item.light.
 const RoomCeilingLight = memo(function RoomCeilingLight({
   light,
 }: {
@@ -518,23 +505,39 @@ const RoomCeilingLight = memo(function RoomCeilingLight({
   const { lightManager, scene } = useFilamentContext();
 
   useEffect(() => {
-    const entity = lightManager.createLightEntity(
-      // Point, not spot: a spot from the ceiling centre lays a disc on the floor and leaves the corners black, and a ceiling fitting in a 4.5 x 4.5 m room is meant to fill it.
-      "point",
+    const at = CEILING_LIGHT_SCENE;
+    // THE KEY. A spot aimed straight down, and the reason this is no longer one point light: it lays a defined pool on the floor and lets the upper walls and corners fall away, which is the only cue available that a bulb hangs overhead — the fitting itself can never be drawn, see ../core/ceilingLight. The old comment here argued a spot "leaves the corners black", which was true of a LONE spot and is what the fill below answers.
+    const key = lightManager.createLightEntity(
+      "spot",
       light.kelvin,
       light.lumens,
+      aimTuple(AIM_DOWN),
+      [at.x, at.y, at.z],
+      // No shadows yet: switched on in its own step so it can be judged, and dropped, on its own.
+      false,
+      CEILING_LIGHT_RIG.keyReachMetres * SCENE_SCALE,
+      ceilingCone(),
+    );
+    // THE FILL. A dim wide point at the same position. The corners sit OUTSIDE the key's cone by design, and this is what keeps them readable enough to place furniture into rather than black. It is not a second key: if the corners read too dark, raise CEILING_LIGHT_RIG.fillRatio before widening the cone, because widening spends the very gradient the key exists to create.
+    const fill = lightManager.createLightEntity(
+      "point",
+      light.kelvin,
+      fillLumens(light.lumens),
       undefined,
-      [CEILING_LIGHT_AT.x, CEILING_LIGHT_AT.y, CEILING_LIGHT_AT.z],
+      [at.x, at.y, at.z],
       // No shadows, for the reason RoomLit already states: a point light needs a six-face cube shadow map, the most expensive thing available here.
       false,
-      CEILING_LIGHT.reachMetres * SCENE_SCALE,
+      CEILING_LIGHT_RIG.fillReachMetres * SCENE_SCALE,
       // No cone: that argument is the spot's, and this is a point.
       undefined,
     );
-    scene.addEntity(entity);
+    scene.addEntity(key);
+    scene.addEntity(fill);
     return () => {
-      scene.removeEntity(entity);
-      lightManager.destroy(entity);
+      scene.removeEntity(key);
+      scene.removeEntity(fill);
+      lightManager.destroy(key);
+      lightManager.destroy(fill);
     };
   }, [lightManager, scene, light]);
 
@@ -1578,13 +1581,12 @@ export function RoomScene({
             direction={sunDirection(sun)}
             castShadows
           />
-          {/* One cool counter-fill, kept weak. The reference look is high-contrast: warm bounce with
-              genuinely dark corners. The old rig had 64k of flat fill here, which washed exactly that
-              contrast out. */}
+          {/* One cool counter-fill, kept weak. The reference look is high-contrast: warm bounce with genuinely dark corners. The old rig had 64k of flat fill here, which washed exactly that contrast out. */}
+          {/* PER-HOUR, and that is not cosmetic. This light burns at every hour while the sun can drop to zero, so a constant figure here becomes the DOMINANT light after dark — and being the room's coldest source, it then fights every warm bulb in it. Held as literals until 2026-08-18, it was the real cause of a "the ceiling light is too cold" report that no edit to the ceiling light could have fixed. Hard-coding these again is that bug, not a simplification. */}
           <Light
             type="directional"
-            colorKelvin={6_800}
-            intensity={4_000}
+            colorKelvin={sun.counterFill.kelvin}
+            intensity={sun.counterFill.intensity}
             direction={[0.6, -0.45, 0.5]}
           />
           {/* The room's own ceiling light. Off at the three daylight hours by default and on after dark, with the player's switch overriding either way — see ceilingLightOn. */}

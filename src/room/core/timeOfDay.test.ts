@@ -52,6 +52,11 @@ test("the day warms and dims from midday to sunset", () => {
   assert.ok(TIME_OF_DAY.afternoon.kelvin < TIME_OF_DAY.midday.kelvin);
   assert.ok(TIME_OF_DAY.sunset.intensity < TIME_OF_DAY.midday.intensity);
   assert.ok(TIME_OF_DAY.sunset.ambient < TIME_OF_DAY.midday.ambient);
+  // Sunset must stay the dimmest hour that still has a sun. "Dim enough that a lamp would start to matter" is the preset's identity, and it is the one this file is most likely to lose: a low raking sun looks better the harder you push it, right up to the point where sunset is just afternoon with an orange filter.
+  assert.ok(
+    TIME_OF_DAY.sunset.intensity < TIME_OF_DAY.afternoon.intensity,
+    "sunset brighter than afternoon is not a sunset",
+  );
 });
 
 test("an unknown id falls back rather than throwing", () => {
@@ -86,6 +91,46 @@ test("the ceiling light brightens against the sun it competes with, and warms af
     TIME_OF_DAY.night.interiorLight.kelvin < TIME_OF_DAY.midday.interiorLight.kelvin,
     "a 2800 K bulb in daylight reads as a yellow stain rather than as a light",
   );
+});
+
+// The counter-fill burns at EVERY hour, unlike the sun — which makes it the one light that can quietly wreck a preset it was never tuned for. It ran at a constant 4000 lux / 6800 K until 2026-08-18, and at night (sun 0, ambient 200) that made it the second-largest contributor in the scene and by far its coldest: every warm bulb in the room was fighting it, and the BULB looked like the thing that was wrong. These assertions are what stop that returning.
+test("the counter-fill stays cool, stays lit, and backs off after dark", () => {
+  for (const id of TIME_OF_DAY_IDS) {
+    const { counterFill, interiorLight } = TIME_OF_DAY[id];
+    // Zeroing it is the tempting move for "make night warmer" and it is the wrong one: warm reads as warm only against something cool, so a flat-warm room is the same failure as a flat-cold one in a different hue.
+    assert.ok(counterFill.intensity > 0, `${id}: a counter-fill at zero leaves the warmth nothing to read against`);
+    assert.ok(
+      counterFill.kelvin > interiorLight.kelvin,
+      `${id}: a fill warmer than the bulb it counters has stopped being a counter-fill`,
+    );
+  }
+  // Asserted only from afternoon onward, deliberately. Midday is the brightest hour and may one day want MORE cool fill than morning; an invariant that forbids a reasonable future edit is a nuisance rather than a guard.
+  assert.ok(
+    TIME_OF_DAY.sunset.counterFill.intensity < TIME_OF_DAY.afternoon.counterFill.intensity,
+    "sunset is dimmer than afternoon, so its fill must be too",
+  );
+  assert.ok(
+    TIME_OF_DAY.night.counterFill.intensity <= TIME_OF_DAY.sunset.counterFill.intensity,
+    "night must never wash colder than sunset",
+  );
+});
+
+// The SHAPE of the ladder, not the values. The test above pins night cooler than midday; this pins the rungs between, so a retune cannot leave sunset cooler than afternoon and call it warming.
+test("the ceiling bulb warms monotonically as the day ends", () => {
+  assert.ok(TIME_OF_DAY.afternoon.interiorLight.kelvin < TIME_OF_DAY.midday.interiorLight.kelvin);
+  assert.ok(TIME_OF_DAY.sunset.interiorLight.kelvin < TIME_OF_DAY.afternoon.interiorLight.kelvin);
+  assert.ok(TIME_OF_DAY.night.interiorLight.kelvin < TIME_OF_DAY.sunset.interiorLight.kelvin);
+  // Warm-incandescent, near candlelight. Night is the hour this fitting exists for, and a bulb that is merely warmish there reads as clinical.
+  assert.ok(TIME_OF_DAY.night.interiorLight.kelvin <= 2_500, "night must be genuinely warm, not merely warmish");
+});
+
+// Warming a bulb COSTS apparent brightness — amber reads as dimmer than neutral white at equal lumens — so the two dark hours have to carry enough output to pay for their own warmth. These are floors against a future retune that warms them further without paying the bill, which is how "atmospheric" quietly becomes "cannot see the furniture".
+test("the hours that default the light ON are bright enough to justify it", () => {
+  for (const id of ["sunset", "night"] as const) {
+    const { defaultOn, lumens } = TIME_OF_DAY[id].interiorLight;
+    assert.equal(defaultOn, true, `${id}: this test is about the hours the light comes on by itself`);
+    assert.ok(lumens >= 150_000, `${id}: ${lumens} lm cannot carry a room whose ambient probe is deliberately starved`);
+  }
 });
 
 test("the switch defaults to the hour, and an override only counts at the hour it was made", () => {
