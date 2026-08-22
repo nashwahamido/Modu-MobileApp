@@ -11,7 +11,7 @@ import { useCatalogStore } from "@/src/data/catalog/buildStore";
 import { useShopStore } from "@/src/data/shop/store";
 import { isSurfaceCategory, useCurrentUserId, useRepos, viewCatalogue } from "@/src/data";
 import type { ShopCategory } from "@/src/data";
-import { useScreenInsets } from '@/src/hooks/use-safe-insets';
+import { GRID_EDGE, usePopupInsets } from '@/src/components/popupInsets';
 import { useRoomCatalogStore } from "@/src/room/core/placeableItems";
 import { usePlacementStore } from "@/src/room/core/placement";
 import { CategoryBoardTabs } from "@/src/components/CategoryBoardTabs";
@@ -21,12 +21,10 @@ import type { OwnedItem } from "./ownedItem";
 
 const GRID_COLUMNS = 4;
 const GRID_GAP = 22;
-const GRID_EDGE = 22;
 
 export function InventoryOverlay({ onClose }: { onClose: () => void }) {
   const s = useFixedStyles(makeStyles);
   const t = useTheme();
-  const safe = useScreenInsets();
   const repos = useRepos();
   const me = useCurrentUserId();
   const { sheetStyle, scrimStyle, requestClose } = useSlideUpPresentation(onClose);
@@ -99,9 +97,8 @@ export function InventoryOverlay({ onClose }: { onClose: () => void }) {
     usePlacementStore.getState().setFinish(item.category === "floor" ? "floor" : "wall", item.id);
   };
 
-  const padTop = 18 + safe.top;
-  const padSide = 62 + safe.side;
-  const padBottom = 18 + safe.bottom;
+  // Proportional on a tablet, the authored points on a phone — see components/popupInsets.
+  const { padTop, padSide, padBottom } = usePopupInsets();
 
   return (
     <View style={s.layer}>
@@ -188,8 +185,6 @@ const makeStyles = (t: Theme) =>
     panel: {
       position: "absolute",
       borderRadius: 28,
-      borderWidth: 1.2,
-      borderColor: "#544F4B",
       backgroundColor: CREAM.card,
       paddingTop: 18,
       paddingHorizontal: 22,

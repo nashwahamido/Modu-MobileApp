@@ -11,12 +11,15 @@ import { ROOM_BACKGROUND } from './roomBackdrops';
 import { ceilingLightOn, type CeilingLightOverride } from '../core/timeOfDay';
 import { useGameStore } from '../../game/core/store';
 import { avatarForProfile } from '@/src/components/avatarAssets';
-import { CARD_CHROME, CREAM, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
+import { CARD_CHROME, CREAM, useFixedStyles, useIsTablet, LEXEND } from "@/src/game/ui/system/theme";
 import { useCurrentUserId } from '../../data';
 import { RoomScene } from '../scene/RoomScene';
 import { FriendPickerOverlay } from './FriendPickerOverlay';
+import { RoomNavRail } from './RoomNavRail';
+import { ASSEMBLE_COLLAR_SIZE, RoomAssembleButton } from './RoomAssembleButton';
 import { RoomBottomBar } from './RoomBottomBar';
-import { LIGHT_COLUMN_GAP, RoomLightControls } from './RoomLightControls';
+import { LIGHT_COLUMN_GAP, ROOM_CHIP_RADIUS, RoomLightControls } from './RoomLightControls';
+import { useLeftColumnScale } from './roomScale';
 import { RoomLoadingOverlay } from './RoomLoadingOverlay';
 import { RoomFirstPlacementGuide } from './RoomFirstPlacementGuide';
 import {
@@ -32,6 +35,14 @@ import { ORBIT } from '../input/orbit';
 import type { Theme } from "@/src/game/ui/system/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from '../../hooks/use-safe-insets';
 
+// The gear's chip, matched to the light buttons below it (RoomLightControls' BUTTON)
+const SETTINGS_DISC = 48;
+// The chip's cream, shared with the room's other chrome
+const ROOM_CHIP_FILL = '#FBFAF3';
+// The artwork inside the chip. Short of the chip so the gear reads as sitting ON a tile rather than
+// filling it — the same relationship the assembly HUD's icons have to their chips.
+const SETTINGS_ICON_FRACTION = 0.92;
+
 const ROOM_EDIT_GUIDE_KEY = 'modu.room-edit-guide-seen.v1';
 const ROOM_WELCOME_GUIDE_KEY = 'modu.room-welcome-guide-seen.v1';
 
@@ -41,6 +52,11 @@ const HEAVY_ROUTES = new Set(['play', 'tutorial', 'visit']);
 
 export function RoomExperience() {
   const s = useFixedStyles(makeStyles);
+  // This screen's sheet stays FIXED — it carries the scene's own chrome, laid out to the point. Only
+  // the left column is scaled for tablets, and by hand, so nothing else on the screen moves.
+  const k = useLeftColumnScale();
+  // The room has TWO layouts, not one layout at two sizes. See the branch further down.
+  const tablet = useIsTablet();
  
   const { welcome, open, firstPlacement } = useLocalSearchParams<{
     welcome?: string;
@@ -202,8 +218,11 @@ export function RoomExperience() {
             // clusters are read at different moments, and the extra drop keeps the gear clear of the
             // status area. Levelling them instead would be 12 + 3 + inset: RoomTopStats pads by the
             // same 12 and centres its 23pt bar inside a 54pt badge, against this 48pt disc.
-            top: 12 + 14 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
-            left: 18 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+            // The design offsets scale with the screen; the device insets do NOT — a cutout is a
+            // physical clearance, and multiplying it would inset the column further for no reason.
+            top: (12 + 14) * k + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
+            left: 18 * k + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+            gap: LIGHT_COLUMN_GAP * k,
           },
         ]}
         pointerEvents="box-none"
@@ -211,10 +230,22 @@ export function RoomExperience() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Settings"
-          style={s.settingsButton}
+          // RADIUS.control, not half the width: this is the same rounded-square chip the light switch
+          // below it wears. Scaled here because the sheet's own radius is not — the inline value wins.
+          style={[
+            s.settingsButton,
+            { width: SETTINGS_DISC * k, height: SETTINGS_DISC * k, borderRadius: ROOM_CHIP_RADIUS * k },
+          ]}
           onPress={() => router.push("/settings" as Href)}
         >
-          <Image source={SETTINGS_ICON} style={s.settingsIcon} resizeMode="contain" />
+          <Image
+            source={SETTINGS_ICON}
+            style={{
+              width: SETTINGS_DISC * SETTINGS_ICON_FRACTION * k,
+              height: SETTINGS_DISC * SETTINGS_ICON_FRACTION * k,
+            }}
+            resizeMode="contain"
+          />
         </Pressable>
 
         {/* hidden mid-placement */}
@@ -231,11 +262,44 @@ export function RoomExperience() {
 
       <RoomTopStats />
 
-      <RoomBottomBar
-        onOpenShop={() => setShopOpen(true)}
-        onOpenInventory={() => setInventoryOpen(true)}
-        onOpenVisit={() => setVisitPickerOpen(true)}
-      />
+      {/* TWO LAYOUTS, chosen by device — not one layout scaled.
+          A phone is narrow and tall-ish in landscape: a band across the bottom eats the floor, which is
+          where the room's furniture is, so navigation goes down the right edge as a rail and Assemble
+          stands alone in the opposite corner.
+          A tablet has width to spare and the bar reads fine there, so it keeps the arrangement it was
+          designed and tuned against. The two share their icons, their scale hooks and their chrome, but
+          not their arrangement — a tweak to one does NOT reach the other, which is the cost of this. */}
+      {tablet ? (
+        <RoomBottomBar
+          onOpenShop={() => setShopOpen(true)}
+          onOpenInventory={() => setInventoryOpen(true)}
+          onOpenVisit={() => setVisitPickerOpen(true)}
+        />
+      ) : (
+        <>
+          <RoomNavRail
+            onOpenShop={() => setShopOpen(true)}
+            onOpenInventory={() => setInventoryOpen(true)}
+            onOpenVisit={() => setVisitPickerOpen(true)}
+          />
+
+          {/* Opposite the rail, and clear of it: the one action, not one of the places to go. Hidden mid-placement, like the light controls — the room is being edited, not navigated. */}
+          {editing ? null : (
+            <RoomAssembleButton
+              style={{
+                // Aligned on CENTRES, not on left edges: this button's collar is wider than the discs
+                // above it, so sharing their left inset would push it half the difference to the right
+                // and break the column's line.
+                left:
+                  18 * k +
+                  Math.max(safe.raw.left, SCREEN_SIDE_MARGIN) -
+                  ((ASSEMBLE_COLLAR_SIZE - SETTINGS_DISC) / 2) * k,
+                bottom: 14 * k + Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN),
+              }}
+            />
+          )}
+        </>
+      )}
 
       {/* all of the placement UI swatches and buttons lives in one component on the right edge */}
       {editing ? (
@@ -341,21 +405,17 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     alignItems: 'flex-start',
     gap: LIGHT_COLUMN_GAP,
   },
-  // Sized TO the artwork, which is a disc: the shadow follows the view's box, so a 42pt box under a
-  // 48pt drawing would cast a circle smaller than the thing casting it. borderWidth is zeroed because
-  // the disc brings its own edge — only the shadow is wanted from CARD_CHROME.
+  // A rounded-square CHIP, matching the small buttons on the assembly HUD (game/ui/hud/hudChrome's
+  // IconButtonBare). The shadow fits now because it follows this container rather than the artwork:
+  // icon-settings.png draws its disc across only 174 of its 196px canvas and off-centre in it, so a
+  // shadow cast by the image's own box ringed the drawing instead of sitting under it.
   settingsButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    borderRadius: ROOM_CHIP_RADIUS,
+    backgroundColor: ROOM_CHIP_FILL,
     alignItems: 'center',
     justifyContent: 'center',
     ...CARD_CHROME,
     borderWidth: 0,
-  },
-  settingsIcon: {
-    width: 48,
-    height: 48,
   },
 
   comingSoonTitle: {

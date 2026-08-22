@@ -7,7 +7,7 @@ import { BulbIcon, CheckIcon, RotateLeftIcon, RotateRightIcon, TrashIcon } from 
 import { getRoomItemDef } from "../core/placeableItems";
 import { usePlacementStore } from "../core/placement";
 import { ColourPicker } from "./ColourPicker";
-import { CREAM, useFixedStyles, useTheme, FONT, LEXEND } from "@/src/game/ui/system/theme";
+import { CARD_CHROME, CREAM, useFixedStyles, useTheme, FONT, LEXEND } from '@/src/game/ui/system/theme';
 import type { Theme } from "@/src/game/ui/system/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "../../hooks/use-safe-insets";
 
@@ -160,6 +160,11 @@ export function PlacementRail({
   );
 }
 
+// The bottom bar's fill and the item tiles' well, so the placement controls read as the same set of
+// surfaces as the rest of the room and the two popups.
+const PLACEMENT_FILL = '#FBFAF3';
+const PLACEMENT_WELL = '#EFE9E0';
+
 const makeStyles = (t: Theme) => StyleSheet.create({
   // The band the placement UI is centred in — pinned to the right edge, its top and bottom set at the render above. A row, so the swatches sit to the LEFT of the button column and the controls stay hard against the edge.
   rail: {
@@ -176,12 +181,13 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     borderRadius: 22,
-    backgroundColor: t.surface,
+    // The room's own chrome: the bar's cream, its shadow, no outline. The placement controls sit ON the
+    // room beside the nav rail, so they are the same material as it rather than a themed surface.
+    backgroundColor: PLACEMENT_FILL,
     paddingHorizontal: 8,
     paddingVertical: 12,
-    shadowColor: '#000',
-    shadowOpacity: .18,
-    shadowRadius: 8,
+    ...CARD_CHROME,
+    borderWidth: 0,
   },
   barBlocked: {
     borderWidth: 2,
@@ -210,7 +216,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: t.surfaceRaised,
+    backgroundColor: PLACEMENT_WELL,
     alignItems: 'center',
     justifyContent: 'center',
   },
