@@ -1,16 +1,16 @@
 // One purchasable tile in the shop popup: price badge, picture well, name
 import { StyleSheet, Image, Pressable, Text, View } from "react-native";
 
-import { CatalogThumb } from "@/src/components/CatalogThumb";
+import { CatalogThumb, gridThumbFill, gridVariation } from "@/src/components/CatalogThumb";
 import { COIN_ICON, STAR_ICON, levelIcon } from "@/src/components/iconAssets";
 import {
   FRAME_FILL,
   FRAME_RADIUS,
   FRAME_STROKE,
   FRAME_STROKE_WIDTH,
+  ItemNameTab,
   LockWash,
   TILE_ROW_GAP,
-  ItemNameTab,
   useTileScale,
   WELL_ASPECT,
   WELL_TOP_PAD,
@@ -82,7 +82,22 @@ export function ShopItemTile({
           style={[s.art, { height: wellHeight - FRAME_STROKE_WIDTH * 2 }]}
           pointerEvents="none"
         >
-          <CatalogThumb source="bought" itemId={itemId} surface={surface} size={wellHeight} />
+          {/* The GRID face for this item (components/CatalogThumb) — an agreed portrait per model
+              rather than whichever finish the catalog row calls default, which was "wooden" for all
+              four built models and put a row of near-identical wood renders in the grid.
+
+              size is inset for the BUILT models only (gridThumbFill) — their assembly-pipeline
+              render is framed tight where a bought item's already carries its own air, so the four
+              ran to the edges of their wells while everything around them sat inside. Bought items
+              are unchanged and still fill. The colour picker and the purchase popups pass a real
+              variation and their own size. */}
+          <CatalogThumb
+            source="bought"
+            itemId={itemId}
+            variation={gridVariation(itemId)}
+            surface={surface}
+            size={Math.round(wellHeight * gridThumbFill(itemId))}
+          />
         </View>
 
         {/* A tint, not a blur — RN has no blur without a native module */}

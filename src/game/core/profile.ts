@@ -19,9 +19,6 @@ export const DEFAULT_SETTINGS: AccessibilitySettings = {
   musicVolume: 0.5,
   buildMusic: true,
   buildMusicVolume: 0.5,
-  // Off by default: OpenDyslexic is a strong preference rather than a neutral improvement, and it
-  // reads as unusual to anyone who did not ask for it.
-  readingFont: false,
   softHints: true,
   showInstructions: true,
   manualTools: false,

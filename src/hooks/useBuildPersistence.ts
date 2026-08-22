@@ -9,7 +9,24 @@ import { useCurrentUserId, useRepos } from "@/src/data";
 // Wait this long after the last progress change before writing, so a burst of taps is one save.
 const AUTOSAVE_DEBOUNCE_MS = 600;
 
-export function useBuildPersistence(target: FurnitureId): void {
+/**
+ * `resume: false` autosaves but never re-applies a save on entry.
+ *
+ * For the TUTORIAL, which teaches a fixed sequence from step one. It builds the same LACK table the
+ * catalogue lists, so its progress must be written — a player who skips halfway and opens the
+ * catalogue should see "Continue", not "Start". But it must never be READ back: re-entering the
+ * tutorial with a half-built table would drop the player into step one of the script beside a model
+ * that is already four legs in.
+ *
+ * `settleOnFinish: false` leaves the FINISHED build alone — no reward, no completion record.
+ * Also for the tutorial, which already records its own completion (and deliberately pays no build
+ * reward, because it pays per-step rewards instead). Without this, adding autosave there would
+ * quietly have started paying coins for the tutorial table.
+ */
+export function useBuildPersistence(
+  target: FurnitureId,
+  { resume = true, settleOnFinish = true }: { resume?: boolean; settleOnFinish?: boolean } = {},
+): void {
   const repos = useRepos();
   const me = useCurrentUserId();
   const hydratedFor = useRef<FurnitureId | null>(null);
@@ -17,7 +34,7 @@ export function useBuildPersistence(target: FurnitureId): void {
 
   // Resume: once the target furniture is loaded into the store, re-apply any saved progress exactly once.
   useEffect(() => {
-    if (loadedId !== target || hydratedFor.current === target) return;
+    if (!resume || loadedId !== target || hydratedFor.current === target) return;
     hydratedFor.current = target;
     // No count sync here — useCatalogSync mirrors every recipe once per app load, which covers this one.
     let alive = true;
@@ -31,7 +48,7 @@ export function useBuildPersistence(target: FurnitureId): void {
     return () => {
       alive = false;
     };
-  }, [loadedId, target, me, repos]);
+  }, [loadedId, target, me, repos, resume]);
 
   // Autosave: debounce a snapshot on any progress change, and flush once more on unmount (leaving play). A finished build clears its save instead of storing a completed one.
   useEffect(() => {
@@ -41,7 +58,11 @@ export function useBuildPersistence(target: FurnitureId): void {
       const save = snapshotBuild(me, state);
       if (!save) return;
       const { completedCount, totalCount } = state.progress();
-      if (totalCount > 0 && completedCount >= totalCount) {
+      const finished = totalCount > 0 && completedCount >= totalCount;
+      // Not ours to settle, and a finished build is never stored as a save — so there is nothing
+      // left to do. Whoever owns the completion drops the save with its own complete() call.
+      if (finished && !settleOnFinish) return;
+      if (finished) {
         // Finished: grant the reward (server-authoritative amount from item_build; idempotent — one per build, so the debounce + unmount flush can't double-pay), record the completion (backs assembly_count), and drop the save. complete() only runs once reward() has settled: complete() DELETES the in-progress save, so running them concurrently means a failed reward loses both the coins and the progress that would let the player earn them again. Both are idempotent, so a retry costs nothing.
         repos.builds
           .reward(me, save.furnitureId)
@@ -67,5 +88,5 @@ export function useBuildPersistence(target: FurnitureId): void {
       unsubscribe();
       persist();
     };
-  }, [me, repos]);
+  }, [me, repos, settleOnFinish]);
 }

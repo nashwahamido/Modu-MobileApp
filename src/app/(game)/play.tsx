@@ -69,6 +69,7 @@ import { ObjectiveBar } from "@/src/game/ui/hud/ObjectiveBar";
 import {
   HintButton,
   RecenterButton,
+  SpokenStepsButton,
   useHudChrome,
   useHudControlStyles,
 } from "@/src/game/ui/hud/hudChrome";
@@ -277,14 +278,18 @@ function GameScreen() {
   // Gated on the existing accessibility flag, so a profile that asks for a quiet build gets one.
   useAssemblySfx(settings.soundEffects);
   const hintGroup = useGameStore((s) => s.hintGroup);
+  const hintGroups = useGameStore((s) => s.hintGroups);
+  // The tray learns ONE concept. "?" highlights a set (hintGroups); Spot highlights its single card (hintGroup); they never both run, so the merge is a preference, not a union.
+  const highlightGroups = hintGroups.length ? hintGroups : hintGroup ? [hintGroup] : [];
   const hintPulse = useGameStore((s) => s.hintPulse);
-  // The Spot marker is a ONE-SHOT: it pulses for a few seconds and puts itself out. Keyed on hintPulse as well as the part, so pressing Spot twice for the same part restarts the window rather than being swallowed as "no change".
+  // The scene markers are a ONE-SHOT: they pulse for a few seconds and put themselves out. Keyed on hintPulse as well as the parts, so pressing the same button twice restarts the window rather than being swallowed as "no change". Covers Spot's single spotlight and the ? highlight's list alike — both are cleared by clearSpot.
   const spotPartId = useGameStore((s) => s.hintPartId);
+  const hintParts = useGameStore((s) => s.hintParts);
   useEffect(() => {
-    if (!spotPartId) return;
+    if (!spotPartId && !hintParts.length) return;
     const t = setTimeout(() => useGameStore.getState().clearSpot(), SPOT_MS);
     return () => clearTimeout(t);
-  }, [spotPartId, hintPulse]);
+  }, [spotPartId, hintParts, hintPulse]);
 
   // select tool
   const selectedTool = useGameStore((s) => s.selectedTool);
@@ -467,7 +472,7 @@ function GameScreen() {
           items={sceneState.trayItems}
           gestureFor={gestureFor}
           thumbs={furniture.thumbs}
-          highlightGroup={hintGroup}
+          highlightGroups={highlightGroups}
           highlightPulse={hintPulse}
           header={
             focus ? undefined : (
@@ -482,6 +487,17 @@ function GameScreen() {
         {/* First build that actually asks for a tool. LACK is hand-tightened, so the tutorial never
             covers this and EKET is where a player meets it cold. */}
         <ToolboxCoach neededTool={neededTool} />
+        {/* Renders itself away outside the visual profile — see the component. Hidden in focus mode
+            with the rest of the top-left row, which is what focus is for.
+
+            It takes the slot beside the gear when the hint is not there to hold it, and steps out to
+            the third slot when it is. Same condition as the HintButton below, so the two can never
+            both claim 58. */}
+        {focus ? null : (
+          <SpokenStepsButton
+            style={mode === "free" ? hudControls.spokenStepsButton : hudControls.hintButton}
+          />
+        )}
         {mode === "free" && !focus ? (
           <HintButton
             style={hudControls.hintButton}
@@ -610,12 +626,19 @@ function GameScreen() {
           rectangle of undimmed scene around the edges. */}
       {/* Strict mode never offered the chooser, so it does not get the map either. Focus
           mode DOES: pause is reachable there, and the map is what pause opens. */}
-      {mode !== "strict" ? <BuildMap /> : null}
+      {/* LIGHT, always. "Assemble in Dark Mode" is a setting about the BUILD SURFACE — the scene and
+          the chrome around it — and these three are not that: the map is the catalogue's own card
+          shown over the build, and the celebrations are their own full-screen moments. Left on the
+          scope they rendered half-dark, most visibly the map's title, which is t.text on a cream
+          card and so came out white on cream. */}
+      <ThemeScope value="light">
+        {mode !== "strict" ? <BuildMap /> : null}
+        <ClusterCelebration />
+        <BuildComplete />
+      </ThemeScope>
       {ringOverlay}
       <GreenFlash trigger={completedCount} />
-      <ClusterCelebration />
       <FinishBuildButton />
-      <BuildComplete />
       {loadingOverlay}
     </SceneBackdrop>
     </ThemeScope>

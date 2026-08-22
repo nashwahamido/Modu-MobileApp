@@ -37,7 +37,7 @@ expo-env.d.ts
 # Tool files
 git-filter-repo
 git-filter-repo.txt
-.test.ts
+*.test.ts
 
 # Logs
 npm-debug.*

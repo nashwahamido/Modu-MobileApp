@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { ELEVATION, RADIUS, SPACE, useTheme } from "@/src/game/ui/system/theme";
 import { useMirroredTable } from "@/src/game/ui/system/handedness";
+import { useGameStore } from "@/src/game/core/store";
 import { useHudIcon } from "@/src/game/ui/hud/hudIcons";
 import { GrainOverlay } from "@/src/game/ui/system/Button";
 import { SCENE_BACKGROUND } from "@/src/game/scene/lighting";
@@ -17,6 +18,9 @@ import { SCENE_BACKGROUND } from "@/src/game/scene/lighting";
 /** One shared size for every bare HUD icon so they line up on the grid. */
 // 24 inside the 36 chip: the art was nearly filling its container, which read as heavy against the scene. The chip size is unchanged, so the grid and the tap targets hold.
 export const HUD_ICON = 24;
+
+const SOUND_ON = require("@/src/assets/ui/icons/icon-sound-on.png");
+const SOUND_OFF = require("@/src/assets/ui/icons/icon-sound-off.png");
 
 /**
  * A HUD icon inside a container chip — surface fill, hairline border, rounded corners, the
@@ -89,6 +93,39 @@ export function RecenterButton({
   );
 }
 
+/**
+ * Mute for the spoken step clips, on the same chip as the gear and the hint beside it.
+ *
+ * VISIBLE ONLY IN THE VISUAL PROFILE, which is the one that turns `audio` on by default — so it is
+ * the one place a player is hearing every step read aloud without having asked for it, and the one
+ * place a way to stop is owed at the moment they want it rather than three taps into Settings.
+ * Every other profile starts silent and turns it on from Settings deliberately.
+ *
+ * The profile test lives HERE rather than at the call sites, so the play screen and the tutorial
+ * fork cannot disagree about when it shows.
+ */
+export function SpokenStepsButton({ style }: { style?: StyleProp<ViewStyle> }) {
+  const profile = useGameStore((s) => s.profile);
+  const audio = useGameStore((s) => s.settings.audio);
+  const setSettings = useGameStore((s) => s.setSettings);
+  if (profile !== "visual") return null;
+  return (
+    <IconButtonBare
+      // The same pair VoiceButton uses, so "sound" looks like one idea across the app. The crossed
+      // speaker says WHAT is off; the chip's own disabled dimming is not used, because the button is
+      // not disabled — it is the way back.
+      source={audio ? SOUND_ON : SOUND_OFF}
+      onPress={() => setSettings({ audio: !audio })}
+      // 24, the same glyph size the settings gear draws inside its own 36 chip. The chips were
+      // already identical; at 20 the speaker just sat smaller inside its own, which reads as a
+      // smaller button next to the gear rather than a quieter one.
+      size={24}
+      style={style}
+      accessibilityLabel={audio ? "Turn spoken steps off" : "Turn spoken steps on"}
+    />
+  );
+}
+
 /** The hint nudge on the 36px icon-button grid. */
 export function HintButton({
   onPress,
@@ -123,8 +160,16 @@ const bareStyles = StyleSheet.create({
 
 /** The right-handed source tables below are exported unchanged, because the tutorial's spotlight maths and a few call sites want the raw numbers. EVERY RENDERING CALL SITE SHOULD USE THE HOOKS AT THE FOOT OF THIS FILE instead — they hand back the same table mirrored when the player is left-handed. A placement read straight off the raw table simply will not move, which is exactly the failure that is invisible until someone tests in left-hand mode. */
 export const hudControlStyles = StyleSheet.create({
-  // Canonical HUD placements, applied by the caller (play passes them as the style prop, tutorial puts them on the TutorialTarget wrapper so the spotlight measures the right frame). Beside the gear on the 36px grid: gear 36 wide at left:14, +8 gap → 58.
+  // Canonical HUD placements, applied by the caller (play passes them as the style prop, tutorial puts them on the TutorialTarget wrapper so the spotlight measures the right frame). The top row runs on a 44pt pitch from the gear: gear 36 wide at left:14, +8 gap → 58, → 102.
+  //
+  // THE HINT OWNS THE SLOT BESIDE THE GEAR. It is the older control and the one a player reaches for
+  // under pressure, so it does not move for anything.
   hintButton: { position: "absolute", left: 58, top: 8 },
+  // The spoken-steps toggle takes whichever slot is FREE, and the call site decides which by passing
+  // one of these two. The pair are conditional on different things — the hint on free mode, the
+  // toggle on the visual profile — so on most screens exactly one of them is showing, and a fixed
+  // third slot would leave the toggle floating a gap away from the gear through every guide mode.
+  spokenStepsButton: { position: "absolute", left: 102, top: 8 },
   // Its own row, directly under undo (top:54 + 36 + 12 gap); same 36x36 square as the rest of the column.
   recenterButton: { position: "absolute", left: 14, top: 102 },
 });
@@ -138,8 +183,13 @@ export const hudChrome = {
   // The row owns the position; the ObjectiveBar is just a flex child of it.
   topRow: {
     position: "absolute",
-    // top:3 puts the pause icon's centre on the same line as the settings gear and hint, whose centres sit at 8 + their box height. Tuned so pause reads as level with the top-left grid.
-    top: 3,
+    // 8 — the SAME top as everything else on this line: the gear (8), the audio and hint chips
+    // (8) and the Map slot (8), so the row's top edges agree.
+    //
+    // It was 3, tuned so a PAUSE button that used to live in this row read as level with the
+    // top-left grid. That button is gone; the 5pt lift it needed stayed behind and left the
+    // objective bar sitting proud of everything beside it.
+    top: 8,
     alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
@@ -178,7 +228,14 @@ export const tutorialChrome = {
     height: "52%",
   },
   // The pill itself is the shared ObjectiveBar (ui/ObjectiveBar); this just centres it, as in play.tsx.
-  objectiveWrap: { position: "absolute", top: 10, alignSelf: "center" },
+  // 8, matching topRow above and every chip on that line — the gear, the audio and hint buttons and
+  // the Map slot all sit at top:8, so this has to as well.
+  //
+  // The tutorial uses THIS wrapper for every profile but momentum, where play.tsx uses topRow. That
+  // is why the two were 10 and 3: each was tuned against its own screen and neither against the
+  // other. Both are 8 now, which also means the bar does not jump when a player moves between the
+  // tutorial and a real build.
+  objectiveWrap: { position: "absolute", top: 8, alignSelf: "center" },
   // Must match PartsTray's own `column` (right:14, top:70, bottom:70, width:86) so the spotlight frames the tray exactly, not a larger box around it.
   partsTrayTarget: {
     position: "absolute",
@@ -211,6 +268,17 @@ export const tutorialChrome = {
     left: 14,
     width: 36,
     height: 36,
+  },
+  // BOTH buttons under one spotlight: undo at top 54 and recenter at top 102, each 36 tall, so the
+  // span runs 54 to 138. The tutorial teaches them as a pair — "go back a step, reset the angle" is
+  // one idea — and a step can only name one target, so the pair needs a rectangle of its own rather
+  // than two consecutive steps saying half of it each.
+  undoRecenterTarget: {
+    position: "absolute",
+    top: 54,
+    left: 14,
+    width: 36,
+    height: 102 + 36 - 54,
   },
   // Match the real gear in GameSettings (left:14, top:8, 36×36). left:92 pointed the spotlight at the hint slot instead of the gear.
   settingsTarget: {

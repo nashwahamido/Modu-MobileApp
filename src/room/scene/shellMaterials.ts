@@ -1,3 +1,5 @@
+import { SHELL_WALL_IDS, type ShellWallId } from "../core/roomShell";
+
 // The shell's material names, grouped by what a surface item does to them. The names are the shell's authored contract — the same fifteen scripts/normalise_shell_materials.py enforces and scripts/verify-room-glb.mts checks — so this list must move only when the shell does.
 //
 // THREE GROUPS FROM TWO ITEM SLOTS. A floor item drives the slab and the plinth; a wall item drives the four walls AND the cornice. The cornice moved to the wall's side of the split on 2026-08-10: it sits at the wall/ceiling junction, so it is the wallpaper's joinery, not the floor's — the room's cornice should change when its wallpaper does, not when its rug does. (The plinth stays with the floor: it is the raised lip around the floor SLAB, so it is the floor's joinery in the way the cornice used to be assumed to be.) Each group that carries maps gets its OWN images at its OWN tiling — never the same image reused, because a cornice is separate geometry with its own UV mapping and the wall's map on it reads as an extruded strip of wallpaper.
@@ -13,6 +15,20 @@ export const SHELL_GROUPS: Record<"slab" | "cornice" | "walls", readonly string[
 
 // The plinth. Deliberately not a group: it takes a baseColorFactor tint and never a texture, because unlike the cornice it does NOT fade — nothing else owns its factor, so writing it cannot desync camera-facing wall culling's cached baseline RGB.
 export const SHELL_PLINTH = "FloorEdge";
+
+// The editing grid: the sixteenth material, and the only one Blender never authored. It is GENERATED into the shipped GLB by scripts/add-shell-grid.mts, straight out of the ROOM_SHELL floor constants, for the same class of reason set-shell-blend-modes.mjs exists — except that here it is not that Blender cannot express it, but that Blender must not be the one to say it. The drawn grid and the grid a piece is placed on have to be the same grid; deriving the geometry from the same constants the placement maths reads makes drift impossible rather than merely unlikely. Hand-authoring it would put a second copy of the cell pitch in a mesh, which is precisely the mistake roomShell.ts's header blames for the old alignment bugs.
+export const SHELL_GRID = "Grid";
+// FIVE grid plates share that one material — the floor and one per wall — because only ever ONE of them is on screen at a time, so which grid is showing is decided by adding that node's entity to the scene and removing the rest, never by giving each its own alpha to get out of step with. Wall grids landed 2026-08-20: placing a picture frame or a cabinet needs cells to aim at exactly as placing a chair does, and the wall lattice is the same 0.25 pitch (WALL_CELL_SIZE) the wall placement maths already uses.
+export const SHELL_GRID_NODE = "Shell_Grid";
+export const shellGridWallNode = (wall: ShellWallId): string => `Shell_Grid_${wall.replace("-", "")}`;
+export const SHELL_GRID_NODES: readonly string[] = [
+  SHELL_GRID_NODE,
+  ...SHELL_WALL_IDS.map(shellGridWallNode),
+];
+// The grid lines' colour. A flat unlit grey rather than the translucent white the SVG overlay used, because the plates had to leave the transparent pass to stop the window band drawing over them (the reasoning is in add-shell-grid.mts). One consequence is worth knowing: a blended white read very differently on a dark wall than on cream plaster — stark on one, nearly invisible on the other — where a fixed grey reads much the same against both.
+//
+// DO NOT TUNE IT HERE, whatever this comment used to claim. Nothing reads this constant. The value that actually reaches the screen was baked into the Grid material's baseColorFactor by the generator, and RoomScene now overwrites that at load time from GRID_TUNING.lineRgb in ./gridTuning — which is where on-device legibility is being settled. This stays as the permanent home the tuning file is meant to collapse back into: when gridTuning.ts is deleted, move the settled value here and point RoomScene's write at it.
+export const SHELL_GRID_RGB: readonly [number, number, number] = [0.72, 0.72, 0.72];
 
 // A glTF material's parameter names in gltfio's ubershader. occlusionMap is deliberately absent and must stay absent: that slot holds the room's baked AO on TEXCOORD_1, and a tiled AO map from a texture pack would fight it.
 export const MAP_PARAMS = {

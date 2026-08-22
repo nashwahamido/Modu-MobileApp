@@ -4,6 +4,7 @@ import {
   AssemblyMode,
   ClusterId,
   Furniture,
+  GroupId,
   PartId,
 } from "@/src/game/core/type";
 import {
@@ -72,6 +73,28 @@ const availabilityCache = new WeakMap<
   Furniture,
   { key: string; result: AssemblyAction[] }
 >();
+
+/** The distinct MOVES an action list offers, counted by part GROUP rather than by raw action: eight legal tightens of the same cam screw are one move to the player, because the tray cards and the hint copy both speak in groups. Actions with no partId name nothing, so they cannot be a move. */
+export function actionableGroups(
+  f: Furniture,
+  actions: readonly AssemblyAction[],
+): GroupId[] {
+  const out: GroupId[] = [];
+  const seen = new Set<GroupId>();
+  for (const a of actions) {
+    if (!a.partId) continue;
+    const group = f.parts[a.partId]?.group;
+    if (!group || seen.has(group)) continue;
+    seen.add(group);
+    out.push(group);
+  }
+  return out;
+}
+
+/** How many ways the WHOLE build is open right now. Decides whether a blocked-grab hint may name one blocker or has to stay generic: with several moves legal, the ranked "first actionable" candidate is one arbitrary pick among many. */
+export function openWayCount(f: Furniture, done: ReadonlySet<ActionId>): number {
+  return actionableGroups(f, availableActions(f, done)).length;
+}
 
 function computeAvailableActions(
   f: Furniture,

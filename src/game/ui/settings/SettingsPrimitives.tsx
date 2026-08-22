@@ -102,16 +102,19 @@ export function Row({
   desc,
   value,
   onValueChange,
+  disabled = false,
 }: {
   label: string;
   desc?: string;
   value: boolean;
   onValueChange: (v: boolean) => void;
+  /** Greyed and unresponsive, but still READ: a setting that has no effect right now is better shown inert with its reason in `desc` than removed, because a row that vanishes leaves the player hunting for a switch that is not there. Same 0.45 opacity ActionRow uses, so "inert" looks the same everywhere in this panel. */
+  disabled?: boolean;
 }) {
   const styles = useFixedStyles(makeSettingsStyles);
   const t = useTheme();
   return (
-    <View style={styles.switchRow}>
+    <View style={[styles.switchRow, disabled && styles.actionRowIdle]}>
       <View style={styles.rowText}>
         <Text style={styles.rowLabel}>{label}</Text>
         {desc ? <Text style={styles.rowDesc}>{desc}</Text> : null}
@@ -119,6 +122,7 @@ export function Row({
       <Switch
         value={value}
         onValueChange={onValueChange}
+        disabled={disabled}
         trackColor={{ false: t.surfaceInset, true: t.accent }}
         thumbColor={value ? t.onAccent : t.surface}
         ios_backgroundColor={t.surfaceInset}
