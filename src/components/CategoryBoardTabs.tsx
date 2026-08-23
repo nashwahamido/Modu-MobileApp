@@ -71,6 +71,13 @@ const BOARD_OVERHANG_X = 21;
 // old height instead would mean stretching the artwork, which is the one thing this ratio exists to
 // prevent.
 const BOARD_ASPECT = 2639 / 355;
+// Drawn TALLER than the artwork's own proportion, by this much.
+//
+// A deliberate distortion, and safe here in a way it would not have been on the wooden plank this
+// replaced: the panel is a flat cream shape with no grain or detail to skew, so stretching it reads as
+// a taller panel rather than as squashed artwork. It also needs resizeMode="stretch" below — `contain`
+// would letterbox the drawing inside the taller box instead of filling it.
+const BOARD_STRETCH_Y = 1.18;
 
 // THE TABLET FILL.
 //
@@ -178,7 +185,7 @@ export function CategoryBoardTabs({
             // On a tablet the panel spans the grid outright; on a phone it stays what it always
             // was — the row plus its overhang, which is narrower than the tiles by design.
             const width = tablet ? tileSpan : row.width + BOARD_OVERHANG_X * 2 * k;
-            const height = width / BOARD_ASPECT;
+            const height = (width / BOARD_ASPECT) * BOARD_STRETCH_Y;
             return (
               <Image
                 source={BOARD}
@@ -194,7 +201,7 @@ export function CategoryBoardTabs({
                     height,
                   },
                 ]}
-                resizeMode="contain"
+                resizeMode="stretch"
                 accessibilityElementsHidden
                 importantForAccessibility="no-hide-descendants"
               />
