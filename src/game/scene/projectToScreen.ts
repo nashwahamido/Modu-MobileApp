@@ -1,7 +1,7 @@
 // Projecting a world point to screen pixels, so a HUD overlay can ask "is that socket actually on
-// screen?". The same maths already lives inside usePartDrag, which matches drop candidates by where
-// the finger AIMS; this is the standalone version, so a component outside the gesture layer can
-// answer that question without pulling in a 900-line hook.
+// screen?" and the drag can match drop candidates by where the finger AIMS. One implementation for
+// both: the gesture layer used to carry its own copy of this maths, which meant the projector the
+// drag ran on and the projector its tests measured with were two functions that merely looked alike.
 //
 // Manual projection rather than a camera matrix: Filament's manipulator exposes getLookAt() and
 // nothing else, so the basis has to be rebuilt from eye/center/up on each call.
@@ -22,12 +22,15 @@ export type LookAt = readonly [
   readonly number[],
 ];
 
-export function projectToScreen(
-  lookAt: LookAt | null | undefined,
-  w: Vec3,
-  winW: number,
-  winH: number,
-): ScreenPoint | null {
+/** The camera's orthonormal frame, rebuilt from a look-at. Every screen-space question in the game starts here — projecting a point, mapping a finger delta to metres, spreading a plane across the view — so it is derived once and shared rather than re-copied per call site. */
+export interface CameraBasis {
+  eye: readonly number[];
+  fwd: Vec3;
+  right: Vec3;
+  camUp: Vec3;
+}
+
+export function cameraBasis(lookAt: LookAt | null | undefined): CameraBasis | null {
   if (!lookAt) return null;
   const [eye, center, up] = lookAt;
   const f: Vec3 = [center[0] - eye[0], center[1] - eye[1], center[2] - eye[2]];
@@ -45,6 +48,18 @@ export function projectToScreen(
     right[2] * fwd[0] - right[0] * fwd[2],
     right[0] * fwd[1] - right[1] * fwd[0],
   ];
+  return { eye, fwd, right, camUp };
+}
+
+export function projectToScreen(
+  lookAt: LookAt | null | undefined,
+  w: Vec3,
+  winW: number,
+  winH: number,
+): ScreenPoint | null {
+  const basis = cameraBasis(lookAt);
+  if (!basis) return null;
+  const { eye, fwd, right, camUp } = basis;
   const d: Vec3 = [w[0] - eye[0], w[1] - eye[1], w[2] - eye[2]];
   const depth = d[0] * fwd[0] + d[1] * fwd[1] + d[2] * fwd[2];
   if (!Number.isFinite(depth) || depth <= 0) return null;

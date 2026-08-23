@@ -19,14 +19,13 @@ import { TIGHTEN_TOTAL_DEG, useGameStore } from "@/src/game/core/store";
 import { animateDriver, OffsetDriver } from "@/src/game/scene/offsetDriver";
 import { useHudIcon } from "@/src/game/ui/hud/hudIcons";
 import type { Theme } from "@/src/game/ui/system/theme";
-import { SHOWCASE_ENABLED } from "@/src/dev/showcase";
 
 interface Props {
   heldDriver: OffsetDriver;
   sinkDriver: OffsetDriver;
 }
 
-/** DEV and SHOWCASE builds: performs the next assembly action through the real store/scene pipeline (pickup → glide → snap, or tighten). Lets the whole game be stepped through on an emulator where touch-gesture injection is flaky; also doubles as a demo mode. Ported from the on-release engine; `snapPart` → game's `placePart`, and the done set is passed to game's targetPositionForAction. Parts that need a follow-up (screw park / slide-press drive) complete on the NEXT press, since their tighten/drive is a separate available action. */
+/** Ships in every build, release included **/
 export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
   const styles = useFixedStyles(makeStyles);
   // Read with the other hooks: this component returns null when it is not showing, so the icon
@@ -64,7 +63,11 @@ export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
       const partId = held?.partId;
       if (partId) {
         const part = furniture.parts[partId];
-        const target = targetPositionForAction(held, furniture.parts, new Set(store.completed));
+        const target = targetPositionForAction(
+          held,
+          furniture.parts,
+          new Set(store.completed),
+        );
         const dest: [number, number, number] = [
           target[0] - part.pose.position[0],
           target[1] - part.pose.position[1],
@@ -141,7 +144,10 @@ export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
         useGameStore.getState().addTightenDeg(action.actionId, 80);
         if (action.partId) {
           const part = furniture.parts[action.partId];
-          const ld = looseDelta(part, engageAxis(part, new Set(useGameStore.getState().completed)));
+          const ld = looseDelta(
+            part,
+            engageAxis(part, new Set(useGameStore.getState().completed)),
+          );
           const p = Math.min(1, applied / TIGHTEN_TOTAL_DEG);
           sinkDriver.set([ld[0] * (1 - p), ld[1] * (1 - p), ld[2] * (1 - p)]);
         }
@@ -163,26 +169,17 @@ export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
     }
   };
 
-  // Visible in DEV, and in SHOWCASE builds — which are release builds, where __DEV__ is false.
+  // Visible in EVERY build, release included — deliberately ungated.
   //
-  // That is the same reasoning showcase.ts already gives for not gating itself on __DEV__: a demo or
-  // a study session runs from a real APK with no Metro attached, and stepping the build without
-  // fighting touch injection is exactly what this is for. EXPO_PUBLIC_SHOWCASE is the switch, so a
-  // shipped build with SHOWCASE=0 still carries none of it.
-  if (!__DEV__ && !SHOWCASE_ENABLED) return null;
+  // It started as a DEV/SHOWCASE stepper, but the state it is most pressed in is a player stuck on a
+  // gesture that will not take, and that happens in shipped builds too. Nothing here reaches past the
+  // real store actions a player could perform by hand, so leaving it in costs nothing but the chip.
   return (
-    <Pressable
-      style={styles.btn}
-      onPress={step}
-    >
+    <Pressable style={styles.btn} onPress={step}>
       {/* icon + word, matching the Spot/recenter chips on the row. The play glyph is the app's own
           icon-play.png rather than the ▶ text character, so it renders in the UI font/weight. */}
       <View style={styles.content}>
-        <Image
-          source={playIcon}
-          style={styles.icon}
-          resizeMode="contain"
-        />
+        <Image source={playIcon} style={styles.icon} resizeMode="contain" />
         <Text style={styles.text}>auto</Text>
       </View>
     </Pressable>
