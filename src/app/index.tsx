@@ -90,6 +90,10 @@ const WAVE_START = BUTTONS_DELAY + BUTTONS_MS;
 const WAVE_STAGGER = 110; // gap between each wave layer's entrance
 const WAVE_MS = 640;
 const WAVE_EASE = Easing.out(Easing.cubic);
+// The two traced lines draw on starting at STILL_MS — the same moment stage 2 begins (the
+// wordmark→mascot swap) — rather than waiting for the wave layers at the very end of the
+// sequence, so they're on screen, mid-draw, through stage 2 rather than only appearing at stage 4.
+const TRACE_MS = 1100;
 
 /** width fraction of the screen (native asset dims, fraction of screen width to occupy). Height
  *  is derived from the asset's own aspect ratio in pixels, computed against the actual window —
@@ -151,9 +155,10 @@ export default function App() {
   const leftFront = useWaveIn(WAVE_START + 1 * WAVE_STAGGER, -90);
   const rightAccent = useWaveIn(WAVE_START + 2 * WAVE_STAGGER, 60);
   const leftAccent = useWaveIn(WAVE_START + 2 * WAVE_STAGGER, -60);
-  // The traced lines come in last, one beat after the accents they sit alongside.
-  const lineRight = useWaveIn(WAVE_START + 3 * WAVE_STAGGER, 60);
-  const lineLeft = useWaveIn(WAVE_START + 3 * WAVE_STAGGER, -60);
+
+  // Stage 2: the two traced lines, drawing on from STILL_MS — see `TRACE_MS` above.
+  const rightTraceProgress = useTraceProgress(STILL_MS);
+  const leftTraceProgress = useTraceProgress(STILL_MS);
 
   useEffect(() => {
     wordmarkOpacity.value = withDelay(STILL_MS, withTiming(0, { duration: SWAP_MS, easing: WAVE_EASE }));
@@ -190,6 +195,27 @@ export default function App() {
     opacity: actionsOpacity.value,
     transform: [{ translateY: actionsY.value }],
   }));
+  // The clip that "draws" each line: width and height grow together from the corner where the
+  // path actually STARTS in the image (see the comments at each line's JSX below) out to the
+  // art's full size, so more of the dashed path is exposed over time rather than the whole image
+  // fading in at once. The quick opacity ramp (progress 0→0.1) is only there so the very first
+  // sliver doesn't pop in at full opacity before it has any width to speak of.
+  const leftTraceStyle = useAnimatedStyle(() => {
+    const p = leftTraceProgress.value;
+    return {
+      width: p * waveSize.lineLeftMain.width,
+      height: p * waveSize.lineLeftMain.height,
+      opacity: Math.min(1, p / 0.1),
+    };
+  });
+  const rightTraceStyle = useAnimatedStyle(() => {
+    const p = rightTraceProgress.value;
+    return {
+      width: p * waveSize.lineRightMain.width,
+      height: p * waveSize.lineRightMain.height,
+      opacity: Math.min(1, p / 0.1),
+    };
+  });
 
   return (
     <View style={[styles.container, { backgroundColor: BG_CREAM }]}>
@@ -199,17 +225,49 @@ export default function App() {
       <Animated.Image source={wavyRight2} style={[styles.waveRightBack, waveSize.rightBack, rightBack]} resizeMode="contain" />
       <Animated.Image source={wavyRight1} style={[styles.waveRightFront, waveSize.rightFront, rightFront]} resizeMode="contain" />
       <Animated.Image source={wavyRight3} style={[styles.waveRightAccent, waveSize.rightAccent, rightAccent]} resizeMode="contain" />
-      <Animated.Image
-        source={lineRight2}
-        style={[styles.lineRightMain, waveSize.lineRightMain, isTablet && styles.lineRightMainTablet, lineRight]}
-        resizeMode="contain"
-      />
+      {/* Fixed-size, non-animated frame at the art's full size and screen position — only its
+          CONTENT is revealed, progressively, from stage 2 (STILL_MS) on. The inner box always
+          grows from top-right REGARDLESS of device: that's where this path actually starts in
+          the image (the loop near the top), which doesn't change between phone and tablet — only
+          `lineRightMainTablet` (the frame's screen position) does. Anchoring the reveal to the
+          screen-position corner instead of the art's own corner was an earlier bug: on tablet
+          that corner is bottom-right, which isn't near either end of the path. */}
+      <View
+        style={[styles.lineRightMain, waveSize.lineRightMain, isTablet && styles.lineRightMainTablet, styles.traceClip]}
+        pointerEvents="none"
+      >
+        <Animated.View style={[styles.traceGrowTopRight, styles.traceClip, rightTraceStyle]}>
+          {/* `position: "absolute"` + the SAME top-right anchor as the box above is load-bearing:
+              without it RN's default flow pins a fixed-size child to its parent's top-LEFT
+              regardless of the parent's own anchor, so the art's screen-fixed position would
+              silently follow the shrinking/growing box instead of staying put while only the
+              clip window changes — which is what made the right line barely look animated. */}
+          <Image
+            source={lineRight2}
+            style={[waveSize.lineRightMain, styles.traceArtTopRight]}
+            resizeMode="contain"
+          />
+        </Animated.View>
+      </View>
 
       {/* Left corner, back to front. */}
       <Animated.Image source={wavyLeft2} style={[styles.waveLeftBack, waveSize.leftBack, leftBack]} resizeMode="contain" />
       <Animated.Image source={wavyLeft1} style={[styles.waveLeftFront, waveSize.leftFront, leftFront]} resizeMode="contain" />
       <Animated.Image source={wavyLeft3} style={[styles.waveLeftAccent, waveSize.leftAccent, leftAccent]} resizeMode="contain" />
-      <Animated.Image source={lineLeft1} style={[styles.lineLeftMain, waveSize.lineLeftMain, lineLeft]} resizeMode="contain" />
+      {/* Same trace-reveal as the right line. Grows from BOTTOM-left, not top-left: this path
+          starts low on the left edge and rises to exit near the top-right, so bottom-left is its
+          actual first point in the image. */}
+      <View style={[styles.lineLeftMain, waveSize.lineLeftMain, styles.traceClip]} pointerEvents="none">
+        <Animated.View style={[styles.traceGrowBottomLeft, styles.traceClip, leftTraceStyle]}>
+          {/* Same fix as the right line's `traceArtTopRight`, mirrored: pins the art to the
+              growing box's bottom-left instead of RN's default top-left flow position. */}
+          <Image
+            source={lineLeft1}
+            style={[waveSize.lineLeftMain, styles.traceArtBottomLeft]}
+            resizeMode="contain"
+          />
+        </Animated.View>
+      </View>
 
       {/* Centred on the full screen, independent of `actions` below — sizing or hiding that row
           must never shift this. That coupling (a flex column centering the pair as a group) was
@@ -273,6 +331,18 @@ function useWaveIn(delay: number, fromX: number) {
     opacity: opacity.value,
     transform: [{ translateX: x.value }],
   }));
+}
+
+/** Raw 0→1 progress for a traced line's reveal, starting `delay` ms after mount. Returned as the
+ *  SharedValue itself (not a style) because the caller needs it twice — to drive a clip's width
+ *  AND height together — rather than once. */
+function useTraceProgress(delay: number) {
+  const progress = useSharedValue(0);
+  useEffect(() => {
+    progress.value = withDelay(delay, withTiming(1, { duration: TRACE_MS, easing: WAVE_EASE }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return progress;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- signature required by useStyles
@@ -380,4 +450,17 @@ const makeStyles = (t: Theme) =>
   // taller screen (a phone's short side, not its `top`, was what made it land there) — anchoring
   // to `bottom` instead makes it reach regardless of how tall the specific tablet is.
   lineRightMainTablet: { top: undefined, bottom: -20, right: -50 },
+  // The trace-reveal clip: `traceClip` on both the outer (fixed-size) frame and the inner
+  // (animated-size) growing box is what makes each a real clipping boundary rather than just a
+  // positioned box — without it the full image would render immediately, sized or not. The two
+  // grow variants pin the inner box to the corner where EACH IMAGE's own path actually starts
+  // (see the comments at their call sites) — not the frame's screen-position anchor, which is a
+  // different thing and, on tablet, a different corner.
+  traceClip: { overflow: "hidden" },
+  traceGrowBottomLeft: { position: "absolute", bottom: 0, left: 0 },
+  traceGrowTopRight: { position: "absolute", top: 0, right: 0 },
+  // Pins each line's art, inside its growing box, to the same corner the box itself grows from —
+  // see the comments at the two call sites above for why this is needed at all.
+  traceArtTopRight: { position: "absolute", top: 0, right: 0 },
+  traceArtBottomLeft: { position: "absolute", bottom: 0, left: 0 },
   });
