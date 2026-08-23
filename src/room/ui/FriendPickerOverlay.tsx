@@ -1,8 +1,18 @@
 // Who to visit. A layer over the hub rather than a route, the way the shop and inventory are, so the room stays mounted and lit behind the scrim and dismissing costs nothing.
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState } from "react";
 import { router } from "expo-router";
 import type { Href } from "expo-router";
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import { avatarForProfile } from "@/src/components/avatarAssets";
 import { Button } from "@/src/game/ui/system/Button";

@@ -1,6 +1,15 @@
 // The shared overlay primitive: a full-screen scrim with a centered card that slides up + fades in on mount. One source of truth for how modal overlays are framed — scrim, card radius, elevation, and the optional title/subtitle/close header — so every overlay reads as one system instead of each surface re-styling its own scrim and card. Render your content as children.
-import { PropsWithChildren, useEffect, useRef } from "react";
-import { Animated, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import {
+  PropsWithChildren,
+  useEffect,
+  useRef } from "react";
+import { Animated,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import { CloseIcon } from "@/src/components/Icons";
 import { SLIDE_UP } from "./slideUp";

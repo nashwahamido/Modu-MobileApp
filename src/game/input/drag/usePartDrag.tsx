@@ -925,6 +925,8 @@ export function usePartDrag({
             });
           } else if (store.settings.releaseBehavior === "float") {
             // FLOAT: leave the part exactly where it was set down. heldActionId stays set (we don't cancelHeld), so the driver keeps its offset and the part renders in place — drag it again on the canvas or use the tray Put-back to return it. Ported from the on-release engine. slideDriver is intentionally left as-is (not zeroed): the lead is still logically held, just parked, so its siblings should keep riding at the same offset until the next drag frame or an explicit cancel.
+            // A drag that ended without placing. Counted here rather than in releaseHeld, which only runs when a socket matched — so it sees successes and never failures.
+            useGameStore.getState().noteMiss(action.actionId);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           } else {
             // complimentary function for FLOAT: AUTO-RETURN: the part flies to a recover spot in front of the camera and returns to the tray.
@@ -952,6 +954,8 @@ export function usePartDrag({
               if (lead) slideDriver.set([0, 0, 0]);
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               st.noteBlocked(action.actionId);
+              // The auto-return half of the same failure. noteBlocked is NOT a substitute: it also fires when a pickup is refused outright, which is not a failed drag.
+              st.noteMiss(action.actionId);
             });
           }
         });

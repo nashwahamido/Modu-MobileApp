@@ -38,6 +38,12 @@ function AppContent() {
   useEffect(() => {
     setMusicVolume("ambient", musicVolume);
     setMusicEnabled("ambient", musicOn);
+    // Onboarding follows the GENERAL music setting rather than getting a row of its own: it is the
+    // same "music while I browse" the room and catalogue use, just a different piece. Without this it
+    // would be the one track a player cannot turn off — and it plays before they have ever seen the
+    // settings screen.
+    setMusicVolume("onboarding", musicVolume);
+    setMusicEnabled("onboarding", musicOn);
   }, [musicOn, musicVolume]);
   useEffect(() => {
     setMusicVolume("assembly", buildMusicVolume);

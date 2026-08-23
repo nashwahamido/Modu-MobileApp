@@ -1,5 +1,10 @@
 // One owned tile in the inventory popup: brand mark, picture well, name
-import { StyleSheet, Image, Pressable, View } from "react-native";
+import {
+  StyleSheet,
+  Image,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import {
   FRAME_FILL,

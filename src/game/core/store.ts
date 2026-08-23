@@ -182,6 +182,17 @@ interface GameState {
   setDragFit: (fitState: FitState, matchedActionId: ActionId | null) => void;
   setAimBlocked: (aimBlocked: boolean) => void;
   releaseHeld: () => "snap" | "recover";
+  /** The action the player keeps failing to place, and how many times in a row they have failed it.
+   *  Reset by a successful snap, by moving to a different part, and by clearMisses. A run of these on
+   *  ONE action is the difference between fumbling a drag and not being able to see where the part
+   *  goes — which is what the recenter prompt is for. */
+  missActionId: ActionId | null;
+  missCount: number;
+  /** Called when a drag ENDS WITHOUT PLACING — the part was set down in float mode, or flew back in
+   *  auto-return. Not by releaseHeld: that only runs when a socket matched, so a counter living
+   *  there counted successes and never saw a single failure. */
+  noteMiss: (actionId: ActionId) => void;
+  clearMisses: () => void;
   cancelHeld: () => void;
 
   examinePart: (partId: PartId) => void;
@@ -191,6 +202,22 @@ interface GameState {
    *  itself when no cluster has been chosen yet; this flag is for reopening it mid-build. */
   mapOpen: boolean;
   setMapOpen: (open: boolean) => void;
+  /** The settings panel is open over the build. Lifted out of GameSettings' own useState so the
+   *  coaches can see it: a card that pops while the player is reading Settings is talking about a
+   *  screen they are not looking at, exactly like the project map. */
+  settingsOpen: boolean;
+  setSettingsOpen: (open: boolean) => void;
+  /** The cluster whose celebration card is on screen, or null. Lifted out of ClusterCelebration's own
+   *  useState so the coaches can see it — a card popping over the celebration is the same mistake as
+   *  one popping over the map. */
+  celebratingCluster: ClusterId | null;
+  /** Clusters already celebrated for THIS furniture. In the store rather than a component ref so it
+   *  survives a remount and a return visit: going back into a finished stage from the project map
+   *  must not replay its card. Cleared by loadFurniture and reset. */
+  celebratedClusters: ClusterId[];
+  celebrateCluster: (cluster: ClusterId) => void;
+  dismissCelebration: () => void;
+  baselineCelebrated: (clusters: ClusterId[]) => void;
   /** The build map has been shown once for this furniture. Single-cluster builds open it as
    *  an intro; this is what stops it reappearing every time the player returns. */
   mapSeen: boolean;
@@ -298,6 +325,11 @@ export const useGameStore = create<GameState>()((set, get) => ({
   combiningCluster: null,
   partBoxes: {},
   mapOpen: false,
+  missActionId: null as ActionId | null,
+  missCount: 0,
+  settingsOpen: false,
+  celebratingCluster: null as ClusterId | null,
+  celebratedClusters: [] as ClusterId[],
   mapSeen: false,
   doneDismissed: false,
   completeConfirmed: false,
@@ -341,6 +373,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
       selectedTool: null,
       // Cleared HERE only: part ids collide across furnitures (`leg_1` is both a LACK leg and a DALFRED leg), so a stale map would hand the drag the previous model's geometry until the next harvest lands. The other reset paths keep the same loaded model, where the boxes are still valid and dropping them would disable the feature mid-session for nothing.
       partBoxes: {},
+      celebratingCluster: null,
+      celebratedClusters: [],
       ...CLEARED,
     }),
   reset: () =>
@@ -356,6 +390,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
       driveKind: null,
       driveProgress: {},
       selectedTool: null,
+      celebratingCluster: null,
+      celebratedClusters: [],
       ...CLEARED,
     }),
 
@@ -651,7 +687,11 @@ export const useGameStore = create<GameState>()((set, get) => ({
     if (!heldActionId) return "recover";
     const ok = fitState === "nearCorrect";
     if (ok) get().completeAction(matchedActionId ?? heldActionId);
-    set({ ...CLEARED });
+    // ONLY the success side is handled here. This function runs when a socket matched, so its
+    // "recover" return means something else — see noteMiss for where a failed drag is actually
+    // counted. A snap clears the run, so a player who gets it on the third go starts the next part
+    // clean.
+    set({ ...CLEARED, ...(ok ? { missActionId: null, missCount: 0 } : {}) });
     return ok ? "snap" : "recover";
   },
   cancelHeld: () =>
@@ -669,7 +709,28 @@ export const useGameStore = create<GameState>()((set, get) => ({
   examineCluster: (cluster) =>
     set({ ...CLEARED, examine: { kind: "cluster", cluster } }),
   clearExamine: () => set({ examine: null }),
+  // A run is counted PER ACTION, and only while it stays the same one: putting a part down to try a
+  // different one is a change of plan, not a fourth failure at the same socket.
+  noteMiss: (actionId) =>
+    set((s) => ({
+      missActionId: actionId,
+      missCount: s.missActionId === actionId ? s.missCount + 1 : 1,
+    })),
+  clearMisses: () => set({ missActionId: null, missCount: 0 }),
   setMapOpen: (open) => set({ mapOpen: open }),
+  setSettingsOpen: (open) => set({ settingsOpen: open }),
+  celebrateCluster: (cluster) =>
+    set((s) => ({
+      celebratingCluster: cluster,
+      celebratedClusters: s.celebratedClusters.includes(cluster)
+        ? s.celebratedClusters
+        : [...s.celebratedClusters, cluster],
+    })),
+  dismissCelebration: () => set({ celebratingCluster: null }),
+  // Marks what is ALREADY finished as celebrated without showing anything — used when a build is
+  // first loaded or resumed, so old wins do not replay.
+  baselineCelebrated: (clusters) =>
+    set({ celebratedClusters: clusters, celebratingCluster: null }),
   setMapSeen: (seen) => set({ mapSeen: seen }),
   setDoneDismissed: (v) => set({ doneDismissed: v }),
   setCompleteConfirmed: (v) => set({ completeConfirmed: v }),

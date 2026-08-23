@@ -1,11 +1,11 @@
 import {
   Image,
-  Pressable,
   StyleSheet,
   type PressableProps,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 const soundOn = require("@/src/assets/ui/icons/icon-sound-on.png");
 const soundOff = require("@/src/assets/ui/icons/icon-sound-off.png");

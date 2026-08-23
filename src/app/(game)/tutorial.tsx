@@ -664,13 +664,20 @@ function TutorialScreen() {
     needsFocusChoice,
     mode,
     textLevel: settings.textLevel,
-    // THE ASSEMBLY VOICE STAYS QUIET WHILE THE TUTORIAL IS RUNNING. `settings.audio` alone meant the
-    // recorded LACK instruction played on top of Lumi's tutorial line — two performances of two
-    // different scripts at once, on the profile built around being read to. `guideCompleted` hands
-    // the voice over once the tutorial is done and the player is simply finishing the table.
+    // THE ASSEMBLY VOICE STAYS QUIET WHILE THE TUTORIAL IS TEACHING — and it stops teaching before it
+    // ends. `settings.audio` alone meant the recorded LACK instruction played on top of Lumi's
+    // tutorial line, two performances of two different scripts at once, on the profile built around
+    // being read to.
+    //
+    // The handover is `collapsedLegGuide`, not `guideCompleted`. The last step is "Continue
+    // assembling", which spans the whole rest of the build: waiting for the tutorial to COMPLETE
+    // means the assembly hints only arrive once the table is finished and there is nothing left to
+    // hint at. collapsedLegGuide is that step plus the player having picked something up — so the
+    // handover happens AFTER Lumi's step-9 line has played rather than on top of it, which is the
+    // one moment the two would otherwise collide.
     //
     // ONLY the audio is gated here. The bar's line is fixed separately, below.
-    audioOn: settings.audio && guideCompleted,
+    audioOn: settings.audio && (guideCompleted || collapsedLegGuide),
     completedCount,
     totalCount,
   });

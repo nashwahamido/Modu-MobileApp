@@ -1,6 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
-import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
-import { findNodeHandle, Image, Pressable, StyleSheet, Text, useWindowDimensions, UIManager, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
+import {
+  useEffect,
+  useRef,
+  useState } from 'react';
+import Svg,
+  { Defs,
+  RadialGradient,
+  Rect,
+  Stop } from 'react-native-svg';
+import { findNodeHandle,
+  Image,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  UIManager,
+  View,
+  type LayoutChangeEvent,
+  type ViewStyle,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import { useTutorialVoice } from '@/src/game/audio/useTutorialVoice';
 import {
   TUTORIAL_REWARD_TOKENS,
