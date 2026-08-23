@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import {
   AppState,
   Animated,
-  Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import { useGameStore } from "@/src/game/core/store";
 import { ACCENT_LIGHT, ELEVATION, Theme, useFixedStyles } from "@/src/game/ui/system/theme";

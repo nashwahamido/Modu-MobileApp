@@ -14,6 +14,7 @@ import { useGameStore } from "@/src/game/core/store";
 import { useHudIcon } from "@/src/game/ui/hud/hudIcons";
 import { GrainOverlay } from "@/src/game/ui/system/Button";
 import { SCENE_BACKGROUND } from "@/src/game/scene/lighting";
+import { playSfx } from "@/src/game/audio/sfx";
 
 /** One shared size for every bare HUD icon so they line up on the grid. */
 // 24 inside the 36 chip: the art was nearly filling its container, which read as heavy against the scene. The chip size is unchanged, so the grid and the tap targets hold.
@@ -43,7 +44,11 @@ export function IconButtonBare({
   const t = useTheme();
   return (
     <Pressable
-      onPress={onPress}
+      // The HUD's chips click like every other button — see withClick in system/Button.
+      onPress={() => {
+        playSfx("click");
+        onPress();
+      }}
       disabled={disabled}
       hitSlop={12}
       accessibilityRole="button"

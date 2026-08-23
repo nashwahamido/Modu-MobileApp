@@ -1,7 +1,13 @@
 //  room hub's top-right cluster: the coins pill and the level/xp pill
-import { router } from 'expo-router';
+import {
+  router } from 'expo-router';
 import type { Href } from 'expo-router';
-import { StyleSheet, Image, Pressable, Text, View } from "react-native";
+import { StyleSheet,
+  Image,
+  Text,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import { CARD_CHROME, CREAM, useScaledStyles, useIsTablet, LEXEND } from "@/src/game/ui/system/theme";
 import { useTopStatsScale } from './roomScale';
 import type { Theme } from "@/src/game/ui/system/theme";

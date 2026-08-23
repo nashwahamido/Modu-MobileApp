@@ -1,7 +1,8 @@
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { StyleSheet, Image, Pressable, ScrollView, Text, View } from "react-native";
+import { StyleSheet, Image, ScrollView, Text, View } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import type { StyleProp, ViewStyle } from "react-native";
 import Animated, {
   Easing,
@@ -22,6 +23,7 @@ import { usePlacementStore } from "@/src/room/core/placement";
 import { ConfettiRain } from "@/src/game/ui/celebration/Confetti";
 import { SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import type { Theme } from "@/src/game/ui/system/theme";
+import { playSfx } from "@/src/game/audio/sfx";
 
 /** The banner art's aspect (900x218 after trimming), so the height is derived from the width rather
  *  than being a second number that has to be kept in step with it. */
@@ -193,9 +195,17 @@ export function BuildComplete() {
     };
   }, [furnitureId, repos]);
 
-  if (!furniture) return null;
-  const total = furniture.actions.length;
+  const total = furniture?.actions.length ?? 0;
   const isDone = total > 0 && completed.length >= total;
+  // THE FANFARE, on the card APPEARING rather than on the last action landing — useAssemblySfx stays
+  // deliberately silent there, and a fanfare then would play to a screen still showing the model.
+  // Above the early return: a hook past a conditional return changes hook order between renders.
+  const celebrating = isDone && !dismissed && confirmed;
+  useEffect(() => {
+    if (celebrating) playSfx("complete");
+  }, [celebrating]);
+
+  if (!furniture) return null;
   // Wait for the player to tap "Complete" — until then the FinishBuildButton is showing and they can still orbit the finished model.
   if (!isDone || dismissed || !confirmed) return null;
 
@@ -206,7 +216,7 @@ export function BuildComplete() {
   };
   // Straight into the room with the ghost already in hand; falls back to the inventory for the rare furniture with no room model (the tutorial).
   const placeInRoom = () => {
-    if (!furnitureId || !usePlacementStore.getState().startPlacing(furnitureId, { firstPlacementGuide: true })) {
+    if (!furnitureId || !usePlacementStore.getState().startPlacing(furnitureId)) {
       goToInventory();
       return;
     }

@@ -1,8 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { router, useLocalSearchParams, useRootNavigationState } from 'expo-router';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState } from 'react';
+import { router,
+  useLocalSearchParams,
+  useRootNavigationState } from 'expo-router';
 import type { Href } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { StyleSheet, Image, Pressable, Text, View } from "react-native";
+import { StyleSheet,
+  Image,
+  Text,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import { SETTINGS_ICON } from '../../components/iconAssets';
 import { Button } from '../../game/ui/system/Button';
 import { OverlaySheet } from '../../game/ui/system/OverlaySheet';

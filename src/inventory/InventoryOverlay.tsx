@@ -1,6 +1,16 @@
 // The inventory, as a popup layer over the room rather than a route, so the scene stays mounted. Twin of ShopOverlay, and separate on purpose: anything that must LOOK the same is a shared token or a shared helper, never a number copied between them. The conventions this file follows are listed at the top of game/ui/theme.ts. Read them before restyling.
-import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Animated, StyleSheet, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  useEffect,
+  useMemo,
+  useState } from "react";
+import { ActivityIndicator,
+  Animated,
+  StyleSheet,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import { CloseIcon } from "@/src/components/Icons";
 import { Button } from "@/src/game/ui/system/Button";

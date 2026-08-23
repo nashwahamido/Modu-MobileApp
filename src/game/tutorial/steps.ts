@@ -291,8 +291,7 @@ export const VISUAL_TUTORIAL_STEPS: TutorialStep[] = [
     // there is no "toggled twice" event, and leaving them in focus mode with no way out is worse.
     id: "hud-focus",
     targetId: "focus",
-    message:
-      'Reduce UI with "Focus", press again to bring it back.',
+    message: "Simplify the screen with ‘Focus’; press again to restore.",
     event: "focus_mode_toggled",
   },
   {

@@ -1,6 +1,13 @@
 // The beat between the last part landing and the completion screen. The build is done, but instead of the summary snapping up immediately, this pulsing button appears and the player keeps full camera control — they can orbit the finished piece and admire it. Tapping it sets completeConfirmed, which is what actually reveals BuildComplete. Same "don't snatch the last look away" reasoning as the cluster celebration waiting for a tap.
-import { useEffect, useRef } from "react";
-import { Animated, Easing, Pressable, StyleSheet, Text } from "react-native";
+import {
+  useEffect,
+  useRef } from "react";
+import { Animated,
+  Easing,
+  StyleSheet,
+  Text,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import * as Haptics from "expo-haptics";
 import { useGameStore } from "@/src/game/core/store";
 import { useSafeInsets } from "@/src/hooks/use-safe-insets";

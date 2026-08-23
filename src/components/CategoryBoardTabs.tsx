@@ -1,7 +1,14 @@
 // The category row for the catalogue popups (shop and inventory), mounted on a cream panel
 // Tabs come from src/data/shop/items.ts, so adding a category is a one-line change there
-import { useState } from "react";
-import { StyleSheet, Image, Pressable, Text, View, useWindowDimensions } from "react-native";
+import {
+  useState } from "react";
+import { StyleSheet,
+  Image,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import { GRID_EDGE } from "@/src/components/popupInsets";
 import { CATEGORY_LABELS, SHOP_CATEGORY_TABS } from "@/src/data";

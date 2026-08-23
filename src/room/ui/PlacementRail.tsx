@@ -1,7 +1,8 @@
 // The controls shown while a piece is being placed: the colour swatches and the button column, in one rail on the RIGHT edge of the screen. Lifted out of RoomExperience so this whole cluster can be restyled on its own — the room screen only decides WHEN it is up (activeEdit), never how it looks.
 //
 // Right edge, and a column, because the app is landscape: the free space is vertical, and the old bottom-centre bar sat across the room's width and on top of the bottom navigation. The rail is centred in the band left between the top stats cluster and the bottom bar, so it covers neither.
-import { StyleSheet, Pressable, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import { BulbIcon, CheckIcon, RotateLeftIcon, RotateRightIcon, TrashIcon } from "../../components/Icons";
 import { getRoomItemDef } from "../core/placeableItems";
@@ -10,6 +11,7 @@ import { ColourPicker } from "./ColourPicker";
 import { CARD_CHROME, CREAM, useFixedStyles, useTheme, FONT, LEXEND } from '@/src/game/ui/system/theme';
 import type { Theme } from "@/src/game/ui/system/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "../../hooks/use-safe-insets";
+import { playSfx } from "@/src/game/audio/sfx";
 
 
 // How far the rail's band is held clear of the two HUD clusters it must never cover: the stats pills at the top right, and the bottom navigation. Each is added to that corner's own inset offset, so the three move together.
@@ -149,6 +151,8 @@ export function PlacementRail({
           ]}
           disabled={blocked}
           onPress={() => {
+            // The piece settling into the room. On CONFIRM rather than on every ghost move.
+            playSfx("dropItem");
             confirmPlacement();
             onGuideAction?.("confirm");
           }}
