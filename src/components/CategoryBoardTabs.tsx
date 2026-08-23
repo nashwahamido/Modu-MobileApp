@@ -78,6 +78,29 @@ const BOARD_ASPECT = 2639 / 355;
 // a taller panel rather than as squashed artwork. It also needs resizeMode="stretch" below — `contain`
 // would letterbox the drawing inside the taller box instead of filling it.
 const BOARD_STRETCH_Y = 1.18;
+// TABLET ONLY: how far past the tile span the panel runs. On a phone the panel is measured from the
+// tab row and is narrower than the tiles by design, so none of this applies there.
+//
+// It is keyed to the screen's ASPECT rather than to a model, because that is what the problem actually
+// is. A 4:3 tablet (an iPad at 1080x810pt) has a canvas 200pt narrower than a 16:10 one at the same
+// height, and the popup's side inset is a SHARE of the width — so the panel, the tile span and the
+// board all come out proportionally shorter, and the header ends up with more empty space around a
+// smaller panel. The squarer the screen, the more of it the panel takes back.
+//
+// Anchored at the two shapes in use and interpolated between; anything squarer or wider than those is
+// clamped, so an unusual tablet lands on one of the tested ends rather than off the scale.
+const BOARD_WIDEN_BY_ASPECT = [
+  { aspect: 4 / 3, widen: 1.16 },
+  { aspect: 16 / 10, widen: 1.06 },
+];
+
+function tabletBoardWiden(aspect: number): number {
+  const [square, wide] = BOARD_WIDEN_BY_ASPECT;
+  if (aspect <= square.aspect) return square.widen;
+  if (aspect >= wide.aspect) return wide.widen;
+  const t = (aspect - square.aspect) / (wide.aspect - square.aspect);
+  return square.widen + (wide.widen - square.widen) * t;
+}
 
 // THE TABLET FILL.
 //
@@ -184,7 +207,9 @@ export function CategoryBoardTabs({
         ? (() => {
             // On a tablet the panel spans the grid outright; on a phone it stays what it always
             // was — the row plus its overhang, which is narrower than the tiles by design.
-            const width = tablet ? tileSpan : row.width + BOARD_OVERHANG_X * 2 * k;
+            const width = tablet
+              ? tileSpan * tabletBoardWiden(Math.max(screenW, screenH) / Math.min(screenW, screenH))
+              : row.width + BOARD_OVERHANG_X * 2 * k;
             const height = (width / BOARD_ASPECT) * BOARD_STRETCH_Y;
             return (
               <Image
