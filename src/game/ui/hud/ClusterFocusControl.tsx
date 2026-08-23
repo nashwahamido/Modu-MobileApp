@@ -11,6 +11,7 @@ import {
   focusableClusterIds,
   requiresClusterFocus,
 } from "@/src/game/core/evaluation/clusters";
+import { HudSpotTarget } from "@/src/game/ui/hud/hudSpotlight";
 import { useGameStore } from "@/src/game/core/store";
 import { clusterThumbSet, modelThumbSet } from "@/src/game/core/presentation/finish";
 import Svg, { Circle as SvgCircle, Defs, RadialGradient, Stop } from "react-native-svg";
@@ -585,7 +586,12 @@ export function MapButton() {
 
   if (!furniture) return null;
   return (
-    <View style={m(styles.mapSlot)}>
+    // MEASURED, not written down. MapCoach used to place its highlight from a copy of `mapSlot`'s
+    // numbers, but this slot lives inside play.tsx's INSET `chrome` container while the highlight is
+    // drawn on the full-screen overlay layer — so "right: 14" meant two different places, and on any
+    // device reporting a side inset the highlight drifted off the chip. The slot style stays on the
+    // wrapper so the layout is unchanged; the wrapper simply also reports where it landed.
+    <HudSpotTarget id="map" style={m(styles.mapSlot)}>
       <Animated.View style={{ transform: [{ scale: lift }] }}>
         <Pressable
           style={styles.mapButton}
@@ -602,7 +608,7 @@ export function MapButton() {
           <Text style={styles.mapLabel}>Map</Text>
         </Pressable>
       </Animated.View>
-    </View>
+    </HudSpotTarget>
   );
 }
 
