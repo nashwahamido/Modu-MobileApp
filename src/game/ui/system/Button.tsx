@@ -11,6 +11,7 @@ import {
   StyleProp,
   StyleSheet,
   Text,
+  TextStyle,
   View,
   ViewStyle,
 } from "react-native";
@@ -49,6 +50,9 @@ interface ButtonProps {
   /** A count, rendered in the accent (the Hint button's "2" in the reference). */
   badge?: number | string;
   style?: StyleProp<ViewStyle>;
+  /** Overrides on top of the label's `TYPE.label`/`TYPE.labelSm` — e.g. a bigger `fontSize` for
+   *  one screen's buttons, without touching every other caller of this shared component. */
+  labelStyle?: StyleProp<TextStyle>;
   hitSlop?: number;
   /** Overrides the label for screen readers — needed for icon-only buttons that have no
    *  visible text label to announce. */
@@ -84,6 +88,7 @@ export function Button({
   small,
   badge,
   style,
+  labelStyle,
   hitSlop = 8,
   accessibilityLabel,
 }: ButtonProps) {
@@ -129,6 +134,7 @@ export function Button({
                     : textFor(t, variant, pressed && !disabled),
                 },
                 icon ? { marginLeft: SPACE.sm } : null,
+                labelStyle,
               ]}
             >
               {label}
