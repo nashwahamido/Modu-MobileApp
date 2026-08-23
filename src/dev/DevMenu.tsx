@@ -9,8 +9,9 @@ import { actionCluster } from "@/src/game/core/evaluation/clusters";
 import { useGameStore } from "@/src/game/core/store";
 import { useFixedStyles } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
+import { SHOWCASE_ENABLED } from "@/src/dev/showcase";
 
-/** DEV-only round drawer button: tap to fan out developer shortcuts. First occupant: finish the focused cluster in one click (drives the REAL store action-by-action, so gates/cascades/celebration all fire — only the gestures are skipped). More tools land here later; the whole thing is stripped from release builds by the __DEV__ guard.
+/** DEV-only round drawer button: tap to fan out developer shortcuts. First occupant: finish the focused cluster in one click (drives the REAL store action-by-action, so gates/cascades/celebration all fire — only the gestures are skipped). More tools land here later; the whole thing is stripped from release builds by the __DEV__ guard, and hidden in showcase builds on top of that.
  *
  *  ASSEMBLY ONLY — every shortcut here reads store.furniture, so it is dead weight anywhere but play.tsx. Cross-screen dev navigation lives in GmTestPanel, which _layout.tsx mounts globally. */
 export function DevMenu() {
@@ -93,7 +94,8 @@ export function DevMenu() {
     setOpen(false);
   };
 
-  if (!__DEV__) return null;
+  // Hidden in showcase even when Metro is attached: a demo build shows the player nothing but the game, and __DEV__ alone is true when the showcase runs off the dev server.
+  if (!__DEV__ || SHOWCASE_ENABLED) return null;
   return (
     <View style={styles.wrap} pointerEvents="box-none">
       {open ? (

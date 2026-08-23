@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { StyleSheet } from "react-native";
 import {
   Camera,
@@ -6,11 +6,12 @@ import {
   FilamentView,
   Light,
   useCameraManipulator,
+  useFilamentContext,
   useModel,
 } from "react-native-filament";
 import type { ISharedValue } from "react-native-worklets-core";
 import { useGameStore } from "@/src/game/core/store";
-import type { PartId } from "@/src/game/core/type";
+import type { PartBox, PartId } from "@/src/game/core/type";
 import { useThemeId } from "@/src/game/ui/system/theme";
 import { CombineCarry, type CarryOffset } from "./CombineCarry";
 import { OrbitDrive, type PanOffset, type StickDeflection } from "./OrbitDrive";
@@ -18,6 +19,8 @@ import { stageOffsetMap } from "@/src/game/core/model/staging";
 import { FOCAL_LENGTH_MM } from "./cameraConfig";
 import { CEL_IBL_INTENSITY, getLightRig, IBL_INTENSITY } from "./lighting";
 import type { ClusterDriver, DriverRegistry, OffsetDriver } from "./offsetDriver";
+import { registerLiveBoxReader, worldBoxFromObjectBox } from "./partBoxes";
+import { registerPickProber } from "./pickProbe";
 import { PartModel } from "./PartModel";
 import { buildPushDriverMap } from "./pushOpen";
 import { ToolModel } from "./ToolModel";
@@ -70,6 +73,7 @@ export function AssemblyScene({
     furniture?.styleModels?.[renderStyle] ?? furniture?.model ?? 0,
     { instanceCount: 2, addToScene: false },
   );
+  const { renderableManager, transformManager, view } = useFilamentContext();
   const manualTools = useGameStore((s) => s.settings.manualTools);
   const lightingPreset = useGameStore((s) => s.settings.lightingPreset);
   // The SCOPED theme, not the app's: this scene renders under the assembly's ThemeScope, so
@@ -109,6 +113,103 @@ export function AssemblyScene({
   useEffect(() => {
     if (model.state === "loaded") onModelReady?.();
   }, [model.state, onModelReady]);
+
+  // Deliberately NOT keyed on onModelReady: the parent passes a fresh inline closure every render, so including it would re-run this whole per-part native-bridge loop on any unrelated parent re-render — the harvest must happen once per model load. model.asset is read from the closure inside, since useModel returns a fresh object identity every render and depending on it would have the same effect.
+  useEffect(() => {
+    if (model.state !== "loaded" || !furniture) return;
+    // Harvest each part's world bounds ONCE — the joint derivation's only input from the renderer. Filament hands back the renderable's OBJECT-space box, so each is pushed through the node's world transform below; the tolerance check that follows is what proves the result really is in the space the derivation assumes, because a box left in the wrong space would shift every anchor by the node's translation and the drag would just feel subtly wrong instead of failing.
+    const boxes: Record<PartId, PartBox> = {};
+    let mismatches = 0;
+    let worst = { partId: "", mm: 0 };
+    for (const p of Object.values(furniture.parts)) {
+      const entity = model.asset.getFirstEntityByName(p.meshName);
+      if (!entity) continue;
+      const b = renderableManager.getAxisAlignedBoundingBox(entity);
+      const { min, max } = worldBoxFromObjectBox(
+        b.center,
+        b.halfExtent,
+        transformManager.getWorldTransform(entity).data,
+      );
+      boxes[p.partId] = { min, max };
+      const vco = p.visualCenterOffset ?? [0, 0, 0];
+      const dx = (min[0] + max[0]) / 2 - (p.pose.position[0] + vco[0]);
+      const dy = (min[1] + max[1]) / 2 - (p.pose.position[1] + vco[1]);
+      const dz = (min[2] + max[2]) / 2 - (p.pose.position[2] + vco[2]);
+      const mm = Math.hypot(dx, dy, dz) * 1000;
+      if (mm > 2) {
+        mismatches++;
+        if (mm > worst.mm) worst = { partId: p.partId, mm };
+      }
+    }
+    // Publishing UNVALIDATED boxes is strictly worse than publishing none: an empty map makes every consumer fall back to the previous visual-centre clamp, which is merely approximate, whereas a box in the wrong space yields a confidently wrong hold point that the drag trusts completely — so the tolerance check is a GATE, not a diagnostic, and one bad part disables the whole feature for the session.
+    if (mismatches > 0) {
+      if (__DEV__) console.warn(`[jointFrames] ${mismatches}/${Object.keys(boxes).length} part boxes are >2mm from pose+visualCenterOffset (worst: ${worst.partId} at ${worst.mm.toFixed(1)}mm). Publishing NO boxes — the drag falls back to the visual-centre clamp.`);
+      useGameStore.getState().setPartBoxes({});
+      return;
+    }
+    useGameStore.getState().setPartBoxes(boxes);
+    // model is a fresh object identity every render (useModel returns a new literal once loaded — see PartModel.tsx's modelEqual/useInstanceEntity for the same caveat), so depending on the whole object would re-run this harvest on every render instead of once per load; model.state is the stable signal that actually changes on load/unload.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model.state, furniture, renderableManager, transformManager]);
+
+  // Modes decide what is on SCREEN and they change with every store tick, so the reader below reads them through a ref — re-registering the closure on each mode change would churn a native-bridge callback for a value only read at pickup.
+  const modesRef = useRef(modes);
+  modesRef.current = modes;
+  // The harvest above is a snapshot of the ASSEMBLED furniture — right for joint frames, which are baked-pose geometry by definition, and wrong for anything asking what stands between the camera and a socket. This publishes the second answer: the same sweep, re-run on demand against whatever transform the render thread last wrote. PartModel drives instance 0 through this very entity (useInstanceEntity returns the asset's own entity for index 0), so a staged carrier or a cluster parked off-screen for the combine reads at the offset it is actually drawn at. A "hidden" part is skipped outright rather than boxed: its entity is out of the scene while its transform still says baked, which is the phantom this whole reader exists to kill. On demand rather than per frame because the answers are world-space part poses, which camera motion never changes (the drag reads the eye fresh every frame and tests sightlines against these boxes) — the poses themselves shift only on the rare mid-drag events the caller's own refresh throttle covers (usePartDrag re-reads every OCCLUDER_REFRESH_MS: a second finger toggling cluster focus, a prior part's commit animation still easing home).
+  useEffect(() => {
+    if (model.state !== "loaded" || !furniture) return;
+    const asset = model.asset;
+    registerLiveBoxReader((ids) => {
+      const out: Record<PartId, PartBox> = {};
+      for (const id of ids) {
+        const p = furniture.parts[id];
+        if (!p) continue;
+        const mode = modesRef.current[id];
+        if (!mode || mode === "hidden") continue;
+        const entity = asset.getFirstEntityByName(p.meshName);
+        if (!entity) continue;
+        const b = renderableManager.getAxisAlignedBoundingBox(entity);
+        out[id] = worldBoxFromObjectBox(
+          b.center,
+          b.halfExtent,
+          transformManager.getWorldTransform(entity).data,
+        );
+      }
+      return out;
+    });
+    return () => registerLiveBoxReader(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model.state, furniture, renderableManager, transformManager]);
+
+  // Renderer-truth pick for the visibility gate's second opinion (input/drag/pickConfirm). The entity→part map is built once per load: instance 0 is the world copy, instance 1 the ghost copy (same index order — see PartModel.useInstanceEntity), and the confirmer needs to tell them apart because a ghost is never an occluder. pickEntityWithDepth only exists on the PATCHED native module (patches/react-native-filament+1.11.0.patch); on an unpatched build the guard leaves the prober unregistered and every box verdict simply stands — the gate degrades to exactly its pre-confirmer behaviour.
+  useEffect(() => {
+    if (model.state !== "loaded" || !furniture) return;
+    const pick = (view as unknown as { pickEntityWithDepth?: (x: number, y: number) => Promise<{ entityId: number; depth: number } | null> }).pickEntityWithDepth;
+    if (typeof pick !== "function") {
+      if (__DEV__) console.warn("[pickProbe] view.pickEntityWithDepth missing — native patch not built; visibility gate runs box-only.");
+      return;
+    }
+    const asset = model.asset;
+    const byEntityId = new Map<number, { partId: PartId; ghost: boolean }>();
+    const baseEntities = asset.getInstance().getEntities();
+    const ghostEntities = asset.getAssetInstances()[1]?.getEntities() ?? [];
+    for (const p of Object.values(furniture.parts)) {
+      const named = asset.getFirstEntityByName(p.meshName);
+      if (!named) continue;
+      byEntityId.set(named.id, { partId: p.partId, ghost: false });
+      const idx = baseEntities.findIndex((e) => e.id === named.id);
+      const ghost = idx >= 0 ? ghostEntities[idx] : undefined;
+      if (ghost) byEntityId.set(ghost.id, { partId: p.partId, ghost: true });
+    }
+    registerPickProber(async (xDp, yDp) => {
+      const hit = await pick.call(view, xDp, yDp);
+      if (!hit) return null;
+      const owner = byEntityId.get(hit.entityId);
+      return { partId: owner?.partId ?? null, ghost: owner?.ghost ?? false, depth: hit.depth };
+    });
+    return () => registerPickProber(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model.state, furniture, view]);
   if (!furniture) return null;
   const driveAction = driveActionId
     ? furniture.actions.find((a) => a.actionId === driveActionId) ?? null

@@ -405,6 +405,69 @@ index 0000000..d165f19
 +};
 +
 +} // namespace margelo
+diff --git a/node_modules/react-native-filament/cpp/core/RNFViewWrapper.cpp b/node_modules/react-native-filament/cpp/core/RNFViewWrapper.cpp
+index 448df5b..377775f 100644
+--- a/node_modules/react-native-filament/cpp/core/RNFViewWrapper.cpp
++++ b/node_modules/react-native-filament/cpp/core/RNFViewWrapper.cpp
+@@ -26,6 +26,7 @@ void ViewWrapper::loadHybridMethods() {
+   registerHybridSetter("antiAliasing", &ViewWrapper::setAntiAliasing, this);
+   registerHybridMethod("projectWorldToScreen", &ViewWrapper::projectWorldToScreen, this);
+   registerHybridMethod("pickEntity", &ViewWrapper::pickEntity, this);
++  registerHybridMethod("pickEntityWithDepth", &ViewWrapper::pickEntityWithDepth, this);
+   registerHybridMethod("getViewport", &ViewWrapper::getViewport, this);
+ }
+ 
+@@ -276,6 +277,38 @@ std::future<std::optional<std::shared_ptr<EntityWrapper>>> ViewWrapper::pickEnti
+   return future;
+ }
+ 
++// Same pick as pickEntity, but the full PickingQueryResult reaches JS: entity id, the depth-buffer
++// value (Filament convention: 1 at the near plane, 0 at infinity — reversed-Z), and the GL-convention
++// fragment coordinates. pickEntity discards everything but the entity, and the depth is exactly what a
++// caller needs to know WHERE along the pick ray the hit surface sits (View.h documents the unproject).
++std::future<std::optional<std::unordered_map<std::string, double>>> ViewWrapper::pickEntityWithDepth(double x, double y) {
++  std::promise<std::optional<std::unordered_map<std::string, double>>> promise;
++  std::future<std::optional<std::unordered_map<std::string, double>>> future = promise.get_future();
++
++  // Adjust DP value from react native to actual viewport / screen pixel
++  x *= _densityPixelRatio;
++  y *= _densityPixelRatio;
++  // The y coordinate we receive has its origin at the top of the screen, but Filament expects it to be at the bottom
++  y = pointee()->getViewport().height - y;
++
++  pointee()->pick(x, y, [promise = std::move(promise)](View::PickingQueryResult result) mutable {
++    Entity entity = result.renderable;
++    if (entity.isNull()) {
++      promise.set_value(std::nullopt);
++    } else {
++      std::unordered_map<std::string, double> hit;
++      hit["entityId"] = static_cast<double>(entity.getId());
++      hit["depth"] = static_cast<double>(result.depth);
++      hit["fragX"] = static_cast<double>(result.fragCoords.x);
++      hit["fragY"] = static_cast<double>(result.fragCoords.y);
++      hit["fragZ"] = static_cast<double>(result.fragCoords.z);
++      promise.set_value(std::optional(hit));
++    }
++  });
++
++  return future;
++}
++
+ std::unordered_map<std::string, int> ViewWrapper::getViewport() {
+   std::unordered_map<std::string, int> viewport;
+   Viewport vp = pointee()->getViewport();
+diff --git a/node_modules/react-native-filament/cpp/core/RNFViewWrapper.h b/node_modules/react-native-filament/cpp/core/RNFViewWrapper.h
+index 9d6b23f..120ab58 100644
+--- a/node_modules/react-native-filament/cpp/core/RNFViewWrapper.h
++++ b/node_modules/react-native-filament/cpp/core/RNFViewWrapper.h
+@@ -47,6 +47,7 @@ private:
+   void setAntiAliasing(const std::string& antiAliasing);
+   std::vector<double> projectWorldToScreen(std::vector<double> worldCoordinates);
+   std::future<std::optional<std::shared_ptr<EntityWrapper>>> pickEntity(double x, double y);
++  std::future<std::optional<std::unordered_map<std::string, double>>> pickEntityWithDepth(double x, double y);
+   std::unordered_map<std::string, int> getViewport();
+   std::shared_ptr<BloomOptionsWrapper> createBloomOptions();
+   void setBloomOptions(std::shared_ptr<BloomOptionsWrapper> options);
 diff --git a/node_modules/react-native-filament/lib/typescript/index.d.ts b/node_modules/react-native-filament/lib/typescript/index.d.ts
 index a97008a..3e20bdc 100644
 --- a/node_modules/react-native-filament/lib/typescript/index.d.ts
@@ -496,6 +559,30 @@ index 0000000..609e37c
 +    readonly width: number;
 +    readonly height: number;
 +}
+diff --git a/node_modules/react-native-filament/lib/typescript/types/View.d.ts b/node_modules/react-native-filament/lib/typescript/types/View.d.ts
+index 5dc2280..61a6273 100644
+--- a/node_modules/react-native-filament/lib/typescript/types/View.d.ts
++++ b/node_modules/react-native-filament/lib/typescript/types/View.d.ts
+@@ -106,6 +106,19 @@ export interface View extends PointerHolder {
+      * Returns undefined if no entity is found.
+      */
+     pickEntity(x: number, y: number): Promise<Entity | null>;
++    /**
++     * Same pick as {@linkcode pickEntity}, but returns the full Filament PickingQueryResult:
++     * the entity's id, the depth-buffer value at the hit (Filament convention: 1 at the near
++     * plane, 0 at infinity - reversed-Z), and the GL-convention fragment coordinates.
++     * Returns undefined if no entity is found.
++     */
++    pickEntityWithDepth(x: number, y: number): Promise<{
++        entityId: number;
++        depth: number;
++        fragX: number;
++        fragY: number;
++        fragZ: number;
++    } | null>;
+     /**
+      * This type is the raw expected valeu for JSI.
+      * The type is encoded in {@linkcode TemporalAntiAliasingOptions}
 diff --git a/node_modules/react-native-filament/lib/typescript/types/index.d.ts b/node_modules/react-native-filament/lib/typescript/types/index.d.ts
 index 72cc3df..1517b3e 100644
 --- a/node_modules/react-native-filament/lib/typescript/types/index.d.ts
@@ -603,6 +690,25 @@ index 0000000..708da5a
 +  readonly width: number
 +  readonly height: number
 +}
+diff --git a/node_modules/react-native-filament/src/types/View.ts b/node_modules/react-native-filament/src/types/View.ts
+index 305ab4b..535ee27 100644
+--- a/node_modules/react-native-filament/src/types/View.ts
++++ b/node_modules/react-native-filament/src/types/View.ts
+@@ -119,6 +119,14 @@ export interface View extends PointerHolder {
+    */
+   pickEntity(x: number, y: number): Promise<Entity | null>
+ 
++  /**
++   * Same pick as {@linkcode pickEntity}, but returns the full Filament PickingQueryResult:
++   * the entity's id, the depth-buffer value at the hit (Filament convention: 1 at the near
++   * plane, 0 at infinity - reversed-Z), and the GL-convention fragment coordinates.
++   * Returns undefined if no entity is found.
++   */
++  pickEntityWithDepth(x: number, y: number): Promise<{ entityId: number; depth: number; fragX: number; fragY: number; fragZ: number } | null>
++
+   /**
+    * This type is the raw expected valeu for JSI.
+    * The type is encoded in {@linkcode TemporalAntiAliasingOptions}
 diff --git a/node_modules/react-native-filament/src/types/index.ts b/node_modules/react-native-filament/src/types/index.ts
 index 510510c..42a9b6f 100644
 --- a/node_modules/react-native-filament/src/types/index.ts

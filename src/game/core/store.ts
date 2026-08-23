@@ -27,6 +27,7 @@ import {
   Furniture,
   GroupId,
   Handedness,
+  PartBox,
   PartId,
   RenderStyleId,
   ThemeId,
@@ -58,6 +59,8 @@ export type ExamineTarget =
 interface GameState {
   /** The furniture currently being assembled (loaded when chosen). */
   furniture: Furniture | null;
+  /** Per-part world bounds at baked pose, harvested from Filament once the model loads (AssemblyScene). Empty until then — every consumer falls back, so a drag before the harvest simply behaves as it did before joint frames. */
+  partBoxes: Record<PartId, PartBox>;
   /** Completed action ids — the source of truth for progress. */
   completed: ActionId[];
   /** Part picked up for ASSEMBLY via long-press (the drag flow). */
@@ -70,6 +73,8 @@ interface GameState {
   combiningCluster: ClusterId | null;
   /** Live snap feedback while dragging a held part. */
   fitState: FitState;
+  /** The aim is parked on a socket whose contact faces away from the camera (facing gate) — the chip coaches a camera turn instead of hunting silently. */
+  aimBlocked: boolean;
   /** Nearest interchangeable socket the held part would snap to. */
   matchedActionId: ActionId | null;
   /** FREE-mode soft hint shown when reaching for a not-yet-available part. */
@@ -175,6 +180,7 @@ interface GameState {
 
   beginPickup: (actionId: ActionId) => void;
   setDragFit: (fitState: FitState, matchedActionId: ActionId | null) => void;
+  setAimBlocked: (aimBlocked: boolean) => void;
   releaseHeld: () => "snap" | "recover";
   /** The action the player keeps failing to place, and how many times in a row they have failed it.
    *  Reset by a successful snap, by moving to a different part, and by clearMisses. A run of these on
@@ -228,6 +234,7 @@ interface GameState {
 
   setActiveCluster: (cluster: ClusterId | null) => void;
   setCombiningCluster: (cluster: ClusterId | null) => void;
+  setPartBoxes: (boxes: Record<PartId, PartBox>) => void;
 
   setSettings: (patch: Partial<AccessibilitySettings>) => void;
   /** Reset settings to a profile's defaults (onboarding / avatar change). */
@@ -238,6 +245,7 @@ const CLEARED = {
   heldActionId: null,
   examine: null,
   fitState: "idle" as FitState,
+  aimBlocked: false,
   matchedActionId: null,
   hint: null,
   hintTone: "info" as const,
@@ -315,6 +323,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
   ...CLEARED,
   activeCluster: null,
   combiningCluster: null,
+  partBoxes: {},
   mapOpen: false,
   missActionId: null as ActionId | null,
   missCount: 0,
@@ -362,6 +371,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
       driveKind: null,
       driveProgress: {},
       selectedTool: null,
+      // Cleared HERE only: part ids collide across furnitures (`leg_1` is both a LACK leg and a DALFRED leg), so a stale map would hand the drag the previous model's geometry until the next harvest lands. The other reset paths keep the same loaded model, where the boxes are still valid and dropping them would disable the feature mid-session for nothing.
+      partBoxes: {},
       celebratingCluster: null,
       celebratedClusters: [],
       ...CLEARED,
@@ -670,6 +681,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
     set({ ...CLEARED, heldActionId: actionId, fitState: "held" });
   },
   setDragFit: (fitState, matchedActionId) => set({ fitState, matchedActionId }),
+  setAimBlocked: (aimBlocked) => set({ aimBlocked }),
   releaseHeld: () => {
     const { heldActionId, fitState, matchedActionId } = get();
     if (!heldActionId) return "recover";
@@ -724,6 +736,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
   setCompleteConfirmed: (v) => set({ completeConfirmed: v }),
   setActiveCluster: (cluster) => set({ activeCluster: cluster }),
   setCombiningCluster: (cluster) => set({ combiningCluster: cluster }),
+  setPartBoxes: (boxes) => set({ partBoxes: boxes }),
 
   setSettings: (patch) => {
     set({ settings: { ...get().settings, ...patch } });

@@ -86,18 +86,6 @@ export function useTileScale(): number {
   const { width, height } = useWindowDimensions();
   return Math.min(width, height) >= TABLET_MIN_SHORT_DP ? NAME_TABLET_SCALE : 1;
 }
-/**
- * The CEILING the name is allowed to reach on a tablet, as a multiple of the scaled size.
- *
- * Paired with adjustsFontSizeToFit below: the text starts at this size and Android shrinks it until
- * the whole name fits on one line. So a short name ("Arm Chair") renders at the ceiling and a long one
- * ("Wooden Single Bed") steps down as far as it needs to — which is what "as big as it can be while
- * still readable" actually means for a grid where the names are wildly different lengths. Fixing one
- * size for all of them means either truncating the long ones or under-sizing the short ones.
- */
-const NAME_MAX_BOOST = 1.45;
-/** How far the shrink may go before the name would be too small to read. */
-const NAME_MIN_SCALE = 0.62;
 
 /** Render AFTER the well, so it paints over the frame's bottom edge rather than under it. */
 export function ItemNameTab({ name }: { name: string }) {
@@ -123,12 +111,11 @@ export function ItemNameTab({ name }: { name: string }) {
     >
       {/* PHONE BEHAVIOUR IS UNCHANGED: one line at the authored size, ellipsis if it does not fit.
           The auto-fit is tablet-only, where there is room for a much larger name to be worth having. */}
-      <Text
-        style={[styles.name, k === 1 ? null : { fontSize: NAME_FONT_SIZE * k * NAME_MAX_BOOST }]}
-        numberOfLines={1}
-        adjustsFontSizeToFit={k !== 1}
-        minimumFontScale={k === 1 ? undefined : NAME_MIN_SCALE}
-      >
+      {/* ONE size for every name, on both devices — no auto-fit. A per-tile size made each name as
+          large as its own tile allowed, so a grid of them showed half a dozen different sizes; a long
+          name now takes an ellipsis instead, which is the ordinary way a label too long for its box
+          behaves. The tablet's size is the phone's times NAME_TABLET_SCALE. */}
+      <Text style={[styles.name, k === 1 ? null : { fontSize: NAME_FONT_SIZE * k }]} numberOfLines={1}>
         {name}
       </Text>
     </View>
