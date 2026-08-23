@@ -61,9 +61,12 @@ export function IdleCheckIn() {
 
   const [asking, setAsking] = useState(false);
   const [welcoming, setWelcoming] = useState(false);
-  // Bumped by a raw touch. Its only job is to be a dependency of the timer effect, so a touch
-  // restarts the fuse exactly as a store change does.
-  const [touchTick, setTouchTick] = useState(0);
+  // CAMERA WORK COUNTS. Orbiting, strafing and pinching change nothing else in the store, so the
+  // fuses below would burn straight through a player who is busy looking round the build. play.tsx
+  // bumps this from the camera gestures themselves; a touch observer on this layer cannot do it,
+  // because `pointerEvents="box-none"` means the layer is never a touch target and its capture
+  // handler is never called — which is why the earlier version of this looked fixed and was not.
+  const activityTick = useGameStore((s) => s.activityTick);
   const pulse = useRef(new Animated.Value(1)).current;
   const appState = useRef(AppState.currentState);
 
@@ -84,7 +87,7 @@ export function IdleCheckIn() {
     orientationActionId,
     activeCluster,
     hintPulse,
-    touchTick,
+    activityTick,
   ]);
 
   // COMING BACK TO THE APP is its own moment, and a better one than the timer's: the player has just
@@ -133,7 +136,14 @@ export function IdleCheckIn() {
     return () => animation.stop();
   }, [pulse, asking, welcoming]);
 
-  if (!momentum || paused || (!asking && !welcoming)) return null;
+  if (!momentum || paused) return null;
+
+  // WAITING, not absent. The touch observer below is the only thing that notices camera-only
+  // interaction — orbiting and pinching never touch the store — and returning null while the fuse
+  // burns meant it did not exist during the one period it was needed. So the card sat there counting
+  // to twenty while the player was busy looking round the build, and asked "are you still here?" to
+  // someone who plainly was. The layer stays mounted; only the bubble waits.
+  const showing = asking || welcoming;
 
   const dismiss = () => {
     setAsking(false);
@@ -154,14 +164,11 @@ export function IdleCheckIn() {
       // gesture continue to whatever the player actually aimed at, while still telling us they are
       // here — which is how camera-only interaction resets the fuse even though orbiting never
       // touches the store.
-      onStartShouldSetResponderCapture={() => {
-        setTouchTick((n) => n + 1);
-        return false;
-      }}
     >
       {/* THE TUTORIAL'S SHAPE: a portrait tile OUTSIDE a copy card, not an avatar inside one. The row
           itself is transparent — only `copy` is the bubble, which is what lets Sparky sit beside it
           the way he does on every tutorial step rather than boxed in with the words. */}
+      {showing ? (
       <Animated.View style={[styles.row, { transform: [{ scale: pulse }] }]}>
         <CompanionPortrait source={avatarHeadForProfile(profile)} accessibilityLabel="Sparky" />
         <View style={styles.copy}>
@@ -187,6 +194,7 @@ export function IdleCheckIn() {
           </Pressable>
         </View>
       </Animated.View>
+      ) : null}
     </View>
     </ThemeScope>
   );

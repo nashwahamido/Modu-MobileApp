@@ -1,16 +1,7 @@
 // The player's profile hub: their card (avatar, level, editable nickname, stats) beside a friends list. Reads/writes entirely through the repo seam (src/data), so it works on fixtures today and swaps to Supabase untouched.
-import {
-  router } from "expo-router";
-import { useEffect,
-  useState } from "react";
-import { StyleSheet,
-  ActivityIndicator,
-  Image,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { router } from "expo-router";
+import { useEffect, useState } from "react";
+import { StyleSheet, ActivityIndicator, Image, ScrollView, Text, TextInput, View } from "react-native";
 import { Pressable } from "@/src/components/Pressable";
 import { useScreenInsets } from '@/src/hooks/use-safe-insets';
 
@@ -23,6 +14,7 @@ import type { FriendRequest, Profile } from "@/src/data";
 import type { Theme } from "@/src/game/ui/system/theme";
 import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
 import { ASSEMBLE_ICON, STAR_ICON, levelIcon } from "@/src/components/iconAssets";
+import { titleCase } from "@/src/data/player/levels";
 
 // The "/N" denominator for items assembled: the same buildable set the catalogue counts.
 const TOTAL_BUILDS = FURNITURE_METAS.length;
@@ -31,10 +23,6 @@ type FriendsTab = "friends" | "requests";
 
 /** "an ambitious newbie" -> "An Ambitious Newbie". The titles are authored lowercase, and a rank
  *  reads as a rank when it is capitalised like one. */
-function titleCase(s: string): string {
-  return s.replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
 /** The avatar recommendation's backdrop, so the two "who you are" screens share a look. */
 /** Shared with the avatar recommendation screen — the two are the same moment either side of
  *  onboarding ("this is who you are"), so they wear the same art rather than each tuning a ramp. */
@@ -54,12 +42,18 @@ const GUTTER_H = 28;
  *  ignores shadowColor/shadowOpacity entirely and draws its own soft grey ramp. The remaining keys
  *  are the iOS fallback for the old architecture. Darker: raise the alpha. Softer: raise the blur. */
 const PANEL_SHADOW = {
-  boxShadow: "0px 5px 4px rgba(0,0,0,0.40)",
+  // 0.40 -> 0.12, and the blur widened 4 -> 10. At two fifths alpha over a four-pixel blur this was a
+  // hard dark band under every cream surface rather than a lift — five of them stacked down the
+  // screen, so the whole page read as harsh. A wide, faint shadow reads as height; a tight, dark one
+  // reads as an outline.
+  boxShadow: "0px 4px 10px rgba(0,0,0,0.12)",
   shadowColor: "#000",
-  shadowOpacity: 0.8,
-  shadowRadius: 2,
-  shadowOffset: { width: 0, height: 4 },
-  elevation: 6,
+  // The iOS fallback, matched to the same weight rather than left at its old 0.8.
+  shadowOpacity: 0.14,
+  shadowRadius: 8,
+  shadowOffset: { width: 0, height: 3 },
+  // Android's own ramp, for the old architecture where boxShadow is not honoured. Down with the rest.
+  elevation: 3,
 } as const;
 
 /** How far the friends column starts below the top of the screen. It clears the avatar's own top
