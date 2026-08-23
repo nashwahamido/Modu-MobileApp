@@ -54,6 +54,7 @@ import {
   useRoomItem,
   type RoomItemModel,
 } from "../core/placeableItems";
+import type { RoomItemLight } from "../../data/core/repos";
 import { useVariantModelSource } from "./variantModel";
 import { GridOverlay } from "./GridOverlay";
 import { GRID_TUNING } from "./gridTuning";
@@ -571,9 +572,6 @@ const RoomLit = memo(function RoomLit({
   placement: GridPlacement;
   item: RoomItemModel;
 }) {
-  const { lightManager, scene } = useFilamentContext();
-  const entityRef = useRef<Entity | null>(null);
-
   const hostId =
     placement.surface.kind === "furniture"
       ? placement.surface.hostInstanceId
@@ -587,10 +585,10 @@ const RoomLit = memo(function RoomLit({
   const topHeight = hostItem ? hostItem.size.y * fitScale(hostItem) : 0;
 
   // emitsLight is only true when the row carried a light, so this is present — but the catalog is a network fetch and a stale cache could disagree, and a lamp that renders nothing beats a crash. A stacked lamp whose host has vanished goes dark the same graceful way.
-  const light =
+  const lights =
     hostId !== null && (!hostPlacement || !hostDef || !hostItem)
       ? undefined
-      : item.light;
+      : item.lights;
 
   // occupiedFootprint, not a raw rotatedFootprint(item.def.footprint, ...): a stacked lamp's footprint is topFootprint, at TOP_CELL_SIZE, not the floor footprint scaled.
   const footprint = occupiedFootprint(placement, item.def);
@@ -611,27 +609,83 @@ const RoomLit = memo(function RoomLit({
     (((hostPlacement?.rotSteps ?? 0) + placement.rotSteps) * Math.PI) / 2;
   const cos = Math.cos(spin);
   const sin = Math.sin(spin);
+
+  // ONE EMITTER PER LIGHT (migration 026). A lamp may carry a point and a spot at once — a soft glow
+  // from the shade plus an aimed beam — each with its own brightness, colour, reach, bulb position and
+  // aim, so each needs its own Filament entity with its own create/move/destroy lifecycle. Everything
+  // ABOVE this line is per-PIECE (where it stands, what it stands on, which way it is turned) and is
+  // computed once and shared; everything below is per-LIGHT and lives in RoomLitEmitter.
+  //
+  // Keyed by `type`, not by index: there is at most one point and at most one spot (item_lights is keyed
+  // (item_id, type)), so the type IS the stable identity. A catalog sync that adds a spot to a lamp that
+  // had only a point then leaves the point's entity untouched instead of tearing both down and
+  // rebuilding them, which an index key would do the moment the array's order or length changed.
+  if (!lights) return null;
+  return (
+    <>
+      {lights.map((light) => (
+        <RoomLitEmitter
+          key={light.type}
+          light={light}
+          centreX={centre.x}
+          centreZ={centre.z}
+          baseY={baseY}
+          cos={cos}
+          sin={sin}
+          itemHeight={item.size.y}
+        />
+      ))}
+    </>
+  );
+});
+
+// One light of one placed lamp: create the Filament entity once, move it as the piece moves, destroy it
+// on unmount. Split out of RoomLit for 026 (see its comment above) — the arithmetic here is verbatim
+// what RoomLit used to do inline for a lamp's single light, now parameterised by the piece's frame
+// rather than reading it from the enclosing scope.
+const RoomLitEmitter = memo(function RoomLitEmitter({
+  light,
+  centreX,
+  centreZ,
+  baseY,
+  cos,
+  sin,
+  itemHeight,
+}: {
+  light: RoomItemLight;
+  centreX: number;
+  centreZ: number;
+  baseY: number;
+  /** The piece's world yaw, pre-resolved to its cosine and sine by RoomLit — passed as two numbers rather than as a turn() closure so this component's effects can depend on them without a new function identity firing on every render. */
+  cos: number;
+  sin: number;
+  /** The piece's own height in authored metres, for the pre-014 bulb fallback below. */
+  itemHeight: number;
+}) {
+  const { lightManager, scene } = useFilamentContext();
+  const entityRef = useRef<Entity | null>(null);
+
   const turn = (x: number, z: number) => ({
     x: x * cos + z * sin,
     z: -x * sin + z * cos,
   });
 
   // A bulb at exactly the base is meaningless for a lamp — it would sit inside the floor — so 0 is a reliable "not authored yet" sentinel, which is what a row cached before migration 014 reads as. Falling back to the old whole-catalog heuristic keeps such a row looking roughly right until the next catalog sync replaces it, instead of dropping its light through the floor for one session.
-  const authored = light?.bulb;
+  const authored = light.bulb;
   const offset =
     authored && authored.y !== 0
       ? authored
-      : { x: 0, y: item.size.y + LIT.bulbAboveTopMetres, z: 0 };
+      : { x: 0, y: itemHeight + LIT.bulbAboveTopMetres, z: 0 };
   const local = turn(offset.x, offset.z);
   const bulb = roomToScene({
-    x: centre.x + local.x,
+    x: centreX + local.x,
     y: baseY + offset.y,
-    z: centre.z + local.z,
+    z: centreZ + local.z,
   });
 
   // Aim, turned by the same rotation. Absent for a point light, which ignores direction entirely.
   const aimed =
-    light?.type === "spot"
+    light.type === "spot"
       ? aimToDirection(light.aim?.pitchDeg ?? null, light.aim?.yawDeg ?? null)
       : null;
   const aimTurned = aimed ? turn(aimed.x, aimed.z) : null;
@@ -645,7 +699,6 @@ const RoomLit = memo(function RoomLit({
   dirRef.current = direction;
 
   useEffect(() => {
-    if (!light) return;
     const at = spawnRef.current;
     const entity = lightManager.createLightEntity(
       light.type,

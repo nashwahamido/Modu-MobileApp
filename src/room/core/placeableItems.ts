@@ -18,8 +18,8 @@ export type RoomItemModel = {
   size: { x: number; y: number; z: number };
   // Lift from the model's origin to its base: -worldMinY. 0 for base-origin models; EKET is authored centred and needs half its height.
   baseOffsetY: number;
-  // Only for lighting (category 'lit'), from item_lights via the placeable_items view. Undefined means the piece emits nothing — true of every item but a lamp.
-  light?: RoomItemLight;
+  // Only for lighting (category 'lit'), from item_lights via the placeable_items view. Undefined means the piece emits nothing — true of every item but a lamp. One or two entries since migration 026 (a point and a spot at once), ordered point-then-spot.
+  lights?: RoomItemLight[];
 };
 
 const CELL = ROOM_SHELL.cellSize;
@@ -64,6 +64,14 @@ function toModel(row: PlaceableRoomRow): RoomItemModel {
   const topFootprint: Footprint = { w: topCells(topSize.x), d: topCells(topSize.z) };
   // Floor and wall are mutually exclusive (one `mount`, required since migration 024); standing on a host's top (`onTop`) is orthogonal and is APPENDED to that mount, never a replacement for it. Every item therefore has at least one surface, which is what lets startPlacing answer "where does this ghost open" with a complete two-way branch instead of searching the room for a host and refusing when there is none.
   const allowedSurfaces = [row.mount, ...(row.onTop ? (["furniture"] as const) : [])];
+  // `lights` since migration 026 — a lamp may carry a point AND a spot. `light` is read as a one-element
+  // fallback purely for a STALE CACHE: placeableStore persists this mapped shape to AsyncStorage, so the
+  // first launch after an app update reads rows written by the previous build, which named the field
+  // `light`. The network sync replaces them moments later; without this the lamps in a saved room would
+  // go dark for those few seconds. Not a DB concern — repos.ts already normalised both row shapes before
+  // anything reaches here.
+  const cached = (row as PlaceableRoomRow & { light?: RoomItemLight }).light;
+  const lights = row.lights ?? (cached != null ? [cached] : undefined);
   const def: PlaceableItemDef =
     row.mount === "wall"
       ? {
@@ -84,10 +92,10 @@ function toModel(row: PlaceableRoomRow): RoomItemModel {
             ...(mask ? { mask } : {}),
             ...(row.topSurface ? { hostsTop: true } : {}),
             allowedSurfaces,
-            emitsLight: row.category === "lit" && row.light != null,
+            emitsLight: row.category === "lit" && lights != null,
           };
         })();
-  return { def, source: row.source, size: row.size, baseOffsetY: row.baseOffsetY, light: row.light };
+  return { def, source: row.source, size: row.size, baseOffsetY: row.baseOffsetY, lights };
 }
 
 // The baked-in BUILT set: sizes mirror the DB seed (003_catalog.sql) the same way seed.ts does, so offline placement matches what the catalog will say once it loads.
