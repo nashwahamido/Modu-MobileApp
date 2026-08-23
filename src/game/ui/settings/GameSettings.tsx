@@ -3,16 +3,8 @@ import { router } from "expo-router";
 import { useHudIcon } from "@/src/game/ui/hud/hudIcons";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import {
-  Image,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
-} from "react-native";
+import { Image, Modal, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import { useSafeInsets } from "@/src/hooks/use-safe-insets";
 import { ELEVATION, RADIUS, Theme, useFixedStyles, FONT } from "@/src/game/ui/system/theme";
 import { useMirror } from "@/src/game/ui/system/handedness";
@@ -21,6 +13,7 @@ import {
   type SettingsFocusTarget,
 } from "@/src/game/ui/settings/SettingsControls";
 import { GrainOverlay } from "@/src/game/ui/system/Button";
+import { useGameStore } from "@/src/game/core/store";
 
 
 interface GameSettingsProps {
@@ -31,6 +24,9 @@ interface GameSettingsProps {
   onConfirm?: () => void;
   tutorialTarget?: SettingsFocusTarget | null;
   onTutorialTargetActivated?: () => void;
+  /** Fired on EVERY close, changed or not. For a tutorial step that asks the player to look through
+   *  Settings rather than to change something in it. */
+  onClosed?: () => void;
 }
 
 export function GameSettings({
@@ -41,6 +37,7 @@ export function GameSettings({
   onConfirm,
   tutorialTarget = null,
   onTutorialTargetActivated,
+  onClosed,
 }: GameSettingsProps = {}) {
   const styles = useFixedStyles(makeStyles);
   const m = useMirror();
@@ -55,6 +52,15 @@ export function GameSettings({
   const insets = useSafeInsets();
   const cardMaxHeight = winH - insets.top - insets.bottom;
 
+  // MIRRORED INTO THE STORE, not replaced by it: `open` drives this component's own animation and
+  // scroll work, so it stays local, and one effect publishes it for anything that needs to know the
+  // build is covered (see useBuildPaused). Cleared on unmount too — leaving the flag set when the
+  // screen goes away would silence every coach for the rest of the session.
+  useEffect(() => {
+    useGameStore.getState().setSettingsOpen(open);
+    return () => useGameStore.getState().setSettingsOpen(false);
+  }, [open]);
+
   const closeSettings = () => {
     const shouldAdvanceTutorial =
       tutorialTarget !== null && tutorialSelectionMade.current;
@@ -63,6 +69,11 @@ export function GameSettings({
     if (shouldAdvanceTutorial) {
       requestAnimationFrame(() => onTutorialTargetActivated?.());
     }
+    // EVERY close, whether or not anything was changed — Done, the backdrop, the hardware back.
+    // `onTutorialTargetActivated` above is the other kind of report: it fires only when the player
+    // committed to a setting the tutorial pointed at. A step that just asks them to look around
+    // needs to hear about the close itself.
+    requestAnimationFrame(() => onClosed?.());
   };
 
   useEffect(() => {
@@ -140,6 +151,8 @@ export function GameSettings({
             >
               {controls ?? (
                 <SettingsControls
+                  // Restarting rebuilds the project map behind this card, so the card gets out of the way.
+                  onRestarted={closeSettings}
                   focusTarget={tutorialTarget}
                   onFocusTargetLayout={setTutorialTargetY}
                   onFocusTargetActivated={() => {

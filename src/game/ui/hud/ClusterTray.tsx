@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { GrainOverlay } from "@/src/game/ui/system/Button";
 import { Image, StyleSheet, Text, View } from "react-native";
 import { GestureDetector, GestureType } from "react-native-gesture-handler";
+import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 import { availableActions } from "@/src/game/core/evaluation/availability";
 import {
   combineReady,
@@ -36,6 +37,8 @@ export function ClusterTray({ clusterDriver, clusterGestureFor }: Props) {
   const completed = useGameStore((s) => s.completed);
   const combiningCluster = useGameStore((s) => s.combiningCluster);
   const renderStyle = useGameStore((s) => s.renderStyle);
+  const hintClusters = useGameStore((s) => s.hintClusters);
+  const hintPulse = useGameStore((s) => s.hintPulse);
   const scheme = useColorScheme();
 
   const done = useMemo(() => new Set(completed), [completed]);
@@ -74,6 +77,20 @@ export function ClusterTray({ clusterDriver, clusterGestureFor }: Props) {
     return m;
   }, [furniture, cards, combineFor, done, clusterDriver, clusterGestureFor]);
 
+  const flash = useSharedValue(0);
+  // Keyed by VALUE, not array identity — the store hands back a fresh array each update and re-running the flash on every one would strobe.
+  const hintKey = hintClusters.join(" ");
+  useEffect(() => {
+    if (!hintKey) return;
+    // Three gentle accent pulses, matching the parts tray — enough to draw the eye without strobing. One shared value drives every highlighted card.
+    flash.value = 0;
+    flash.value = withRepeat(
+      withSequence(withTiming(1, { duration: 240 }), withTiming(0, { duration: 240 })),
+      3,
+    );
+  }, [hintKey, hintPulse, flash]);
+  const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value * 0.5 }));
+
   if (!furniture || cards.length === 0) return null;
   const theme = scheme === "dark" ? "dark" : "light";
 
@@ -102,6 +119,9 @@ export function ClusterTray({ clusterDriver, clusterGestureFor }: Props) {
             <Text style={styles.label} numberOfLines={1}>
               {clusterLabel(furniture, c)}
             </Text>
+            {hintClusters.includes(c) ? (
+              <Animated.View pointerEvents="none" style={[styles.flashOverlay, flashStyle]} />
+            ) : null}
           </View>
         );
         return g ? (
@@ -128,9 +148,15 @@ const makeStyles = (t: Theme) =>
     paddingHorizontal: 8,
     alignItems: "center",
     gap: 4,
+    overflow: "hidden",
   },
   cardWaiting: { borderColor: t.borderStrong, opacity: 0.85 },
   cardDragging: { opacity: 0.4 },
   thumb: { width: 44, height: 44 },
   label: { fontSize: 11, fontWeight: "700", color: t.text, textAlign: "center" },
+  flashOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 12,
+    backgroundColor: t.accent,
+  },
   });

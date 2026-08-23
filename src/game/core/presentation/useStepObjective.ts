@@ -1,10 +1,7 @@
 // The objective-bar text for the current step, plus the matching auto-spoken audio — one policy, shared by the game (play.tsx) and the tutorial. needsFocusChoice is computed per-screen (the combine stage differs) and passed in.
 import { useStepAudio } from "@/src/game/audio/useStepAudio";
 import { instructionText } from "@/src/game/core/presentation/instructions";
-import {
-  objectiveText,
-  speaksSteps,
-} from "@/src/game/core/presentation/objective";
+import { objectiveText } from "@/src/game/core/presentation/objective";
 import type {
   ActionId,
   AssemblyMode,
@@ -33,7 +30,7 @@ export function useStepObjective({
   audioOn,
   completedCount,
   totalCount,
-}: StepObjectiveInput): string {
+}: StepObjectiveInput): string | null {
   const objective = objectiveText({
     mode,
     needsFocusChoice,
@@ -45,10 +42,23 @@ export function useStepObjective({
     totalCount,
   });
 
+  // The whole furniture, not just its audio map: the recorded voiceover is addressed by the model's
+  // id and the step's position in its action list, so the hook needs both. `textLevel` picks which
+  // recording — standard for Control, Momentum and Clear Path, simple for Lumi's visual profile.
+  //
+  // NO MODE GATE. This used to fall silent in `free` mode on the rule that free mode "stays quiet
+  // until asked" — but Control is the only profile pinned to free, and settings.audio IS the asking.
+  // A player who turns Audio steps on and hears nothing has been overruled by a default.
+  //
+  // The objective BAR still reads "Build it your way" in free mode: it is deliberately not
+  // instructing, and that is a separate decision from whether the step can be read aloud on request.
+  // needsFocusChoice still silences it — there is no single step to speak while the player is
+  // choosing which area to work on.
   useStepAudio(
-    furniture?.audio,
-    needsFocusChoice || !speaksSteps(mode) ? undefined : firstAvailable,
+    furniture,
+    needsFocusChoice ? undefined : firstAvailable,
     audioOn,
+    textLevel,
   );
 
   return objective;

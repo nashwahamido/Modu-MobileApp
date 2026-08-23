@@ -10,14 +10,25 @@ export interface ObjectiveInput {
   totalCount: number;
 }
 
-export function objectiveText(o: ObjectiveInput): string {
+export function objectiveText(o: ObjectiveInput): string | null {
+  if (o.mode === "free") return null;
   if (o.needsFocusChoice) return "Choose focus";
   if (o.totalCount > 0 && o.completedCount === o.totalCount) return "All done!";
-  if (o.mode === "free") return "Build it your way";
   return o.stepText ?? "Switch focus";
 }
 
-/** Whether step audio should auto-speak the current step in this mode —  mirrors the objective policy (free mode stays quiet until asked). */
+/**
+ * Whether this mode's objective bar INSTRUCTS — free mode shows "Build it your way" rather than a
+ * step, so there is no line on screen to mirror.
+ *
+ * NO LONGER GATES STEP AUDIO. It did, on the rule that free mode stays quiet until asked, and that
+ * silenced the Control profile entirely: Control is the only profile pinned to free, so turning
+ * "Audio steps" on did nothing at all for the one group of players most likely to want it. The
+ * toggle is the asking. See useStepObjective.
+ *
+ * Kept because it still describes something true about the bar, and because a mode that wants the
+ * distinction later should find it here rather than reinvent it.
+ */
 export function speaksSteps(mode: AssemblyMode): boolean {
   return mode !== "free";
 }

@@ -6,7 +6,7 @@ import {
   requiresClusterFocus,
 } from "@/src/game/core/evaluation/clusters";
 import { availableInMode, currentStage } from "@/src/game/core/evaluation/availability";
-import { isNonLeadBody } from "@/src/game/core/model/components";
+import { hasTrayCard } from "@/src/game/core/evaluation/trayCard";
 import { isStaged, stagedCarriers, stagedMembers } from "@/src/game/core/model/staging";
 import { isPickupType } from "@/src/game/core/ids";
 import { buildPartActions } from "@/src/game/core/scene/targets";
@@ -111,15 +111,9 @@ export function deriveSceneState(
     }
     if (!a.partId || done.has(a.actionId)) continue;
     if (mode !== "free" && a.stage !== stage) continue;
-    // stagePart earns a card of its own (fetching the carrier out of the box).
-    if (!isPickupType(a.type)) continue;
+    // One definition of card-eligibility, shared with the focus-mode decision below and with the store's ? highlight — see hasTrayCard for which pickup types are excluded and why.
+    if (!hasTrayCard(furniture, a)) continue;
     const part = furniture.parts[a.partId];
-    // a 3-phase insertFastener is a PRESS gesture on the already-dropped fastener (InsertPressControl), not a tray pickup — no card. Its placeFastener is the pickup that fetches it out of the tray.
-    if (a.type === "insertFastener" && part.insertStage) continue;
-    // a staged carrier's SEATING placePart earns NO tray card — the finished sub-assembly is out on the canvas and seats via SeatSlideControl (slide it straight down). Its stagePart card (taking it OUT of the box) still stands.
-    if (a.type === "placePart" && isStaged(part)) continue;
-    // a non-lead component body never gets its own card — the lead's card stands for the whole component
-    if (isNonLeadBody(furniture.components, a.partId)) continue;
     const comp = furniture.components?.byBody[a.partId];
     const compLabel = comp ? furniture.components!.label[comp] : undefined;
     const pickable = !heldAction && availableIds.has(a.actionId);
@@ -151,15 +145,31 @@ export function deriveSceneState(
     }
   }
   const allTray = [...groups.values()];
-  let trayItems = allTray;
+  // Guided mode leads, so the cards the player can actually use come first — authored order is the right default in free mode, where reordering the tray would railroad a player who is deliberately building their own way. Sorted on availableIds, NOT on `enabled`: enabled also covers free mode's grab-anything cards, and trusting it here is what put a LEG at the top of focus mode while the only legal step was a bolt. Stable sort, so everything keeps its authored order within the actionable and non-actionable halves.
+  const guidedOrder =
+    mode !== "free"
+      ? [...allTray].sort(
+          (a, b) =>
+            Number(!!b.action && availableIds.has(b.action.actionId)) -
+            Number(!!a.action && availableIds.has(a.action.actionId)),
+        )
+      : allTray;
+  let trayItems = guidedOrder;
   if (focusMode && allTray.length > 0) {
     if (heldAction?.partId) {
       const heldG = furniture.parts[heldAction.partId].group;
       const only = allTray.filter((t) => t.group === heldG);
       trayItems = only.length ? only : allTray.slice(0, 1);
+    } else if (available[0] && !hasTrayCard(furniture, available[0])) {
+      // The next step is an on-canvas gesture (tighten, insert-press, staged seat, beat) and has no card of its own. Focus mode's single card must BE the next step, so showing the next PICKUP here would present a later part as the current one. PartsTray renders nothing for an empty list.
+      trayItems = [];
     } else {
-      // The one card shown must be ACTIONABLE: the first group with an enabled action, not just the first group in authored order (which could be a stability-blocked leg while the next legal step is a bolt).
-      trayItems = [allTray.find((t) => t.enabled) ?? allTray[0]];
+      // ACTUALLY actionable, not merely enabled: in free mode `enabled` also covers grab-anything cards (any part in a started cluster is draggable), so the old `find(t => t.enabled)` handed focus mode a LEG while the only legal step was a bolt — the exact failure the comment below was written to prevent, with the wrong predicate. Fall back to enabled, then to the first card, so a state with nothing available still shows something rather than nothing.
+      trayItems = [
+        allTray.find((t) => t.action && availableIds.has(t.action.actionId)) ??
+          allTray.find((t) => t.enabled) ??
+          allTray[0],
+      ];
     }
   }
   const firstTighten = available.find((a) => a.type === "tightenFastener") ?? null;

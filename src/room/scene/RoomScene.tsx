@@ -17,6 +17,7 @@ import {
   FilamentView,
   Light,
   RenderCallbackContext,
+  optionsToJSI,
   useFilamentContext,
   useModel,
   type Entity,
@@ -53,8 +54,10 @@ import {
   useRoomItem,
   type RoomItemModel,
 } from "../core/placeableItems";
+import type { RoomItemLight } from "../../data/core/repos";
 import { useVariantModelSource } from "./variantModel";
 import { GridOverlay } from "./GridOverlay";
+import { GRID_TUNING } from "./gridTuning";
 import { applySurfaceItem } from "./applySurfaceItem";
 import {
   SHELL_GRID,
@@ -68,7 +71,8 @@ import { RoomAvatar } from "./RoomAvatar";
 import { useCurrentUserId, useRepos } from "../../data";
 import { useShopStore } from "../../data/shop/store";
 import { setCameraAzimuth, usePlacementStore } from "../core/placement";
-import { aimToDirection } from "../core/lightAim";
+import { AIM_DOWN, aimToDirection, aimTuple } from "../core/lightAim";
+import { CEILING_LIGHT_AT, CEILING_LIGHT_RIG, ceilingCone, fillLumens } from "../core/ceilingLight";
 import { useGameStore } from "../../game/core/store";
 import { sunDirection, sunPreset, type CeilingLight } from "../core/timeOfDay";
 import {
@@ -142,6 +146,8 @@ type GridMode = "floor" | "wall" | null;
 function gridNodesFor(mode: GridMode, byWall: Record<ShellWallId, number>): ReadonlySet<string> {
   if (mode === null) return EMPTY_GRIDS;
   if (mode === "floor") return FLOOR_GRID_ONLY;
+  // Wall grids are suppressed wholesale while the floor's legibility is being tuned — see gridTuning.ts. Deliberately here rather than in the culling loop: this function is the single place that answers "which plates belong on screen", and the loop only ever writes the DIFFERENCE against what it last showed, so a plate withheld here is removed on the next frame like any other and nothing else has to know.
+  if (!GRID_TUNING.wallGrid) return EMPTY_GRIDS;
   const wanted = new Set<string>();
   for (const wall of SHELL_WALL_IDS) {
     if (byWall[wall] > WALL_GRID_MIN_ALPHA) wanted.add(shellGridWallNode(wall));
@@ -388,6 +394,11 @@ function RoomModel({
         console.log(`[room] no "${SHELL_GRID}" material — rebuild the shell with npm run build:room`);
       return;
     }
+    // The lines' colour, written at runtime rather than trusted from the GLB. It has to be a write to be tunable at all: the value is baked into the Grid material's baseColorFactor by the generator, and that generator (scripts/add-shell-grid.mts) is missing from the tree, so the shipped factor is frozen and editing a constant would change nothing. All five plates share the one material, so this is a single write for the whole grid. Alpha stays 1 — the plates are OPAQUE and their visibility is entity membership, never alpha; writing anything else here would not fade them, it would just be ignored.
+    shellMaterialsByName.current[SHELL_GRID]?.setFloat4Parameter("baseColorFactor", [
+      ...GRID_TUNING.lineRgb,
+      1,
+    ]);
     const nodes = new Map<string, Entity>();
     for (const name of SHELL_GRID_NODES) {
       const entity = asset.getFirstEntityByName(name);
@@ -484,24 +495,10 @@ const LIT = {
   bulbAboveTopMetres: 0.28,
 };
 
-// The room's OWN light: a fixture, not a bought lamp, so it takes no placement and reads its look from the HOUR instead of from item_lights. Geometry is global and look is per-hour, and the split is deliberate — where a ceiling fitting hangs and how far it throws are facts about the room, while how bright and how warm it burns is what the player is choosing when they pick an hour. Derived from ROOM_SHELL rather than written out, because nothing in this codebase carries its own copy of a shell measurement: re-export the shell and this follows it.
-const CEILING_LIGHT = {
-  x: (ROOM_SHELL.floor.minX + ROOM_SHELL.floor.maxX) / 2,
-  z: (ROOM_SHELL.floor.minZ + ROOM_SHELL.floor.maxZ) / 2,
-  // Just under the wall band's top, so the source sits inside the room rather than buried in the ceiling slab.
-  y: ROOM_SHELL.walls["x-min"].top - 0.1,
-  // UNLIKE the brightness, this one IS derived: the farthest thing to light is a floor corner, hypot(2.25, 2.2495) = 3.18 m out and 2.82 m down, so 4.25 m of slant distance. 6 leaves the corners inside the falloff instead of sitting on its edge.
-  reachMetres: 6,
-};
+// Scene space, resolved once: the position is a module constant in ../core/ceilingLight and this light never moves, so there is nothing here for a hook to recompute. Everything ELSE about the fitting — cone, reach, the key/fill split — lives in that module too, because it is geometry rather than rendering; only this conversion is the renderer's business.
+const CEILING_LIGHT_SCENE = roomToScene(CEILING_LIGHT_AT);
 
-// Scene space, resolved once: ROOM_SHELL is a module constant and this light never moves, so there is nothing here for a hook to recompute.
-const CEILING_LIGHT_AT = roomToScene({
-  x: CEILING_LIGHT.x,
-  y: CEILING_LIGHT.y,
-  z: CEILING_LIGHT.z,
-});
-
-// Simpler than RoomLit in the one way that matters: RoomLit has to chase a piece being dragged across the room, so it creates its entity once and moves it with setPosition. This one never moves, so it is a plain create-on-mount, destroy-on-unmount. The effect's dependency on `light` is what makes an hour change rebuild the entity — lumens and kelvin are CREATION parameters of createLightEntity, and TIME_OF_DAY is a module constant, so each preset's interiorLight is a stable object identity and a different hour is a genuinely different reference. No key prop needed; this is the same mechanism RoomLit relies on for item.light.
+// Simpler than RoomLit in the one way that matters: RoomLit has to chase a piece being dragged across the room, so it creates its entities once and moves them with setPosition. This one never moves, so it is a plain create-on-mount, destroy-on-unmount — for BOTH entities, and both must be destroyed or every hour change strands one. The effect's dependency on `light` is what makes an hour change rebuild them: lumens and kelvin are CREATION parameters of createLightEntity, and TIME_OF_DAY is a module constant, so each preset's interiorLight is a stable object identity and a different hour is a genuinely different reference. No key prop needed; this is the same mechanism RoomLit relies on for item.light.
 const RoomCeilingLight = memo(function RoomCeilingLight({
   light,
 }: {
@@ -510,23 +507,39 @@ const RoomCeilingLight = memo(function RoomCeilingLight({
   const { lightManager, scene } = useFilamentContext();
 
   useEffect(() => {
-    const entity = lightManager.createLightEntity(
-      // Point, not spot: a spot from the ceiling centre lays a disc on the floor and leaves the corners black, and a ceiling fitting in a 4.5 x 4.5 m room is meant to fill it.
-      "point",
+    const at = CEILING_LIGHT_SCENE;
+    // THE KEY. A spot aimed straight down, and the reason this is no longer one point light: it lays a defined pool on the floor and lets the upper walls and corners fall away, which is the only cue available that a bulb hangs overhead — the fitting itself can never be drawn, see ../core/ceilingLight. The old comment here argued a spot "leaves the corners black", which was true of a LONE spot and is what the fill below answers.
+    const key = lightManager.createLightEntity(
+      "spot",
       light.kelvin,
       light.lumens,
+      aimTuple(AIM_DOWN),
+      [at.x, at.y, at.z],
+      // No shadows yet: switched on in its own step so it can be judged, and dropped, on its own.
+      false,
+      CEILING_LIGHT_RIG.keyReachMetres * SCENE_SCALE,
+      ceilingCone(),
+    );
+    // THE FILL. A dim wide point at the same position. The corners sit OUTSIDE the key's cone by design, and this is what keeps them readable enough to place furniture into rather than black. It is not a second key: if the corners read too dark, raise CEILING_LIGHT_RIG.fillRatio before widening the cone, because widening spends the very gradient the key exists to create.
+    const fill = lightManager.createLightEntity(
+      "point",
+      light.kelvin,
+      fillLumens(light.lumens),
       undefined,
-      [CEILING_LIGHT_AT.x, CEILING_LIGHT_AT.y, CEILING_LIGHT_AT.z],
+      [at.x, at.y, at.z],
       // No shadows, for the reason RoomLit already states: a point light needs a six-face cube shadow map, the most expensive thing available here.
       false,
-      CEILING_LIGHT.reachMetres * SCENE_SCALE,
+      CEILING_LIGHT_RIG.fillReachMetres * SCENE_SCALE,
       // No cone: that argument is the spot's, and this is a point.
       undefined,
     );
-    scene.addEntity(entity);
+    scene.addEntity(key);
+    scene.addEntity(fill);
     return () => {
-      scene.removeEntity(entity);
-      lightManager.destroy(entity);
+      scene.removeEntity(key);
+      scene.removeEntity(fill);
+      lightManager.destroy(key);
+      lightManager.destroy(fill);
     };
   }, [lightManager, scene, light]);
 
@@ -560,9 +573,6 @@ const RoomLit = memo(function RoomLit({
   placement: GridPlacement;
   item: RoomItemModel;
 }) {
-  const { lightManager, scene } = useFilamentContext();
-  const entityRef = useRef<Entity | null>(null);
-
   const hostId =
     placement.surface.kind === "furniture"
       ? placement.surface.hostInstanceId
@@ -576,10 +586,10 @@ const RoomLit = memo(function RoomLit({
   const topHeight = hostItem ? hostItem.size.y * fitScale(hostItem) : 0;
 
   // emitsLight is only true when the row carried a light, so this is present — but the catalog is a network fetch and a stale cache could disagree, and a lamp that renders nothing beats a crash. A stacked lamp whose host has vanished goes dark the same graceful way.
-  const light =
+  const lights =
     hostId !== null && (!hostPlacement || !hostDef || !hostItem)
       ? undefined
-      : item.light;
+      : item.lights;
 
   // occupiedFootprint, not a raw rotatedFootprint(item.def.footprint, ...): a stacked lamp's footprint is topFootprint, at TOP_CELL_SIZE, not the floor footprint scaled.
   const footprint = occupiedFootprint(placement, item.def);
@@ -600,27 +610,83 @@ const RoomLit = memo(function RoomLit({
     (((hostPlacement?.rotSteps ?? 0) + placement.rotSteps) * Math.PI) / 2;
   const cos = Math.cos(spin);
   const sin = Math.sin(spin);
+
+  // ONE EMITTER PER LIGHT (migration 026). A lamp may carry a point and a spot at once — a soft glow
+  // from the shade plus an aimed beam — each with its own brightness, colour, reach, bulb position and
+  // aim, so each needs its own Filament entity with its own create/move/destroy lifecycle. Everything
+  // ABOVE this line is per-PIECE (where it stands, what it stands on, which way it is turned) and is
+  // computed once and shared; everything below is per-LIGHT and lives in RoomLitEmitter.
+  //
+  // Keyed by `type`, not by index: there is at most one point and at most one spot (item_lights is keyed
+  // (item_id, type)), so the type IS the stable identity. A catalog sync that adds a spot to a lamp that
+  // had only a point then leaves the point's entity untouched instead of tearing both down and
+  // rebuilding them, which an index key would do the moment the array's order or length changed.
+  if (!lights) return null;
+  return (
+    <>
+      {lights.map((light) => (
+        <RoomLitEmitter
+          key={light.type}
+          light={light}
+          centreX={centre.x}
+          centreZ={centre.z}
+          baseY={baseY}
+          cos={cos}
+          sin={sin}
+          itemHeight={item.size.y}
+        />
+      ))}
+    </>
+  );
+});
+
+// One light of one placed lamp: create the Filament entity once, move it as the piece moves, destroy it
+// on unmount. Split out of RoomLit for 026 (see its comment above) — the arithmetic here is verbatim
+// what RoomLit used to do inline for a lamp's single light, now parameterised by the piece's frame
+// rather than reading it from the enclosing scope.
+const RoomLitEmitter = memo(function RoomLitEmitter({
+  light,
+  centreX,
+  centreZ,
+  baseY,
+  cos,
+  sin,
+  itemHeight,
+}: {
+  light: RoomItemLight;
+  centreX: number;
+  centreZ: number;
+  baseY: number;
+  /** The piece's world yaw, pre-resolved to its cosine and sine by RoomLit — passed as two numbers rather than as a turn() closure so this component's effects can depend on them without a new function identity firing on every render. */
+  cos: number;
+  sin: number;
+  /** The piece's own height in authored metres, for the pre-014 bulb fallback below. */
+  itemHeight: number;
+}) {
+  const { lightManager, scene } = useFilamentContext();
+  const entityRef = useRef<Entity | null>(null);
+
   const turn = (x: number, z: number) => ({
     x: x * cos + z * sin,
     z: -x * sin + z * cos,
   });
 
   // A bulb at exactly the base is meaningless for a lamp — it would sit inside the floor — so 0 is a reliable "not authored yet" sentinel, which is what a row cached before migration 014 reads as. Falling back to the old whole-catalog heuristic keeps such a row looking roughly right until the next catalog sync replaces it, instead of dropping its light through the floor for one session.
-  const authored = light?.bulb;
+  const authored = light.bulb;
   const offset =
     authored && authored.y !== 0
       ? authored
-      : { x: 0, y: item.size.y + LIT.bulbAboveTopMetres, z: 0 };
+      : { x: 0, y: itemHeight + LIT.bulbAboveTopMetres, z: 0 };
   const local = turn(offset.x, offset.z);
   const bulb = roomToScene({
-    x: centre.x + local.x,
+    x: centreX + local.x,
     y: baseY + offset.y,
-    z: centre.z + local.z,
+    z: centreZ + local.z,
   });
 
   // Aim, turned by the same rotation. Absent for a point light, which ignores direction entirely.
   const aimed =
-    light?.type === "spot"
+    light.type === "spot"
       ? aimToDirection(light.aim?.pitchDeg ?? null, light.aim?.yawDeg ?? null)
       : null;
   const aimTurned = aimed ? turn(aimed.x, aimed.z) : null;
@@ -634,7 +700,6 @@ const RoomLit = memo(function RoomLit({
   dirRef.current = direction;
 
   useEffect(() => {
-    if (!light) return;
     const at = spawnRef.current;
     const entity = lightManager.createLightEntity(
       light.type,
@@ -978,6 +1043,24 @@ function RoomPostProcess() {
     bloom.levels = 6;
     bloom.quality = "MEDIUM";
     view.setBloomOptions(bloom);
+
+    // ANTI-ALIASING IS A GRID QUESTION HERE, not an image-quality one, and both knobs live in gridTuning.ts with the evidence behind them. In short: the editing grid is 6 mm world-space geometry, which is about one pixel at the room's normal framing and less than one further away, so it aliases; FXAA is a post-process and cannot recover a line that never rasterised, TAA can because it jitters and accumulates. Filament defaults FXAA on, so stating it is itself a change — this is the first time the render path has said either way.
+    view.antiAliasing = GRID_TUNING.fxaa ? "FXAA" : "none";
+
+    // The one option object here that must NOT come from a view.create*Options() factory. Unlike AO and bloom above, `temporalAntiAliasingOptions` is a plain property whose binding takes a Record<string, number>, built by the package's own optionsToJSI — there is no createTemporalAntiAliasingOptions to call. Set unconditionally rather than only when enabled, so toggling it off in gridTuning actually turns it off on a Fast Refresh instead of leaving the last value latched on the native view.
+    view.temporalAntiAliasingOptions = optionsToJSI({
+      enabled: GRID_TUNING.taa,
+      // Eight sub-pixel sample positions, which is what buys the grid its coverage. X16 and X32 converge further on a still camera but take proportionally longer to settle after every orbit, and this camera is rarely still for long.
+      jitterPattern: "HALTON_23_X8",
+      // History weight, and Filament's own default — 0.12 accumulates ~19 samples in steady state. This is the ghosting/settling dial and the LAST one to touch: raising it cuts smear during a glide but costs exactly the sub-pixel coverage TAA is here for.
+      feedback: 0.12,
+      // Reject history the current frame contradicts, so furniture and the drag ghost do not trail. ACCURATE is the default; the cheaper modes are for debugging.
+      boxClipping: "ACCURATE",
+      historyReprojection: true,
+      // Built for thin high-contrast geometry that flickers between frames, which is this grid exactly.
+      preventFlickering: true,
+      // filterWidth is deliberately absent. It is in the TypeScript type, but RNFViewWrapper.cpp never reads that key — every other field is guarded by a find() and this one simply is not among them — so setting it does nothing at all, silently.
+    });
   }, [view]);
   return null;
 }
@@ -1567,13 +1650,12 @@ export function RoomScene({
             direction={sunDirection(sun)}
             castShadows
           />
-          {/* One cool counter-fill, kept weak. The reference look is high-contrast: warm bounce with
-              genuinely dark corners. The old rig had 64k of flat fill here, which washed exactly that
-              contrast out. */}
+          {/* One cool counter-fill, kept weak. The reference look is high-contrast: warm bounce with genuinely dark corners. The old rig had 64k of flat fill here, which washed exactly that contrast out. */}
+          {/* PER-HOUR, and that is not cosmetic. This light burns at every hour while the sun can drop to zero, so a constant figure here becomes the DOMINANT light after dark — and being the room's coldest source, it then fights every warm bulb in it. Held as literals until 2026-08-18, it was the real cause of a "the ceiling light is too cold" report that no edit to the ceiling light could have fixed. Hard-coding these again is that bug, not a simplification. */}
           <Light
             type="directional"
-            colorKelvin={6_800}
-            intensity={4_000}
+            colorKelvin={sun.counterFill.kelvin}
+            intensity={sun.counterFill.intensity}
             direction={[0.6, -0.45, 0.5]}
           />
           {/* The room's own ceiling light. Off at the three daylight hours by default and on after dark, with the player's switch overriding either way — see ceilingLightOn. */}

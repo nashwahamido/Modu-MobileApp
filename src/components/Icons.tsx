@@ -1,4 +1,4 @@
-import Svg, { Circle, Line, Path, Polyline, Rect } from 'react-native-svg';
+import Svg, { Circle, Defs, FeDropShadow, Filter, G, Line, Path, Polyline, Rect } from 'react-native-svg';
 
 type Props = { size?: number; color?: string };
 const base = (size = 28) => ({ width: size, height: size, viewBox: '0 0 24 24' });
@@ -45,14 +45,27 @@ export function ToolsIcon({ size = 31, color = '#807277' }: Props) {
     <Path d="m6.5 18 10.8-10.8M4.2 20.3l3.1-1.1-2-2-1.1 3.1ZM19.8 3.7l-3.1 1.1 2 2 1.1-3.1Z" fill={color}/>
   </Svg>;
 }
-export function ChevronIcon({ size = 28, color = '#807277', up = false, outlineColor, outlineWidth = 1.5 }: Props & { up?: boolean; outlineColor?: string; outlineWidth?: number }) {
+export function ChevronIcon({ size = 28, color = '#807277', up = false, outlineColor, outlineWidth = 1.5, shadow = false }: Props & { up?: boolean; outlineColor?: string; outlineWidth?: number; shadow?: boolean }) {
   // Fill plus a same-colour stroke, whose round linejoin softens the corners.
   const d = up ? 'M2.6 17.2 12 6.8l9.4 10.4H2.6Z' : 'M2.6 6.8 12 17.2l9.4-10.4H2.6Z';
-  return <Svg {...base(size)}>
+  // A REAL drop shadow, shaped to the arrow. RN's own boxShadow and elevation follow a view's border
+  // box, so on a transparent triangle they cast a rectangle — an SVG filter is what makes the shadow
+  // the shape of the thing casting it. Matched to CARD_CHROME (0 5 4 rgba(0,0,0,0.22)); a CSS blur
+  // radius is roughly twice the Gaussian deviation, hence 2. The filter region is oversized because
+  // the default (-10%) would clip the blur off at the glyph's own edges.
+  const body = <>
     {/* Behind the arrow, at its width plus twice the outline, so only the outer half shows.
         Stroking the arrow itself would eat inward and change its shape. */}
     {outlineColor ? <Path d={d} fill="none" stroke={outlineColor} strokeWidth={2 + outlineWidth * 2} strokeLinejoin="round"/> : null}
     <Path d={d} fill={color} stroke={color} strokeWidth={2} strokeLinejoin="round"/>
+  </>;
+  return <Svg {...base(size)}>
+    {shadow ? <Defs>
+      <Filter id="chevronDrop" x="-50%" y="-50%" width="200%" height="200%">
+        <FeDropShadow dx="0" dy="2.5" stdDeviation="2" floodColor="#000" floodOpacity="0.22"/>
+      </Filter>
+    </Defs> : null}
+    {shadow ? <G filter="url(#chevronDrop)">{body}</G> : body}
   </Svg>;
 }
 export function CheckIcon({ size, color = '#555' }: Props) { return <Svg {...base(size)} fill="none" stroke={color} strokeWidth="2.5"><Polyline points="4,12 9,17 20,6"/></Svg> }

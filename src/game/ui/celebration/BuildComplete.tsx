@@ -1,7 +1,8 @@
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { StyleSheet, Image, Pressable, ScrollView, Text, View } from "react-native";
+import { StyleSheet, Image, ScrollView, Text, View } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import type { StyleProp, ViewStyle } from "react-native";
 import Animated, {
   Easing,
@@ -22,6 +23,7 @@ import { usePlacementStore } from "@/src/room/core/placement";
 import { ConfettiRain } from "@/src/game/ui/celebration/Confetti";
 import { SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import type { Theme } from "@/src/game/ui/system/theme";
+import { playSfx } from "@/src/game/audio/sfx";
 
 /** The banner art's aspect (900x218 after trimming), so the height is derived from the width rather
  *  than being a second number that has to be kept in step with it. */
@@ -193,9 +195,17 @@ export function BuildComplete() {
     };
   }, [furnitureId, repos]);
 
-  if (!furniture) return null;
-  const total = furniture.actions.length;
+  const total = furniture?.actions.length ?? 0;
   const isDone = total > 0 && completed.length >= total;
+  // THE FANFARE, on the card APPEARING rather than on the last action landing — useAssemblySfx stays
+  // deliberately silent there, and a fanfare then would play to a screen still showing the model.
+  // Above the early return: a hook past a conditional return changes hook order between renders.
+  const celebrating = isDone && !dismissed && confirmed;
+  useEffect(() => {
+    if (celebrating) playSfx("complete");
+  }, [celebrating]);
+
+  if (!furniture) return null;
   // Wait for the player to tap "Complete" — until then the FinishBuildButton is showing and they can still orbit the finished model.
   if (!isDone || dismissed || !confirmed) return null;
 
@@ -206,7 +216,7 @@ export function BuildComplete() {
   };
   // Straight into the room with the ghost already in hand; falls back to the inventory for the rare furniture with no room model (the tutorial).
   const placeInRoom = () => {
-    if (!furnitureId || !usePlacementStore.getState().startPlacing(furnitureId, { firstPlacementGuide: true })) {
+    if (!furnitureId || !usePlacementStore.getState().startPlacing(furnitureId)) {
       goToInventory();
       return;
     }
@@ -321,14 +331,25 @@ export function BuildComplete() {
                 <Pressable
                   style={styles.action}
                   onPress={goToInventory}
-                  accessibilityLabel="Store it in your inventory"
+                  accessibilityLabel="Put it in your inventory"
                 >
                   <Image
-                    source={require("@/src/assets/ui/icons/icon-inventory.png")}
+                    source={require("@/src/assets/ui/icons/Inventory-icon.png")}
                     style={styles.actionIcon}
                     resizeMode="contain"
                   />
-                  <Text style={styles.actionText}>Store in Inventory</Text>
+                  {/* One line: at 11pt "Put in Inventory" is about 106pt against the button's 108,
+                      which is close enough that a wider glyph or a larger UI scale would wrap it.
+                      The floor lets it shrink a hair instead — a two-line label here would sit a
+                      row lower than the button beside it. */}
+                  <Text
+                    style={styles.actionText}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.8}
+                  >
+                    Put in Inventory
+                  </Text>
                 </Pressable>
               </PopIn>
             </View>
@@ -362,7 +383,10 @@ const makeStyles = (t: Theme) =>
     ribbonText: {
       position: "absolute",
       // Centred on the BODY, which occupies the top 73% of the art — the tails and folds hang lower and would drag the label down with them if it were centred on the whole image.
-      top: RIBBON_H * 0.36 - 9,
+      // 0.32 rather than the body's true middle at 0.36: the fold along the ribbon's lower edge is
+      // darker than the face above it, and a label centred by measurement sat visually low against
+      // it. Optical centring, which is what the eye reads.
+      top: RIBBON_H * 0.32 - 9,
       fontFamily: FONT,
       fontSize: 14,
       fontWeight: "800",
@@ -373,7 +397,8 @@ const makeStyles = (t: Theme) =>
     card: {
       width: "100%",
       maxWidth: 520,
-      backgroundColor: "#E3DACD",
+      // #FBF8F3, matching the project map's card (ClusterFocusControl.PANEL_CREAM). Was #E3DACD.
+      backgroundColor: "#FBF8F3",
       borderRadius: 22,
       borderWidth: 3,
       borderColor: MAUVE,
@@ -437,7 +462,9 @@ const makeStyles = (t: Theme) =>
     xpIcon: { width: 18, height: 18 },
 
     actionsRow: { flexDirection: "row", justifyContent: "space-around", gap: 12, marginTop: 2 },
-    action: { alignItems: "center", gap: 3, flex: 1, maxWidth: 108 },
+    // 116, was 108: "Put in Inventory" measures about 106 at 11pt, so the old cap left two points of
+    // slack and any widening — a UI scale, a different glyph — pushed it onto a second line.
+    action: { alignItems: "center", gap: 3, flex: 1, maxWidth: 116 },
   actionIcon: { width: 30, height: 30, marginBottom: 2 },
     actionText: {
       fontFamily: FONT, fontSize: 11,

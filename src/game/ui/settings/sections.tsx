@@ -1,7 +1,8 @@
 // One component per settings SECTION, plus the option tables they read from. Nothing here decides which sections a surface shows — that is the composing panel's job (SettingsControls for the in-build gear panel, app/(presentation)/settings.tsx for the tabbed screen).
 //
 // Where a section differs between the two panels it takes a named boolean rather than a variant string, so the call site reads as a list of what that panel shows.
-import { Alert, Pressable, Text, View, type LayoutChangeEvent } from "react-native";
+import { Alert, Text, View, type LayoutChangeEvent } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import { router } from "expo-router";
 import { useGameStore } from "@/src/game/core/store";
 import { setMusicEnabled, setMusicVolume } from "@/src/game/audio/music";
@@ -115,14 +116,24 @@ function useFocusHandlers({
 // ── sections ─────────────────────────────────────────────────────────────────
 
 /** Restart — top of every assembly surface: infrequent (vs the on-HUD undo/redo), so it lives here instead of taking a HUD slot. */
-export function RestartRow() {
+export function RestartRow({ onRestarted }: { onRestarted?: () => void } = {}) {
   const completedCount = useGameStore((s) => s.completed.length);
   const reset = useGameStore((s) => s.reset);
   const confirmReset = () => {
     if (completedCount === 0) return;
     Alert.alert("Start over?", "This clears all assembly progress.", [
       { text: "Cancel", style: "cancel" },
-      { text: "Reset", style: "destructive", onPress: reset },
+      {
+        text: "Reset",
+        style: "destructive",
+        // CLOSE THE PANEL TOO. Resetting rebuilds the project map behind this card, so leaving it up
+        // hides the one thing the player just asked to see and makes them dismiss a panel they are
+        // finished with. Optional because the tabbed /settings screen has nothing to close.
+        onPress: () => {
+          reset();
+          onRestarted?.();
+        },
+      },
     ]);
   };
   return (
@@ -303,18 +314,29 @@ export function GuidanceSection({
           onValueChange={(v) => setSettings({ focusMode: v })}
         />
       ) : null}
-      <Row
-        label="Show instructions"
-        desc="Off: only the progress bar stays at the top"
-        value={settings.showInstructions}
-        onValueChange={(v) => setSettings({ showInstructions: v })}
-      />
-      <Row
-        label="Error hints"
-        desc="Nudge after a part flies back"
-        value={settings.softHints}
-        onValueChange={(v) => setSettings({ softHints: v })}
-      />
+      {/* Free mode has no instructions to show — objectiveText returns null there — so the toggle would be a switch for an empty bar. Written !== "free" rather than === "guide" so strict, live in the engine but unreachable from this panel, groups with guide. */}
+      {mode !== "free" ? (
+        <Row
+          label="Show instructions"
+          desc="Off: only the progress bar stays at the top"
+          value={settings.showInstructions}
+          onValueChange={(v) => setSettings({ showInstructions: v })}
+        />
+      ) : null}
+      {/* noteBlocked no-ops outside free mode AND in focus mode. Outside free the row is gone entirely, but focus mode DISABLES it instead of hiding it: focus mode is a thing the player just switched on and can switch straight back off, so the honest answer to "where did my error hints go" belongs here, on the row, rather than leaving them hunting for a switch that vanished. Its own desc carries the reason. */}
+      {mode === "free" ? (
+        <Row
+          label="Error hints"
+          desc={
+            settings.focusMode
+              ? "Off while Focus mode is on"
+              : "Nudge after a part flies back"
+          }
+          value={settings.softHints}
+          onValueChange={(v) => setSettings({ softHints: v })}
+          disabled={settings.focusMode}
+        />
+      ) : null}
       {showManualTools ? (
         <Row
           label="Choose tools"

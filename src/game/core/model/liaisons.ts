@@ -1,5 +1,6 @@
 import FASTENER_KINDS from "@/src/game/core/model/fastener-kinds.json";
 import { liaisonId } from "@/src/game/core/ids";
+import { lowerJoints, mergeOverlays, type JointDef } from "./joints";
 import {
   FastenerKind,
   JoinKind,
@@ -57,14 +58,23 @@ export type StructureOverlay = Record<
       | "fastenerKind"
       | "engageDir"
       | "stageOffset"
+      | "jointAnchor"
     >
   >
 >;
 
-export function applyStructure(parts: Parts, overlay: StructureOverlay): Parts {
+/** Overlay the authored structure onto the generated parts. `joints` is the v2 authoring route (model/joints.ts): joint ENTITIES are lowered into the same flat fields first, then the flat overlay lands on top, so a furniture may use either form or both during a migration and the engine downstream never learns the difference. */
+export function applyStructure(
+  parts: Parts,
+  overlay: StructureOverlay,
+  joints?: readonly JointDef[],
+): Parts {
+  const merged = joints?.length
+    ? mergeOverlays(lowerJoints(joints, parts), overlay)
+    : overlay;
   const out: Parts = {};
   for (const [id, p] of Object.entries(parts) as [PartId, PartDef][]) {
-    out[id] = overlay[id] ? { ...p, ...overlay[id] } : p;
+    out[id] = merged[id] ? { ...p, ...merged[id] } : p;
   }
   return out;
 }

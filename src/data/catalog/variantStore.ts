@@ -80,7 +80,7 @@ export function variantsOf(itemId: CatalogId): ItemVariant[] {
   return useVariantStore.getState().byItem[itemId] ?? EMPTY;
 }
 
-// The variation to show/place when the player has not picked one. Null = the item has a single model (the 'default' path segment) — which is also what an unloaded table yields, so placement still works offline against whatever the bundle has.
+// The variation to show/place when the player has not picked one. Null = the item has a single model (the 'default' path segment), which is also what an unloaded table yields — indistinguishable here, so a caller that must survive the unloaded case has to re-ask once the rows land rather than treat this answer as final.
 export function defaultVariationOf(itemId: CatalogId): string | null {
   return defaultVariation(variantsOf(itemId));
 }

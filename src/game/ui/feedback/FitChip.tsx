@@ -29,6 +29,7 @@ export function FitChip() {
   const styles = useFixedStyles(makeStyles);
   const t = useTheme();
   const fitState = useGameStore((s) => s.fitState);
+  const aimBlocked = useGameStore((s) => s.aimBlocked);
   const orientationActionId = useGameStore((s) => s.orientationActionId);
   const driveKind = useGameStore((s) => s.driveKind);
   const driveActionId = useGameStore((s) => s.driveActionId);
@@ -43,6 +44,10 @@ export function FitChip() {
   );
 
   let look = lookFor(t)[fitState];
+  // Facing gate feedback: the aim is on a socket the camera cannot see the contact side of. Coaching the camera turn out loud is half the feature — the gate alone reads as "snapping is broken" (the off-frame gate shipped silent and did exactly that).
+  if (fitState === "held" && aimBlocked) {
+    look = { color: FIT_CLOSE, label: "Try turning the camera" };
+  }
   if (driveKind === "slide") {
     look = { color: t.success, label: "Slide it into the groove" };
   } else if (driveKind === "press") {
@@ -77,13 +82,13 @@ export function FitChip() {
 
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
-  chip: {
-    position: "absolute",
-    top: 52,
-    alignSelf: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 14,
-  },
-  text: { color: t.text, fontWeight: "700", fontSize: 13 },
+    chip: {
+      position: "absolute",
+      top: 68,
+      alignSelf: "center",
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+      borderRadius: 14,
+    },
+    text: { color: t.text, fontWeight: "700", fontSize: 13 },
   });

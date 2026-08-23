@@ -72,6 +72,7 @@ type ProfileRow = {
   coin: number | null;
   xp: number | null;
   onboarding_completed: boolean | null;
+  map_coach_seen: boolean | null;
   assembly_count: number | null;
   like_count: number | null;
 };
@@ -89,6 +90,9 @@ function rowToProfile(r: ProfileRow, refs: Refs): Profile {
     coins: r.coin ?? 0,
     xp,
     onboardingCompleted: r.onboarding_completed ?? false,
+    // Absent until migration 025 has run — read as "not seen", which shows the coach once rather
+    // than suppressing it forever on a database that has not caught up yet.
+    mapCoachSeen: r.map_coach_seen ?? false,
     title: titleForLevel(level, refs.levels),
     xpIntoLevel: span.xpIntoLevel,
     xpForNextLevel: span.xpForNextLevel,
@@ -103,6 +107,7 @@ function profilePatchToRow(patch: ProfilePatch, avatars: AvatarRef[]): Record<st
   if ("username" in patch) row.username = patch.username;
   if ("avatarMode" in patch) row.avatar_id = idForMode(patch.avatarMode ?? null, avatars);
   if ("onboardingCompleted" in patch) row.onboarding_completed = patch.onboardingCompleted;
+  if ("mapCoachSeen" in patch) row.map_coach_seen = patch.mapCoachSeen;
   return row;
 }
 

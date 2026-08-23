@@ -8,7 +8,8 @@
 // The confirmation exists for one reason: to say the build is not lost. Without it "skip" reads as
 // "throw this away", and the honest answer is that the model is waiting in the catalogue.
 import { useEffect } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import Animated, {
   Easing,
   useAnimatedStyle,

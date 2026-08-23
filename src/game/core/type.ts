@@ -94,6 +94,8 @@ export interface StructuralFields {
   lockTravel?: number;
   /** Force a plain snap placement even when a press/screw partner is already placed — the part just clicks home at drop with no drive gesture (EKET's suspension cover pushes over its bracket in the same motion that places it). */
   dropOn?: boolean;
+  /** Authored override for this part's drag hold/aim anchor, world-space at baked pose. Replaces the part's RESOLVED anchor outright (the value the multi-joint centroid would produce), not any individual frame — authoring is per-part while frames are per-liaison. None authored today: all four shipped furnitures derive cleanly. */
+  jointAnchor?: Vec3;
 }
 export interface FastenerFields {
   fastenerKind?: FastenerKind;
@@ -108,6 +110,32 @@ export interface FastenerFields {
   insertProud?: number;
 }
 export interface PartDef extends PartCore, StructuralFields, FastenerFields {}
+
+/** The same box kept in the part's OWN frame: `axes` are the frame's unit directions in world space, `half` the half-extents along them, `center` in world. Tight where the world-aligned min/max is a slab of air — every splay in these GLBs lives in the node rotation, not the vertices (DALFRED leg: a 35mm stick whose AABB is a 192mm slab; BEKVAM leg: a 22mm plank in a 64mm AABB) — so the visibility gate measures sightlines and burial against this when present. AABB ⊇ OBB ⊇ mesh: still conservative, just far less wasteful. */
+export interface OrientedBox {
+  center: Vec3;
+  axes: [Vec3, Vec3, Vec3];
+  half: Vec3;
+}
+
+/** A part's world-space axis-aligned bounds at its BAKED pose. Harvested from Filament at model load; the unit the joint derivation works in. `obb` is optional so every min/max consumer (joint frames, hold reach) keeps working unchanged. */
+export interface PartBox {
+  min: Vec3;
+  max: Vec3;
+  obb?: OrientedBox;
+}
+
+/** Where two parts actually meet, derived per liaison at baked pose. `anchor` is the shared world contact point; the per-endpoint offsets are what the drag uses as hold/aim points, each clamped into its own part's bounds. */
+export interface JointFrame {
+  liaison: LiaisonId;
+  anchor: Vec3;
+  offsetA: Vec3;
+  offsetB: Vec3;
+  /** How the anchor was found: a direct box overlap, or via a fastener bridging an air gap. */
+  via: "direct" | "bridge";
+  /** Unit direction the contact FACES, from part A's surface toward part B — the thin axis of the direct overlap slab (a contact is a thin sheet, and its normal is the slab's smallest dimension), or the center-to-center line for a bridged joint. Facing is what visibility gating needs: a socket whose facing points away from the camera is on the far side of its own part, invisible no matter what occludes it. */
+  facingA: Vec3;
+}
 
 export type RawPartDef = Omit<
   PartDef,

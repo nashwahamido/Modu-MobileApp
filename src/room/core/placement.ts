@@ -284,7 +284,7 @@ export const usePlacementStore = create<PlacementState>()((set, get) => ({
       const placement: GridPlacement = {
         instanceId: nextInstanceId(itemId, layout),
         itemId,
-        // Opens on the item's DEFAULT colour, the one its tile showed. Null when the variant table has not loaded (or the item has no colour axis) — the 'default' model, which is what the bundle has.
+        // Opens on the item's DEFAULT colour, the one its tile showed. Null when the variant table has not loaded (or the item has no colour axis), and this is a SNAPSHOT — it is the colour that gets persisted, not the one that gets drawn. What to draw is resolved against item_variants again at render time (variationToLoad, scene/variantModel.ts), so a null stamped here no longer condemns the piece to the 'default' path segment for the rest of its life.
         variation: opts?.variation ?? defaultVariationOf(itemId),
         surface,
         cell: startCell,

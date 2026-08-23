@@ -1,15 +1,17 @@
 // The controls shown while a piece is being placed: the colour swatches and the button column, in one rail on the RIGHT edge of the screen. Lifted out of RoomExperience so this whole cluster can be restyled on its own — the room screen only decides WHEN it is up (activeEdit), never how it looks.
 //
 // Right edge, and a column, because the app is landscape: the free space is vertical, and the old bottom-centre bar sat across the room's width and on top of the bottom navigation. The rail is centred in the band left between the top stats cluster and the bottom bar, so it covers neither.
-import { StyleSheet, Pressable, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import { BulbIcon, CheckIcon, RotateLeftIcon, RotateRightIcon, TrashIcon } from "../../components/Icons";
 import { getRoomItemDef } from "../core/placeableItems";
 import { usePlacementStore } from "../core/placement";
 import { ColourPicker } from "./ColourPicker";
-import { CREAM, useFixedStyles, useTheme, FONT, LEXEND } from "@/src/game/ui/system/theme";
+import { CARD_CHROME, CREAM, useFixedStyles, useTheme, FONT, LEXEND } from '@/src/game/ui/system/theme';
 import type { Theme } from "@/src/game/ui/system/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "../../hooks/use-safe-insets";
+import { playSfx } from "@/src/game/audio/sfx";
 
 
 // How far the rail's band is held clear of the two HUD clusters it must never cover: the stats pills at the top right, and the bottom navigation. Each is added to that corner's own inset offset, so the three move together.
@@ -149,6 +151,8 @@ export function PlacementRail({
           ]}
           disabled={blocked}
           onPress={() => {
+            // The piece settling into the room. On CONFIRM rather than on every ghost move.
+            playSfx("dropItem");
             confirmPlacement();
             onGuideAction?.("confirm");
           }}
@@ -159,6 +163,11 @@ export function PlacementRail({
     </View>
   );
 }
+
+// The bottom bar's fill and the item tiles' well, so the placement controls read as the same set of
+// surfaces as the rest of the room and the two popups.
+const PLACEMENT_FILL = '#FBFAF3';
+const PLACEMENT_WELL = '#EFE9E0';
 
 const makeStyles = (t: Theme) => StyleSheet.create({
   // The band the placement UI is centred in — pinned to the right edge, its top and bottom set at the render above. A row, so the swatches sit to the LEFT of the button column and the controls stay hard against the edge.
@@ -176,12 +185,13 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     borderRadius: 22,
-    backgroundColor: t.surface,
+    // The room's own chrome: the bar's cream, its shadow, no outline. The placement controls sit ON the
+    // room beside the nav rail, so they are the same material as it rather than a themed surface.
+    backgroundColor: PLACEMENT_FILL,
     paddingHorizontal: 8,
     paddingVertical: 12,
-    shadowColor: '#000',
-    shadowOpacity: .18,
-    shadowRadius: 8,
+    ...CARD_CHROME,
+    borderWidth: 0,
   },
   barBlocked: {
     borderWidth: 2,
@@ -210,7 +220,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: t.surfaceRaised,
+    backgroundColor: PLACEMENT_WELL,
     alignItems: 'center',
     justifyContent: 'center',
   },

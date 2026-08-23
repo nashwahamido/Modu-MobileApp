@@ -62,6 +62,11 @@ import { ClusterCelebration } from "@/src/game/ui/celebration/ClusterCelebration
 import { UndoButton } from "@/src/game/ui/hud/UndoButton";
 import { GameSettings } from "@/src/game/ui/settings/GameSettings";
 import { ToggleChips } from "@/src/game/ui/hud/ToggleChips";
+import { IdleCheckIn } from "@/src/game/ui/hud/IdleCheckIn";
+import { MapCoach } from "@/src/game/ui/hud/MapCoach";
+import { StuckCoach } from "@/src/game/ui/hud/StuckCoach";
+import { HudSpotTarget } from "@/src/game/ui/hud/hudSpotlight";
+import { useBuildPaused } from "@/src/game/ui/hud/useBuildPaused";
 import { BuildMap, MapButton } from "@/src/game/ui/hud/ClusterFocusControl";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 import { Button } from "@/src/game/ui/system/Button";
@@ -259,13 +264,19 @@ function GameScreen() {
     !activeCluster &&
     // once every cluster is built, no focus means the combine stage, not an unanswered chooser
     !combineReady(furniture, new Set(useGameStore.getState().completed));
+  // THE MAP IS A PAUSE, and so is the loading screen. `settings.audio` alone started the spoken step
+  // the instant the furniture resolved — which is before the model has drawn and before the stage
+  // chooser has been answered, so the first thing a player heard was an instruction about a build
+  // they could not yet see, over a loading overlay. It should begin when they pick a stage and the
+  // build is actually in front of them.
+  const buildPaused = useBuildPaused();
   const objective = useStepObjective({
     furniture,
     firstAvailable,
     needsFocusChoice,
     mode,
     textLevel: settings.textLevel,
-    audioOn: settings.audio,
+    audioOn: settings.audio && !buildPaused && !loaderVisible,
     completedCount,
     totalCount,
   });
@@ -278,14 +289,18 @@ function GameScreen() {
   // Gated on the existing accessibility flag, so a profile that asks for a quiet build gets one.
   useAssemblySfx(settings.soundEffects);
   const hintGroup = useGameStore((s) => s.hintGroup);
+  const hintGroups = useGameStore((s) => s.hintGroups);
+  // The tray learns ONE concept. "?" highlights a set (hintGroups); Spot highlights its single card (hintGroup); they never both run, so the merge is a preference, not a union.
+  const highlightGroups = hintGroups.length ? hintGroups : hintGroup ? [hintGroup] : [];
   const hintPulse = useGameStore((s) => s.hintPulse);
-  // The Spot marker is a ONE-SHOT: it pulses for a few seconds and puts itself out. Keyed on hintPulse as well as the part, so pressing Spot twice for the same part restarts the window rather than being swallowed as "no change".
+  // The scene markers are a ONE-SHOT: they pulse for a few seconds and put themselves out. Keyed on hintPulse as well as the parts, so pressing the same button twice restarts the window rather than being swallowed as "no change". Covers Spot's single spotlight and the ? highlight's list alike — both are cleared by clearSpot.
   const spotPartId = useGameStore((s) => s.hintPartId);
+  const hintParts = useGameStore((s) => s.hintParts);
   useEffect(() => {
-    if (!spotPartId) return;
+    if (!spotPartId && !hintParts.length) return;
     const t = setTimeout(() => useGameStore.getState().clearSpot(), SPOT_MS);
     return () => clearTimeout(t);
-  }, [spotPartId, hintPulse]);
+  }, [spotPartId, hintParts, hintPulse]);
 
   // select tool
   const selectedTool = useGameStore((s) => s.selectedTool);
@@ -443,6 +458,10 @@ function GameScreen() {
         <CenterDropRing />
         <FitChip />
         <HintToast />
+        {/* Sparky's check-in after a long pause. Momentum only, and it renders itself away for the
+            other three — the profile test lives in the component so this screen cannot disagree with
+            any future caller about who it is for. */}
+        <IdleCheckIn />
         {/* Only speaks when Spot is running and its target is somewhere the player cannot see. */}
         <SpotOrbitCue manipulator={manipulator} />
         {/* Focus mode clears the workbench: everything below is chrome the task doesn't
@@ -455,8 +474,12 @@ function GameScreen() {
         <UndoButton />
         <GameSettings />
         <View style={styles.togglesRow}>
+          {/* Wrapped so a coach can ring it. The row is right-anchored with a gap and Auto is
+              content-sized, so its position cannot be written down — it has to report itself. */}
           {focus ? null : (
-            <DevAutoStep heldDriver={heldDriver} sinkDriver={sinkDriver} />
+            <HudSpotTarget id="auto">
+              <DevAutoStep heldDriver={heldDriver} sinkDriver={sinkDriver} />
+            </HudSpotTarget>
           )}
           {focus ? null : <DevMenu />}
           <ToggleChips />
@@ -464,11 +487,14 @@ function GameScreen() {
         {/* One Map button where the cluster discs were. Same visibility rule they had: hidden in
             focus mode and in strict, where the step is chosen for you. */}
         {!focus && mode !== "strict" ? <MapButton /> : null}
+        {/* Introduces the Map button the first time an account reaches a real build. Shows itself at
+            most once ever — the flag lives on the profile, not on the device. */}
+        <MapCoach />
         <PartsTray
           items={sceneState.trayItems}
           gestureFor={gestureFor}
           thumbs={furniture.thumbs}
-          highlightGroup={hintGroup}
+          highlightGroups={highlightGroups}
           highlightPulse={hintPulse}
           header={
             focus ? undefined : (
@@ -600,11 +626,9 @@ function GameScreen() {
             dark={dark}
           />
         </View>
-        <RecenterButton
-          enabled={sceneHasParts}
-          onPress={resetCamera}
-          style={hudControls.recenterButton}
-        />
+        <HudSpotTarget id="recenter" style={hudControls.recenterButton}>
+          <RecenterButton enabled={sceneHasParts} onPress={resetCamera} />
+        </HudSpotTarget>
 
         {heldActionId && settings.releaseBehavior === "float" ? (
           // Float mode: a released part stays where it was set down; this is the way back to the tray. (In autoReturn mode a miss returns by itself.)
@@ -627,6 +651,10 @@ function GameScreen() {
           shown over the build, and the celebrations are their own full-screen moments. Left on the
           scope they rendered half-dark, most visibly the map's title, which is t.text on a cream
           card and so came out white on cream. */}
+      {/* OUTSIDE `chrome`, with the other full-screen overlays, and that placement is load-bearing:
+          its ghost ring positions itself from measureInWindow, and inside the inset chrome every
+          ring would be off by the safe-area margin. */}
+      <StuckCoach />
       <ThemeScope value="light">
         {mode !== "strict" ? <BuildMap /> : null}
         <ClusterCelebration />

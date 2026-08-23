@@ -48,7 +48,8 @@ const HARDWARE_RAW = {
   screw110519: {
     tool: "screwdriver",
     label: { standard: "Back screw", simple: "Screw" },
-    note: "back panel screw",
+    // A DRAWER's back panel into that drawer's own two side panels, four per drawer — NOT the cabinet's back panel, which is held by cams and pins and never sees this screw. Worth stating in the negative: "back panel screw" read as the cabinet's back to someone tracing an unassemblable socket, and the label alone cannot settle it because both furnitures have a part called a back.
+    note: "drawer back panel into the drawer sides",
   },
   screw115339: {
     tool: "screwdriver",

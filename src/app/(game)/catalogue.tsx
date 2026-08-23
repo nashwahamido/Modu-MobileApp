@@ -18,11 +18,11 @@ import Animated, {
 } from "react-native-reanimated";
 import { StyleSheet,
   Image,
-  Pressable,
   Text,
   useColorScheme,
   View,
 } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 // type
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
@@ -98,6 +98,9 @@ export default function CatalogueScreen() {
   const [completedIds, setCompletedIds] = useState<ReadonlySet<string>>(new Set());
   // Furniture with a resumable save. complete() DELETES the save as it records the completion, so this and completedIds are disjoint for anything built once and not restarted.
   const [inProgressIds, setInProgressIds] = useState<ReadonlySet<string>>(new Set());
+  // How many actions each resumable save has finished. The save already carries the completed list —
+  // it is the source of truth for how far a build got — so the card's XP line costs no extra read.
+  const [doneSteps, setDoneSteps] = useState<Readonly<Record<string, number>>>({});
   // The XP each furniture pays out. buildReward is per-furniture, so this is one read per tile — fine at four items, wrong at twenty. The fix then is an xp column on BuildCatalogRow, which arrives with the rest of the row in a single fetch.
   const [rewardXp, setRewardXp] = useState<Readonly<Record<string, number>>>({});
   useEffect(() => {
@@ -111,6 +114,7 @@ export default function CatalogueScreen() {
         if (!alive) return;
         setCompletedIds(new Set(ids));
         setInProgressIds(new Set(saves.map((b) => b.furnitureId)));
+        setDoneSteps(Object.fromEntries(saves.map((b) => [b.furnitureId, b.completed.length])));
         setRewardXp(Object.fromEntries(rewards));
       })
       // A failed read means every card renders as un-built — the wrong label, but never a wrong action, since all three states lead to the same build screen.
@@ -256,7 +260,7 @@ export default function CatalogueScreen() {
               key={m.id}
               meta={m}
               dark={scheme === "dark"}
-              // In-progress WINS over completed: a rebuild of a finished item is still a build in flight, and offering "assemble again" mid-build would read as a restart. It also keeps the earned XP hidden until the run it belongs to is over.
+              // In-progress WINS over completed: a rebuild of a finished item is still a build in flight, and offering "Re-assemble" mid-build would read as a restart.
               state={
                 inProgressIds.has(m.id)
                   ? "inProgress"
@@ -265,6 +269,9 @@ export default function CatalogueScreen() {
                     : "new"
               }
               xp={rewardXp[m.id] ?? 0}
+              // Steps finished, not XP: the card turns it into XP against the model's own stepCount,
+              // so the two numbers in "120/310" can never come from different denominators.
+              doneSteps={doneSteps[m.id] ?? 0}
               selected={selectedId === m.id}
               onSelect={() => setSelectedId((cur) => (cur === m.id ? null : m.id))}
               // Straight to the build. The experience/profile is set by onboarding (and adjustable in Settings) — not a per-item chooser. The finish rides along as a param. play.tsx does not read it yet — the assembly model is still the one baked GLB — so this is the tile half of the feature only.
@@ -278,16 +285,31 @@ export default function CatalogueScreen() {
           ))}
         </View>
       </Animated.ScrollView>
-      {/* Pinned to the SCREEN, not the scroll: the ropes run off the top edge and the sign hangs
-          beneath them. It fades on scroll rather than travelling with the grid. */}
+      {/* Pinned to the SCREEN, not the scroll: it fades on scroll rather than travelling with the
+          grid. Same drop-and-settle spring the wooden board hung on — only the sign itself changed. */}
       <Animated.View style={[styles.boardSign, signStyle]} pointerEvents="none">
-        <Image
-          source={require("@/src/assets/ui/board-wooden.png")}
-          style={styles.board}
-          resizeMode="contain"
-          accessibilityRole="image"
-          accessibilityLabel="Furniture Catalogue"
-        />
+        {/* TWO NESTED VIEWS, not one. The shadow and the rounded clip cannot share a node on
+            Android: `overflow: hidden` clips the shadow away with everything else outside the box.
+            So the outer view carries the radius and the shadow, the inner carries the radius and
+            the clip, and the art sits inside that. */}
+        <View style={styles.headerShadow}>
+          <View style={styles.headerPanel}>
+            <Image
+              source={require("@/src/assets/ui/cream-header.png")}
+              style={StyleSheet.absoluteFill}
+              // STRETCH, not contain: the view is already sized by the art's own aspect ratio, so
+              // the two agree exactly and this only guarantees the cream reaches the rounded edge.
+              // `contain` would letterbox on a rounding difference and show the fill colour beneath.
+              resizeMode="stretch"
+            />
+            {/* The title is TEXT now, where the wooden board had it painted into the PNG. It scales
+                with the reading-size setting, it can be read aloud, and rewording it costs nothing —
+                which is why the image no longer carries an accessibilityLabel. */}
+            <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit>
+              Furniture Catalogue
+            </Text>
+          </View>
+        </View>
       </Animated.View>
     </SceneBackdrop>
   );
@@ -363,6 +385,20 @@ const THUMB_INSET = "#CFCAC2";
 /** The single text colour for this screen (wireframe ink). */
 const INK = "#231F20";
 
+/** The header panel's size. 288 ÷ (985/222) is 65, so this PAIR reproduces the artwork's ratio
+ *  exactly at full width, with no squash. No `aspectRatio` in the style: Yoga ignores it once both
+ *  width and height are set, so stating the ratio there would have been a comment pretending to be
+ *  a rule. Change both together, or the stadium ends go oval.
+ *
+ *  Down from 360×81, which crowded the two pills either side of it and read as a banner rather than
+ *  as a title. The type did not shrink with it — the panel was the thing that was too big. */
+const HEADER_W = 288;
+const HEADER_H = 65;
+
+/** The header art's own top-band cream, sampled from cream-header.png. It sits UNDER the artwork and
+ *  is never seen — its job is to give the shadow view a background so Android rounds its outline. */
+const HEADER_CREAM = "#F3ECE0";
+
 /** The finish carousel: how long a table sits still, and how long the slide to the next one takes.
  *  Together they set the loop's pace — four cells at 1.75s each is a ~7s cycle, slow enough to read
  *  as a showcase running in the background rather than something demanding attention. */
@@ -395,7 +431,7 @@ type CardState = "new" | "inProgress" | "done";
 const PILL_LABEL: Record<CardState, string> = {
   new: "Start ›",
   inProgress: "Continue ›",
-  done: "Assemble again ›",
+  done: "Re-assemble ›",
 };
 
 /** A colour per state, so the pill says which of the three it is before the label is read.
@@ -413,6 +449,7 @@ function FurnitureCard({
   dark,
   state,
   xp,
+  doneSteps,
   selected,
   onSelect,
   onStart,
@@ -421,11 +458,27 @@ function FurnitureCard({
   dark: boolean;
   state: CardState;
   xp: number;
+  /** Actions finished on the resumable save, or 0. Steps rather than XP — see the call site. */
+  doneSteps: number;
   selected: boolean;
   onSelect: () => void;
   onStart: (variation: string | null) => void;
 }) {
   const styles = useFixedStyles(makeStyles);
+  // What the XP row's first number says, per state:
+  //   new         0        nothing started
+  //   inProgress  a share  steps finished against this model's own stepCount
+  //   done        the lot  a finished build has been paid in full
+  //
+  // `done` is asserted rather than derived: complete() DELETES the save as it records the
+  // completion, so a finished furniture has no `completed` list left to count and deriving it would
+  // read 0 on exactly the card that has earned everything.
+  const earnedXp =
+    state === "done"
+      ? xp
+      : state === "inProgress" && meta.stepCount > 0
+        ? Math.floor((xp * Math.min(doneSteps, meta.stepCount)) / meta.stepCount)
+        : 0;
   // The finish list comes from item_variants (default first, already sorted by the store) but is narrowed to the finishes this build ships art for — so a variation authored in the DB ahead of its artwork simply doesn't appear, rather than rendering a missing image.
   const variants = useVariantStore((v) => v.byItem[meta.id]);
   const finishes = useMemo(() => {
@@ -582,15 +635,24 @@ function FurnitureCard({
         </View>
         <View style={styles.cardCopy}>
           <View style={styles.nameRow}>
-            {/* adjustsFontSizeToFit with a floor: "BEKVÄM Step Stool" is the longest name in the
-                catalogue and sits right on the wrap boundary, so it flips between one and two lines
-                on the smallest width change. Letting it shrink a hair keeps every card's copy block
-                the same height instead of one of them being a line taller than the rest. */}
+            {/* ONE LINE, shrunk to fit. The longest names in the catalogue sit right on the wrap
+                boundary, so they flipped between one and two lines on the smallest width change —
+                and a card whose title took two lines pushed its whole copy block a line lower than
+                the card beside it.
+
+                numberOfLines={2} was the reason the shrink never helped: adjustsFontSizeToFit only
+                shrinks as far as it needs to fit the lines it is ALLOWED, so with two available it
+                wrapped at full size rather than reducing. Capping at one is what makes the scale do
+                the work.
+
+                The floor is 0.75 rather than 0.85 for the same reason — at 0.85 a name that does
+                not fit has nowhere left to go and gets truncated with an ellipsis, which is worse
+                than a slightly smaller title. 17pt down to ~13pt is still comfortably readable. */}
             <Text
               style={styles.name}
-              numberOfLines={2}
+              numberOfLines={1}
               adjustsFontSizeToFit
-              minimumFontScale={0.85}
+              minimumFontScale={0.75}
             >
               {row?.name ?? "…"}
             </Text>
@@ -619,15 +681,25 @@ function FurnitureCard({
               <Text style={styles.statText}>{row.durationMin} mins</Text>
             </View>
           ) : null}
-          {/* Past tense, and only once built: the reward is granted exactly once per furniture, so a rebuild pays nothing and must not read as if it will. */}
-          {state === "done" && xp > 0 ? (
+          {/* ALWAYS, as earned-of-total. It used to appear only once a build was finished, which made
+              the XP line itself the reward announcement — so an unstarted card said nothing about
+              what it was worth, and a card mid-build hid the progress the player had just made.
+              Reading "0/310" before, "120/310" during and "310/310" after turns the same row into
+              the answer to "what do I get" and "how far am I", from one number.
+
+              The middle number is derived from STEPS rather than tracked as XP, so it is always a
+              share of this model's own reward and cannot drift from the total beside it. Rounded
+              down: a build one step in should not read as though it has banked more than it has. */}
+          {xp > 0 ? (
             <View style={styles.statRow}>
               <Image
                 source={require("@/src/assets/ui/icons/icon-xp.png")}
                 style={styles.xpIcon}
                 resizeMode="contain"
               />
-              <Text style={styles.statText}>{xp} earned</Text>
+              <Text style={styles.statText}>
+                {earnedXp}/{xp} XP
+              </Text>
             </View>
           ) : null}
         </View>
@@ -689,21 +761,58 @@ const makeStyles = (t: Theme) =>
     // The board sits BETWEEN the two pills and takes the middle. overflow hidden + the image's
     // negative marginTop is what clips the rope-tops, so they read as running off the screen edge.
     headerSpacer: { flex: 1 },
-    // The sign hangs from the top of the SCREEN. Centered across the full width; pinned so the grid
-    // scrolls underneath and the sign fades out instead of following it.
+    // The panel hangs from the top of the SCREEN. Centered across the full width; pinned so the grid
+    // scrolls underneath and it fades out instead of following it.
     boardSign: {
       position: "absolute",
       top: 0,
       // The extra right inset pushes the centred sign slightly LEFT of true centre. Increase it to
-      // shift further left; drop it back to 0 to re-centre.
+      // shift further left; drop it back to 0 to re-centre. Unchanged from the wooden board, so the
+      // header lands exactly where the sign did.
       left: 0,
       right: 28,
       alignItems: "center",
       zIndex: 5,
     },
-    // 2.77:1 art. The negative marginTop cancels the transparent cap above the ropes in the PNG, so
-    // the rope-tops meet the screen edge. Tune height to resize; width follows the aspect ratio.
-    board: { width: "100%", maxWidth: 360, height: 140, aspectRatio: 1109 / 401, marginTop: -44 },
+    // Unlike the wooden board this art fills its own box — the PNG has no transparent cap to
+    // cancel, so there is no negative marginTop here. The small POSITIVE one is the gap from the
+    // screen edge: the board's ropes ran off the top, this panel does not.
+    //
+    // Radius is half the height, which is what makes the ends read as the stadium the art is drawn
+    // with. See HEADER_W/HEADER_H above for why the two are the numbers they are.
+    headerShadow: {
+      width: "100%",
+      maxWidth: HEADER_W,
+      height: HEADER_H,
+      marginTop: 18,
+      borderRadius: HEADER_H / 2,
+      // A BACKGROUND IS LOAD-BEARING HERE, not decoration. Android derives a view's shadow outline
+      // from its background drawable — with none, `elevation` falls back to the full rectangle and
+      // draws grey square corners around a rounded pill, which is what broke the left end. The
+      // colour is the art's own top cream, so nothing shows even at the antialiased edge.
+      backgroundColor: HEADER_CREAM,
+      ...SHADOW,
+    },
+    headerPanel: {
+      flex: 1,
+      borderRadius: HEADER_H / 2,
+      overflow: "hidden",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    // Sits on the art's LIGHTER upper band rather than dead centre: the PNG carries its own shading,
+    // with a darker sweep across the lower third, and text centred vertically straddled the two.
+    headerTitle: {
+      ...TYPE.title,
+      fontSize: 20,
+      // INK, the same colour every other word on this screen uses — 13.9:1 on the panel's cream. The
+      // umber it replaced was a second dark text colour for one title, which is the drift the theme
+      // header warns about; the header is not special enough to earn its own ink.
+      color: INK,
+      marginBottom: HEADER_H * 0.12,
+      paddingHorizontal: SPACE.lg,
+      textAlign: "center",
+    },
     trendArrow: { width: 24, height: 24 },
     pressedSurface: { backgroundColor: t.surfaceRaised },
     pickerWrap: { position: "relative", zIndex: 20 },
@@ -726,13 +835,24 @@ const makeStyles = (t: Theme) =>
       right: 0,
       minWidth: 190,
       paddingVertical: SPACE.xs,
+      // Horizontal padding to match the vertical, so a full-width row is inset on all four sides and
+      // its own radius can follow the panel's curve. Without it the selected row ran edge to edge and
+      // its square corners cut outside the rounded panel.
+      paddingHorizontal: SPACE.xs,
       borderRadius: RADIUS.control,
       backgroundColor: "#FBF8F3",
       borderWidth: 1,
       borderColor: t.border,
       ...SHADOW,
     },
-    pickerItem: { paddingVertical: SPACE.sm, paddingHorizontal: SPACE.lg },
+    // THE PANEL'S INNER RADIUS (its 14 minus the 4 of padding), so the selected row's fill follows the
+    // panel's corner instead of squaring it off. Rows are inset by the padding above, so the label
+    // keeps its distance from the edge with lg reduced to md here.
+    pickerItem: {
+      paddingVertical: SPACE.sm,
+      paddingHorizontal: SPACE.md,
+      borderRadius: RADIUS.control - SPACE.xs,
+    },
     // The current filter, marked on the row rather than by the label alone — weight is easy to miss at this size.
     pickerItemSelected: { backgroundColor: t.surfaceRaised },
     pickerItemText: { ...TYPE.body, color: INK },
