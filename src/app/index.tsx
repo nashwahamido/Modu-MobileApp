@@ -1,13 +1,4 @@
-// Home. The workbench palette: a warm near-black, one lavender action, everything else quiet.
-//
-// The landing plays a fixed, one-shot sequence on mount — never re-triggered, never skippable
-// mid-flight, because it is the first thing a player ever sees:
-//   1. Cream field + clay grain + the MODU wordmark. Holds still for STILL_MS.
-//   2. The wordmark swaps for the mascot (a quick cross-fade/scale, not a cut).
-//   3. The two entry buttons rise in.
-//   4. The wavy corner accents float in from off-screen, back layer first, both corners in step.
-// Every stage is scheduled with withDelay on the UI thread, so the sequence can't stutter or drift
-// even if the JS thread is busy — there must be no lag between stages.
+// Home. The workbench palette: a warm near-black, one lavender action, everything else quiet. animations css for landing come from here
 import { Link } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo } from "react";
@@ -26,8 +17,7 @@ import { SESSION_REQUIRED, SIGN_IN_ROUTE } from "@/src/hooks/useSessionGate";
 import { CARD_CHROME, SPACE, Theme, useIsTablet, useStyles, useUiScale } from "@/src/game/ui/system/theme";
 import { useSafeInsets } from "@/src/hooks/use-safe-insets";
 
-// Sampled from the reference mockup, not eyeballed. One-off (the landing predates the theme, and
-// doesn't read it — see the note on the wordmark below), so it's named here rather than in `Theme`.
+
 const BG_CREAM = "#F3ECE0";
 
 const clayPattern = require("@/src/assets/ui/landing/clay-pattern.png");
@@ -40,76 +30,76 @@ const wavyLeft3 = require("@/src/assets/ui/landing/wavy-left-3.png");
 const wavyRight1 = require("@/src/assets/ui/landing/wavy-right-1.png");
 const wavyRight2 = require("@/src/assets/ui/landing/wavy-right-2.png");
 const wavyRight3 = require("@/src/assets/ui/landing/wavy-right-3.png");
-// The traced dashed line in each top corner (their fainter dotted echoes were removed).
 const lineLeft1 = require("@/src/assets/ui/landing/line-left-1.png");
 const lineRight2 = require("@/src/assets/ui/landing/line-right-2.png");
 
-/** The art's aspect (600x133 after trimming), so the height follows the width instead of being a
- *  second number that has to be kept in step with it. */
+
 const WORDMARK_W = 300;
 const WORDMARK_H = Math.round(WORDMARK_W * (133 / 600));
-/** Same footprint modu-figure.png held (that asset was 915x941, near-square) — kept as-is when
- *  swapped for modu-mascot.png so the brand box doesn't reflow. `contain` below fits the new
- *  art's own aspect inside this box without distorting it. */
 const FIGURE_W = 216;
 const FIGURE_H = Math.round(FIGURE_W * (941 / 915));
-// disk.png is 748x196, the flattened "ground shadow" ellipse the mascot stands on.
+// disk.png 
 const FIGURE_SHADOW_W = Math.round(FIGURE_W * 1.05);
 const FIGURE_SHADOW_H = Math.round(FIGURE_SHADOW_W * (196 / 748));
-/** Houses both the wordmark and the figure, centred on the same point, so the swap between them
- *  is a cross-fade in place rather than a layout jump. */
 const BRAND_BOX = Math.max(WORDMARK_H, FIGURE_H) + 12;
-/** The figure sits dead-centre on screen while the buttons are pinned a fixed distance off the
- *  bottom edge (see `brandBox`/`actions` below) — two independent anchors, not a flex group, so
- *  the pair reads as bottom-heavy rather than centred as a unit. This lifts both by the same
- *  amount so the whole composition's visual centre lands on the screen's centre.
- *
- *  In base (phone) units — multiplied by `useUiScale()` where it's used below. This is a JS
- *  number driving a reanimated value and a raw style offset, neither of which goes through
- *  `useStyles`'s automatic scaling, so unlike the wordmark/figure/button sizes above it has to be
- *  scaled by hand. A full-page screen like this one takes the scale straight, unlike the room's
- *  HUD (see `roomScale.ts`), which deliberately trims it — this isn't a diorama you look into. */
 const GROUP_LIFT = 56;
-/** Extra clearance below the button row, past the safe-area inset — same base-unit/manual-scale
- *  reasoning as `GROUP_LIFT`. */
 const ACTIONS_BOTTOM_GAP = 56 + 28;
-/** Tablet-only extra lift on the button row, on top of `ACTIONS_BOTTOM_GAP * k`.
- *
- *  A tablet's landscape screen is much taller (not just wider) than a phone's, so the gap between
- *  the mascot and the bottom-anchored buttons opens up far more than `k` alone accounts for — `k`
- *  tracks the UI's scale, not the screen's spare height. Phone is untouched: this is added only
- *  when `useIsTablet()` is true. */
+
 const TABLET_ACTIONS_LIFT = 46;
 
-// ── timeline ─────────────────────────────────────────────────────────────────
-const STILL_MS = 1800; // state 1 holds, untouched, for exactly this long
-const SWAP_MS = 550; // wordmark → figure cross-fade
+const STILL_MS = 1800;
+const SWAP_MS = 550;
 const BUTTONS_DELAY = STILL_MS + SWAP_MS;
 const BUTTONS_MS = 420;
 const WAVE_START = BUTTONS_DELAY + BUTTONS_MS;
-const WAVE_STAGGER = 110; // gap between each wave layer's entrance
+const WAVE_STAGGER = 110;
 const WAVE_MS = 640;
 const WAVE_EASE = Easing.out(Easing.cubic);
-// The two traced lines draw on starting at STILL_MS — the same moment stage 2 begins (the
-// wordmark→mascot swap) — rather than waiting for the wave layers at the very end of the
-// sequence, so they're on screen, mid-draw, through stage 2 rather than only appearing at stage 4.
 const TRACE_MS = 1100;
 
-/** width fraction of the screen (native asset dims, fraction of screen width to occupy). Height
- *  is derived from the asset's own aspect ratio in pixels, computed against the actual window —
- *  not a CSS `aspectRatio` on an absolutely positioned node, which some RN/Yoga versions fail to
- *  resolve against a percentage width and simply don't render (that was the last bug: the layers
- *  silently collapsed to zero size instead of distorting). */
+
 const WAVE_ASSETS = {
-  rightBack: { w: 960, h: 1173, frac: 0.33 },
-  rightFront: { w: 1068, h: 1128, frac: 0.34 },
-  rightAccent: { w: 681, h: 858, frac: 0.14 },
-  leftBack: { w: 1216, h: 1436, frac: 0.35 },
-  leftFront: { w: 972, h: 1192, frac: 0.3 },
-  leftAccent: { w: 768, h: 872, frac: 0.23 },
+  rightBack: {
+    w: 960,
+    h: 1173,
+    frac: 0.33,
+  },
+  rightFront: {
+    w: 1068,
+    h: 1128,
+    frac: 0.34,
+  },
+  rightAccent: {
+    w: 681,
+    h: 858,
+    frac: 0.14,
+  },
+  leftBack: {
+    w: 1216,
+    h: 1436,
+    frac: 0.35,
+  },
+  leftFront: {
+    w: 972,
+    h: 1192,
+    frac: 0.3,
+  },
+  leftAccent: {
+    w: 768,
+    h: 872,
+    frac: 0.23,
+  },
   // The traced corner lines, top-left and top-right.
-  lineLeftMain: { w: 2200, h: 1700, frac: 0.57 },
-  lineRightMain: { w: 1472, h: 1424, frac: 0.39 },
+  lineLeftMain: {
+    w: 2200,
+    h: 1700,
+    frac: 0.57,
+  },
+  lineRightMain: {
+    w: 1472,
+    h: 1424,
+    frac: 0.39,
+  },
 } as const;
 
 function useWaveSizes() {
@@ -132,23 +122,17 @@ export default function App() {
   const k = useUiScale();
   const isTablet = useIsTablet();
   const { user } = useAuth();
-  // useSessionGate would bounce a signed-out Home tap anyway, but only AFTER the room mounts and fires its first query. Pointing the link straight at sign-in means that wasted round-trip never happens.
   const homeRoute = SESSION_REQUIRED && !user ? SIGN_IN_ROUTE : "/room";
 
-  // Stage 1→2: wordmark out, figure in.
   const wordmarkOpacity = useSharedValue(1);
   const wordmarkScale = useSharedValue(1);
   const figureOpacity = useSharedValue(0);
   const figureScale = useSharedValue(0.85);
-  // 0 while the wordmark alone is on screen (dead-centre); animates to -GROUP_LIFT alongside the
-  // figure swap, since the lift only exists to counterbalance the buttons that appear after it.
   const groupLift = useSharedValue(0);
 
-  // Stage 3: the two entry buttons.
   const actionsOpacity = useSharedValue(0);
   const actionsY = useSharedValue(16);
 
-  // Stage 4: the six wave layers — back-to-front per corner, both corners stepping together.
   const rightBack = useWaveIn(WAVE_START + 0 * WAVE_STAGGER, 90);
   const leftBack = useWaveIn(WAVE_START + 0 * WAVE_STAGGER, -90);
   const rightFront = useWaveIn(WAVE_START + 1 * WAVE_STAGGER, 90);
@@ -156,7 +140,6 @@ export default function App() {
   const rightAccent = useWaveIn(WAVE_START + 2 * WAVE_STAGGER, 60);
   const leftAccent = useWaveIn(WAVE_START + 2 * WAVE_STAGGER, -60);
 
-  // Stage 2: the two traced lines, drawing on from STILL_MS — see `TRACE_MS` above.
   const rightTraceProgress = useTraceProgress(STILL_MS);
   const leftTraceProgress = useTraceProgress(STILL_MS);
 
@@ -169,7 +152,6 @@ export default function App() {
 
     actionsOpacity.value = withDelay(BUTTONS_DELAY, withTiming(1, { duration: BUTTONS_MS, easing: WAVE_EASE }));
     actionsY.value = withDelay(BUTTONS_DELAY, withTiming(0, { duration: BUTTONS_MS, easing: WAVE_EASE }));
-    // Runs once, on mount, for the whole sequence — never re-armed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -182,12 +164,8 @@ export default function App() {
   }));
   const figureStyle = useAnimatedStyle(() => ({
     opacity: figureOpacity.value,
-    // The fixed +10 (after the scale) settles the mascot's feet a bit further into the shadow
-    // disk beneath it, instead of hovering just above it.
     transform: [{ scale: figureScale.value }, { translateY: 10 }],
   }));
-  // Fades in with the figure but doesn't share its scale — a ground shadow should stay put
-  // while the mascot pops in above it, not grow in lockstep.
   const figureShadowStyle = useAnimatedStyle(() => ({
     opacity: figureOpacity.value,
   }));
@@ -195,11 +173,6 @@ export default function App() {
     opacity: actionsOpacity.value,
     transform: [{ translateY: actionsY.value }],
   }));
-  // The clip that "draws" each line: width and height grow together from the corner where the
-  // path actually STARTS in the image (see the comments at each line's JSX below) out to the
-  // art's full size, so more of the dashed path is exposed over time rather than the whole image
-  // fading in at once. The quick opacity ramp (progress 0→0.1) is only there so the very first
-  // sliver doesn't pop in at full opacity before it has any width to speak of.
   const leftTraceStyle = useAnimatedStyle(() => {
     const p = leftTraceProgress.value;
     return {
@@ -221,27 +194,14 @@ export default function App() {
     <View style={[styles.container, { backgroundColor: BG_CREAM }]}>
       <Image source={clayPattern} style={styles.clay} resizeMode="cover" />
 
-      {/* Right corner, back to front. */}
       <Animated.Image source={wavyRight2} style={[styles.waveRightBack, waveSize.rightBack, rightBack]} resizeMode="contain" />
       <Animated.Image source={wavyRight1} style={[styles.waveRightFront, waveSize.rightFront, rightFront]} resizeMode="contain" />
       <Animated.Image source={wavyRight3} style={[styles.waveRightAccent, waveSize.rightAccent, rightAccent]} resizeMode="contain" />
-      {/* Fixed-size, non-animated frame at the art's full size and screen position — only its
-          CONTENT is revealed, progressively, from stage 2 (STILL_MS) on. The inner box always
-          grows from top-right REGARDLESS of device: that's where this path actually starts in
-          the image (the loop near the top), which doesn't change between phone and tablet — only
-          `lineRightMainTablet` (the frame's screen position) does. Anchoring the reveal to the
-          screen-position corner instead of the art's own corner was an earlier bug: on tablet
-          that corner is bottom-right, which isn't near either end of the path. */}
       <View
         style={[styles.lineRightMain, waveSize.lineRightMain, isTablet && styles.lineRightMainTablet, styles.traceClip]}
         pointerEvents="none"
       >
         <Animated.View style={[styles.traceGrowTopRight, styles.traceClip, rightTraceStyle]}>
-          {/* `position: "absolute"` + the SAME top-right anchor as the box above is load-bearing:
-              without it RN's default flow pins a fixed-size child to its parent's top-LEFT
-              regardless of the parent's own anchor, so the art's screen-fixed position would
-              silently follow the shrinking/growing box instead of staying put while only the
-              clip window changes — which is what made the right line barely look animated. */}
           <Image
             source={lineRight2}
             style={[waveSize.lineRightMain, styles.traceArtTopRight]}
@@ -250,17 +210,11 @@ export default function App() {
         </Animated.View>
       </View>
 
-      {/* Left corner, back to front. */}
       <Animated.Image source={wavyLeft2} style={[styles.waveLeftBack, waveSize.leftBack, leftBack]} resizeMode="contain" />
       <Animated.Image source={wavyLeft1} style={[styles.waveLeftFront, waveSize.leftFront, leftFront]} resizeMode="contain" />
       <Animated.Image source={wavyLeft3} style={[styles.waveLeftAccent, waveSize.leftAccent, leftAccent]} resizeMode="contain" />
-      {/* Same trace-reveal as the right line. Grows from BOTTOM-left, not top-left: this path
-          starts low on the left edge and rises to exit near the top-right, so bottom-left is its
-          actual first point in the image. */}
       <View style={[styles.lineLeftMain, waveSize.lineLeftMain, styles.traceClip]} pointerEvents="none">
         <Animated.View style={[styles.traceGrowBottomLeft, styles.traceClip, leftTraceStyle]}>
-          {/* Same fix as the right line's `traceArtTopRight`, mirrored: pins the art to the
-              growing box's bottom-left instead of RN's default top-left flow position. */}
           <Image
             source={lineLeft1}
             style={[waveSize.lineLeftMain, styles.traceArtBottomLeft]}
@@ -269,9 +223,6 @@ export default function App() {
         </Animated.View>
       </View>
 
-      {/* Centred on the full screen, independent of `actions` below — sizing or hiding that row
-          must never shift this. That coupling (a flex column centering the pair as a group) was
-          the bug: with `actions` reserving height before it faded in, the wordmark sat off-centre. */}
       <Animated.View style={[styles.brandBox, brandBoxStyle]} pointerEvents="none">
         <Animated.Image source={wordmark} style={[styles.wordmark, wordmarkStyle]} resizeMode="contain" />
         <Animated.Image source={figureShadow} style={[styles.figureShadow, figureShadowStyle]} resizeMode="contain" />
@@ -290,7 +241,7 @@ export default function App() {
         ]}
       >
         <Link href="/auth" asChild>
-          {/* The ONE primary action on the screen: first-run onboarding (auth → questionnaire → avatar → home). */}
+          {/* T */}
           <Button
             label="New User"
             variant="primary"
@@ -310,22 +261,18 @@ export default function App() {
         </Link>
       </Animated.View>
 
-      {/* DARK icons now: the field is a pale cream, and light status icons on it were invisible. */}
+      {/* D */}
       <StatusBar style="dark" />
     </View>
   );
 }
 
-/** One wave layer's entrance: fades and slides in from `fromX` px off its resting position,
- *  starting at `delay` ms after mount. Every layer shares the same duration and easing, so the
- *  only thing that varies between them is when they start — that's what reads as "in sequence". */
 function useWaveIn(delay: number, fromX: number) {
   const opacity = useSharedValue(0);
   const x = useSharedValue(fromX);
   useEffect(() => {
     opacity.value = withDelay(delay, withTiming(1, { duration: WAVE_MS, easing: WAVE_EASE }));
     x.value = withDelay(delay, withTiming(0, { duration: WAVE_MS, easing: WAVE_EASE }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return useAnimatedStyle(() => ({
     opacity: opacity.value,
@@ -333,31 +280,28 @@ function useWaveIn(delay: number, fromX: number) {
   }));
 }
 
-/** Raw 0→1 progress for a traced line's reveal, starting `delay` ms after mount. Returned as the
- *  SharedValue itself (not a style) because the caller needs it twice — to drive a clip's width
- *  AND height together — rather than once. */
 function useTraceProgress(delay: number) {
   const progress = useSharedValue(0);
   useEffect(() => {
     progress.value = withDelay(delay, withTiming(1, { duration: TRACE_MS, easing: WAVE_EASE }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return progress;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- signature required by useStyles
+
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
   container: {
     flex: 1,
     overflow: "hidden",
   },
-  // The texture's own alpha is already near-invisible (a few percent at most) — it's baked to
-  // read as grain on cream, not a layer that needs its own opacity knob.
-  clay: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
-  // Dead-centre on the CONTAINER (the whole screen), via the standard absolute-center trick —
-  // not flexbox, and not offset by the safe-area padding `actions` carries below. A negative
-  // margin half its own fixed size is exact because the box's size never changes at runtime.
+
+  clay: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+  },
+
   brandBox: {
     position: "absolute",
     top: "50%",
@@ -369,10 +313,17 @@ const makeStyles = (t: Theme) =>
     alignItems: "center",
     justifyContent: "center",
   },
-  wordmark: { position: "absolute", width: WORDMARK_W, height: WORDMARK_H },
-  figure: { position: "absolute", width: FIGURE_W, height: FIGURE_H },
-  // Sits behind the figure (drawn before it above), anchored to the same bottom edge so it reads
-  // as ground the mascot is standing on rather than a halo centred on it.
+  wordmark: {
+    position: "absolute",
+    width: WORDMARK_W,
+    height: WORDMARK_H,
+  },
+  figure: {
+    position: "absolute",
+    width: FIGURE_W,
+    height: FIGURE_H,
+  },
+
   figureShadow: {
     position: "absolute",
     bottom: 6,
@@ -386,10 +337,7 @@ const makeStyles = (t: Theme) =>
     justifyContent: "center",
     gap: SPACE.lg,
   },
-  // Equal, fixed width — sized to comfortably fit "Choose Account" — regardless of label length,
-  // so the pair reads as two matched pills, not chips stretched to fill the row.
-  // Shadow matched to the room nav rail's white pill (`CARD_CHROME`), not the Button component's
-  // own default — the two chrome elements should read as the same weight of "lifted".
+
   actionButton: {
     width: 172,
     boxShadow: CARD_CHROME.boxShadow,
@@ -399,35 +347,14 @@ const makeStyles = (t: Theme) =>
     shadowOffset: CARD_CHROME.shadowOffset,
     elevation: CARD_CHROME.elevation,
   },
-  // Tablet only. `actionButton`'s `width: 172` is fixed so the two pills read as matched chips at
-  // the phone label size (14pt) — but the tablet label is bigger (16pt, scaled further by `k`),
-  // and "Choose Account" doesn't fit that width on one line at that size.
-  //
-  // Still a fixed `width`, not `minWidth`: `minWidth` let each pill size to its OWN label, which
-  // made "New User" and "Choose Account" different widths — the opposite of "same length and
-  // size" for both. 220 is sized to comfortably fit "Choose Account" (the longer label) at 16pt
-  // on one line, and both buttons take it regardless of their own text, so they stay matched.
-  //
-  // `minHeight` overrides `Button`'s own internal 44pt (`SIZE.controlHeight`), which — like its
-  // label — doesn't go through `useStyles` and so never grew with the rest of this screen's
-  // tablet scale, unlike everything driven from this sheet. `Button` centres its label on both
-  // axes regardless of height (`alignItems`/`justifyContent: "center"` on the Pressable), so
-  // taller here doesn't touch the horizontal centring `actionLabelTablet` already fixes.
-  actionButtonTablet: { width: 220, minWidth: undefined, minHeight: 52, paddingHorizontal: SPACE.xl },
-  // Tablet only. `Button`'s own label (`TYPE.label`, 14pt) doesn't go through `useStyles` — it's
-  // a shared component with its own fixed styles — so unlike `actionButton` above it never grew
-  // with the rest of this screen's tablet scale. This is a plain `StyleSheet` entry, though, so
-  // `fontSize` still passes through `useStyles`'s own scaling here (14 → 16 → up to 16 * k).
-  // `textAlign: "center"` is load-bearing at this size: the pill's fixed `actionButton.width`
-  // only grows by `k`, while this label grew by `k` AND the 14→16 step, so "Choose Account" can
-  // wrap to two lines here where it never did at 14pt — and RN left-aligns wrapped text by
-  // default, which is what read as off-centre rather than the label sitting in the wrong place.
-  //
-  // `includeFontPadding: false` + a tight `lineHeight` fix the text sitting low in the pill:
-  // Android's default font padding adds extra space BELOW the glyphs (not above), so a Text
-  // block that's centred as a whole still reads bottom-heavy inside it — bigger and more visible
-  // at 16pt than it was at 14. `lineHeight` close to the glyph size (not the font's own, looser
-  // default) is what makes that padding removal take effect.
+
+  actionButtonTablet: {
+    width: 220,
+    minWidth: undefined,
+    minHeight: 52,
+    paddingHorizontal: SPACE.xl,
+  },
+
   actionLabelTablet: {
     fontSize: 16,
     lineHeight: 18,
@@ -435,32 +362,75 @@ const makeStyles = (t: Theme) =>
     includeFontPadding: false,
     textAlignVertical: "center",
   },
-  // Position (anchor corner) only — width/height come from `useWaveSizes`, computed in real
-  // pixels against the actual window so the art is never stretched off its native aspect.
-  waveRightBack: { position: "absolute", top: 0, right: 0 },
-  waveRightFront: { position: "absolute", top: 0, right: 0 },
-  waveRightAccent: { position: "absolute", top: 0, right: 0 },
-  waveLeftBack: { position: "absolute", bottom: 0, left: 0 },
-  waveLeftFront: { position: "absolute", bottom: 0, left: 0 },
-  waveLeftAccent: { position: "absolute", bottom: -10, left: -7 },
-  // The traced lines, top corners.
-  lineRightMain: { position: "absolute", top: 210, right: -50 },
-  lineLeftMain: { position: "absolute", top: -130, left: -120},
-  // Tablet only: a fixed `top` offset doesn't reach the bottom edge on a landscape tablet's much
-  // taller screen (a phone's short side, not its `top`, was what made it land there) — anchoring
-  // to `bottom` instead makes it reach regardless of how tall the specific tablet is.
-  lineRightMainTablet: { top: undefined, bottom: -20, right: -50 },
-  // The trace-reveal clip: `traceClip` on both the outer (fixed-size) frame and the inner
-  // (animated-size) growing box is what makes each a real clipping boundary rather than just a
-  // positioned box — without it the full image would render immediately, sized or not. The two
-  // grow variants pin the inner box to the corner where EACH IMAGE's own path actually starts
-  // (see the comments at their call sites) — not the frame's screen-position anchor, which is a
-  // different thing and, on tablet, a different corner.
-  traceClip: { overflow: "hidden" },
-  traceGrowBottomLeft: { position: "absolute", bottom: 0, left: 0 },
-  traceGrowTopRight: { position: "absolute", top: 0, right: 0 },
-  // Pins each line's art, inside its growing box, to the same corner the box itself grows from —
-  // see the comments at the two call sites above for why this is needed at all.
-  traceArtTopRight: { position: "absolute", top: 0, right: 0 },
-  traceArtBottomLeft: { position: "absolute", bottom: 0, left: 0 },
+ 
+  waveRightBack: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+  },
+  waveRightFront: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+  },
+  waveRightAccent: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+  },
+  waveLeftBack: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+  },
+  waveLeftFront: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+  },
+  waveLeftAccent: {
+    position: "absolute",
+    bottom: -10,
+    left: -7,
+  },
+
+  lineRightMain: {
+    position: "absolute",
+    top: 210,
+    right: -50,
+  },
+  lineLeftMain: {
+    position: "absolute",
+    top: -130,
+    left: -120,
+  },
+  lineRightMainTablet: {
+    top: undefined,
+    bottom: -20,
+    right: -50,
+  },
+
+  traceClip: {
+    overflow: "hidden",
+  },
+  traceGrowBottomLeft: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+  },
+  traceGrowTopRight: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+  },
+  traceArtTopRight: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+  },
+  traceArtBottomLeft: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+  },
   });
