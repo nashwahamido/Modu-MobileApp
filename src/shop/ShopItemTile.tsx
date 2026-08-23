@@ -1,5 +1,11 @@
 // One purchasable tile in the shop popup: price badge, picture well, name
-import { StyleSheet, Image, Pressable, Text, View } from "react-native";
+import {
+  StyleSheet,
+  Image,
+  Text,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import { CatalogThumb, gridThumbFill, gridVariation } from "@/src/components/CatalogThumb";
 import type { ItemSource } from "@/src/data/catalog/assets";

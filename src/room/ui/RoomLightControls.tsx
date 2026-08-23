@@ -1,6 +1,14 @@
 // The room's own lighting controls: the ceiling light's switch, and the hour that sets the sun behind it. Both live on the room HUD rather than in Settings because they are things you do TO THE ROOM while looking at it — a control whose whole point is the change you see has no business two screens away. See docs/superpowers/specs/2026-08-04-room-ceiling-light-design.md section 6. NOTHING here relates to settings.lightingPreset, which rigs the ASSEMBLY scene; "light" in this file means the room's ceiling fitting and nothing else. Props only, no store: RoomExperience owns the switch's override state and positions this column, exactly as it does for the settings button.
-import { useMemo, useRef, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  useMemo,
+  useRef,
+  useState } from 'react';
+import { Image,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import type { StyleProp, ViewStyle } from 'react-native';
 import Animated, { withTiming } from 'react-native-reanimated';
 import type { EntryAnimationsValues, ExitAnimationsValues } from 'react-native-reanimated';

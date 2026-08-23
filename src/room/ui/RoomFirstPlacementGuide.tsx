@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import * as Speech from "@/src/onboarding/speech";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import { avatarForProfile } from "@/src/components/avatarAssets";
 import type { ProfileId } from "@/src/game/core/profile";
+import { useCurrentUserId } from "@/src/data";
 import { useGameStore } from "@/src/game/core/store";
 import { ConfettiRain } from "@/src/game/ui/celebration/Confetti";
 import { Button } from "@/src/game/ui/system/Button";
@@ -21,6 +24,28 @@ import type {
   PlacementGuideInteraction,
   PlacementGuideTarget,
 } from "./PlacementRail";
+
+/** Shown ONCE, ever, after the tutorial's LACK table. The route param that arms this guide is only
+ *  sent by the tutorial on completion, so it already means "just finished the first table"; what it
+ *  cannot survive is a SECOND arrival with the same param. AsyncStorage matches the room's own
+ *  coaches (ROOM_EDIT_GUIDE_KEY, ROOM_WELCOME_GUIDE_KEY) rather than the profile flag the Map coach
+ *  uses — this one is tied to a route passed through once on this device. */
+const FIRST_PLACEMENT_GUIDE_PREFIX = "modu.first-placement-guide-seen.v1";
+
+/**
+ * PER USER, not per install.
+ *
+ * The first version wrote one shared key, and that is a latch on the DEVICE: the first player to
+ * finish the tutorial consumed it, and every account created afterwards pressed "Place the LACK in
+ * my room" and got an empty room — no placement, no guide, no error. Exactly the same mistake as the
+ * Map coach's local mirror, and with the same symptom: a fresh account silently inheriting a
+ * decision made by a previous one.
+ *
+ * The guide is per-install rather than per-account by design — it is tied to a route param passed
+ * through once on this device, not to anything the profile stores — but "this install" still has to
+ * mean "this install, for this player".
+ */
+const guideKey = (userId: string) => `${FIRST_PLACEMENT_GUIDE_PREFIX}:${userId}`;
 
 type GuideStage =
   | "idle"
@@ -80,6 +105,8 @@ export function RoomFirstPlacementGuide({
   onSessionChange,
 }: Props) {
   const s = useStyles(makeStyles);
+  // Whose install-latch this is — see guideKey.
+  const me = useCurrentUserId();
   const profile = useGameStore((state) => state.profile);
   const audioEnabled = useGameStore((state) => state.settings.audio);
   const activeEdit = usePlacementStore((state) => state.activeEdit);
@@ -102,18 +129,37 @@ export function RoomFirstPlacementGuide({
       return;
     }
 
+    // Claimed BEFORE the async read: this effect re-runs on every store change, so without it two
+    // passes can both get past the guard and start the placement twice.
     requestConsumed.current = true;
-    const started = usePlacementStore.getState().startPlacing(requestedItemId, {
-      firstPlacementGuide: true,
-    });
-    if (!started) {
-      requestConsumed.current = false;
-      return;
-    }
 
-    onSessionChange?.(true);
-    setStage("style");
-  }, [activeEdit, hydrated, onSessionChange, requestedItemId, stage]);
+    let alive = true;
+    void AsyncStorage.getItem(guideKey(me))
+      .then((seen) => {
+        if (!alive || seen) return;
+        const started = usePlacementStore
+          .getState()
+          .startPlacing(requestedItemId, { firstPlacementGuide: true });
+        if (!started) {
+          requestConsumed.current = false;
+          return;
+        }
+        // Written on START, not on finish: a player who backgrounds the app mid-script has still had
+        // it, and the opposite failure is a walkthrough that returns until it is played to the end.
+        AsyncStorage.setItem(guideKey(me), "1").catch((err) =>
+          console.warn("[room] could not save first-placement guide state", err),
+        );
+        onSessionChange?.(true);
+        setStage("style");
+      })
+      .catch((err) =>
+        console.warn("[room] could not read first-placement guide state", err),
+      );
+
+    return () => {
+      alive = false;
+    };
+  }, [activeEdit, hydrated, me, onSessionChange, requestedItemId, stage]);
 
   useEffect(() => {
     if (!hydrated || !activeEdit?.firstPlacementGuide || guideId.current)

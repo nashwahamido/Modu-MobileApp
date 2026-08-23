@@ -1,8 +1,14 @@
 // the room hub's bottom navigation:shop / inventory/ assemble/ visit friends /you
-import { useState } from 'react';
+import {
+  useState } from 'react';
 import { router } from 'expo-router';
 import type { Href } from 'expo-router';
-import { StyleSheet, Image, Pressable, Text, View } from "react-native";
+import { StyleSheet,
+  Image,
+  Text,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 import Svg, { Circle, Path } from "react-native-svg";
 import { ChevronIcon } from '../../components/Icons';

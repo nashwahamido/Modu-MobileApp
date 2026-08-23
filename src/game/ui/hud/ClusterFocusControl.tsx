@@ -1,17 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useRouter } from "expo-router";
-import {
-  Animated,
-  Easing,
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from "react-native";
+import { Animated, Easing, Image, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import {
   actionCluster,
   clusterComplete,
@@ -381,7 +371,13 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
               <Fragment key={n.key}>
                 {i > 0 ? <View style={styles.connectorSlot} /> : null}
                 <Pressable
-                  disabled={!n.enabled || n.finished}
+                  // FINISHED IS STILL PRESSABLE. Only a LOCKED stage refuses the tap — one whose
+                  // prerequisites are not met yet. A completed stage was disabled too, which meant a
+                  // player who wanted to look at what they had built, undo a step, or just check a
+                  // part could never get back into it: the map became a one-way door the moment a
+                  // stage went green. The tick and the steady ring already say it is done; they do
+                  // not need to say it is closed as well.
+                  disabled={!n.enabled}
                   onPress={n.onPress}
                   // Odd nodes ride lower, so the row reads as a path stepping between stages rather than three buttons in a line.
                   style={[
@@ -644,8 +640,11 @@ export function ClusterFocusControl() {
           const selected = activeCluster === clusterId;
           const z = clusters.length - Math.abs(i - selectedIndex);
           const finished = clusterComplete(furniture, clusterId, done);
-          const enabled =
-            !finished && clusterPrereqsMet(furniture, clusterId, done);
+          // Same rule as the map's discs: FINISHED is not LOCKED. Only unmet prerequisites refuse
+          // the tap. The rail is how a player moves between stages mid-build, so keeping a completed
+          // one shut here would undo the map fix — you could get back in from the map and then not
+          // leave and return. `discFinished` still marks it green.
+          const enabled = clusterPrereqsMet(furniture, clusterId, done);
           return (
             <Pressable
               key={clusterId}
@@ -660,7 +659,7 @@ export function ClusterFocusControl() {
                 finished && styles.discFinished,
                 // Selected LAST so it wins the fill.
                 selected && styles.discSelected,
-                !enabled && !finished && !selected && styles.discDisabled,
+                !enabled && !selected && styles.discDisabled,
               ]}
             >
               <Text

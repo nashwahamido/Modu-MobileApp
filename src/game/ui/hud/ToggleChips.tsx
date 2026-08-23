@@ -3,6 +3,7 @@ import { useGameStore } from "@/src/game/core/store";
 import { Button } from "@/src/game/ui/system/Button";
 import { SPACE, useThemeId } from "@/src/game/ui/system/theme";
 import { hudIcon } from "@/src/game/ui/hud/hudIcons";
+import { HudSpotTarget } from "@/src/game/ui/hud/hudSpotlight";
 /** The two in-scene toggles. A chip that is ON takes the ACCENT — the same fill as a
  *  pressed button — because "on" and "pressed" are the same idea in this language: the
  *  control is lifted and live. It is deliberately not the success green: green means the
@@ -11,7 +12,11 @@ export function ToggleChips() {
   return (
     <View style={styles.row}>
       <FocusToggleButton />
-      <SpotButton />
+      {/* Wrapped so a coach can ring it: in a release build Spot IS the "I am stuck" control, since
+          Auto does not ship. The wrapper is box-none and adds no layout of its own. */}
+      <HudSpotTarget id="spot">
+        <SpotButton />
+      </HudSpotTarget>
     </View>
   );
 }

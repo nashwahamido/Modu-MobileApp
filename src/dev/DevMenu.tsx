@@ -1,5 +1,10 @@
-import { useState } from "react";
-import { StyleSheet, Pressable, Text, View } from "react-native";
+import {
+  useState } from "react";
+import { StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import { actionCluster } from "@/src/game/core/evaluation/clusters";
 import { useGameStore } from "@/src/game/core/store";
 import { useFixedStyles } from "@/src/game/ui/system/theme";

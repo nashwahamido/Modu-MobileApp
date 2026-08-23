@@ -1,7 +1,17 @@
 // The player's profile hub: their card (avatar, level, editable nickname, stats) beside a friends list. Reads/writes entirely through the repo seam (src/data), so it works on fixtures today and swaps to Supabase untouched.
-import { router } from "expo-router";
-import { useEffect, useState } from "react";
-import { StyleSheet, ActivityIndicator, Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import {
+  router } from "expo-router";
+import { useEffect,
+  useState } from "react";
+import { StyleSheet,
+  ActivityIndicator,
+  Image,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import { useScreenInsets } from '@/src/hooks/use-safe-insets';
 
 import { Button } from "@/src/game/ui/system/Button";

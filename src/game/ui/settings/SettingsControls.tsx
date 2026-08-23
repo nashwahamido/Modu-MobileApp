@@ -18,7 +18,10 @@ import {
 
 export type { SettingsFocusTarget };
 
-export function SettingsControls(props: FocusProps = {}) {
+export function SettingsControls({
+  onRestarted,
+  ...props
+}: FocusProps & { onRestarted?: () => void } = {}) {
   const styles = useFixedStyles(makeSettingsStyles);
   return (
     <View style={styles.list}>
@@ -31,7 +34,7 @@ export function SettingsControls(props: FocusProps = {}) {
       <GuidanceSection showManualTools={false} showFocusMode={false} {...props} />
       <BuildAudioSection />
       {/* Last, not first: it throws the build away, and the end of a scrolled list is the one place a thumb does not land by accident. */}
-      <RestartRow />
+      <RestartRow onRestarted={onRestarted} />
     </View>
   );
 }

@@ -1,7 +1,16 @@
-import { router, useLocalSearchParams } from "expo-router";
+import {
+  router,
+  useLocalSearchParams } from "expo-router";
 import type { Href } from "expo-router";
-import { useMemo, useState } from "react";
-import { StyleSheet, Image, Pressable, Text, TextInput, View } from "react-native";
+import { useMemo,
+  useState } from "react";
+import { StyleSheet,
+  Image,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import {
   continueWithEmail,
   continueWithPrototypeProvider,

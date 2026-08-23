@@ -1,6 +1,7 @@
 import { Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 import * as Haptics from "expo-haptics";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 const NUDGE_PX = 78;
 

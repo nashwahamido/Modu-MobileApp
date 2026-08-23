@@ -7,9 +7,17 @@
 // It keeps the collar — a cream disc behind the purple one — which is what the button wore when it
 // popped out of the old bottom bar. Free-standing it no longer has a bar to break out of, so the ring
 // runs the full circle rather than being an arc.
-import { router } from 'expo-router';
+import {
+  router } from 'expo-router';
 import type { Href } from 'expo-router';
-import { StyleSheet, Image, Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet,
+  Image,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import { ASSEMBLE_ICON } from '../../components/iconAssets';
 import { CARD_CHROME, CREAM, useScaledStyles, LEXEND } from '@/src/game/ui/system/theme';

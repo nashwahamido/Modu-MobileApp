@@ -16,6 +16,7 @@ import {
   ViewStyle,
 } from "react-native";
 
+import { playSfx } from "@/src/game/audio/sfx";
 import { ELEVATION, RADIUS, SIZE, SPACE, Theme, TYPE, useTheme } from "./theme";
 
 /**
@@ -78,6 +79,25 @@ function textFor(t: Theme, variant: ButtonVariant, pressed: boolean): string {
   return t.text;
 }
 
+/**
+ * THE CLICK, added here rather than at 140 call sites.
+ *
+ * Every button in the app goes through one of these four primitives, so wrapping the handler once
+ * means a new button is audible for free and nobody has to remember. Dragging a part is deliberately
+ * NOT a button: it runs through usePartDrag's gestures and keeps its own pickup and drop sounds,
+ * which are about the PART rather than about a control being pressed.
+ *
+ * A disabled button never reaches here — Pressable does not call onPress — so a refused tap stays
+ * silent, which is the right answer: a sound would read as "that worked".
+ */
+function withClick(onPress?: () => void) {
+  if (!onPress) return undefined;
+  return () => {
+    playSfx("click");
+    onPress();
+  };
+}
+
 export function Button({
   label,
   icon,
@@ -97,7 +117,7 @@ export function Button({
 
   return (
     <Pressable
-      onPress={onPress}
+      onPress={withClick(onPress)}
       disabled={disabled}
       hitSlop={hitSlop}
       accessibilityRole="button"
@@ -176,7 +196,7 @@ export function IconButton({
 
   return (
     <Pressable
-      onPress={onPress}
+      onPress={withClick(onPress)}
       disabled={disabled}
       hitSlop={10}
       accessibilityRole="button"
@@ -224,7 +244,7 @@ export function Fab({
   const t = useTheme();
   return (
     <Pressable
-      onPress={onPress}
+      onPress={withClick(onPress)}
       hitSlop={10}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
@@ -295,7 +315,7 @@ export function PanelRow({
   const t = useTheme();
   return (
     <Pressable
-      onPress={onPress}
+      onPress={withClick(onPress)}
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={label}

@@ -64,6 +64,9 @@ import { GameSettings } from "@/src/game/ui/settings/GameSettings";
 import { ToggleChips } from "@/src/game/ui/hud/ToggleChips";
 import { IdleCheckIn } from "@/src/game/ui/hud/IdleCheckIn";
 import { MapCoach } from "@/src/game/ui/hud/MapCoach";
+import { StuckCoach } from "@/src/game/ui/hud/StuckCoach";
+import { HudSpotTarget } from "@/src/game/ui/hud/hudSpotlight";
+import { useBuildPaused } from "@/src/game/ui/hud/useBuildPaused";
 import { BuildMap, MapButton } from "@/src/game/ui/hud/ClusterFocusControl";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 import { Button } from "@/src/game/ui/system/Button";
@@ -261,13 +264,19 @@ function GameScreen() {
     !activeCluster &&
     // once every cluster is built, no focus means the combine stage, not an unanswered chooser
     !combineReady(furniture, new Set(useGameStore.getState().completed));
+  // THE MAP IS A PAUSE, and so is the loading screen. `settings.audio` alone started the spoken step
+  // the instant the furniture resolved — which is before the model has drawn and before the stage
+  // chooser has been answered, so the first thing a player heard was an instruction about a build
+  // they could not yet see, over a loading overlay. It should begin when they pick a stage and the
+  // build is actually in front of them.
+  const buildPaused = useBuildPaused();
   const objective = useStepObjective({
     furniture,
     firstAvailable,
     needsFocusChoice,
     mode,
     textLevel: settings.textLevel,
-    audioOn: settings.audio,
+    audioOn: settings.audio && !buildPaused && !loaderVisible,
     completedCount,
     totalCount,
   });
@@ -465,8 +474,12 @@ function GameScreen() {
         <UndoButton />
         <GameSettings />
         <View style={styles.togglesRow}>
+          {/* Wrapped so a coach can ring it. The row is right-anchored with a gap and Auto is
+              content-sized, so its position cannot be written down — it has to report itself. */}
           {focus ? null : (
-            <DevAutoStep heldDriver={heldDriver} sinkDriver={sinkDriver} />
+            <HudSpotTarget id="auto">
+              <DevAutoStep heldDriver={heldDriver} sinkDriver={sinkDriver} />
+            </HudSpotTarget>
           )}
           {focus ? null : <DevMenu />}
           <ToggleChips />
@@ -613,11 +626,9 @@ function GameScreen() {
             dark={dark}
           />
         </View>
-        <RecenterButton
-          enabled={sceneHasParts}
-          onPress={resetCamera}
-          style={hudControls.recenterButton}
-        />
+        <HudSpotTarget id="recenter" style={hudControls.recenterButton}>
+          <RecenterButton enabled={sceneHasParts} onPress={resetCamera} />
+        </HudSpotTarget>
 
         {heldActionId && settings.releaseBehavior === "float" ? (
           // Float mode: a released part stays where it was set down; this is the way back to the tray. (In autoReturn mode a miss returns by itself.)
@@ -640,6 +651,10 @@ function GameScreen() {
           shown over the build, and the celebrations are their own full-screen moments. Left on the
           scope they rendered half-dark, most visibly the map's title, which is t.text on a cream
           card and so came out white on cream. */}
+      {/* OUTSIDE `chrome`, with the other full-screen overlays, and that placement is load-bearing:
+          its ghost ring positions itself from measureInWindow, and inside the inset chrome every
+          ring would be off by the safe-area margin. */}
+      <StuckCoach />
       <ThemeScope value="light">
         {mode !== "strict" ? <BuildMap /> : null}
         <ClusterCelebration />

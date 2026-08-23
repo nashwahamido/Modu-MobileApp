@@ -1,5 +1,11 @@
-import { useEffect } from "react";
-import { StyleSheet, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  useEffect } from "react";
+import { StyleSheet,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import { Radius, Spacing, Status, Surface, typeScale } from "./theme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

@@ -10,7 +10,9 @@ import type { ProfileId } from "@/src/game/core/profile";
 import { LoadingScreen } from "@/src/game/ui/loading/LoadingScreen";
 import { type Milestone } from "@/src/game/ui/loading/loadingProgress";
 
-const questionnaireRoute = "/onboarding-questionnaire" as Href;
+// The voice notice, which then replaces itself with the questionnaire. Onboarding's FIRST screen is
+// now "you can have this read to you" — before Modu introduces himself, and before any question.
+const questionnaireRoute = "/voice-intro" as Href;
 const mainRoute = "/room" as Href;
 const profileIds = new Set<ProfileId>(["visual", "momentum", "clearPath", "control"]);
 

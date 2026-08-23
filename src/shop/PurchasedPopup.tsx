@@ -4,7 +4,13 @@
 // one being a default. "Room" leaves the shop and starts placing the piece; "Inventory" keeps the
 // player shopping and says so with a message that clears itself. Either way the item is already
 // owned — this popup spends nothing and can be dismissed without losing the purchase.
-import { StyleSheet, Image, Pressable, Text, View } from "react-native";
+import {
+  StyleSheet,
+  Image,
+  Text,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import { HOME_ICON, INVENTORY_ICON } from "@/src/components/iconAssets";
 import { CREAM, CREAM_LIFT, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
