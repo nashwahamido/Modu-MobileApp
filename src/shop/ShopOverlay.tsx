@@ -21,7 +21,7 @@ import { isSurfaceCategory, useCurrentUserId, useRepos, viewCatalogue } from "@/
 import type { ShopCategory, ShopItem, ShopItemId } from "@/src/data";
 import { useProfileStore } from "@/src/data/player/profileStore";
 import { useShopStore } from "@/src/data/shop/store";
-import { GRID_EDGE, usePopupInsets } from '@/src/components/popupInsets';
+import { GRID_EDGE, PANEL_EDGE, usePopupInsets } from '@/src/components/popupInsets';
 import { CategoryBoardTabs } from "@/src/components/CategoryBoardTabs";
 import { ShopItemTile } from "./ShopItemTile";
 import type { PurchaseBlock } from "./purchaseBlock";
@@ -259,7 +259,7 @@ const makeStyles = (t: Theme) =>
       borderRadius: 28,
       backgroundColor: CREAM.card,
       paddingTop: 18,
-      paddingHorizontal: 22,
+      paddingHorizontal: PANEL_EDGE,
       overflow: "hidden",
       ...CREAM_LIFT.panel,
     },
