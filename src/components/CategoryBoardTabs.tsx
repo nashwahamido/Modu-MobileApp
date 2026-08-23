@@ -10,7 +10,7 @@ import { StyleSheet,
 } from "react-native";
 import { Pressable } from "@/src/components/Pressable";
 
-import { GRID_EDGE } from "@/src/components/popupInsets";
+import { GRID_EDGE, PANEL_EDGE } from "@/src/components/popupInsets";
 import { CATEGORY_LABELS, SHOP_CATEGORY_TABS } from "@/src/data";
 import type { ShopCategory } from "@/src/data";
 import { CREAM, LEXEND, useScaledStyles } from "@/src/game/ui/system/theme";
@@ -90,7 +90,7 @@ const BOARD_STRETCH_Y = 1.18;
 // Anchored at the two shapes in use and interpolated between; anything squarer or wider than those is
 // clamped, so an unusual tablet lands on one of the tested ends rather than off the scale.
 const BOARD_WIDEN_BY_ASPECT = [
-  { aspect: 4 / 3, widen: 1.16 },
+  { aspect: 4 / 3, widen: 1.02 },
   { aspect: 16 / 10, widen: 1.06 },
 ];
 
@@ -101,6 +101,14 @@ function tabletBoardWiden(aspect: number): number {
   const t = (aspect - square.aspect) / (wide.aspect - square.aspect);
   return square.widen + (wide.widen - square.widen) * t;
 }
+
+// How much cream is left between the board's rounded end and the panel's own edge, at the widest.
+//
+// A CEILING, not the usual case: the widens above are what set the board's length, and at 4:3 they sit
+// well inside this. It exists because the panel CLIPS (overflow: hidden) — a board solved past its edge
+// does not overhang, it loses its stadium ends to a straight cut — so anything that widens the board
+// later runs into a rounded stop rather than a square one.
+const BOARD_EDGE_BREATH = 4;
 
 // THE TABLET FILL.
 //
@@ -208,7 +216,15 @@ export function CategoryBoardTabs({
             // On a tablet the panel spans the grid outright; on a phone it stays what it always
             // was — the row plus its overhang, which is narrower than the tiles by design.
             const width = tablet
-              ? tileSpan * tabletBoardWiden(Math.max(screenW, screenH) / Math.min(screenW, screenH))
+              ? Math.min(
+                  tileSpan *
+                    tabletBoardWiden(
+                      Math.max(screenW, screenH) / Math.min(screenW, screenH),
+                    ),
+                  // The panel's inner edge, from the inside: the header sits within the panel's own
+                  // side padding, so the board may run out over that padding but no further.
+                  available + (PANEL_EDGE - BOARD_EDGE_BREATH) * 2,
+                )
               : row.width + BOARD_OVERHANG_X * 2 * k;
             const height = (width / BOARD_ASPECT) * BOARD_STRETCH_Y;
             return (
