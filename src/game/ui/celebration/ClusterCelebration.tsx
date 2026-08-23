@@ -1,5 +1,5 @@
 import * as Haptics from "expo-haptics";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Image, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -16,7 +16,6 @@ import {
 import { useGameStore } from "@/src/game/core/store";
 import { Button } from "@/src/game/ui/system/Button";
 import { Theme, useFixedStyles } from "@/src/game/ui/system/theme";
-import type { ClusterId } from "@/src/game/core/type";
 
 /** Fires the moment a cluster's last action lands: names what was finished and offers the one move that follows — the next unfinished cluster, or the combine stage when they are all done. The full-screen "choose a section" moment stays with BuildMap at game start; this popup owns the mid-build transitions so a finished cluster never has to become a card while you build the next one. */
 export function ClusterCelebration() {
@@ -24,9 +23,12 @@ export function ClusterCelebration() {
   const win = useWindowDimensions();
   const furniture = useGameStore((s) => s.furniture);
   const completed = useGameStore((s) => s.completed);
-  const [shown, setShown] = useState<ClusterId | null>(null);
-  const seen = useRef<Set<ClusterId> | null>(null);
-  // Which furniture `seen` was baselined against. Cluster ids are generic ("base", "seat"), and the play screen swaps furniture WITHOUT remounting — so a set carried across a swap either swallows the new build's "base" celebration or replays a resumed build's already-finished ones.
+  // BOTH IN THE STORE now, not local state. A ref is emptied by any remount, and it is invisible from
+  // outside — which is how a finished stage re-celebrated when the player went back into it from the
+  // project map, and how the Map coach ended up drawing on top of this card.
+  const shown = useGameStore((s) => s.celebratingCluster);
+  const celebrated = useGameStore((s) => s.celebratedClusters);
+  // Which furniture the baseline was taken against. Cluster ids are generic ("base", "seat"), and the play screen swaps furniture WITHOUT remounting — so a set carried across a swap either swallows the new build's "base" celebration or replays a resumed build's already-finished ones.
   const seenFor = useRef<string | null>(null);
 
   const done = new Set(completed);
@@ -38,18 +40,16 @@ export function ClusterCelebration() {
 
   useEffect(() => {
     if (!furniture) return;
-    // first run — and every furniture swap — baselines to the clusters already finished, so neither a remount mid-build nor a resumed save replays old celebrations
-    if (!seen.current || seenFor.current !== furniture.meta.id) {
-      seen.current = new Set(finished);
+    // Every furniture swap baselines to the clusters already finished, so neither a remount mid-build
+    // nor a resumed save replays old celebrations.
+    if (seenFor.current !== furniture.meta.id) {
       seenFor.current = furniture.meta.id;
-      // A stale card from the previous furniture must not survive the swap.
-      setShown(null);
+      useGameStore.getState().baselineCelebrated(finished);
       return;
     }
     for (const c of finished) {
-      if (seen.current.has(c)) continue;
-      seen.current.add(c);
-      setShown(c);
+      if (celebrated.includes(c)) continue;
+      useGameStore.getState().celebrateCluster(c);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       return;
     }
@@ -87,7 +87,7 @@ export function ClusterCelebration() {
   const onPress = () => {
     const store = useGameStore.getState();
     store.setActiveCluster(allDone ? null : next);
-    setShown(null);
+    useGameStore.getState().dismissCelebration();
     Haptics.selectionAsync();
   };
 

@@ -1,7 +1,8 @@
 // The colour/finish swatch column shown while a piece is being placed — the one place a player chooses which variant of an item goes into the room. Positioned by the placement rail in RoomExperience, which sets it beside the placement bar on the right edge so the ghost, the swatches and the confirm button read as one control.
 //
 // What it offers comes from item_variants (the DB is the source for which colours exist); what it shows per swatch is that variation's own thumbnail, the SAME picture the Shop and Inventory tiles use. The variation name is captioned as well as pictured: it is the honest label when the artwork is missing. Hidden for anything with fewer than two variations — a one-look item has no choice to make.
-import { StyleSheet, Pressable, ScrollView, Text, View } from "react-native";
+import { StyleSheet, ScrollView, Text, View } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import { CatalogThumb } from "../../components/CatalogThumb";
 import { useItemVariants } from "../../data/catalog/variantStore";
@@ -95,8 +96,8 @@ const makeStyles = (t: Theme) =>
       paddingVertical: SPACE.xs,
       // THE BAR'S INNER RADIUS, not RADIUS.control. A rounded box inside a rounded box has to match
       // `outer - padding` or its corners cut outside the parent's curve: at 14 against the bar's 22
-      // minus 4 of padding, the top and bottom swatches showed square shoulders poking past the
-      // rail. Nothing here can be clipped away instead — `overflow: hidden` on the bar would take
+      // minus 4 of padding, the top and bottom swatches showed square shoulders poking past the rail.
+      // Nothing here can be clipped away instead — `overflow: hidden` on the bar would take
       // CARD_CHROME's shadow with it on Android.
       borderRadius: 22 - SPACE.xs,
       borderWidth: 2,

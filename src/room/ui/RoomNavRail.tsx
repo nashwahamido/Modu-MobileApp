@@ -6,10 +6,16 @@
 //
 // Assemble is NOT here. It is the one action rather than a place to go, and it lives on its own at the
 // other corner (RoomAssembleButton) so it is never one of five equal choices.
-import { useState } from 'react';
+import {
+  useState } from 'react';
 import { router } from 'expo-router';
 import type { Href } from 'expo-router';
-import { StyleSheet, Image, Pressable, Text, View } from 'react-native';
+import { StyleSheet,
+  Image,
+  Text,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import type { ImageSourcePropType, StyleProp, ImageStyle } from 'react-native';
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 

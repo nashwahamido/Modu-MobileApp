@@ -44,12 +44,71 @@ const METAL_MAP = require("@/src/assets/textures/metal.tex");
 
 /** Steel, not wood. LINEAR — a light neutral grey the map is tinted by. */
 const METAL_BASE: Vec3 = [0.52, 0.53, 0.56];
-/** The shadow side. COLD — steel's shadow goes blue-grey, where wood's goes brown. That
- *  one difference does most of the work of telling the two materials apart. */
-const METAL_SHADE: Vec3 = [0.055, 0.06, 0.075];
 /** Repeats per metre. A screw is ~10 mm across, so the map has to be dense to show any
  *  brushing at all at that size. */
 const METAL_TILES = 24;
+
+/**
+ * The colour each hardware part actually IS, read off the base model.
+ *
+ * WHY A TABLE RATHER THAN TWO BUCKETS. This shader only ever had "wood" or "one grey metal", so
+ * every piece of hardware came out the same tone — and EKET's runner assembly is not one tone: the
+ * frames are galvanised steel (light), the R-side carriage and frame are near-black, the stabiliser
+ * rod is mid aluminium, the cams and knobs are black plastic. One grey made half of it wrong, and
+ * two buckets only moved which half.
+ *
+ * These values are AVERAGED FROM THE AUTHORED MATERIALS in EKET.glb — the base colour factor where
+ * there is one, the mean of the base colour texture where there is not — so the wooden and realistic
+ * looks agree by construction rather than by me matching them by eye.
+ *
+ * EKET ONLY, deliberately. LACK, BEKVAM and DALFRED are signed off as they are, and their hardware
+ * is a single tone each, so the default below is already right for them. The same table can be
+ * extended per model if that ever changes.
+ */
+const METAL_TINT: Record<string, Vec3> = {
+  // UNIFIED, not white. These are authored in the panels' own "IKEA BASIC WHITE Foil", which is
+  // invisible on the white realistic cabinet and stark white on any other — so one half of a
+  // mirrored runner pair looked like a different component from the other. They take the runner
+  // system's own plastic instead (Rationell grey, 0.015), matching what the GLB pass now writes for
+  // cozy and cartoon so all three restyled looks show the same mechanism.
+  screw109041: [0.015, 0.016, 0.018],
+  dowel145572: [0.015, 0.016, 0.018],
+  runnerCarriageL: [0.015, 0.016, 0.018],
+  runnerClip: [0.015, 0.016, 0.018],
+  suspCover: [0.015, 0.016, 0.018],
+  suspCap: [0.015, 0.016, 0.018],
+  screw110519: [0.015, 0.016, 0.018],
+  cam139434: [0, 0, 0],
+  dowel139435: [0, 0, 0],
+  runnerBracketL: [0.452, 0.468, 0.480],
+  runnerBracketR: [0.452, 0.468, 0.480],
+  runnerCarriageR: [0.015, 0.016, 0.018],
+  runnerFrameL: [0.452, 0.468, 0.480],
+  // MATCHES runnerFrameL, and must. Both frames carry the same two materials — galvanised steel for
+  // the rail, Rationell grey for the plastic — but the two meshes list them in opposite order, so
+  // reading "the first material" gave the left frame steel and the right frame black, and the pair
+  // rendered as two different components. Every L/R pair in this table is deliberately one value.
+  runnerFrameR: [0.452, 0.468, 0.480],
+  runnerMiddleL: [0.452, 0.468, 0.480],
+  runnerMiddleR: [0.452, 0.468, 0.480],
+  screw100349: [0.866, 0.866, 0.866],
+  stabilizerRod: [0.408, 0.408, 0.408],
+  suspBracket: [0, 0, 0],
+  suspKnob: [0, 0, 0],
+};
+
+/**
+ * How dark a metal's shadow sits under its base.
+ *
+ * REPLACED a fixed METAL_SHADE constant. One shadow colour for every metal meant a black plastic cam
+ * got the same mid-grey shadow as a galvanised rail, which is a large part of why the darker parts
+ * read as washed out. 0.105 is the ratio that constant already had against METAL_BASE, so bare steel
+ * is unchanged and everything else now shades in its own colour.
+ *
+ * Steel's shadow still goes COLD where wood's goes brown — that comes from the tint itself now
+ * rather than from a separate constant.
+ */
+const METAL_SHADE_RATIO = 0.105;
 
 /** Rendered with the METAL map, not the wood.
  *
@@ -69,6 +128,46 @@ const METAL_GROUPS: readonly string[] = [
   "ringRail",
   "supportPin",
   "seatPlate",
+  // DALFRED — the pole. Its material is "IKEA BLACK no 7 metal Text", so it was always metal; it was simply never listed, and a chrome stool leg in pine grain is the most visible version of this bug.
+  "pole",
+  // BEKVAM — black anodised aluminium. NOTE what is NOT here: dowel101350 is "IKEA BIRCH no 4", a genuinely WOODEN dowel, and it must keep the wood map. Being a fastener is not the test; the material is.
+  "screw105111",
+  "screw105215",
+  // EKET — EVERY piece of hardware, at her instruction: "make sure the hardware in eket is all metal
+  // in all cases". This is the one model where the material name cannot decide it. Its runner
+  // carriages and clips ship with the PANELS' white foil, and its cams and dowels with black
+  // plastic, so a name test leaves them inheriting whatever the body becomes — which is what put
+  // pine grain on the drawer runners and cream on the clips.
+  //
+  // The whole runner assembly, both handed pairs, and the suspension rail go in together: they are a
+  // single mechanism, and half of it in steel with the other half in timber is worse than either.
+  "screw100349",
+  "cam139434",
+  "dowel139435",
+  "stabilizerRod",
+  "runnerBracketL",
+  "runnerBracketR",
+  "runnerFrameL",
+  "runnerFrameR",
+  "runnerMiddleL",
+  "runnerMiddleR",
+  "runnerCarriageR",
+  "suspBracket",
+  "suspCap",
+  "suspKnob",
+  // The WHITE PLASTIC hardware. These wear the panels' white foil in the base model, and for one
+  // round they were left out of this list on the theory that they should follow the cabinet — which
+  // put WOOD GRAIN on a plastic drawer carriage. They are hardware; they are simply pale hardware,
+  // and their tint below says so.
+  "screw109041",
+  "screw110519",
+  "dowel145572",
+  "runnerCarriageL",
+  "runnerClip",
+  "suspCover",
+  "suspCap",
+  // NOT here, and deliberately: the cabinet and the drawer box — backPanel, sidePanel*, topPanel,
+  // bottomPanel, drawerFront/Back/Bottom and drawerSide*. Those are the parts the finish is FOR.
 ];
 
 // NOTE: ringRail, supportPin and seatPlate still have entries in ROUND and CAP_AXIS below. Those are now dead for these parts — the metal branch in the shader returns before either is read. Left in place because they are correct descriptions of the geometry, and they come straight back into use the moment a part is moved back to wood.
@@ -307,14 +406,23 @@ function paramsFor(
     };
   }
   const metal = METAL_GROUPS.includes(def.group);
+  // THREE buckets, not two: wood, bare steel, and black steel. The third exists because EKET's
+  // runners and screws are black in every authored finish, and one metal colour for all hardware
+  // turned the whole drawer mechanism light grey.
+  // The part's own colour where the model states one, the default steel otherwise.
+  const tint = metal ? (METAL_TINT[def.group] ?? METAL_BASE) : null;
 
   return {
     float3: {
-      baseColor: metal
-        ? METAL_BASE
-        : (override?.baseColor ?? (USE_TEXTURE ? INK_BASE : INK_BASE_PROCEDURAL)),
+      baseColor: tint ?? (override?.baseColor ?? (USE_TEXTURE ? INK_BASE : INK_BASE_PROCEDURAL)),
       // Steel's shadow is COLD; wood's is warm. Swapping this one colour is most of what separates the two materials — more than the texture does.
-      shadeColor: metal ? METAL_SHADE : INK_SHADE,
+      shadeColor: tint
+        ? ([
+            tint[0] * METAL_SHADE_RATIO,
+            tint[1] * METAL_SHADE_RATIO,
+            tint[2] * METAL_SHADE_RATIO,
+          ] as Vec3)
+        : INK_SHADE,
       inkColor: INK_LINE,
       highlightColor: INK_HIGHLIGHT,
       keyDir: KEY_TO_LIGHT,

@@ -18,11 +18,11 @@ import Animated, {
 } from "react-native-reanimated";
 import { StyleSheet,
   Image,
-  Pressable,
   Text,
   useColorScheme,
   View,
 } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 // type
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";

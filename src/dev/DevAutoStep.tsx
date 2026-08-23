@@ -1,5 +1,16 @@
-import { ELEVATION, FONT, RADIUS, SIZE, SPACE, useFixedStyles } from "@/src/game/ui/system/theme";
-import { StyleSheet, Pressable, Text, View, Image } from "react-native";
+import {
+  ELEVATION,
+  FONT,
+  RADIUS,
+  SIZE,
+  SPACE,
+  useFixedStyles } from "@/src/game/ui/system/theme";
+import { StyleSheet,
+  Text,
+  View,
+  Image,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import { actionCluster } from "@/src/game/core/evaluation/clusters";
 import { engageAxis } from "@/src/game/core/evaluation/engagement";
 import { targetPositionForAction } from "@/src/game/core/scene/targets";

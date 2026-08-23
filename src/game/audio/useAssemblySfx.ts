@@ -2,7 +2,7 @@
 //
 // Every gesture in this app ends in the same few store transitions — a part is held, an action completes, a tighten accumulates degrees. Subscribing once here means a new control gets its sounds for free, and no control has to remember to make a noise. It also keeps the audio out of the gesture path, which is the part that has to stay at 60fps.
 import { useEffect, useRef } from "react";
-import { actionCluster } from "@/src/game/core/evaluation/clusters";
+import { actionCluster, requiresClusterFocus } from "@/src/game/core/evaluation/clusters";
 import { useGameStore } from "@/src/game/core/store";
 import { playSfx, preloadSfx } from "@/src/game/audio/sfx";
 import type { ActionId } from "@/src/game/core/type";
@@ -57,7 +57,23 @@ export function useAssemblySfx(enabled: boolean): void {
             s.furniture.actions
               .filter((a) => actionCluster(s.furniture!, a) === cluster)
               .every((a) => s.completed.includes(a.actionId));
-          playSfx(clusterDone ? "stage" : "seat");
+          // The cluster fanfare is for models that ACTUALLY have stages — DALFRED and EKET. LACK and
+          // BEKVAM are single-cluster builds, so `clusterDone` goes true on their very last action
+          // and the fanfare would fire a beat before the completion screen's own. requiresClusterFocus
+          // is the same test the project map uses to decide whether to offer a stage chooser at all,
+          // so the sound and the map agree about what a stage is by construction.
+          const staged = requiresClusterFocus(s.furniture);
+          // Logged in dev because "the cluster sound did not play" has three possible causes that
+          // look identical from the outside: the action was not the last of its cluster, the model
+          // has no stages, or the clip itself failed to open. This says which.
+          if (__DEV__ && clusterDone) {
+            console.log(
+              `[sfx] cluster "${cluster}" complete on ${s.furniture.meta.id} — staged=${staged} -> ${
+                staged ? "clusterComplete" : "seat"
+              }`,
+            );
+          }
+          playSfx(clusterDone && staged ? "clusterComplete" : "seat");
         } else {
           playSfx("seat");
         }

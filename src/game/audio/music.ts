@@ -1,4 +1,4 @@
-// The app's background music: two tracks, one player each, switched by ROUTE.
+// The app's background music: three tracks, one player each, switched by ROUTE.
 //
 // Players are created lazily and kept at module scope, like sfx.ts and for the same reason: the
 // music has to survive whichever screen is mounted, and a hook would tie it to one component's
@@ -10,7 +10,7 @@
 // where they are (see useRouteMusic); this decides what that means.
 import { createAudioPlayer, type AudioPlayer } from "expo-audio";
 
-export type MusicTrackId = "assembly" | "ambient";
+export type MusicTrackId = "assembly" | "ambient" | "onboarding";
 
 const SOURCES: Record<MusicTrackId, number> = {
   // The build's own theme: workshop-ish, steady, meant to sit under a long focused task.
@@ -19,6 +19,20 @@ const SOURCES: Record<MusicTrackId, number> = {
   // Everywhere else — the room, the catalogue, the profile, the shop.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   ambient: require("@/src/assets/audio/music/room-theme.mp3"),
+  // Account creation, the questionnaire and the avatar recommendation.
+  onboarding: require("@/src/assets/audio/music/onboarding-theme.mp3"),
+};
+
+/** A per-track trim under MUSIC_CEILING, for a track that has to share the room with something.
+ *
+ *  ONBOARDING IS THE CASE THIS EXISTS FOR. Those screens are wall-to-wall narration — the
+ *  questionnaire reads every question and answer, the recommendation reads the whole card — and the
+ *  route used to be deliberately silent for exactly that reason. Adding a bed there is fine; adding
+ *  it at the same level as the room theme would put it on top of the voice it is meant to sit under. */
+const TRIM: Record<MusicTrackId, number> = {
+  assembly: 1,
+  ambient: 1,
+  onboarding: 0.6,
 };
 
 /** The ceiling the setting scales against, NOT the volume itself: at 1.0 either track would compete
@@ -28,8 +42,8 @@ const MUSIC_CEILING = 0.45;
 const players: Partial<Record<MusicTrackId, AudioPlayer>> = {};
 // PER TRACK, not global: assembly music is set in the build's own settings and ambient music in the
 // General tab, and a player who silences one usually means only that one.
-const levels: Record<MusicTrackId, number> = { assembly: 0.5, ambient: 0.5 };
-const enabled: Record<MusicTrackId, boolean> = { assembly: true, ambient: true };
+const levels: Record<MusicTrackId, number> = { assembly: 0.5, ambient: 0.5, onboarding: 0.5 };
+const enabled: Record<MusicTrackId, boolean> = { assembly: true, ambient: true, onboarding: true };
 let current: MusicTrackId | null = null;
 
 function playerFor(id: MusicTrackId): AudioPlayer | null {
@@ -38,7 +52,7 @@ function playerFor(id: MusicTrackId): AudioPlayer | null {
   try {
     const p = createAudioPlayer(SOURCES[id]);
     p.loop = true;
-    p.volume = levels[id] * MUSIC_CEILING;
+    p.volume = levels[id] * MUSIC_CEILING * TRIM[id];
     players[id] = p;
     return p;
   } catch {
@@ -55,7 +69,7 @@ function apply() {
       const target = playerFor(id);
       if (target) {
         try {
-          target.volume = levels[id] * MUSIC_CEILING;
+          target.volume = levels[id] * MUSIC_CEILING * TRIM[id];
           if (!target.playing) target.play();
         } catch {
           /* ignore */
@@ -73,7 +87,7 @@ function apply() {
   }
 }
 
-/** Which track this part of the app wants — or null for silence (onboarding). */
+/** Which track this part of the app wants — or null for silence. */
 export function setMusicTrack(track: MusicTrackId | null) {
   if (current === track) return;
   current = track;

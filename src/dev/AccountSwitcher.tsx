@@ -6,7 +6,8 @@
 //
 // Styled with the panel's own flat palette, not the app theme: it has to read as part of the panel, and the panel deliberately does not follow the product's surfaces.
 import { useState } from "react";
-import { StyleSheet, ActivityIndicator, Pressable, Text, View } from "react-native";
+import { StyleSheet, ActivityIndicator, Text, View } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import { router } from "expo-router";
 import type { Href } from "expo-router";
 
@@ -17,7 +18,8 @@ import { ENABLED_ROSTERS } from "./rosters";
 
 // A fresh account starts the questionnaire so the whole onboarding run is on show; a prepared one drops into its room.
 const ESTABLISHED_ROUTE = "/room" as Href;
-const FRESH_ROUTE = "/onboarding-questionnaire" as Href;
+// The first screen of onboarding — the voice notice, which replaces itself with the questionnaire.
+const FRESH_ROUTE = "/voice-intro" as Href;
 
 // How the signed-in account is named back to you. Anonymous sessions have no email, so they fall back to the username the fresh-account path seeded and then to a short uid — enough to tell two apart.
 function describeUser(user: { id: string; email?: string; user_metadata?: Record<string, unknown> } | null): string {

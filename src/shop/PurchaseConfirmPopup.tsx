@@ -1,5 +1,11 @@
 // The "buy this?" confirmation, as a popup over the shop. Nothing is charged until Yes — the tap that opens this is not itself a purchase
-import { StyleSheet, Image, Pressable, Text, View } from "react-native";
+import {
+  StyleSheet,
+  Image,
+  Text,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import { COIN_ICON } from "@/src/components/iconAssets";
 import {

@@ -1,6 +1,12 @@
 // The "you can't buy this" notice, as a popup over the shop. The twin of
 // PurchaseConfirmPopup — same card, same scrim, one button instead of two
-import { StyleSheet, Image, Pressable, Text, View } from "react-native";
+import {
+  StyleSheet,
+  Image,
+  Text,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import { COIN_ICON, STAR_ICON, levelIcon } from "@/src/components/iconAssets";
 import {

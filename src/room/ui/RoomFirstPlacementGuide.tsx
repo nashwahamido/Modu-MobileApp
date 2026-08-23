@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import * as Speech from "@/src/onboarding/speech";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import { avatarForProfile } from "@/src/components/avatarAssets";
 import type { ProfileId } from "@/src/game/core/profile";
+import { useCurrentUserId } from "@/src/data";
 import { useGameStore } from "@/src/game/core/store";
 import { ConfettiRain } from "@/src/game/ui/celebration/Confetti";
 import { Button } from "@/src/game/ui/system/Button";
@@ -23,20 +25,27 @@ import type {
   PlacementGuideTarget,
 } from "./PlacementRail";
 
+/** Shown ONCE, ever, after the tutorial's LACK table. The route param that arms this guide is only
+ *  sent by the tutorial on completion, so it already means "just finished the first table"; what it
+ *  cannot survive is a SECOND arrival with the same param. AsyncStorage matches the room's own
+ *  coaches (ROOM_EDIT_GUIDE_KEY, ROOM_WELCOME_GUIDE_KEY) rather than the profile flag the Map coach
+ *  uses — this one is tied to a route passed through once on this device. */
+const FIRST_PLACEMENT_GUIDE_PREFIX = "modu.first-placement-guide-seen.v1";
+
 /**
- * Shown ONCE, ever, after the tutorial's LACK table.
+ * PER USER, not per install.
  *
- * The route param that arms this guide is only ever sent by the tutorial on completion, so it
- * already means "this player just finished their first table". What it cannot survive is a second
- * arrival with the same param — a back navigation, a params restore, a re-run of the tutorial — and
- * the script is a beginner's walkthrough, not something to sit through again.
+ * The first version wrote one shared key, and that is a latch on the DEVICE: the first player to
+ * finish the tutorial consumed it, and every account created afterwards pressed "Place the LACK in
+ * my room" and got an empty room — no placement, no guide, no error. Exactly the same mistake as the
+ * Map coach's local mirror, and with the same symptom: a fresh account silently inheriting a
+ * decision made by a previous one.
  *
- * AsyncStorage, matching the room's own coaches (RoomExperience's ROOM_EDIT_GUIDE_KEY and
- * ROOM_WELCOME_GUIDE_KEY) rather than the profile flag the HUD's Map coach uses. This one is tied to
- * a route the player passes through exactly once on this device; the Map coach is about a control
- * they carry between devices.
+ * The guide is per-install rather than per-account by design — it is tied to a route param passed
+ * through once on this device, not to anything the profile stores — but "this install" still has to
+ * mean "this install, for this player".
  */
-const FIRST_PLACEMENT_GUIDE_KEY = "modu.first-placement-guide-seen.v1";
+const guideKey = (userId: string) => `${FIRST_PLACEMENT_GUIDE_PREFIX}:${userId}`;
 
 type GuideStage =
   | "idle"
@@ -96,6 +105,8 @@ export function RoomFirstPlacementGuide({
   onSessionChange,
 }: Props) {
   const s = useStyles(makeStyles);
+  // Whose install-latch this is — see guideKey.
+  const me = useCurrentUserId();
   const profile = useGameStore((state) => state.profile);
   const audioEnabled = useGameStore((state) => state.settings.audio);
   const activeEdit = usePlacementStore((state) => state.activeEdit);
@@ -118,13 +129,12 @@ export function RoomFirstPlacementGuide({
       return;
     }
 
-    // Claimed BEFORE the storage read, not after. The read is async and this effect re-runs on every
-    // store change in the meantime, so without it two passes can both get past the guard and start
-    // the placement twice.
+    // Claimed BEFORE the async read: this effect re-runs on every store change, so without it two
+    // passes can both get past the guard and start the placement twice.
     requestConsumed.current = true;
 
     let alive = true;
-    void AsyncStorage.getItem(FIRST_PLACEMENT_GUIDE_KEY)
+    void AsyncStorage.getItem(guideKey(me))
       .then((seen) => {
         if (!alive || seen) return;
         const started = usePlacementStore
@@ -134,17 +144,14 @@ export function RoomFirstPlacementGuide({
           requestConsumed.current = false;
           return;
         }
-        // Written on START, not on finish. A player who backgrounds the app or walks away mid-script
-        // has still had it; the opposite failure is a walkthrough that returns until it happens to be
-        // played to the end.
-        AsyncStorage.setItem(FIRST_PLACEMENT_GUIDE_KEY, "1").catch((err) =>
+        // Written on START, not on finish: a player who backgrounds the app mid-script has still had
+        // it, and the opposite failure is a walkthrough that returns until it is played to the end.
+        AsyncStorage.setItem(guideKey(me), "1").catch((err) =>
           console.warn("[room] could not save first-placement guide state", err),
         );
         onSessionChange?.(true);
         setStage("style");
       })
-      // On a storage failure the guide simply does not run. Better than the alternative: a read that
-      // fails on every launch would replay the whole script on every launch.
       .catch((err) =>
         console.warn("[room] could not read first-placement guide state", err),
       );
@@ -152,7 +159,7 @@ export function RoomFirstPlacementGuide({
     return () => {
       alive = false;
     };
-  }, [activeEdit, hydrated, onSessionChange, requestedItemId, stage]);
+  }, [activeEdit, hydrated, me, onSessionChange, requestedItemId, stage]);
 
   useEffect(() => {
     if (!hydrated || !activeEdit?.firstPlacementGuide || guideId.current)

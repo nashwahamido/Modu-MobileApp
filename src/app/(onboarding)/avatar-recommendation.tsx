@@ -1,7 +1,8 @@
 import { router, useLocalSearchParams } from "expo-router";
 import type { Href } from "expo-router";
 import * as Speech from "@/src/onboarding/speech";
-import { StyleSheet, Animated, Image, Pressable, Text, View, useWindowDimensions } from "react-native";
+import { StyleSheet, Animated, Image, Text, View, useWindowDimensions } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import { useEffect, useRef, useState } from "react";
 import { avatarModes } from "@/src/onboarding/avatarModes";
 import { avatarPath } from "@/src/onboarding/voiceAssets";
@@ -31,6 +32,7 @@ import Reanimated, {
 import type { ReactNode } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
+import { playSfx } from "@/src/game/audio/sfx";
 
 /** This screen's backdrop. Deliberately its own pair rather than a shared token: each screen can
  *  be retuned without touching the others. Keep root.backgroundColor equal to BG_FROM — that is
@@ -236,6 +238,15 @@ export default function AvatarRecommendationScreen() {
   useEffect(() => {
     const t = setTimeout(() => setIntroPlaying(false), STAGE.tabs + 900);
     return () => clearTimeout(t);
+  }, []);
+  // THE RESULT LANDING, once. Empty deps on purpose: this is tied to the recommendation the
+  // questionnaire produced, not to `selectedModeId`, so switching between the four modes afterwards
+  // is silent — the player is comparing then, and a fanfare per tab would turn the announcement into
+  // a click sound. Timed to the avatar's own pop (STAGE.avatar) so the sound and the arrival are one
+  // event rather than two.
+  useEffect(() => {
+    const cue = setTimeout(() => playSfx("recommendation"), STAGE.avatar);
+    return () => clearTimeout(cue);
   }, []);
   // The timer alone was not enough: tapping a mode inside the opening ~4s left the intro "still playing", so the switch animated. Touching a tab IS the end of the announcement, whenever it happens — after this the player is comparing, and comparing wants content, not choreography.
   const endIntro = () => setIntroPlaying(false);
@@ -497,7 +508,7 @@ export default function AvatarRecommendationScreen() {
       <SlideDown
         delay={STAGE.tabs} animate={introPlaying}
         style={[
-          styles.modeTabs,
+          styles.modeTabsWrap,
           {
             // 38 to match the content column's own inset, so the tab row lines up with the copy above it rather than running wider than everything else on the screen.
             left: 38 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
@@ -506,6 +517,11 @@ export default function AvatarRecommendationScreen() {
           },
         ]}
       >
+        {/* Names what the row is for. Without it the four tabs read as navigation the player is
+            expected to work through, rather than an alternative to the one choice already made for
+            them. Inside the same SlideDown as the row so the label and its tabs arrive together. */}
+        <Text style={styles.modeTabsLabel}>Or, you can choose another mode:</Text>
+        <View style={styles.modeTabs}>
         {modes.map((mode) => {
           const isSelected = mode.id === selectedModeId;
           const isRecommended = mode.id === initialModeId;
@@ -528,6 +544,7 @@ export default function AvatarRecommendationScreen() {
             </Pressable>
           );
         })}
+        </View>
       </SlideDown>
 
       {showModeTip && (
@@ -687,8 +704,22 @@ const makeStyles = (t: Theme, k = 1) =>
       fontWeight: "700",
     },
     // Offsets come from the CALL SITE, not from here: absolute children are not inset by the parent's padding, so a literal here can never account for a device's safe insets.
-    modeTabs: {
+    // The COLUMN: label above, tabs below. It carries the absolute placement the row used to, so the
+    // row's own height is preserved and the label simply sits on top of it.
+    modeTabsWrap: {
       position: "absolute",
+      flexDirection: "column",
+      gap: SPACE.xs,
+    },
+    modeTabsLabel: {
+      ...TYPE.body,
+      fontSize: Math.round(13 * k),
+      color: t.textDim,
+      // Centred over the four tabs rather than left-aligned to the first one — it introduces the row
+      // as a whole, so it belongs to the row's middle, not to its start.
+      textAlign: "center",
+    },
+    modeTabs: {
       height: Math.round(56 * k),
       flexDirection: "row",
       gap: SPACE.sm,

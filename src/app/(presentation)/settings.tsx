@@ -1,9 +1,15 @@
 // The one FULL settings surface, reached from the room's top-left gear and from the profile screen. Edits the global store, so choices made here become the defaults when you enter a build.
 //
 // Two tabs. General is the app and the account — what follows the player across every screen. Assembly is every build setting, including the ones the in-build gear panel deliberately hides (see SettingsControls).
-import { useState } from "react";
+import {
+  useState } from "react";
 import { router } from "expo-router";
-import { StyleSheet, Pressable, ScrollView, Text, View } from "react-native";
+import { StyleSheet,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import { useScreenInsets } from '@/src/hooks/use-safe-insets';
 import {
   AccountSection,

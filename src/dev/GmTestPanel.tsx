@@ -1,11 +1,14 @@
 import { router } from "expo-router";
 import type { Href } from "expo-router";
 import { useState } from "react";
-import { StyleSheet, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { StyleSheet, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import { AccountSwitcher } from "./AccountSwitcher";
 import { useGameStore } from "@/src/game/core/store";
 import { useTutorialStore } from "@/src/game/tutorial/store";
 import type { ProfileId } from "@/src/game/core/profile";
+import { resetMapCoachSeen } from "@/src/game/ui/hud/MapCoach";
+import { useCurrentUserId, useRepos } from "@/src/data";
 
 type GmTarget = {
   label: string;
@@ -25,7 +28,7 @@ type GmTarget = {
 
 const targets: GmTarget[] = [
   { label: "Welcome", route: "/" as Href, note: "Landing screen" },
-  { label: "Onboarding", route: "/onboarding-questionnaire" as Href, note: "Questionnaire" },
+  { label: "Onboarding", route: "/voice-intro" as Href, note: "Voice notice, then questionnaire" },
   {
     label: "Avatar",
     route: "/avatar-recommendation?mode=momentum&secondary=visual" as Href,
@@ -55,6 +58,8 @@ export function GmTestPanel() {
   const [open, setOpen] = useState(false);
   // The app is landscape-LOCKED, so the tall axis is the short one: a phone gives roughly 250 points above the panel's bottom edge, and the roster alone is taller than that once a build lists more than about three accounts. Uncapped, the lower rows — Sign out and Purge among them — render off the top of the screen where no touch can reach them. Cap against the live window rather than a constant so a tablet still gets the whole panel without scrolling.
   const { height } = useWindowDimensions();
+  const repos = useRepos();
+  const me = useCurrentUserId();
   const maxPanelHeight = Math.max(180, height - PANEL_BOTTOM_INSET - PANEL_TOP_GUTTER);
 
   // The catalogue picks the furniture now, so nothing here needs the old "/play + an id chosen from the active profile" special case — that guessed one piece when the point was to choose.
@@ -102,6 +107,19 @@ export function GmTestPanel() {
                 </Pressable>
               ))}
             </View>
+            {/* The Map coach is once per ACCOUNT and remembered in two places, so without this there
+                is no way to see it a second time on the same login — which makes "it did not show"
+                impossible to tell apart from "it already has". */}
+            <Pressable
+              onPress={() => {
+                void resetMapCoachSeen(repos.profiles, me).then(() => setOpen(false));
+              }}
+              style={styles.targetButton}
+              hitSlop={4}
+            >
+              <Text style={styles.targetLabel}>Reset Map coach</Text>
+              <Text style={styles.targetNote}>Show it again on the next task</Text>
+            </Pressable>
             {/* Renders nothing unless a roster is live in this build. Closes the panel before it navigates. */}
             <AccountSwitcher onDone={() => setOpen(false)} />
           </ScrollView>

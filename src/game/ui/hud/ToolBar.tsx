@@ -1,6 +1,13 @@
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useState } from "react";
 import { useHudIcon } from "@/src/game/ui/hud/hudIcons";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,

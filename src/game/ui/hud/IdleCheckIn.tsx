@@ -1,5 +1,13 @@
+// "Are you still here?" — Sparky, after the build has sat untouched for a while.
+//
+// MOMENTUM ONLY, and deliberately so. The profile exists for players who lose the thread when
+// progress stalls; the other three are each built around NOT being nudged — Control asks for help
+// when it wants it, Clear Path is already showing exactly one next step, and Lumi is being read to.
+// The profile test lives in this component rather than at the call site, so no future caller can
+// disagree with it about who this is for.
 import { useEffect, useRef, useState } from "react";
-import { Animated, AppState, Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, AppState, StyleSheet, Text, View } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import { avatarHeadForProfile } from "@/src/components/avatarAssets";
 import { CompanionPortrait } from "@/src/game/ui/hud/CompanionPortrait";
@@ -7,16 +15,31 @@ import { useGameStore } from "@/src/game/core/store";
 import { useBuildPaused } from "@/src/game/ui/hud/useBuildPaused";
 import { ELEVATION, RADIUS, SPACE, ThemeScope, TYPE, type Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 
+/**
+ * How long the build sits untouched before Sparky asks.
+ *
+ * 20 SECONDS. Longer than the tutorial's 12, because the tutorial names the single tap the player
+ * owes it and silence there really is being stuck, while here they may be reading the step or
+ * hunting the right part. Shorter than the 45 this started at: for the profile built around losing
+ * the thread when progress stalls, a check-in that waits three quarters of a minute arrives after
+ * the moment it was meant to catch.
+ *
+ * The fuse restarts on ANY activity, touches included, so the only way to reach it is a genuinely
+ * still screen.
+ */
 const IDLE_MS = 20_000;
+
+/** How long the "welcome back" card stays before it fades itself out. It is a greeting, not a
+ *  question, so it should never need dismissing. */
 const WELCOME_MS = 6_000;
 
-/** How long "Are you still here?" stays before it puts itself away.
- *
- *  SHORTER THAN THE GAP TO StuckCoach, deliberately. That card asks at 30s and this one at 20s, so
- *  without a limit both would be on screen at once, saying different things about the same silence.
- *  It is a check-in rather than a question, so nothing is waiting on an answer and letting it expire
- *  costs the player nothing. */
+/** How long "Are you still here?" stays before putting itself away. SHORTER THAN THE GAP TO
+ *  StuckCoach, which asks at 30s: without a limit both would be up at once saying different things
+ *  about the same silence. It is a check-in, not a question, so nothing waits on an answer. */
 const ASK_VISIBLE_MS = 8_000;
+/** The panel colour the rest of the app's floating cards use — the project map's PANEL_CREAM, the
+ *  celebration panel's, the catalogue's pills. Copied rather than imported for the same reason
+ *  MapCoach copies it: it wants a token in theme.ts, and several screens already write it by hand. */
 const CARD_CREAM = "#FBF8F3";
 const CARD_INK = "#231F20";
 
@@ -32,9 +55,9 @@ export function IdleCheckIn() {
   const driveActionId = useGameStore((s) => s.driveActionId);
   const orientationActionId = useGameStore((s) => s.orientationActionId);
   const activeCluster = useGameStore((s) => s.activeCluster);
-  const hintPulse = useGameStore((s) => s.hintPulse);
-
+  // The whole map rule, shared with the other coaches and the spoken step.
   const paused = useBuildPaused();
+  const hintPulse = useGameStore((s) => s.hintPulse);
 
   const [asking, setAsking] = useState(false);
   const [welcoming, setWelcoming] = useState(false);
@@ -47,8 +70,6 @@ export function IdleCheckIn() {
   const momentum = profile === "momentum";
 
   useEffect(() => {
-    // The map is a pause: no check-in behind it, and no idle clock running either — time spent
-    // looking at the build map is not time spent stuck.
     if (!momentum || paused || welcoming) return;
     setAsking(false);
     const timer = setTimeout(() => setAsking(true), IDLE_MS);
@@ -83,16 +104,16 @@ export function IdleCheckIn() {
   }, [momentum]);
 
   useEffect(() => {
-    if (!welcoming) return;
-    const timer = setTimeout(() => setWelcoming(false), WELCOME_MS);
-    return () => clearTimeout(timer);
-  }, [welcoming]);
-
-  useEffect(() => {
     if (!asking) return;
     const timer = setTimeout(() => setAsking(false), ASK_VISIBLE_MS);
     return () => clearTimeout(timer);
   }, [asking]);
+
+  useEffect(() => {
+    if (!welcoming) return;
+    const timer = setTimeout(() => setWelcoming(false), WELCOME_MS);
+    return () => clearTimeout(timer);
+  }, [welcoming]);
 
   // The same slow breath the tutorial's card uses, so the two read as one character rather than as
   // two different notifications from the same app.

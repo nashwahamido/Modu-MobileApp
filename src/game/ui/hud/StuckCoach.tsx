@@ -1,9 +1,35 @@
-
-import { useEffect, useRef, useState } from "react";
-import { Animated, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+// The companion speaking up when a step is going badly — every profile, not just Sparky's.
+//
+// TWO PROMPTS, ONE CARD, because they are the same interruption for the same reason and only one of
+// them can be true at a time. Which one it is decides the copy and nothing else:
+//
+//   STALLED   — the step has sat untouched for STUCK_MS. Points at the skip.
+//   FUMBLING  — the same part has been dropped and missed MISS_LIMIT times in a row. Points at
+//               Recenter, because a run of misses on ONE socket usually means the player cannot SEE
+//               where the part goes, and re-framing the build is the fix for that.
+//
+// FUMBLING WINS when both are true. It is the more specific reading of the same silence: someone who
+// has missed four times is not idle, they are trying.
+//
+// Deliberately NOT momentum-only. IdleCheckIn is Sparky's own "are you still here", which is about
+// the player having left; this is about the BUILD being stuck, which happens to everyone. The two
+// are kept from stacking by IdleCheckIn giving up its card before this one arrives — see the note on
+// ASK_VISIBLE_MS there.
+import {
+  useEffect,
+  useRef,
+  useState } from "react";
+import { Animated,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import { avatarHeadForProfile } from "@/src/components/avatarAssets";
 import { SHOWCASE_ENABLED } from "@/src/dev/showcase";
+import { availableInMode } from "@/src/game/core/evaluation/availability";
 import { useGameStore } from "@/src/game/core/store";
 import { CompanionPortrait } from "@/src/game/ui/hud/CompanionPortrait";
 import { HUD_GHOST_LAYER, HudGhostRing, useHudSpots, type HudSpotId } from "@/src/game/ui/hud/hudSpotlight";
@@ -61,7 +87,6 @@ export function StuckCoach() {
 
   // The same activity set IdleCheckIn watches. Camera moves are NOT here — orbiting never reaches
   // the store — which is why the layer below also watches raw touches.
-  const completedCount = useGameStore((s) => s.completed.length);
   const heldActionId = useGameStore((s) => s.heldActionId);
   const driveActionId = useGameStore((s) => s.driveActionId);
   const orientationActionId = useGameStore((s) => s.orientationActionId);
@@ -82,7 +107,27 @@ export function StuckCoach() {
   // useBuildPaused. Testing `mapOpen` alone let this fire over the chooser, which is how the map
   // opens on every multi-stage build.
   const paused = useBuildPaused();
-  const live = !!furniture && !paused && !focus;
+  const completed = useGameStore((s) => s.completed);
+  const mode = useGameStore((s) => s.mode);
+
+  // IS THERE ANYTHING TO BE STUCK ON? Two cases sent the card up when the answer was no.
+  //
+  // NOT BEFORE THE FIRST STEP. Arriving at a fresh build and reading the objective for half a minute
+  // is not being stuck, it is starting — and "press Spot to skip this step" is a strange first thing
+  // to hear from a companion before the player has touched anything. It waits for one completed
+  // action, so the offer only ever follows a step they have actually managed.
+  //
+  // NOT WITH THE STAGE FINISHED. When the last action of a cluster lands there is nothing left to
+  // place: the player has to open the map and choose another stage. Offering to skip a step that
+  // does not exist, or to recentre a build that is done, points at the wrong thing entirely.
+  // `availableInMode` is the same function the HUD uses to decide what the next step IS, so this
+  // agrees with the objective bar by construction rather than by a second guess at the rule.
+  const somethingToDo =
+    !!furniture &&
+    availableInMode(furniture, new Set(completed), mode, activeCluster).length > 0;
+
+  const live =
+    !!furniture && !paused && !focus && completed.length > 0 && somethingToDo;
 
   // FUMBLING is driven by the count, not by a timer: the fourth miss IS the moment.
   useEffect(() => {
@@ -101,7 +146,7 @@ export function StuckCoach() {
   }, [
     live,
     prompt,
-    completedCount,
+    completed.length,
     heldActionId,
     driveActionId,
     orientationActionId,

@@ -14,7 +14,9 @@
 // dismissed. A player who backgrounds the app or force-quits mid-coach has still SEEN it, and the
 // alternative failure is worse: a card that comes back every launch until it happens to be tapped.
 import { useEffect, useRef, useState } from "react";
-import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Animated, StyleSheet, Text, View } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import { avatarHeadForProfile } from "@/src/components/avatarAssets";
 import { CompanionPortrait } from "@/src/game/ui/hud/CompanionPortrait";
@@ -57,8 +59,70 @@ const RING_BLEED = 6;
  * card comes back on every task they open, which is exactly what it must never do. A module-level
  * latch cannot fix a failed write, but it does contain the damage to one appearance per launch
  * instead of one per build.
+ *
+ * HOLDS A USER ID, not a boolean. As a bare flag it silenced the coach for whoever signed in NEXT:
+ * switching accounts from the dev roster does not restart the app, so a fresh account inherited a
+ * latch set by the previous one and never saw the card. Same mistake as the shared storage key
+ * below — an "is it shown" answer that forgot to ask "for whom".
  */
-let shownThisRun = false;
+let shownThisRunFor: string | null = null;
+
+/**
+ * A LOCAL mirror of the profile flag.
+ *
+ * The profile is still the real memory — it is what makes this once per ACCOUNT rather than once per
+ * install. But the write can fail for reasons the player never sees: an unrun migration, a column
+ * the grant does not cover, no session. When it does, the coach comes back on every launch, which is
+ * exactly the thing it must never do, and the failure is invisible from the outside.
+ *
+ * So both are written and EITHER suppresses. The worst case flips from "shown forever" to "shown
+ * once more on a second device", which is the right way round for a card that teaches one button.
+ */
+const SEEN_KEY_PREFIX = "modu.map-coach-seen.v1";
+
+/**
+ * PER USER, not per device — and that distinction is the whole point of this key.
+ *
+ * The first version wrote one shared key. It worked exactly once: the account that saw the coach set
+ * it, and from then on EVERY account on that device read it back and stayed silent, including brand
+ * new ones. A fallback meant to cover a failed database write ended up overriding the rule it was
+ * there to protect, and the symptom — "a fresh account never sees it" — pointed at the trigger
+ * rather than at the memory.
+ *
+ * Keyed by user id, it does what it was meant to: a failed profile write still suppresses the coach
+ * for THAT player on THIS device, and no one else.
+ */
+const seenKey = (userId: string) => `${SEEN_KEY_PREFIX}:${userId}`;
+
+/**
+ * Forget that the coach was ever shown — BOTH memories, plus the in-run latch.
+ *
+ * Once-per-account is exactly what was asked for, and it makes the thing untestable: after the first
+ * sighting there is no way back short of a new account or clearing app data, so "it did not appear
+ * when I skipped the tutorial" and "it already fired for me last week" look identical from the
+ * outside. This is the difference between them.
+ *
+ * Dev-facing only — wired to the GM panel, never to anything a player can reach.
+ */
+export async function resetMapCoachSeen(
+  profiles?: { update: (id: string, patch: { mapCoachSeen: boolean }) => Promise<unknown> },
+  userId?: string,
+) {
+  shownThisRunFor = null;
+  if (userId) await AsyncStorage.removeItem(seenKey(userId)).catch(() => undefined);
+  // The shared key the first version wrote. Removed too, so a device that ran that build is not left
+  // permanently silent for every account on it.
+  await AsyncStorage.removeItem(SEEN_KEY_PREFIX).catch(() => undefined);
+  // The repo is PASSED IN rather than imported: it is chosen by a hook (useRepos), and reaching for
+  // a module-level instance here would pick the wrong adapter in a build that swaps them.
+  if (profiles && userId) {
+    await profiles
+      .update(userId, { mapCoachSeen: false })
+      .catch((err: unknown) =>
+        console.warn("[map coach] could not clear the profile flag", err),
+      );
+  }
+}
 
 export function MapCoach() {
   const styles = useFixedStyles(makeStyles);
@@ -72,8 +136,11 @@ export function MapCoach() {
   const focus = useGameStore((s) => s.settings.focusMode);
   const mode = useGameStore((s) => s.mode);
   const heldActionId = useGameStore((s) => s.heldActionId);
-  // THE WHOLE MAP RULE, not the `mapOpen` flag — shared with the idle and stuck cards and with the
-  // spoken step, so the four cannot disagree about whether the build is paused.
+  // THE WHOLE MAP RULE, not the `mapOpen` flag. The map arrives three ways and only one of them sets
+  // that flag — see buildMapVisible. Watching the flag alone put this card straight over the STAGE
+  // CHOOSER, which is how the map opens on every multi-stage build.
+  // Shared with the idle and stuck cards and with the spoken step, so the four cannot disagree about
+  // whether the build is in front of the player. Covers the finished build as well as the map.
   const mapVisible = useBuildPaused();
 
   const [visible, setVisible] = useState(false);
@@ -88,15 +155,37 @@ export function MapCoach() {
   useEffect(() => {
     // ONE DECISION PER MOUNT. Without this guard the effect re-runs on every store change and asks
     // the profile again each time, which both hammers the repo and can race its own write.
-    if (decided.current || shownThisRun || !mapButtonShowing || mapVisible || heldActionId) return;
+    if (
+      decided.current ||
+      shownThisRunFor === me ||
+      !mapButtonShowing ||
+      mapVisible ||
+      heldActionId
+    )
+      return;
     decided.current = true;
 
     let alive = true;
-    void repos.profiles
-      .get(me)
-      .then((row) => {
-        if (!alive || !row || row.mapCoachSeen || shownThisRun) return;
-        shownThisRun = true;
+    void Promise.all([
+      repos.profiles.get(me).catch(() => null),
+      AsyncStorage.getItem(seenKey(me)).catch(() => null),
+    ])
+      .then(([row, seenLocally]) => {
+        if (!alive) return;
+        // NO ROW YET is not "already seen". A brand new account is created by the loading gate and
+        // the read can land before the row is readable — in which case giving up here would be
+        // permanent, because `decided` has already been claimed for this mount. Release it instead
+        // and let the next store change ask again.
+        if (!row) {
+          decided.current = false;
+          return;
+        }
+        if (row.mapCoachSeen || seenLocally || shownThisRunFor === me) return;
+        shownThisRunFor = me;
+        // Written first and unconditionally: this one cannot fail for a schema reason.
+        AsyncStorage.setItem(seenKey(me), "1").catch((err) =>
+          console.warn("[map coach] could not save seen state locally", err),
+        );
         // Saved on APPEAR, not on dismiss — see the header. A failure here is logged and otherwise
         // ignored: the player still gets the coach, and the worst case is seeing it once more.
         void repos.profiles
@@ -115,8 +204,10 @@ export function MapCoach() {
         }, APPEAR_DELAY_MS);
       })
       .catch((err) => {
-        // No profile, no network: say nothing. A coach that fires on every failed read would be a
-        // card that appears whenever the player is offline.
+        // No profile, no network: say nothing THIS time, but let it try again — the same reasoning as
+        // the missing row above. A coach that fired on a failed read would appear whenever the player
+        // is offline; one that gave up for good would never appear after a single slow request.
+        decided.current = false;
         console.warn("[map coach] could not read seen state", err);
       });
 
