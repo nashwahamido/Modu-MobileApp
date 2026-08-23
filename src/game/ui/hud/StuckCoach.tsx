@@ -32,7 +32,7 @@ import { SHOWCASE_ENABLED } from "@/src/dev/showcase";
 import { availableInMode } from "@/src/game/core/evaluation/availability";
 import { useGameStore } from "@/src/game/core/store";
 import { CompanionPortrait } from "@/src/game/ui/hud/CompanionPortrait";
-import { HUD_GHOST_LAYER, HudGhostRing, useHudSpots, type HudSpotId } from "@/src/game/ui/hud/hudSpotlight";
+import { HudGhostLayer, HudGhostRing, useHudSpots, type HudSpotId } from "@/src/game/ui/hud/hudSpotlight";
 import { useBuildPaused } from "@/src/game/ui/hud/useBuildPaused";
 import { ELEVATION, RADIUS, SPACE, ThemeScope, TYPE, type Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 
@@ -199,9 +199,11 @@ export function StuckCoach() {
     // LIGHT, always — the same scope play.tsx gives the map and the celebrations, and IdleCheckIn.
     // "Assemble in Dark Mode" is about the build surface, not the panels floating over it.
     <ThemeScope value="light">
-      <View style={HUD_GHOST_LAYER} pointerEvents="none">
+      {/* The layer measures its own window origin so the ring lands on the button whatever the
+          window is doing — see HudGhostLayer. */}
+      <HudGhostLayer>
         <HudGhostRing id={ring} visible />
-      </View>
+      </HudGhostLayer>
       <View
         style={[styles.layer, beside ? styles.anchoredLayer : null]}
         pointerEvents="box-none"
