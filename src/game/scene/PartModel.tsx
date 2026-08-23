@@ -465,7 +465,7 @@ function Ghost({
   return null;
 }
 
-/** Ghost rendered at one of the open socket positions while the player is holding a same-group part. It only appears for the proximity-selected matched socket, including the socket for the representative part being held. */
+/** Ghost rendered at one of the open socket positions while the player is holding a same-group part, including the socket for the representative part being held. Structural parts ghost the proximity-matched socket only; fasteners ghost every open socket of the group. */
 function SocketHintGhost({
   model,
   def,
@@ -482,7 +482,6 @@ function SocketHintGhost({
 }) {
   const matchedActionId = useGameStore((s) => s.matchedActionId);
   const hintPartId = useGameStore((s) => s.hintPartId);
-  const ghostStyle = useGameStore((s) => s.settings.ghostStyle);
   const firstDrop = useGameStore(selectFirstDrop);
   // Parked at its seat: the part is physically AT the socket and only the finishing gesture (screw / orientation twist / slide / press) is left. A ghost at the target pose now sits exactly where the real part already is and reads as a doubled, clashing leg — same reasoning as the tighten phase, which dropped its goal ghost for this exact reason.
   const driveActionId = useGameStore((s) => s.driveActionId);
@@ -497,9 +496,9 @@ function SocketHintGhost({
     return <Ghost model={model} def={def} atLoosePose={false} glowOverride={GLOW_MARK} travel />;
   }
   if (firstDrop || !actionId || parked) return null;
-  // "staticSockets": every open socket of the held group shows a dim pulsing marker; the proximity-matched one switches to the steady fitState-driven color (blue approaching → green seated). "movingGhost": only the matched socket gets a ghost, as before.
+  // Fasteners: every open socket of the held group shows a dim pulsing marker, and the proximity-matched one switches to the steady fitState-driven colour (blue approaching → green seated) — a field of near-identical holes is a CHOICE, so the player needs to see the whole field. Structural parts: only the matched socket is ghosted, because a translucent copy of every open panel buries the assembly. `def` is same-group as the held part (see deriveSceneState), so its own type is the held part's type in both the held and socket_hint cases.
   if (!isMatched) {
-    if (ghostStyle !== "staticSockets") return null;
+    if (def.type !== "fastener") return null;
     return (
       <Ghost
         model={model}

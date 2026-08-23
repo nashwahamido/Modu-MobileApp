@@ -1,6 +1,5 @@
 // TODO: settle down the part marked as dev-setting:
-// 1. moving Ghost vs static ghost
-// 2. float vs auto return
+// 1. float vs auto return
 
 // The accessibility settings — types only. Default values and the profiles that override them live in profile.ts.
 
@@ -9,8 +8,6 @@ import { TextLevel } from "@/src/game/core/type";
 // =============  Interaction axes ================
 
 // dev-setting
-/** Socket preview: "movingGhost" previews the fit on the held part as it approaches; "staticSockets" shows a fixed ghost at every open socket that recolors as the nearest one. */
-export type GhostStyle = "movingGhost" | "staticSockets";
 /** A part released away from a socket: "autoReturn" sends it back to the tray; "float" leaves it where you set it down (Put-back returns it later). */
 export type ReleaseBehavior = "float" | "autoReturn";
 /** Lighting rig: "auto" = each render style's natural rig; the rest force a mood. */
@@ -50,7 +47,6 @@ export interface AccessibilitySettings {
   fontScale: number;
   
   // dev-setting
-  ghostStyle: GhostStyle;
   releaseBehavior: ReleaseBehavior;
   /** Lighting rig mood; "auto" follows the render style. */
   lightingPreset: LightingPreset;
