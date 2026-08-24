@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { TimeOfDayId } from "@/src/room/core/timeOfDay";
+import type { RoomBackgroundId } from "@/src/room/ui/roomBackdrops";
 // Type-only: the room's backdrop table carries image require()s, and the store must not pull those in.
 import { isPickupType } from "@/src/game/core/ids";
 import {
@@ -121,8 +122,10 @@ interface GameState {
   renderStyle: RenderStyleId;
   /** Scene background: clean | studio | dot (independent of the model look). */
   backdrop: BackdropId;
-  /** Which hour of the day the room's sun is set to. The room's backdrop photo comes from this too — sunPreset(roomTimeOfDay).backdrop — so there is no separate backdrop setting: a daytime photo behind a night-lit room reads as a bug. Chosen, not clock-driven: the light's angle is a look the player picks, and every preset is authored to enter through walls the camera can see (see src/room/core/timeOfDay.ts). */
+  /** Which hour of the day the room's sun is set to. Chosen, not clock-driven: the light's angle is a look the player picks, and every preset is authored to enter through walls the camera can see (see src/room/core/timeOfDay.ts). Also picks which of the three shots (day/sunset/night) roomBackground's photo shows — see timeOfDayPhase. */
   roomTimeOfDay: TimeOfDayId;
+  /** Which photo hangs outside the room's window — Settings > General > "Room Background". Independent of roomTimeOfDay: that picks the HOUR shown in whichever background this names. Defaults to "bg7". */
+  roomBackground: RoomBackgroundId;
   /** Display theme (backdrop + thumbnails): light | dark | high_contrast. */
   theme: ThemeId;
   /** Which hand drives the build — it MIRRORS the HUD, so the joystick, the trays, the button column and every task control move to the other side. Answered in onboarding's first question and read back at the loading gate (src/app/(onboarding)/loading.tsx). Deliberately out of `settings`: applyProfile replaces that object wholesale, so it would reset on every avatar change. */
@@ -145,6 +148,7 @@ interface GameState {
   setRenderStyle: (style: RenderStyleId) => void;
   setBackdrop: (backdrop: BackdropId) => void;
   setRoomTimeOfDay: (time: TimeOfDayId) => void;
+  setRoomBackground: (background: RoomBackgroundId) => void;
   setTheme: (theme: ThemeId) => void;
   setHandedness: (handedness: Handedness) => void;
   setAssembleDark: (on: boolean) => void;
@@ -356,6 +360,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
   backdrop: "grid",
   // Afternoon: the longest warm pool of the day, and the look the room was tuned against.
   roomTimeOfDay: "afternoon",
+  roomBackground: "bg7",
   // Light by default. The palette (ui/theme.ts) was designed against the dark reference, but light is the safer default for a study: it survives a bright room, a projector, and a participant's own phone brightness, none of which we control. Dark and high-contrast are the SAME product in different light — same three accent hues, same meanings — so switching costs nothing but the setting.
   theme: "light",
   // RIGHT by default, because the HUD was authored right-handed and that is what every screenshot, spotlight offset and tuned margin in the build assumes. A left-hander gets the mirror from their own answer to onboarding's first question; nobody gets it by accident.
@@ -432,6 +437,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
   setRenderStyle: (renderStyle) => set({ renderStyle }),
   setBackdrop: (backdrop) => set({ backdrop }),
   setRoomTimeOfDay: (roomTimeOfDay) => set({ roomTimeOfDay }),
+  setRoomBackground: (roomBackground) => set({ roomBackground }),
   setTheme: (theme) => set({ theme }),
   setAssembleDark: (assembleDark) => set({ assembleDark }),
 

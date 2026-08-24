@@ -8,8 +8,8 @@ import { SETTINGS_ICON } from '../../components/iconAssets';
 import { Button } from '../../game/ui/system/Button';
 import { OverlaySheet } from '../../game/ui/system/OverlaySheet';
 import { SceneBackdrop } from '../../game/ui/backdrop/SceneBackdrop';
-import { ROOM_BACKGROUND } from './roomBackdrops';
-import { ceilingLightOn, type CeilingLightOverride } from '../core/timeOfDay';
+import { roomBackgroundView } from './roomBackdrops';
+import { ceilingLightOn, timeOfDayPhase, type CeilingLightOverride } from '../core/timeOfDay';
 import { useGameStore } from '../../game/core/store';
 import { avatarForProfile } from '@/src/components/avatarAssets';
 import { CARD_CHROME, CREAM, useFixedStyles, useIsTablet, LEXEND } from "@/src/game/ui/system/theme";
@@ -88,6 +88,7 @@ export function RoomExperience() {
   }, [sceneMounted]);
   const hour = useGameStore((s) => s.roomTimeOfDay);
   const setRoomTimeOfDay = useGameStore((s) => s.setRoomTimeOfDay);
+  const roomBackground = useGameStore((s) => s.roomBackground);
 
   const [lightOverride, setLightOverride] = useState<CeilingLightOverride>(null);
   const ceilingLight = ceilingLightOn(hour, lightOverride);
@@ -216,8 +217,8 @@ export function RoomExperience() {
   const safe = useSafeInsets();
   return (
     <View style={s.screen}>
-      {/* The backdrop sits UNDER a transparent Filament view */}
-      <SceneBackdrop source={ROOM_BACKGROUND} fit="cover" style={s.stage}>
+      {/* The backdrop sits UNDER a transparent Filament view. Follows both the chosen Room Background (Settings > General) and the hour (RoomLightControls) — see roomBackgroundView. */}
+      <SceneBackdrop {...roomBackgroundView(roomBackground, timeOfDayPhase(hour))} style={s.stage}>
         {sceneMounted ? (
           <RoomScene
             rotationY={roomRotation}

@@ -121,6 +121,14 @@ export function sunPreset(id: TimeOfDayId): SunPreset {
   return TIME_OF_DAY[id] ?? TIME_OF_DAY.afternoon;
 }
 
+// Which of a Room Background's three shots (day/sunset/night) an hour calls for. Morning, midday and
+// afternoon all read as "day" outside the window — only sunset and night get their own photo — so
+// this collapses TIME_OF_DAY_IDS' five hours down to the three a background actually ships.
+export function timeOfDayPhase(id: TimeOfDayId): "day" | "sunset" | "night" {
+  if (id === "sunset" || id === "night") return id;
+  return "day";
+}
+
 // The renderer wants a plain tuple, and a null direction still needs one — Filament has no "no direction" — so night points straight down at zero intensity, which contributes nothing.
 export function sunDirection(preset: SunPreset): [number, number, number] {
   const d = preset.direction ?? { x: 0, y: -1, z: 0 };
