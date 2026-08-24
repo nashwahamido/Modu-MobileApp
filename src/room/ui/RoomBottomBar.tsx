@@ -75,6 +75,22 @@ const ASSEMBLE_LABEL_TOP = BAR_LABEL_GAP + (ICON_SLOT - (ASSEMBLE_BUTTON_SIZE - 
 const ASSEMBLE_WRAP_HEIGHT =
   ASSEMBLE_BUTTON_SIZE - ASSEMBLE_LIFT + ASSEMBLE_LABEL_TOP + BAR_LABEL_LINE_HEIGHT;
 
+// THE ACTIVE MARK — the disc behind Shop or Inventory while that popup is up, so the bar says which
+// place you are in rather than only that you left the room.
+//
+// Its size is SOLVED against the bar rather than picked, because the brief was that it must not cross
+// the bar's edge and the icon slot does not sit in the middle of the bar: the column is icon + label,
+// centred, so the slot's top edge is the tight side and the label below is slack. The clearance that
+// leaves is what the disc is allowed to spend. Written as a min, so shrinking BAR_HEIGHT shrinks the
+// disc instead of pushing it out through the stroke.
+const ICON_SLOT_TOP = (BAR_HEIGHT - (ICON_SLOT + BAR_LABEL_GAP + BAR_LABEL_LINE_HEIGHT)) / 2;
+/** Cream left between the disc and the bar's inner edge at the tight side. */
+const ACTIVE_DISC_EDGE_GAP = 2;
+const ACTIVE_DISC = Math.min(
+  ICON_SLOT,
+  ICON_SLOT + 2 * (ICON_SLOT_TOP - BAR_STROKE_WIDTH - ACTIVE_DISC_EDGE_GAP),
+);
+
 const ASSEMBLE_COLLAR_ARC = (() => {
   const r = ASSEMBLE_COLLAR_SIZE / 2;
   const barTop = -(BAR_HEIGHT - ASSEMBLE_WRAP_HEIGHT) / 2 + BAR_STROKE_WIDTH / 2;
@@ -91,10 +107,13 @@ export function RoomBottomBar({
   onOpenShop,
   onOpenInventory,
   onOpenVisit,
+  active,
 }: {
   onOpenShop: () => void;
   onOpenInventory: () => void;
   onOpenVisit: () => void;
+  /** Which popup is open, if any. These three and no more: they are the destinations that stay open OVER the room, so the bar is still on screen to say where you are. Assemble and You navigate AWAY — the room unmounts, and there is nothing left to mark. */
+  active?: 'shop' | 'inventory' | 'friends' | null;
 }) {
   // SCALED on tablets, 1:1 on phones. The sheet is scaled by the SAME k (useScaledStyles); what does NOT scale
   // automatically is everything that is not a style property — the collar's SVG, the chevron's `size`
@@ -142,10 +161,12 @@ export function RoomBottomBar({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Shop"
+              accessibilityState={{ selected: active === 'shop' }}
               style={s.barItem}
               onPress={onOpenShop}
             >
               <View style={s.iconSlot}>
+                {active === 'shop' ? <View style={s.activeDisc} /> : null}
                 <Image source={SHOP_ICON} style={s.shopIcon} resizeMode="contain" />
               </View>
               <Text style={s.barLabel}>Shop</Text>
@@ -158,10 +179,12 @@ export function RoomBottomBar({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Inventory"
+              accessibilityState={{ selected: active === 'inventory' }}
               style={s.barItem}
               onPress={onOpenInventory}
             >
               <View style={s.iconSlot}>
+                {active === 'inventory' ? <View style={s.activeDisc} /> : null}
                 <Image source={INVENTORY_ICON} style={s.barIcon} resizeMode="contain" />
               </View>
               <Text style={s.barLabel}>Inventory</Text>
@@ -216,10 +239,12 @@ export function RoomBottomBar({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Visit friends"
+              accessibilityState={{ selected: active === 'friends' }}
               style={s.barItem}
               onPress={onOpenVisit}
             >
               <View style={s.iconSlot}>
+                {active === 'friends' ? <View style={s.activeDisc} /> : null}
                 <Image source={VISIT_FRIENDS_ICON} style={s.friendsIcon} resizeMode="contain" />
               </View>
               <Text style={s.barLabel}>Friends</Text>
@@ -334,9 +359,26 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   },
   
   iconSlot: {
+    // Square, so the disc below has a box to centre in. Layout-neutral without it too: the icons are
+    // wider than this and simply overhang, and they were already centred on the item's own centre.
+    width: ICON_SLOT,
     height: ICON_SLOT,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // Absolute, so it paints UNDER the icon without taking part in the layout — the same arrangement the
+  // shop's active category uses, and for the same reason: a disc drawn as the icon's background would
+  // be clipped by the box the artwork overhangs.
+  //
+  // Centred on the ITEM, not on the drawing. The cart is nudged 4pt left of centre for optical reasons
+  // (SHOP_ICON_NUDGE_X) and following that here would sit Shop's disc 4pt off the line Inventory's
+  // disc and both labels stand on, which reads as a mistake at a glance where the nudge does not.
+  activeDisc: {
+    position: 'absolute',
+    width: ACTIVE_DISC,
+    height: ACTIVE_DISC,
+    borderRadius: ACTIVE_DISC / 2,
+    backgroundColor: CREAM.navActive,
   },
   barIcon: {
     width: BAR_ICON_SIZE,

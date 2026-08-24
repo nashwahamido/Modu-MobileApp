@@ -22,6 +22,7 @@ export function snapshotBuild(ownerId: UserId, state: GameState): BuildSave | nu
 
 // Re-apply a save onto the store. Call AFTER loadFurniture (which resets progress) so this restores on top of the freshly loaded model. Only progress fields are touched — never furniture itself.
 export function applyBuild(save: BuildSave): void {
+  // The save's mode ALWAYS wins here, including over a furniture's `meta.mode` — that field is only ever the mode a build OPENS in, and a save means this build has been opened before. So a furniture default is seen on the first entry and never again, which is the intent: it is a starting nudge, not a property of the furniture.
   useGameStore.setState({
     completed: save.completed,
     tightenDeg: save.tightenDeg,

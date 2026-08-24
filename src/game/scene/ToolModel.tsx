@@ -21,8 +21,8 @@ const REST_AXIS: Partial<Record<ToolId, [number, number, number]>> = {
   mallet: [0, 0, 1],
 };
 
-/** Clearance between the tool's contact origin and the fastener origin. */
-const TIP_GAP_M = 0.012;
+/** Clearance between the tool's contact origin and the fastener's HEAD FACE. Was 0.012 measured off the part ORIGIN — an accidental stand-in for a screw's half-length that only matched EKET's ~24mm screws; now the generated `headOffset` supplies the real half-length per fastener and this is a true small clearance. VERIFY ON DEVICE: the EKET suspension-bracket tighten (authored toolAnchor at the boss) was user-verified under the old 12mm hover and now sits 10mm closer to the back panel. */
+const TIP_GAP_M = 0.002;
 
 /** How far the mallet pulls back between strikes. */
 const MALLET_SWING_M = 0.07;
@@ -63,8 +63,17 @@ export function ToolModel({ action }: { action: AssemblyAction }) {
     const align = axisAngleBetween(restAxis, axis);
     const p = Math.min(1, deg / TIGHTEN_TOTAL_DEG);
 
-    // Anchor at the authored tool contact point when the node origin isn't it (EKET suspension bracket: origin on the plate, screw hole at the circular boss); insertProud-0 parts rest flush, so the tool tip starts at the hole instead of following a 2cm proud head.
-    const [ax0, ay0, az0] = part.toolAnchor ?? [0, 0, 0];
+    // Anchor priority: authored toolAnchor outright (EKET suspension bracket: origin on the plate, screw hole at the circular boss — deliberately SIDEWAYS of the tool axis, so it must never be projected) > generated headOffset PROJECTED onto the live tool axis (the projection keeps it exact for straight fasteners and harmlessly ~0 where an authored engageDir override redirects the axis away from the mesh frame, e.g. EKET cams whose mesh −Z is the panel-thickness direction) > the part origin. insertProud-0 parts rest flush, so the tool tip starts at the contact point instead of following a 2cm proud head.
+    const [ax0, ay0, az0] = part.toolAnchor ??
+      (part.headOffset
+        ? (() => {
+            const d =
+              part.headOffset[0] * axis[0] +
+              part.headOffset[1] * axis[1] +
+              part.headOffset[2] * axis[2];
+            return [axis[0] * d, axis[1] * d, axis[2] * d] as const;
+          })()
+        : [0, 0, 0]);
     const anchor: [number, number, number] = [
       pose.position[0] + ax0,
       pose.position[1] + ay0,

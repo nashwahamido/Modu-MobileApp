@@ -195,7 +195,6 @@ export default function VisitScreen() {
         <RoomLoadingOverlay
           dataReady={!loading}
           sceneReady={sceneReady}
-          avatar={{ initial: hostName.charAt(0).toUpperCase() }}
           label={`${hostName}'s room`}
           onRevealed={() => setRevealed(true)}
         />

@@ -7,8 +7,8 @@ import { LEXEND, Theme, useFixedStyles, useIsTablet } from "@/src/game/ui/system
 import { advance, type Milestone } from "./loadingProgress";
 
 const clayPattern = require("@/src/assets/ui/landing/clay-pattern.png");
-const purpleWaveLeft = require("@/src/assets/ui/landing/Purple wave_left.png");
-const purpleWaveRight = require("@/src/assets/ui/landing/Purple wave_right.png");
+const purpleWaveLeft = require("@/src/assets/ui/landing/purple-wave-left.png");
+const purpleWaveRight = require("@/src/assets/ui/landing/purple-wave-right.png");
 const wavyLeft2 = require("@/src/assets/ui/landing/wavy-left-2.png");
 const wavyRight1 = require("@/src/assets/ui/landing/wavy-right-1.png");
 const modumascot = require("@/src/assets/images/mascot/modu-mascot.png");
@@ -37,38 +37,43 @@ function useWaveSizes() {
 
 const WAVE_STAGGER = 90;
 const WAVE_MS = 500;
-/** Idle drift once a layer has settled: half-amplitude in px and one leg's duration. Each caller
- *  passes its own `floatMs` so the four layers drift out of phase instead of in lockstep — that's
- *  the whole "asynchronous" look, not a randomised value (which would differ every reload). */
+/** Idle drift once a layer has settled: half-amplitude in px and one full cycle's duration. Each
+ *  caller passes its own `floatMs` so the four layers drift out of phase instead of in lockstep —
+ *  that's the whole "asynchronous" look, not a randomised value (which would differ every reload). */
 const FLOAT_AMP = 20;
+/** A precomputed sine table, not a ping-pong `Animated.sequence` between +/-FLOAT_AMP: a sequence
+ *  needs a JS-thread round trip to hand off between legs, which is exactly the stutter at each
+ *  turnaround that reads as "laggy". One continuous `Animated.loop` driving a single linear phase
+ *  through this table has no direction to reverse — the phase always moves the same way, only the
+ *  interpolated OUTPUT curves — so there's nothing for the JS thread to hand off mid-cycle. The
+ *  loop's own restart (phase 1 → 0) is seamless too: sin(2π) === sin(0), so the position doesn't
+ *  jump at the wrap. */
+const SINE_STEPS = 24;
+const SINE_INPUT = Array.from({ length: SINE_STEPS + 1 }, (_, i) => i / SINE_STEPS);
+const SINE_OUTPUT = SINE_INPUT.map((p) => Math.sin(p * Math.PI * 2) * FLOAT_AMP);
 
 interface WaveInOptions {
   /** Mirrors the art vertically (the purple-wave source art is authored bottom-up) — folded into
    *  the same transform array as the animated translateX, since RN style merging replaces a later
    *  `transform` array wholesale rather than combining it with an earlier one. */
   flipY?: boolean;
-  /** One leg of the idle float loop's duration, once the entrance settles. Vary this per layer. */
+  /** One full float cycle's duration, once the entrance settles. Vary this per layer. */
   floatMs?: number;
 }
 
 /** One wave layer's entrance: fades and slides in from `fromX` px off its resting position,
- *  starting `delay` ms after mount, while a SEPARATE value idly ping-pongs a few px side to side
- *  the whole time (added to the entrance offset, not sequenced after it) — so the float is already
- *  moving by the time the slide-in settles instead of visibly kicking off late. Two legs, not
- *  three, and `quad` rather than `sin`: fewer JS-thread handoffs between legs and a gentler
- *  ease-in reads as smoother than the more pronounced slow-start `sin` gave. */
+ *  starting `delay` ms after mount, while a SEPARATE value idly sweeps a few px side to side the
+ *  whole time (added to the entrance offset, not sequenced after it) — so the float is already
+ *  moving by the time the slide-in settles instead of visibly kicking off late. */
 function useWaveIn(delay: number, fromX: number, { flipY = false, floatMs = 2600 }: WaveInOptions = {}) {
   const opacity = useRef(new Animated.Value(0)).current;
   const entranceX = useRef(new Animated.Value(fromX)).current;
-  const floatX = useRef(new Animated.Value(0)).current;
+  const phase = useRef(new Animated.Value(0)).current;
+  const floatX = useRef(phase.interpolate({ inputRange: SINE_INPUT, outputRange: SINE_OUTPUT })).current;
   const x = useRef(Animated.add(entranceX, floatX)).current;
   useEffect(() => {
-    const ease = Easing.inOut(Easing.quad);
     const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(floatX, { toValue: FLOAT_AMP, duration: floatMs, easing: ease, useNativeDriver: true }),
-        Animated.timing(floatX, { toValue: -FLOAT_AMP, duration: floatMs, easing: ease, useNativeDriver: true }),
-      ])
+      Animated.timing(phase, { toValue: 1, duration: floatMs, easing: Easing.linear, useNativeDriver: true })
     );
     loop.start();
     const t = setTimeout(() => {

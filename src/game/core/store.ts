@@ -365,6 +365,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
   loadFurniture: (f) =>
     set({
       furniture: f,
+      // A furniture may pin the mode its build OPENS in (meta.mode), outranking the profile mode this store was left in. Only the opening value: a resumed build's own mode lands right after, via applyBuild, so a player who switched mid-build gets their switch back rather than this.
+      mode: f.meta.mode ?? get().mode,
       completed: [],
       undoneActions: [],
       activeCluster: null,

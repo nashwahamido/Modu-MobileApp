@@ -5,6 +5,7 @@ import { applyBuild, snapshotBuild } from "@/src/game/core/buildSave";
 import { useGameStore } from "@/src/game/core/store";
 import type { FurnitureId } from "@/src/game/core/type";
 import { useCurrentUserId, useRepos } from "@/src/data";
+import { useShopStore } from "@/src/data/shop/store";
 
 // Wait this long after the last progress change before writing, so a burst of taps is one save.
 const AUTOSAVE_DEBOUNCE_MS = 600;
@@ -66,7 +67,11 @@ export function useBuildPersistence(
         // Finished: grant the reward (server-authoritative amount from item_build; idempotent — one per build, so the debounce + unmount flush can't double-pay), record the completion (backs assembly_count), and drop the save. complete() only runs once reward() has settled: complete() DELETES the in-progress save, so running them concurrently means a failed reward loses both the coins and the progress that would let the player earn them again. Both are idempotent, so a retry costs nothing.
         repos.builds
           .reward(me, save.furnitureId)
-          .then(() => repos.builds.complete(me, save.furnitureId))
+          .then((granted) => {
+            // The grant already put this in user_buy; this is the CLIENT catching up. useShopStore.load() skips the fetch when the user's data is already cached, and the Inventory popup opens seconds later from the completion screen — so without this the item is granted server-side and simply missing from the list the player is looking at. Purchases mark themselves owned the same way, for the same reason.
+            if (granted.rewardItemId) useShopStore.getState().markOwned(granted.rewardItemId);
+            return repos.builds.complete(me, save.furnitureId);
+          })
           // The repos THROW on any Postgrest error. This runs from an effect cleanup, so there is no UI left to tell — but an uncaught rejection here meant a finished build silently paid nothing while BuildComplete promised the player coins and XP.
           .catch((err) => console.warn(`[build] reward/complete failed for ${save.furnitureId}`, err));
       } else {

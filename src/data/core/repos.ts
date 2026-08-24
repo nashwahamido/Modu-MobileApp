@@ -68,10 +68,35 @@ export type BuiltItem = { id: FurnitureId; name: string; category: ShopCategory 
 // The counts a recipe derives locally and mirrors into the catalog. Never read back for display — the bundle already knows them, and its copy is always current.
 export type SyncedCounts = { stepCount: number; stageCount: number; clusterCount: number };
 
+// The ITEM a build grants beside its currency, as the catalog describes it (item_build.reward_item_id -> item_buy, migration 027). Absent when the column is null, which is every furniture until a reward item is authored — the completion screen then shows coins and XP alone rather than naming something nothing will deliver, which is precisely what the hardcoded "succulent plant" did before this existed.
+export type RewardItem = { id: ShopItemId; name: string; category: ShopCategory };
+
 // The reward a build is worth (what the screen shows and the grant applies).
-export type BuildRewardAmount = { coins: number; xp: number };
-// The result of granting a finished build's reward. alreadyRewarded=true means the build was already rewarded (idempotent no-op); coins/xp are the profile's totals after the grant.
-export type BuildReward = { coins: number; xp: number; alreadyRewarded: boolean };
+export type BuildRewardAmount = { coins: number; xp: number; item?: RewardItem };
+// The result of granting a finished build's reward. alreadyRewarded=true means the build was already rewarded (idempotent no-op); coins/xp are the profile's totals after the grant. rewardItemId is what the grant PUT IN THE INVENTORY, so the caller can mark it owned without re-reading the owned list; absent when the furniture grants no item.
+export type BuildReward = { coins: number; xp: number; alreadyRewarded: boolean; rewardItemId?: ShopItemId };
+
+// One item_buy row as the embedded select returns it — only the three fields the reward display needs.
+type RewardItemRow = { id: string; name: string; category_id: string };
+
+// One item_build reward row exactly as Postgrest hands it back. The currency columns are nullable here and not on the domain type because a furniture with NO catalog row at all yields nulls, which reward_build coalesces to 0 and this mapper matches.
+export type BuildRewardRow = {
+  coin_reward: number | null;
+  xp_reward: number | null;
+  // OBJECT OR ARRAY, and the union is load-bearing rather than defensive: Postgrest returns an embedded row either way depending on the relationship it infers, and listCompletedItems already normalises both for exactly this reason. Absent when the select did not ask for it; null when the FK is null.
+  item_buy?: RewardItemRow | RewardItemRow[] | null;
+};
+
+// BuildRewardRow -> BuildRewardAmount. Pulled out of the adapter and made pure for the same reason toPlaceableRoomRow was: `item` is optional, so a hand-written literal can drop it with no type error, and a bug that exists on only one side of an adapter boundary needs a test on that side.
+export function toBuildRewardAmount(row: BuildRewardRow): BuildRewardAmount {
+  const embed = Array.isArray(row.item_buy) ? row.item_buy[0] : row.item_buy;
+  return {
+    coins: row.coin_reward ?? 0,
+    xp: row.xp_reward ?? 0,
+    // Spread rather than `item: undefined`, so a furniture with no reward item produces an object with NO item key — which is what the deepEqual in the tests pins, and what stops `"item" in reward` from answering yes to a reward that has none.
+    ...(embed ? { item: { id: embed.id, name: embed.name, category: embed.category_id as ShopCategory } } : {}),
+  };
+}
 
 // A buildable furniture's catalogue row. The DB is the SINGLE SOURCE for all of it — the bundle keeps only what it must (the thumbnail asset, and the counts it derives from the recipe), so editing a row here changes the catalogue without an app build.
 export type BuildCatalogRow = {
