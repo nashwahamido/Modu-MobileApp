@@ -17,7 +17,6 @@ interface Props {
 }
 
 export function LoadingOverlay({ milestone, error, onRetry, onBack, onFadedOut }: Props) {
-  const profile = useGameStore((s) => s.profile);
   const furniture = useGameStore((s) => s.furniture);
   // The name shown while loading is DB-authored; before the catalogue lands this falls back to LoadingScreen's default.
   const catalogRow = useCatalogRow(furniture?.meta.id ?? null);
@@ -28,8 +27,6 @@ export function LoadingOverlay({ milestone, error, onRetry, onBack, onFadedOut }
       overlay
       fadeOnComplete
       milestone={milestone}
-      // Avatar placeholder: the active profile's initial in the ring — real art replaces the Text without layout changes.
-      avatar={{ initial: profile.charAt(0).toUpperCase() }}
       label={catalogRow ? `${catalogRow.name} · ${catalogRow.brand}` : undefined}
       errorMessage={
         error ? (simple ? "This didn't load." : "Couldn't load this furniture.") : undefined
