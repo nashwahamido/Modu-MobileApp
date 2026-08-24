@@ -1,18 +1,8 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState } from 'react';
-import { router,
-  useLocalSearchParams,
-  useRootNavigationState } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { router, useLocalSearchParams, useRootNavigationState } from 'expo-router';
 import type { Href } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { StyleSheet,
-  Image,
-  Text,
-  View,
-} from "react-native";
+import { StyleSheet, Image, Text, View } from "react-native";
 import { Pressable } from "@/src/components/Pressable";
 import { SETTINGS_ICON } from '../../components/iconAssets';
 import { Button } from '../../game/ui/system/Button';
@@ -38,6 +28,8 @@ import {
   type PlacementGuideInteraction,
   type PlacementGuideTarget,
 } from './PlacementRail';
+import { useProfileHud } from '../../hooks/useProfileHud';
+import { LevelUpCelebration } from './LevelUpCelebration';
 import { RoomTopStats } from './RoomTopStats';
 import { ShopOverlay } from '../../shop/ShopOverlay';
 import { InventoryOverlay } from '../../inventory/InventoryOverlay';
@@ -53,6 +45,14 @@ const ROOM_CHIP_FILL = '#FBFAF3';
 // The artwork inside the chip. Short of the chip so the gear reads as sitting ON a tile rather than
 // filling it — the same relationship the assembly HUD's icons have to their chips.
 const SETTINGS_ICON_FRACTION = 0.92;
+// The gear is NOT centred in its own file, and `contain` centres the CANVAS rather than the drawing —
+// so the file's own offset lands on screen as an icon parked high in its chip. Measured on alpha,
+// icon-settings.png draws x 12..208 and y 3..202 of a 218x218 canvas: a centre 6.5px above and 1px
+// right of the canvas's, which at the rendered size left twice as much chip below the gear as above.
+// Expressed as a fraction of the ICON BOX so it holds at any scale, phone and tablet alike.
+// RE-MEASURE IF THE PNG IS RE-EXPORTED: nudge = (canvas/2 - drawnCentre) / canvas, per axis.
+const SETTINGS_ART_NUDGE_X = -1 / 218;
+const SETTINGS_ART_NUDGE_Y = 6.5 / 218;
 
 const ROOM_EDIT_GUIDE_KEY = 'modu.room-edit-guide-seen.v1';
 const ROOM_WELCOME_GUIDE_KEY = 'modu.room-welcome-guide-seen.v1';
@@ -96,6 +96,9 @@ export function RoomExperience() {
   const hydrate = usePlacementStore((p) => p.hydrate);
   const hydrated = usePlacementStore((p) => p.hydrated);
   const editing = usePlacementStore((p) => p.activeEdit !== null);
+  // The level the profile currently reports. LevelUpCelebration compares it against the last one it
+  // congratulated, so this is just "what they are now", not "did something happen".
+  const hudProfile = useProfileHud();
   const placedFurnitureCount = usePlacementStore((p) => p.layout.length);
   useEffect(() => {
     hydrate(me);
@@ -254,6 +257,12 @@ export function RoomExperience() {
             style={{
               width: SETTINGS_DISC * SETTINGS_ICON_FRACTION * k,
               height: SETTINGS_DISC * SETTINGS_ICON_FRACTION * k,
+              // A transform, not a margin: this corrects where the ART lands, and the box it sits in
+              // is already centred in the chip. A margin would move the box and unbalance that.
+              transform: [
+                { translateX: SETTINGS_DISC * SETTINGS_ICON_FRACTION * SETTINGS_ART_NUDGE_X * k },
+                { translateY: SETTINGS_DISC * SETTINGS_ICON_FRACTION * SETTINGS_ART_NUDGE_Y * k },
+              ],
             }}
             resizeMode="contain"
           />
@@ -272,6 +281,15 @@ export function RoomExperience() {
       </View>
 
       <RoomTopStats />
+
+      {/* Fires only when the level has climbed past the last one celebrated — see the component.
+          Held back while a placement is in progress or a guide is up: those are the player steering
+          something, and a full-screen reward over them takes the room away mid-action. */}
+      <LevelUpCelebration
+        level={hudProfile?.level ?? null}
+        title={hudProfile?.title ?? null}
+        blocked={editing || showRoomWelcomeGuide}
+      />
 
       {/* TWO LAYOUTS, chosen by device — not one layout scaled.
           A phone is narrow and tall-ish in landscape: a band across the bottom eats the floor, which is
@@ -418,8 +436,8 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   },
   // A rounded-square CHIP, matching the small buttons on the assembly HUD (game/ui/hud/hudChrome's
   // IconButtonBare). The shadow fits now because it follows this container rather than the artwork:
-  // icon-settings.png draws its disc across only 174 of its 196px canvas and off-centre in it, so a
-  // shadow cast by the image's own box ringed the drawing instead of sitting under it.
+  // icon-settings.png draws off-centre in its own canvas (see SETTINGS_ART_NUDGE_Y), so a shadow cast
+  // by the image's own box ringed the drawing instead of sitting under it.
   settingsButton: {
     borderRadius: ROOM_CHIP_RADIUS,
     backgroundColor: ROOM_CHIP_FILL,

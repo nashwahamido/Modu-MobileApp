@@ -41,9 +41,22 @@ const FIGURE_H = Math.round(FIGURE_W * (941 / 915));
 // disk.png 
 const FIGURE_SHADOW_W = Math.round(FIGURE_W * 1.05);
 const FIGURE_SHADOW_H = Math.round(FIGURE_SHADOW_W * (196 / 748));
+/** Phone only. Nudges the mascot and its ground shadow right of the wordmark's own centre line —
+ *  the wordmark itself (swapped out before this shows) stays centred, and tablet is untouched. */
+const FIGURE_X_SHIFT = 12;
 const BRAND_BOX = Math.max(WORDMARK_H, FIGURE_H) + 12;
 const GROUP_LIFT = 56;
 const ACTIONS_BOTTOM_GAP = 56 + 28;
+
+/** Phone only. Base offset is `2*GROUP_LIFT - SIZE.controlHeight` — the distance that puts the
+ *  mascot's own centre exactly halfway between the screen's top edge and the top of this row (see
+ *  `groupLift` below). `PHONE_ACTIONS_LIFT` pulls the row up from there, closer under the mascot. */
+const PHONE_ACTIONS_LIFT = 14;
+/** Phone only. Raises the mascot+disk group AND the button row together by this much, on top of
+ *  everything above — so the whole composition sits higher on screen while the gap between them
+ *  (already tuned via `PHONE_ACTIONS_LIFT`) stays the same. */
+const PHONE_GROUP_RAISE = 20;
+const PHONE_ACTIONS_BOTTOM_GAP = 2 * GROUP_LIFT - 44 + PHONE_ACTIONS_LIFT + PHONE_GROUP_RAISE;
 
 const TABLET_ACTIONS_LIFT = 46;
 
@@ -148,7 +161,10 @@ export default function App() {
     wordmarkScale.value = withDelay(STILL_MS, withTiming(0.85, { duration: SWAP_MS, easing: WAVE_EASE }));
     figureOpacity.value = withDelay(STILL_MS, withTiming(1, { duration: SWAP_MS, easing: WAVE_EASE }));
     figureScale.value = withDelay(STILL_MS, withTiming(1, { duration: SWAP_MS, easing: WAVE_EASE }));
-    groupLift.value = withDelay(STILL_MS, withTiming(-GROUP_LIFT * k, { duration: SWAP_MS, easing: WAVE_EASE }));
+    groupLift.value = withDelay(
+      STILL_MS,
+      withTiming(-(GROUP_LIFT * k + (isTablet ? 0 : PHONE_GROUP_RAISE)), { duration: SWAP_MS, easing: WAVE_EASE })
+    );
 
     actionsOpacity.value = withDelay(BUTTONS_DELAY, withTiming(1, { duration: BUTTONS_MS, easing: WAVE_EASE }));
     actionsY.value = withDelay(BUTTONS_DELAY, withTiming(0, { duration: BUTTONS_MS, easing: WAVE_EASE }));
@@ -162,12 +178,14 @@ export default function App() {
     opacity: wordmarkOpacity.value,
     transform: [{ scale: wordmarkScale.value }],
   }));
+  const figureXShift = isTablet ? 0 : FIGURE_X_SHIFT;
   const figureStyle = useAnimatedStyle(() => ({
     opacity: figureOpacity.value,
-    transform: [{ scale: figureScale.value }, { translateY: 10 }],
+    transform: [{ scale: figureScale.value }, { translateY: 10 }, { translateX: figureXShift }],
   }));
   const figureShadowStyle = useAnimatedStyle(() => ({
     opacity: figureOpacity.value,
+    transform: [{ translateX: figureXShift }],
   }));
   const actionsStyle = useAnimatedStyle(() => ({
     opacity: actionsOpacity.value,
@@ -234,19 +252,20 @@ export default function App() {
           styles.actions,
           actionsStyle,
           {
-            bottom: ACTIONS_BOTTOM_GAP * k + (isTablet ? TABLET_ACTIONS_LIFT * k : 0) + safe.bottom,
+            bottom: isTablet
+              ? ACTIONS_BOTTOM_GAP * k + TABLET_ACTIONS_LIFT * k + safe.bottom
+              : PHONE_ACTIONS_BOTTOM_GAP + safe.bottom,
             left: safe.left,
             right: safe.right,
           },
         ]}
       >
         <Link href="/auth" asChild>
-          {/* T */}
           <Button
             label="New User"
             variant="primary"
             pill
-            style={[styles.actionButton, isTablet && styles.actionButtonTablet]}
+            style={{ ...styles.actionButton, ...(isTablet ? styles.actionButtonTablet : null) }}
             labelStyle={isTablet && styles.actionLabelTablet}
           />
         </Link>
@@ -255,7 +274,7 @@ export default function App() {
             label="Choose Account"
             variant="primary"
             pill
-            style={[styles.actionButton, isTablet && styles.actionButtonTablet]}
+            style={{ ...styles.actionButton, ...(isTablet ? styles.actionButtonTablet : null) }}
             labelStyle={isTablet && styles.actionLabelTablet}
           />
         </Link>
@@ -349,9 +368,9 @@ const makeStyles = (t: Theme) =>
   },
 
   actionButtonTablet: {
-    width: 220,
+    width: 197,
     minWidth: undefined,
-    minHeight: 52,
+    minHeight: 44,
     paddingHorizontal: SPACE.xl,
   },
 
