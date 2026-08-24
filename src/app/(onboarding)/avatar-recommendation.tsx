@@ -364,232 +364,286 @@ export default function AvatarRecommendationScreen() {
             paddingLeft: 38 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
             paddingRight: 38 + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN),
             paddingTop: 18 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
-            paddingBottom: 18 + Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN),
+            paddingBottom:
+              18 + Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN),
           },
         ]}
       >
-      <View
-        style={[
-          styles.header,
-          {
-            top: 20 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
-            right: 4 + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN),
-          },
-        ]}
-      >
-        <Pressable
-          onPress={() => {
-            Speech.stop();
-            router.back();
-          }}
-          style={styles.navButton}
+        <View
+          style={[
+            styles.header,
+            {
+              top: 20 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
+              right: 4 + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN),
+            },
+          ]}
         >
-          {/* The drawn arrow head, same asset the questionnaire uses — a "<" glyph is a
+          <Pressable
+            onPress={() => {
+              Speech.stop();
+              router.back();
+            }}
+            style={styles.navButton}
+          >
+            {/* The drawn arrow head, same asset the questionnaire uses — a "<" glyph is a
               less-than sign that happens to look like an arrow, and it renders differently in
               every font. */}
-          <Image
-            source={require("@/src/assets/ui/icons/arrow-back.png")}
-            style={styles.navArrow}
-            resizeMode="contain"
-          />
-        </Pressable>
-      </View>
+            <Image
+              source={require("@/src/assets/ui/icons/arrow-back.png")}
+              style={styles.navArrow}
+              resizeMode="contain"
+            />
+          </Pressable>
+        </View>
 
-      {/* Top-left of the SCREEN, not of the layout row: it reads the page aloud, so it belongs with
+        {/* Top-left of the SCREEN, not of the layout row: it reads the page aloud, so it belongs with
           the page's own chrome rather than inside the content it narrates. */}
-      <VoiceButton
-        onPress={speakSelectedMode}
-        style={[
-          styles.audioButton,
-          {
-            top: 20 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
-            left: 4 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
-          },
-        ]}
-      />
+        <VoiceButton
+          onPress={speakSelectedMode}
+          style={[
+            styles.audioButton,
+            {
+              top: 20 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
+              left: 4 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+            },
+          ]}
+        />
 
-      <View style={styles.recommendationLayout}>
-        {/* No card. The avatar IS the object here, and a frame around a circle was two shapes
+        <View style={styles.recommendationLayout}>
+          {/* No card. The avatar IS the object here, and a frame around a circle was two shapes
             competing to be the thing you look at. */}
-        <View style={styles.modeColumn}>
-          <PopIn delay={STAGE.avatar} big animate={introPlaying}>
-            {/* ONE circle colour for every mode. Per-mode tints made the four cards read as four
+          <View style={styles.modeColumn}>
+            <PopIn delay={STAGE.avatar} big animate={introPlaying}>
+              {/* ONE circle colour for every mode. Per-mode tints made the four cards read as four
                 different components, and the avatars — which now carry their own colour — had to
                 sit on whatever hue the mode happened to own. Control's light lavender is the one
                 that worked against all four characters. */}
-            <View style={styles.avatarCircle}>
-              {/* White at the centre falling to cream at the rim, matching the tutorial portrait and
+              <View style={styles.avatarCircle}>
+                {/* White at the centre falling to cream at the rim, matching the tutorial portrait and
                   the hint toast — one backing for a character wherever it appears. */}
-              <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
-                <Defs>
-                  {/* The SAME three stops as the auth screen's character cards (dev/AccountPicker):
+                <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+                  <Defs>
+                    {/* The SAME three stops as the auth screen's character cards (dev/AccountPicker):
                       a character sits on one backing wherever it is chosen. */}
-                  <RadialGradient id="avatarglow" cx="50%" cy="40%" r="62%">
-                    <Stop offset="0" stopColor="#FFFFFF" />
-                    <Stop offset="0.55" stopColor="#F7F1E6" />
-                    <Stop offset="1" stopColor="#DCCFB8" />
-                  </RadialGradient>
-                </Defs>
-                <Rect x="0" y="0" width="100%" height="100%" fill="url(#avatarglow)" />
-              </Svg>
-              <Image
-                source={selectedMode.image}
-                style={styles.avatarImage}
-                // contain: these are FULL BODY portraits, and cropping them to fill the circle cut
-                // heads off — the head tiles elsewhere are cover because a head has no such problem.
-                resizeMode="contain"
-              />
-            </View>
-            {/* Outside the circle's overflow:hidden, so the glints can sit ON its rim. */}
-            <View style={styles.sparkLayer} pointerEvents="none">
-              {(introPlaying ? SPARKS : []).map((sp, i) => (
-                <Spark key={i} x={sp.x} y={sp.y} size={sp.size} delay={STAGE.spark + sp.delay} />
+                    <RadialGradient id="avatarglow" cx="50%" cy="40%" r="62%">
+                      <Stop offset="0" stopColor="#FFFFFF" />
+                      <Stop offset="0.55" stopColor="#F7F1E6" />
+                      <Stop offset="1" stopColor="#DCCFB8" />
+                    </RadialGradient>
+                  </Defs>
+                  <Rect
+                    x="0"
+                    y="0"
+                    width="100%"
+                    height="100%"
+                    fill="url(#avatarglow)"
+                  />
+                </Svg>
+                <Image
+                  source={selectedMode.image}
+                  style={styles.avatarImage}
+                  // contain: these are FULL BODY portraits, and cropping them to fill the circle cut
+                  // heads off — the head tiles elsewhere are cover because a head has no such problem.
+                  resizeMode="contain"
+                />
+              </View>
+              {/* Outside the circle's overflow:hidden, so the glints can sit ON its rim. */}
+              <View style={styles.sparkLayer} pointerEvents="none">
+                {(introPlaying ? SPARKS : []).map((sp, i) => (
+                  <Spark
+                    key={i}
+                    x={sp.x}
+                    y={sp.y}
+                    size={sp.size}
+                    delay={STAGE.spark + sp.delay}
+                  />
+                ))}
+              </View>
+            </PopIn>
+            {/* Straddling the top of the circle, so it reads as pinned ON the avatar rather than
+              floating beside it. */}
+            {selectedMode.id === initialModeId ? (
+              <Animated.View
+                style={[
+                  styles.recommendedBadge,
+                  {
+                    transform: [
+                      {
+                        scale: badgePulse.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [1, 1.06],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              >
+                <Text style={styles.recommendedBadgeText}>Recommended</Text>
+              </Animated.View>
+            ) : null}
+          </View>
+
+          <View style={styles.recommendationCopy}>
+            <SlideDown delay={STAGE.title} animate={introPlaying}>
+              <Text style={styles.title}>
+                {selectedMode.avatarName}: {selectedMode.title}
+              </Text>
+            </SlideDown>
+            {/* The three traits become chips: short, parallel, and read at a glance rather than as a
+              sentence to parse. */}
+            <View style={styles.traitRow}>
+              {selectedMode.personality.split(",").map((trait, i) => (
+                <PopIn
+                  key={trait}
+                  delay={STAGE.traits + i * STAGE.traitStep}
+                  animate={introPlaying}
+                  style={styles.traitChip}
+                >
+                  <StarIcon size={12} color={t.accent} />
+                  <Text style={styles.traitText}>{sentenceCase(trait)}</Text>
+                </PopIn>
               ))}
             </View>
-          </PopIn>
-          {/* Straddling the top of the circle, so it reads as pinned ON the avatar rather than
-              floating beside it. */}
-          {selectedMode.id === initialModeId ? (
+            <View style={styles.bulletList}>
+              {selectedMode.bullets.map((bullet, i) => (
+                <SlideDown
+                  key={bullet}
+                  delay={STAGE.bullets + i * STAGE.bulletStep}
+                  animate={introPlaying}
+                  style={styles.bulletRow}
+                >
+                  {/* A tick, not a dot: these are what the mode GIVES you, and a check says that where
+                    a bullet only separates lines. */}
+                  <CheckIcon size={15} color={t.success} />
+                  <Text style={styles.bulletText}>{bullet}</Text>
+                </SlideDown>
+              ))}
+            </View>
+            {saveError ? (
+              <Text style={styles.saveErrorText}>{saveError}</Text>
+            ) : null}
+            <PopIn
+              delay={STAGE.confirm}
+              animate={introPlaying}
+              style={styles.confirmWrap}
+            >
+              <ConfirmHalo />
+              <Button
+                label={savingChoice ? "Saving..." : "Confirm"}
+                variant="primary"
+                style={styles.confirmButton}
+                onPress={confirmAvatar}
+                disabled={savingChoice}
+              />
+            </PopIn>
+          </View>
+        </View>
+
+        <SlideDown
+          delay={STAGE.tabs}
+          animate={introPlaying}
+          style={[
+            styles.modeTabsWrap,
+            {
+              // 38 to match the content column's own inset, so the tab row lines up with the copy above it rather than running wider than everything else on the screen.
+              left: 38 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+              right: 38 + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN),
+              bottom:
+                Math.max(28 * scale) +
+                Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN),
+            },
+          ]}
+        >
+          {/* Names what the row is for. Without it the four tabs read as navigation the player is
+            expected to work through, rather than an alternative to the one choice already made for
+            them. Inside the same SlideDown as the row so the label and its tabs arrive together. */}
+          <Text style={styles.modeTabsLabel}>
+            Or, you can choose another mode:
+          </Text>
+          <View style={styles.modeTabs}>
+            {modes.map((mode) => {
+              const isSelected = mode.id === selectedModeId;
+              const isRecommended = mode.id === initialModeId;
+              return (
+                <Pressable
+                  key={mode.id}
+                  onPress={() => {
+                    Speech.stop();
+                    endIntro();
+                    setSelectedModeId(mode.id as ModeId);
+                    setShowModeTip(false);
+                    setSaveError(null);
+                  }}
+                  style={[styles.modeTab, isSelected && styles.modeTabSelected]}
+                >
+                  <Text
+                    style={[
+                      styles.modeTabText,
+                      isSelected && styles.modeTabTextSelected,
+                    ]}
+                  >
+                    {mode.title}
+                  </Text>
+                  {isRecommended ? (
+                    <Text style={styles.modeTabRecommended}>Recommended</Text>
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </View>
+        </SlideDown>
+
+        {showModeTip && (
+          <View style={styles.dimOverlay}>
             <Animated.View
               style={[
-                styles.recommendedBadge,
+                styles.highlightedPopup,
+                { maxWidth: popupMaxWidth },
                 {
+                  opacity: modeTipAnim,
                   transform: [
-                    { scale: badgePulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] }) },
+                    {
+                      scale: modeTipAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.96, 1],
+                      }),
+                    },
                   ],
                 },
               ]}
             >
-              <Text style={styles.recommendedBadgeText}>Recommended</Text>
-            </Animated.View>
-          ) : null}
-        </View>
-
-        <View style={styles.recommendationCopy}>
-          <SlideDown delay={STAGE.title} animate={introPlaying}>
-            <Text style={styles.title}>
-              {selectedMode.avatarName}: {selectedMode.title}
-            </Text>
-          </SlideDown>
-          {/* The three traits become chips: short, parallel, and read at a glance rather than as a
-              sentence to parse. */}
-          <View style={styles.traitRow}>
-            {selectedMode.personality.split(",").map((trait, i) => (
-              <PopIn key={trait} delay={STAGE.traits + i * STAGE.traitStep} animate={introPlaying} style={styles.traitChip}>
-                <StarIcon size={12} color={t.accent} />
-                <Text style={styles.traitText}>{sentenceCase(trait)}</Text>
-              </PopIn>
-            ))}
-          </View>
-          <View style={styles.bulletList}>
-            {selectedMode.bullets.map((bullet, i) => (
-              <SlideDown
-                key={bullet}
-                delay={STAGE.bullets + i * STAGE.bulletStep} animate={introPlaying}
-                style={styles.bulletRow}
-              >
-                {/* A tick, not a dot: these are what the mode GIVES you, and a check says that where
-                    a bullet only separates lines. */}
-                <CheckIcon size={15} color={t.success} />
-                <Text style={styles.bulletText}>{bullet}</Text>
-              </SlideDown>
-            ))}
-          </View>
-          {saveError ? <Text style={styles.saveErrorText}>{saveError}</Text> : null}
-          <PopIn delay={STAGE.confirm} animate={introPlaying} style={styles.confirmWrap}>
-            <ConfirmHalo />
-            <Button
-              label={savingChoice ? "Saving..." : "Confirm"}
-              variant="primary"
-              style={styles.confirmButton}
-              onPress={confirmAvatar}
-              disabled={savingChoice}
-            />
-          </PopIn>
-        </View>
-      </View>
-
-      <SlideDown
-        delay={STAGE.tabs} animate={introPlaying}
-        style={[
-          styles.modeTabsWrap,
-          {
-            // 38 to match the content column's own inset, so the tab row lines up with the copy above it rather than running wider than everything else on the screen.
-            left: 38 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
-            right: 38 + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN),
-            bottom: 26 + Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN),
-          },
-        ]}
-      >
-        {/* Names what the row is for. Without it the four tabs read as navigation the player is
-            expected to work through, rather than an alternative to the one choice already made for
-            them. Inside the same SlideDown as the row so the label and its tabs arrive together. */}
-        <Text style={styles.modeTabsLabel}>Or, you can choose another mode:</Text>
-        <View style={styles.modeTabs}>
-        {modes.map((mode) => {
-          const isSelected = mode.id === selectedModeId;
-          const isRecommended = mode.id === initialModeId;
-          return (
-            <Pressable
-              key={mode.id}
-              onPress={() => {
-                Speech.stop();
-                endIntro();
-                setSelectedModeId(mode.id as ModeId);
-                setShowModeTip(false);
-                setSaveError(null);
-              }}
-              style={[styles.modeTab, isSelected && styles.modeTabSelected]}
-            >
-              <Text style={[styles.modeTabText, isSelected && styles.modeTabTextSelected]}>
-                {mode.title}
-              </Text>
-              {isRecommended ? <Text style={styles.modeTabRecommended}>Recommended</Text> : null}
-            </Pressable>
-          );
-        })}
-        </View>
-      </SlideDown>
-
-      {showModeTip && (
-        <View style={styles.dimOverlay}>
-          <Animated.View
-            style={[
-              styles.highlightedPopup,
-              { maxWidth: popupMaxWidth },
-              {
-                opacity: modeTipAnim,
-                transform: [
-                  {
-                    scale: modeTipAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0.96, 1],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          >
-            <View style={styles.noteCopy}>
-              <Text style={styles.noteTitle}>Ready for your tutorial task?</Text>
-              <Text style={styles.noteText}>
-                Your avatar is set. Start the guided assembly task now, or return to the homepage for later.
-              </Text>
-              <View style={styles.taskActions}>
-                <Button label="I am ready" variant="primary" pill onPress={goToGame} />
-                <Button label="Not now" pill onPress={goHome} />
+              <View style={styles.noteCopy}>
+                <Text style={styles.noteTitle}>
+                  Ready for your tutorial task?
+                </Text>
+                <Text style={styles.noteText}>
+                  Your avatar is set. Start the guided assembly task now, or
+                  return to the homepage for later.
+                </Text>
+                <View style={styles.taskActions}>
+                  <Button
+                    label="I am ready"
+                    variant="primary"
+                    pill
+                    onPress={goToGame}
+                  />
+                  <Button label="Not now" pill onPress={goHome} />
+                </View>
               </View>
-            </View>
-            <View style={styles.smallMascotCircle}>
-              {/* contain, not the Image default of cover: this art is a whole little SCENE — the
+              <View style={styles.smallMascotCircle}>
+                {/* contain, not the Image default of cover: this art is a whole little SCENE — the
                   mascot, the board, the screw and its motion lines — and cropping it to fill a
                   square cuts the tool off the picture. The old portrait was a bust, so cover
                   happened to suit it. */}
-              <Image source={mascotAtWork} style={styles.smallMascot} resizeMode="contain" />
-            </View>
-          </Animated.View>
-        </View>
-      )}
+                <Image
+                  source={mascotAtWork}
+                  style={styles.smallMascot}
+                  resizeMode="contain"
+                />
+              </View>
+            </Animated.View>
+          </View>
+        )}
       </View>
     </SceneBackdrop>
   );
@@ -630,9 +684,18 @@ const makeStyles = (t: Theme, k = 1) =>
     // A column, not a card: width comes from the circle, and nothing draws a box around it.
     sparkLayer: { ...StyleSheet.absoluteFillObject },
     // Narrower than the copy column: a full-width primary action read as a banner rather than a button, and the halo needs room to swell without touching the text above it.
-    confirmWrap: { alignSelf: "center", width: Math.round(260 * k), marginTop: SPACE.lg, alignItems: "center" },
+    confirmWrap: {
+      alignSelf: "center",
+      width: Math.round(260 * k),
+      marginTop: SPACE.lg,
+      alignItems: "center",
+    },
     // stretch + auto margin puts the title on the column's BASE, which is where the Confirm button sits in the column beside it — so the two land on the same line.
-    modeColumn: { width: Math.round(220 * k), alignItems: "center", alignSelf: "stretch", paddingTop: Math.round(12 * k) },
+    modeColumn: {
+      width: Math.round(220 * k),
+      alignItems: "center",
+      paddingTop: Math.round(12 * k),
+    },
     avatarCircle: {
       width: Math.round(210 * k),
       height: Math.round(210 * k),
@@ -661,7 +724,8 @@ const makeStyles = (t: Theme, k = 1) =>
     },
     recommendedBadgeText: {
       color: t.onSuccess,
-      fontFamily: FONT, fontSize: Math.round(9 * k),
+      fontFamily: FONT,
+      fontSize: Math.round(9 * k),
       fontWeight: "900",
     },
     recommendationCopy: {
@@ -671,7 +735,8 @@ const makeStyles = (t: Theme, k = 1) =>
     },
     title: {
       color: t.text,
-      fontFamily: FONT, fontSize: Math.round(20 * k),
+      fontFamily: FONT,
+      fontSize: Math.round(20 * k),
       fontWeight: "900",
       lineHeight: Math.round(24 * k),
     },
@@ -704,7 +769,8 @@ const makeStyles = (t: Theme, k = 1) =>
     bulletText: {
       flex: 1,
       color: t.text,
-      fontFamily: FONT, fontSize: Math.round(13 * k),
+      fontFamily: FONT,
+      fontSize: Math.round(13 * k),
       fontWeight: "700",
     },
     // Offsets come from the CALL SITE, not from here: absolute children are not inset by the parent's padding, so a literal here can never account for a device's safe insets.
@@ -755,7 +821,8 @@ const makeStyles = (t: Theme, k = 1) =>
     },
     modeTabRecommended: {
       color: t.success,
-      fontFamily: FONT, fontSize: Math.round(9 * k),
+      fontFamily: FONT,
+      fontSize: Math.round(9 * k),
       fontWeight: "900",
       marginTop: Math.round(1 * k),
     },
@@ -796,13 +863,15 @@ const makeStyles = (t: Theme, k = 1) =>
     },
     noteTitle: {
       color: t.text,
-      fontFamily: FONT, fontSize: Math.round(21 * k),
+      fontFamily: FONT,
+      fontSize: Math.round(21 * k),
       fontWeight: "900",
       marginBottom: Math.round(5 * k),
     },
     noteText: {
       color: t.text,
-      fontFamily: FONT, fontSize: Math.round(14 * k),
+      fontFamily: FONT,
+      fontSize: Math.round(14 * k),
       fontWeight: "700",
       lineHeight: Math.round(19 * k),
     },
