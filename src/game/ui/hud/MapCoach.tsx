@@ -200,6 +200,9 @@ export function MapCoach() {
   const mapVisible = useBuildPaused();
 
   const [visible, setVisible] = useState(false);
+  /** Decided to show, but not on screen yet. Separate STATE rather than a timer inside the decision
+   *  effect — see the appearance effect below for why that distinction is load-bearing. */
+  const [armed, setArmed] = useState(false);
   const decided = useRef(false);
   const fade = useRef(new Animated.Value(0)).current;
   // 0 → 1 across one flash of the accent wash. See HudGhostRing — the same signal, same timing.
@@ -240,27 +243,10 @@ export function MapCoach() {
           return;
         }
         if (row.mapCoachSeen || seenLocally || shownThisRunFor === me) return;
+        // The in-run latch is claimed HERE, at the decision, so two mounts in one session cannot both
+        // arm. The DURABLE flags are not — they wait until the card is actually on screen.
         shownThisRunFor = me;
-        // Written first and unconditionally: this one cannot fail for a schema reason.
-        AsyncStorage.setItem(seenKey(me), "1").catch((err) =>
-          console.warn("[map coach] could not save seen state locally", err),
-        );
-        // Saved on APPEAR, not on dismiss — see the header. A failure here is logged and otherwise
-        // ignored: the player still gets the coach, and the worst case is seeing it once more.
-        void repos.profiles
-          .update(me, { mapCoachSeen: true })
-          // LOUD, because a silent failure here is indistinguishable from the feature working: the
-          // card shows, the flag never sticks, and it returns on the next build. The usual cause is
-          // migration 025 not having run, or its column grant missing — see 009_grants.sql.
-          .catch((err) =>
-            console.warn(
-              "[map coach] could not save seen state — the coach will reappear next launch. Has migration 025_map_coach_seen.sql run, with its column grant?",
-              err,
-            ),
-          );
-        setTimeout(() => {
-          if (alive) setVisible(true);
-        }, APPEAR_DELAY_MS);
+        setArmed(true);
       })
       .catch((err) => {
         // No profile, no network: say nothing THIS time, but let it try again — the same reasoning as
@@ -274,6 +260,51 @@ export function MapCoach() {
       alive = false;
     };
   }, [repos, me, mapButtonShowing, mapVisible, heldActionId]);
+
+  /**
+   * THE APPEARANCE, on its own effect, keyed only on `armed`.
+   *
+   * The delay used to be a setTimeout inside the decision effect above — whose dependencies include
+   * `mapVisible` and `heldActionId`, both of which change constantly in the first seconds of a build
+   * (the map intro closing, the first part picked up). Any one of them changing inside the 1.4s
+   * window tore that effect down, `alive` went false, and the card never appeared — but the decision
+   * had already written the profile flag, so the coach was marked SEEN having never been shown. Once
+   * per account, silently spent. That is the worst possible failure for a one-off.
+   *
+   * `armed` flips once and never back, so this effect is not at the mercy of store churn.
+   */
+  useEffect(() => {
+    if (!armed) return;
+    const timer = setTimeout(() => setVisible(true), APPEAR_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [armed]);
+
+  /**
+   * THE DURABLE FLAGS, written when the card is genuinely on screen — not when it was decided.
+   *
+   * "Saved on appear, not on dismiss" was always the intent: a player who backgrounds the app
+   * mid-card has still been shown it. But the write used to happen at the DECISION, a second and a
+   * half earlier, so a card that never reached the screen still spent its one showing. Keyed on
+   * `visible`, the two cannot come apart.
+   */
+  useEffect(() => {
+    if (!visible) return;
+    // Written first and unconditionally: this one cannot fail for a schema reason.
+    AsyncStorage.setItem(seenKey(me), "1").catch((err) =>
+      console.warn("[map coach] could not save seen state locally", err),
+    );
+    void repos.profiles
+      .update(me, { mapCoachSeen: true })
+      // LOUD, because a silent failure here is indistinguishable from the feature working: the card
+      // shows, the flag never sticks, and it returns on the next build. The usual cause is migration
+      // 025 not having run, or its column grant missing — see 009_grants.sql.
+      .catch((err) =>
+        console.warn(
+          "[map coach] could not save seen state — the coach will reappear next launch. Has migration 025_map_coach_scene.sql run, with its column grant?",
+          err,
+        ),
+      );
+  }, [visible, me, repos]);
 
   useEffect(() => {
     if (!visible) return;
