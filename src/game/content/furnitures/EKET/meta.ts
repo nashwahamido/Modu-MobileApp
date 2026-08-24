@@ -29,6 +29,8 @@ const CATALOGUE_THUMBS: Record<string, ThumbSet> = {
 
 export const EKET_META: FurnitureMeta = {
   id: asFurnitureId("eket-cabinet"),
+  // The longest build in the set, and the only one with cam locks, keyholes and a drawer beat — it opens GUIDED whatever the player's profile pins, so a first EKET is a led one. A default, not a lock: the settings panel still switches it, and that switch is what a resumed build comes back in.
+  mode: "guide",
   thumbnail: CATALOGUE_THUMBS.wooden,
   variantThumbnails: CATALOGUE_THUMBS,
   ...metaCounts(ALL_PART_IDS, ACTIONS, CLUSTERS),

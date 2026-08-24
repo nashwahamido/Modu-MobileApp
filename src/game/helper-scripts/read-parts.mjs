@@ -108,7 +108,7 @@ function readVec3(json, bin, accessorIndex) {
   return out;
 }
 
-function visualCenterOffset(json, bin, node) {
+function meshBounds(json, bin, node) {
   if (node.mesh == null) return undefined;
   const min = [Infinity, Infinity, Infinity];
   const max = [-Infinity, -Infinity, -Infinity];
@@ -121,10 +121,25 @@ function visualCenterOffset(json, bin, node) {
       }
     }
   }
-  if (!Number.isFinite(min[0])) return undefined;
+  return Number.isFinite(min[0]) ? { min, max } : undefined;
+}
+
+// world offset origin -> mesh bounds centre
+function visualCenterOffset(node, bounds) {
   const scale = node.scale ?? [1, 1, 1];
-  const localCenter = min.map((v, i) => ((v + max[i]) / 2) * scale[i]);
+  const localCenter = bounds.min.map((v, i) => ((v + bounds.max[i]) / 2) * scale[i]);
   return rotateByQuat(node.rotation ?? [0, 0, 0, 1], localCenter).map((v) => +v.toFixed(6));
+}
+
+// world offset origin -> HEAD FACE centre: the local −Z bbox face (LOCAL_ENGAGE side). Works for any origin placement — it reads the bounds, not the origin. ToolModel projects this onto the tool axis so the tool meets the head instead of hovering a fixed gap off the ORIGIN, which buried the driver up to 18mm into BEKVÄM's long screws.
+function headOffset(node, bounds) {
+  const scale = node.scale ?? [1, 1, 1];
+  const local = [
+    ((bounds.min[0] + bounds.max[0]) / 2) * scale[0],
+    ((bounds.min[1] + bounds.max[1]) / 2) * scale[1],
+    bounds.min[2] * scale[2],
+  ];
+  return rotateByQuat(node.rotation ?? [0, 0, 0, 1], local).map((v) => +v.toFixed(6));
 }
 
 // nodes -> { partId: <model facts> }
@@ -137,6 +152,7 @@ function buildParts(json, bin, typeOverrides = {}) {
     const joinsTwo = p.attached?.length === 2;
     const type = typeOf(p.group, typeOverrides[p.group], joinsTwo);
     const rotation = n.rotation ?? [0, 0, 0, 1];
+    const bounds = meshBounds(json, bin, n);
     parts[p.partId] = {
       partId: p.partId,
       group: p.group,
@@ -144,11 +160,12 @@ function buildParts(json, bin, typeOverrides = {}) {
       type,
       cluster: p.cluster,
       ...(p.attached ? { attached: p.attached } : {}),
-      ...(n.mesh != null ? { visualCenterOffset: visualCenterOffset(json, bin, n) } : {}),
+      ...(bounds ? { visualCenterOffset: visualCenterOffset(n, bounds) } : {}),
       // NO kind field: the runtime derives it from the group name (fastenerKindOf ← core/fastener-kinds.json).
       ...(type === 'fastener'
         ? { engageDir: snapAxis(rotateByQuat(rotation, LOCAL_ENGAGE)) }
         : {}),
+      ...(type === 'fastener' && bounds ? { headOffset: headOffset(n, bounds) } : {}),
       pose: {
         position: (n.translation ?? [0, 0, 0]).map((v) => +v.toFixed(6)),
         rotation: rotation.map((v) => +v.toFixed(6)),
