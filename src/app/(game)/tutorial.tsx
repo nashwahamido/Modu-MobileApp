@@ -92,6 +92,12 @@ import {
 const TUTORIAL_FURNITURE_ID = asFurnitureId("lack-table");
 const TUTORIAL_SPOT_MS = 2800;
 
+/** The parts-tray column's own top inset and its list padding (PartsTray's `column` and `list`).
+ *  Copied rather than imported because they are private to that sheet — if either moves, this must
+ *  move with it, or the spotlight drifts off the card it frames. */
+const PARTS_TRAY_TOP = 70;
+const PARTS_TRAY_LIST_PAD = 4;
+
 function TutorialScreen() {
   useScreenOrientationLock(OrientationLock.LANDSCAPE);
   useTutorialHaptics();
@@ -366,6 +372,8 @@ function TutorialScreen() {
   );
   const completedCount = useGameStore((s) => s.completed.length);
   const [skipAsked, setSkipAsked] = useState(false);
+  /** The first parts-tray card's measured height, so the spotlight can frame exactly it. */
+  const [firstCardHeight, setFirstCardHeight] = useState(0);
   const gripStepActive = useTutorialStore(
     (s) => s.steps[s.currentIndex]?.id === "hold-like-controller",
   );
@@ -962,6 +970,7 @@ function TutorialScreen() {
           items={tutorialTrayItems}
           gestureFor={gestureFor}
           thumbs={furniture.thumbs}
+          onFirstCardHeight={setFirstCardHeight}
           header={
             <ClusterTray
               clusterDriver={clusterDriver}
@@ -969,9 +978,24 @@ function TutorialScreen() {
             />
           }
         />
+        {/* THE FIRST CARD, not the whole column. `partsTrayTarget` spans the tray top to bottom
+            because some steps talk about the tray as a place ("your parts live here"); the steps that
+            say "long-press a part card" mean ONE card, and lighting the full column pointed at four
+            things while naming one.
+            The height is measured by the tray and the top comes from the same constants the column
+            uses, so the rectangle sits on the real card rather than on an estimate of it — a card is
+            67pt or 81pt depending on whether its label wraps, which no written-down number survives.
+            ASSUMES NO HEADER ABOVE THE LIST, which holds because the tutorial always builds LACK and
+            LACK has no clusters, so the ClusterTray passed as `header` renders null. Teach the
+            tutorial a clustered model and the header's height has to be measured and added here. */}
         <TutorialTarget
           id="partsTray"
-          style={styles.partsTrayTarget}
+          style={[
+            styles.partsTrayTarget,
+            firstCardHeight
+              ? { top: PARTS_TRAY_TOP + PARTS_TRAY_LIST_PAD, height: firstCardHeight, bottom: undefined }
+              : null,
+          ]}
           pointerEvents="none"
         />
         {/* No TutorialTarget: no step points at it, and wrapping it would register a spotlight

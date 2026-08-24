@@ -7,7 +7,8 @@ import Svg,
   RadialGradient,
   Rect,
   Stop } from 'react-native-svg';
-import { findNodeHandle,
+import { Animated,
+  findNodeHandle,
   Image,
   StyleSheet,
   Text,
@@ -28,6 +29,7 @@ import {
 } from './steps';
 import { useTutorialStore } from './store';
 import { useTutorialTargets, type TutorialFrame } from './targetRegistry';
+import { useHighlightPulse } from '@/src/game/ui/hud/highlightPulse';
 import { useTutorialAudio } from './useTutorialAudio';
 import { Button } from '@/src/game/ui/system/Button';
 import { useGameStore } from '@/src/game/core/store';
@@ -419,13 +421,10 @@ export function MascotGuideOverlay({
                 dim={dimTarget}
                 styles={styles}
               />
-              <View
-                pointerEvents="none"
-                style={[
-                  styles.highlight,
-                  presentation.emphasizeTarget && styles.highlightEmphasized,
-                  { left: frame.x, top: frame.y, width: frame.width, height: frame.height },
-                ]}
+              <TutorialHighlight
+                frame={frame}
+                emphasized={presentation.emphasizeTarget}
+                styles={styles}
               />
             </>
           )}
@@ -439,13 +438,7 @@ export function MascotGuideOverlay({
               marked, the one between them is not, and nothing else on screen is greyed out for a
               card that is only telling the player where help lives. */}
           {step.id === 'visual-stuck-help' && autoFrame ? (
-            <View
-              pointerEvents="none"
-              style={[
-                styles.highlight,
-                { left: autoFrame.x, top: autoFrame.y, width: autoFrame.width, height: autoFrame.height },
-              ]}
-            />
+            <TutorialHighlight frame={autoFrame} styles={styles} />
           ) : null}
           {/* The arrow, on every step that asks the player to take something OUT OF THE TRAY. That is
               two steps: the first part and the first bolt. Both begin with the same long-press on the
@@ -764,21 +757,62 @@ function bubblePosition(
   return { bottom: Math.max(20, screenH - frame.y + 16), left };
 }
 
+/**
+ * The mark on the control a step is asking the player to press.
+ *
+ * PULSES, and does not outline. It is the same pulse the parts tray uses when Spot lights a card and
+ * the same one the stuck and Map coaches use — one gesture for "this one" across the whole app,
+ * instead of a static border here and a flash there.
+ *
+ * NO BORDER, deliberately: the coaches need a halo because they sit on a live scene where an accent
+ * wash can be lost against whatever is behind it, but this overlay DIMS everything else. A target
+ * lifting out of that dim is already unambiguous, and a stroke on top of it was a second signal
+ * saying the same thing twice.
+ *
+ * The mint stays. In the tutorial that colour is doing its own job — completion, "you did this here"
+ * — and which colour it is was never the thing that read as heavy-handed.
+ */
+function TutorialHighlight({
+  frame,
+  emphasized,
+  styles,
+}: {
+  frame: { x: number; y: number; width: number; height: number };
+  emphasized?: boolean;
+  styles: ReturnType<typeof makeStyles>;
+}) {
+  const pulse = useHighlightPulse(true);
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.highlight,
+        { left: frame.x, top: frame.y, width: frame.width, height: frame.height },
+        {
+          // Never fully out: the floor keeps the target lit between pulses, so a player who looks up
+          // mid-beat still sees which control the step means. Only the peak differs when a step asks
+          // for emphasis.
+          opacity: pulse.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0.12, emphasized ? 0.55 : 0.4],
+          }),
+        },
+      ]}
+    />
+  );
+}
+
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
     layer: { ...StyleSheet.absoluteFillObject, zIndex: 50 },
     scrim: { position: 'absolute', backgroundColor: t.scrim },
     // Green ring = "you did this here": completion colour marks the highlighted control.
+    // A WASH, not a frame. Opacity is animated at the call site; `highlightEmphasized` is gone with
+    // the border it used to thicken — emphasis is now a stronger peak on the same pulse.
     highlight: {
       position: 'absolute',
       borderRadius: 18,
-      borderWidth: 3,
-      borderColor: ACCENT_LIGHT,
-      backgroundColor: 'rgba(255,255,255,0.08)',
-    },
-    highlightEmphasized: {
-      borderWidth: 5,
-      backgroundColor: 'rgba(118,230,219,0.22)',
+      backgroundColor: ACCENT_LIGHT,
     },
     bubble: {
       position: 'absolute',
