@@ -25,7 +25,7 @@ export function catalogUrl(path: string): string | null {
   return getResolver()?.(path) ?? null;
 }
 
-// No variantModelUrl here: the room's model URL is not a plain path-to-URL call. getRoomItemVariantUrl (room/core/placeableItems.ts) has to answer "bundled or storage?" first — a BUILT item with no colour picked resolves to null so the caller uses its bundle — and that decision belongs with the catalog it reads, not with this module's URL builders.
+// No variantModelUrl here: the room's model URL is not a plain path-to-URL call. getRoomItemVariantUrl (room/core/placeableItems.ts) has to read the catalog first — the item's source decides the subtree, and an id the catalog does not carry has no path at all — and that lookup belongs with the catalog, not with this module's pure URL builders.
 
 // The per-variation thumbnail — the picker swatch, and the tile picture for a model-item.
 export function variantThumbUrl(source: ItemSource, id: CatalogId, variation?: string | null): string | null {

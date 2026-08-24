@@ -1,7 +1,13 @@
 // One purchasable tile in the shop popup: price badge, picture well, name
-import { StyleSheet, Image, Pressable, Text, View } from "react-native";
+import {
+  StyleSheet,
+  Image,
+  Text,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
-import { CatalogThumb } from "@/src/components/CatalogThumb";
+import { CatalogThumb, gridThumbFill, gridVariation } from "@/src/components/CatalogThumb";
 import type { ItemSource } from "@/src/data/catalog/assets";
 import { COIN_ICON, STAR_ICON, levelIcon } from "@/src/components/iconAssets";
 import {
@@ -9,9 +15,10 @@ import {
   FRAME_RADIUS,
   FRAME_STROKE,
   FRAME_STROKE_WIDTH,
+  ItemNameTab,
   LockWash,
   TILE_ROW_GAP,
-  ItemNameTab,
+  useTileScale,
   WELL_ASPECT,
   WELL_TOP_PAD,
 } from "@/src/components/ItemTileFrame";
@@ -66,6 +73,9 @@ export function ShopItemTile({
   disabled?: boolean;
 }) {
   const s = useFixedStyles(makeStyles);
+  // The badges are fixed points on a tile that grows with the panel, so on a tablet they end up small
+  // against a much larger frame — and against the name tab, which scales by this same factor.
+  const k = useTileScale();
   const locked = lockLevel !== undefined;
   const lockStar = lockLevel === undefined ? null : levelIcon(lockLevel);
   const wellHeight = Math.round(width * WELL_ASPECT);
@@ -90,7 +100,22 @@ export function ShopItemTile({
           style={[s.art, { height: wellHeight - FRAME_STROKE_WIDTH * 2 }]}
           pointerEvents="none"
         >
-          <CatalogThumb source={source} itemId={itemId} surface={surface} size={wellHeight} />
+          {/* The GRID face for this item (components/CatalogThumb) — an agreed portrait per model
+              rather than whichever finish the catalog row calls default, which was "wooden" for all
+              four built models and put a row of near-identical wood renders in the grid.
+
+              size is inset for the BUILT models only (gridThumbFill) — their assembly-pipeline
+              render is framed tight where a bought item's already carries its own air, so the four
+              ran to the edges of their wells while everything around them sat inside. Bought items
+              are unchanged and still fill. The colour picker and the purchase popups pass a real
+              variation and their own size. */}
+          <CatalogThumb
+            source={source}
+            itemId={itemId}
+            variation={gridVariation(itemId)}
+            surface={surface}
+            size={Math.round(wellHeight * gridThumbFill(itemId))}
+          />
         </View>
 
         {/* A tint, not a blur — RN has no blur without a native module */}
@@ -109,14 +134,41 @@ export function ShopItemTile({
         ) : null}
 
         {owned ? (
-          <View style={s.ownedBadge}>
-            <Text style={s.ownedText}>owned</Text>
+          <View
+            style={[
+              s.ownedBadge,
+              {
+                left: PILL_LEFT * k,
+                top: PILL_TOP * k,
+                width: OWNED_WIDTH * k,
+                height: PILL_HEIGHT * k,
+                borderRadius: PILL_RADIUS * k,
+              },
+            ]}
+          >
+            <Text style={[s.ownedText, { fontSize: 11 * k }]}>owned</Text>
           </View>
         ) : (
-          <View style={s.priceBadge}>
-            <Image source={COIN_ICON} style={s.priceIcon} resizeMode="contain" />
-            <View style={s.pricePill}>
-              <Text style={s.priceText}>{price}</Text>
+          <View style={[s.priceBadge, { left: BADGE_LEFT * k }]}>
+            <Image
+              source={COIN_ICON}
+              style={[s.priceIcon, { width: COIN_SIZE * k, height: COIN_SIZE * k }]}
+              resizeMode="contain"
+            />
+            <View
+              style={[
+                s.pricePill,
+                {
+                  marginLeft: -PRICE_TUCK * k,
+                  height: PILL_HEIGHT * k,
+                  borderRadius: PILL_RADIUS * k,
+                  paddingLeft: (PRICE_TUCK + PILL_PAD) * k,
+                  paddingRight: PILL_PAD * k,
+                  minWidth: 43 * k,
+                },
+              ]}
+            >
+              <Text style={[s.priceText, { fontSize: 11 * k }]}>{price}</Text>
             </View>
           </View>
         )}

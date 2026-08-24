@@ -1,5 +1,5 @@
 import * as Haptics from "expo-haptics";
-import { CONTROL } from "@/src/game/ui/system/theme";
+import { CONTROL, useTheme } from "@/src/game/ui/system/theme";
 import { useEffect, useRef } from "react";
 import { Animated, Easing, Image, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -22,6 +22,7 @@ interface Props {
 /** Slide control: drag the thumb along the track to GLIDE the parked part into its groove. Linear counterpart of RotateControl's dial — a slider doesn't turn, it travels, so the gesture is a straight drag and the part follows 1:1. Progress is normalized 0..1 (store.advanceDrive); at 1 the placement commits. */
 export function SlideControl({ action, driver, park }: Props) {
   const m = useMirror();
+  const t = useTheme();
   const progress = useGameStore((s) => s.driveProgress[action.actionId] ?? 0);
   const parked = useRef<Vec3 | null>(null);
   const lastY = useRef<number | null>(null);
@@ -79,6 +80,18 @@ export function SlideControl({ action, driver, park }: Props) {
 
   return (
     <View style={m(styles.wrap)} pointerEvents="box-none">
+      {/* ABOVE the track, not under it. Below, it sat on top of the HUD row and was overlapping the
+          auto button — grey text on a busy background, half of it unreadable.
+          Styled as ToolBar's "Pick a Tool" prompt: the same lavender pill, which is the app's one
+          "here is what to do" label. It stops being a caption on the control and becomes an
+          instruction, and it carries its own background so nothing behind it can swallow it.
+          pointerEvents none regardless: a Text child of a box-none wrapper still takes touches. */}
+      <Text
+        style={[styles.hint, { color: t.onAccent, backgroundColor: t.accent }]}
+        pointerEvents="none"
+      >
+        Slide it in · {Math.round(progress * 100)}%
+      </Text>
       <GestureDetector gesture={pan}>
         <View style={styles.track}>
           {/* The fill IS the indicator now — it grows from the top as you drag down, no
@@ -111,12 +124,6 @@ export function SlideControl({ action, driver, park }: Props) {
           ) : null}
         </View>
       </GestureDetector>
-      {/* pointerEvents none: this label is drawn over the HUD row below it, and a Text child of a
-          box-none wrapper still swallows touches — it was eating presses meant for the auto button
-          sitting underneath. Nothing here is interactive. */}
-      <Text style={styles.hint} pointerEvents="none">
-        Slide it in · {Math.round(progress * 100)}%
-      </Text>
     </View>
   );
 }
@@ -153,5 +160,17 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   arrow: { fontSize: 26, color: "#FBF8F3", fontWeight: "800" },
-  hint: { fontSize: 12, color: "#6b6257", fontWeight: "700" },
+  // ToolBar's `prompt`, verbatim — same size, weight, colours, radius and padding. Copied rather
+  // than imported because that style is local to ToolBar; if either moves into the theme, both
+  // should point at it.
+  hint: {
+    fontSize: 12,
+    fontWeight: "800",
+    // Colours come from the live theme at the call site: `onAccent` is white on light and linen on
+    // dark, and this sheet is static so it cannot read either.
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 3,
+    overflow: "hidden",
+  },
 });

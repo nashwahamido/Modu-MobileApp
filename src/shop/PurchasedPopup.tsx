@@ -4,7 +4,13 @@
 // one being a default. "Room" leaves the shop and starts placing the piece; "Inventory" keeps the
 // player shopping and says so with a message that clears itself. Either way the item is already
 // owned — this popup spends nothing and can be dismissed without losing the purchase.
-import { StyleSheet, Image, Pressable, Text, View } from "react-native";
+import {
+  StyleSheet,
+  Image,
+  Text,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import { HOME_ICON, INVENTORY_ICON } from "@/src/components/iconAssets";
 import { CREAM, CREAM_LIFT, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
@@ -15,7 +21,10 @@ const TITLE_COLOUR = "#897B9E";
 const CHOICE_ICON_SIZE = 46;
 // The shop and inventory panels' edge, so every surface in this family shares one outline
 const PANEL_STROKE = "#544F4B";
-const PANEL_STROKE_WIDTH = 1.2;
+// 0 = no outline, matching the shop and inventory panels these cards open over. The cards are told
+// apart from the scrim by their fill and their lift, which is enough — an outline as well read as a
+// second border stacked on the panel behind.
+const PANEL_STROKE_WIDTH = 0;
 
 export function PurchasedPopup({
   name,

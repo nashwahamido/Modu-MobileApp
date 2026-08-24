@@ -1,13 +1,20 @@
 // the room hub's bottom navigation:shop / inventory/ assemble/ visit friends /you
-import { useState } from 'react';
+import {
+  useState } from 'react';
 import { router } from 'expo-router';
 import type { Href } from 'expo-router';
-import { StyleSheet, Image, Pressable, Text, View } from "react-native";
+import { StyleSheet,
+  Image,
+  Text,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 import Svg, { Circle, Path } from "react-native-svg";
 import { ChevronIcon } from '../../components/Icons';
 import { ASSEMBLE_ICON, INVENTORY_ICON, SHOP_ICON, VISIT_FRIENDS_ICON, YOU_ICON } from '../../components/iconAssets';
-import { CARD_CHROME, CREAM, useFixedStyles, LEXEND } from "@/src/game/ui/system/theme";
+import { CARD_CHROME, CREAM, useScaledStyles, LEXEND } from "@/src/game/ui/system/theme";
+import { useBottomBarScale } from './roomScale';
 import type { Theme } from "@/src/game/ui/system/theme";
 import { useScreenInsets } from '../../hooks/use-safe-insets';
 
@@ -50,12 +57,18 @@ const ICON_SLOT = 44;
 // re-seats the label and re-cuts the arc without another edit.
 const ASSEMBLE_LIFT = 16;
 
+// Kept in step with the phone's standalone button (RoomAssembleButton's DISC_FILL) by hand: the two
+// layouts do not share a component, so this is one of the places a change has to be made twice.
+const ASSEMBLE_DISC_FILL = '#D4CED9';
+
 const ASSEMBLE_COLLAR_SIZE = 68;
 const ASSEMBLE_BUTTON_SIZE = 55;
 const ASSEMBLE_ICON_SIZE = 76;
 const ASSEMBLE_ICON_NUDGE_Y = -7;
 const ASSEMBLE_CENTRE_OPEN = -ASSEMBLE_LIFT + ASSEMBLE_BUTTON_SIZE / 2;
 const ASSEMBLE_CENTRE_CLOSED = ASSEMBLE_BUTTON_SIZE / 2;
+// A prop rather than a style, so it is scaled at the call site
+const CHEVRON_SIZE = 26;
 const BAR_LABEL_LINE_HEIGHT = 13;
 const BAR_LABEL_GAP= 0;
 const ASSEMBLE_LABEL_TOP = BAR_LABEL_GAP + (ICON_SLOT - (ASSEMBLE_BUTTON_SIZE - ASSEMBLE_LIFT));
@@ -83,12 +96,18 @@ export function RoomBottomBar({
   onOpenInventory: () => void;
   onOpenVisit: () => void;
 }) {
-  const s = useFixedStyles(makeStyles);
+  // SCALED on tablets, 1:1 on phones. The sheet is scaled by the SAME k (useScaledStyles); what does NOT scale
+  // automatically is everything that is not a style property — the collar's SVG, the chevron's `size`
+  // prop, and the absolute offsets the scaler skips — so those are multiplied at the call sites.
+  const k = useBottomBarScale();
+  // The sheet takes the SAME k as the hand-scaled values below — see useScaledStyles.
+  const s = useScaledStyles(makeStyles, k);
   // Immersive mode reports 0 insets, so these floors sit UNDER the design's own offsets
   const safe = useScreenInsets();
-  const padL = 22 + safe.left;
+  // Design spacing scales; the device inset does not — it is a physical clearance, not a size.
+  const padL = 22 * k + safe.left;
   // Design spacing only — safe.bottom is already floored, so lowering this cannot push the bar under the gesture pill
-  const padBottom = 10 + safe.bottom;
+  const padBottom = 10 * k + safe.bottom;
   const [barOpen, setBarOpen] = useState(true);
 
   return (
@@ -111,7 +130,7 @@ export function RoomBottomBar({
             onPress={() => setBarOpen(false)}
           >
             <View style={s.chevronRight}>
-              <ChevronIcon size={26} up color={BAR_FILL} outlineColor={BAR_STROKE} outlineWidth={BAR_STROKE_WIDTH} />
+              <ChevronIcon size={CHEVRON_SIZE * k} up color={BAR_FILL} outlineColor={BAR_STROKE} outlineWidth={BAR_STROKE_WIDTH} />
             </View>
           </Pressable>
         </Animated.View>
@@ -152,7 +171,11 @@ export function RoomBottomBar({
 
         <Animated.View layout={BAR_LAYOUT} style={s.assembleWrap}>
           {barOpen ? (
-            <Svg width={ASSEMBLE_COLLAR_SIZE} height={ASSEMBLE_COLLAR_SIZE} style={s.assembleCollar} pointerEvents="none">
+            <Svg
+              viewBox={`0 0 ${ASSEMBLE_COLLAR_SIZE} ${ASSEMBLE_COLLAR_SIZE}`}
+              style={[s.assembleCollar, { top: (ASSEMBLE_CENTRE_OPEN - ASSEMBLE_COLLAR_SIZE / 2) * k }]}
+              pointerEvents="none"
+            >
               <Circle
                 cx={ASSEMBLE_COLLAR_SIZE / 2}
                 cy={ASSEMBLE_COLLAR_SIZE / 2}
@@ -162,7 +185,10 @@ export function RoomBottomBar({
               <Path d={ASSEMBLE_COLLAR_ARC} fill="none" stroke={BAR_STROKE} strokeWidth={BAR_STROKE_WIDTH} />
             </Svg>
           ) : (
-            <View style={s.assembleCollarClosed} pointerEvents="none" />
+            <View
+              style={[s.assembleCollarClosed, { top: (ASSEMBLE_CENTRE_CLOSED - ASSEMBLE_COLLAR_SIZE / 2) * k }]}
+              pointerEvents="none"
+            />
           )}
           <Pressable
             accessibilityRole="button"
@@ -170,7 +196,17 @@ export function RoomBottomBar({
             style={[s.assembleButton, !barOpen && s.assembleButtonClosed]}
             onPress={() => router.push("/catalogue" as Href)}
           >
-            <Image source={ASSEMBLE_ICON} style={s.assembleIcon} resizeMode="contain" />
+            <Image
+              source={ASSEMBLE_ICON}
+              style={[
+                s.assembleIcon,
+                {
+                  left: ((ASSEMBLE_BUTTON_SIZE - ASSEMBLE_ICON_SIZE) / 2) * k,
+                  top: ((ASSEMBLE_BUTTON_SIZE - ASSEMBLE_ICON_SIZE) / 2 + ASSEMBLE_ICON_NUDGE_Y) * k,
+                },
+              ]}
+              resizeMode="contain"
+            />
           </Pressable>
           {barOpen ? <Text style={[s.barLabel, s.assembleLabel]}>Assemble</Text> : null}
         </Animated.View>
@@ -220,7 +256,7 @@ export function RoomBottomBar({
             onPress={() => setBarOpen(true)}
           >
             <View style={s.chevronLeft}>
-              <ChevronIcon size={26} up color={BAR_FILL} outlineColor={BAR_STROKE} outlineWidth={BAR_STROKE_WIDTH} />
+              <ChevronIcon size={CHEVRON_SIZE * k} up color={BAR_FILL} outlineColor={BAR_STROKE} outlineWidth={BAR_STROKE_WIDTH} />
             </View>
           </Pressable>
         </Animated.View>
@@ -328,16 +364,16 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     justifyContent: 'center',
   },
  
+  // width/height live here so they scale; the SVG's viewBox keeps the arc's authored coordinates
   assembleCollar: {
     position: 'absolute',
     alignSelf: 'center',
-    top: ASSEMBLE_CENTRE_OPEN - ASSEMBLE_COLLAR_SIZE / 2,
+    width: ASSEMBLE_COLLAR_SIZE,
+    height: ASSEMBLE_COLLAR_SIZE,
   },
  
   assembleIcon: {
     position: 'absolute',
-    left: (ASSEMBLE_BUTTON_SIZE - ASSEMBLE_ICON_SIZE) / 2,
-    top: (ASSEMBLE_BUTTON_SIZE - ASSEMBLE_ICON_SIZE) / 2 + ASSEMBLE_ICON_NUDGE_Y,
     width: ASSEMBLE_ICON_SIZE,
     height: ASSEMBLE_ICON_SIZE,
   },
@@ -348,7 +384,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     marginTop: -ASSEMBLE_LIFT,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#E6DCF5',
+    backgroundColor: ASSEMBLE_DISC_FILL,
     borderWidth: 0.6,
     borderColor: '#9C9994',
     shadowColor: '#000',
@@ -363,7 +399,6 @@ const makeStyles = (t: Theme) => StyleSheet.create({
   assembleCollarClosed: {
     position: 'absolute',
     alignSelf: 'center',
-    top: ASSEMBLE_CENTRE_CLOSED - ASSEMBLE_COLLAR_SIZE / 2,
     width: ASSEMBLE_COLLAR_SIZE,
     height: ASSEMBLE_COLLAR_SIZE,
     borderRadius: ASSEMBLE_COLLAR_SIZE / 2,

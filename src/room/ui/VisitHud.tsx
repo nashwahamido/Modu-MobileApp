@@ -1,5 +1,11 @@
 // The chrome over a visited room: whose room this is, the way out, and the heart. Deliberately thin — a visit is look-and-like, so there is no bar of tools to host.
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Image,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import { avatarForProfile } from "@/src/components/avatarAssets";
 import { CREAM, useFixedStyles, useTheme, LEXEND } from "@/src/game/ui/system/theme";

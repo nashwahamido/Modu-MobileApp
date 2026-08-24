@@ -62,6 +62,11 @@ import { ClusterCelebration } from "@/src/game/ui/celebration/ClusterCelebration
 import { UndoButton } from "@/src/game/ui/hud/UndoButton";
 import { GameSettings } from "@/src/game/ui/settings/GameSettings";
 import { ToggleChips } from "@/src/game/ui/hud/ToggleChips";
+import { IdleCheckIn } from "@/src/game/ui/hud/IdleCheckIn";
+import { MapCoach } from "@/src/game/ui/hud/MapCoach";
+import { StuckCoach } from "@/src/game/ui/hud/StuckCoach";
+import { HudSpotTarget } from "@/src/game/ui/hud/hudSpotlight";
+import { useBuildPaused } from "@/src/game/ui/hud/useBuildPaused";
 import { BuildMap, MapButton } from "@/src/game/ui/hud/ClusterFocusControl";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 import { Button } from "@/src/game/ui/system/Button";
@@ -259,13 +264,19 @@ function GameScreen() {
     !activeCluster &&
     // once every cluster is built, no focus means the combine stage, not an unanswered chooser
     !combineReady(furniture, new Set(useGameStore.getState().completed));
+  // THE MAP IS A PAUSE, and so is the loading screen. `settings.audio` alone started the spoken step
+  // the instant the furniture resolved — which is before the model has drawn and before the stage
+  // chooser has been answered, so the first thing a player heard was an instruction about a build
+  // they could not yet see, over a loading overlay. It should begin when they pick a stage and the
+  // build is actually in front of them.
+  const buildPaused = useBuildPaused();
   const objective = useStepObjective({
     furniture,
     firstAvailable,
     needsFocusChoice,
     mode,
     textLevel: settings.textLevel,
-    audioOn: settings.audio,
+    audioOn: settings.audio && !buildPaused && !loaderVisible,
     completedCount,
     totalCount,
   });
@@ -307,6 +318,7 @@ function GameScreen() {
           lastScale.current = 1;
         })
         .onUpdate((e) => {
+          useGameStore.getState().noteActivity();
           onZoomDelta(e.scale - lastScale.current);
           lastScale.current = e.scale;
         }),
@@ -320,8 +332,12 @@ function GameScreen() {
         .minPointers(2)
         .activeOffsetX([-22, 22])
         .activeOffsetY([-22, 22])
-        .onStart((e) => onPanStart(e.x, e.y))
+        .onStart((e) => {
+          useGameStore.getState().noteActivity();
+          onPanStart(e.x, e.y);
+        })
         .onUpdate((e) => {
+          useGameStore.getState().noteActivity();
           if (e.numberOfPointers >= 2) onPanMove(e.x, e.y);
         })
         .onEnd(() => onPanEnd())
@@ -340,9 +356,15 @@ function GameScreen() {
         .activeOffsetY([-12, 12])
         .onStart((e) => {
           strafing.current = true;
+          // THE PLAYER IS WORKING. Orbiting and strafing touch nothing else in the store, so without
+          // this the idle and stuck fuses burn right through a player who is busy looking round the
+          // build — which is exactly how those cards kept arriving mid-gesture.
+          useGameStore.getState().noteActivity();
           onPanStart(e.x, e.y);
         })
         .onUpdate((e) => {
+          // Throttled inside the store, so a long orbit costs one bump a second rather than one a frame.
+          useGameStore.getState().noteActivity();
           if (strafing.current) onPanMove(e.x, e.y);
         })
         .onFinalize(() => {
@@ -447,6 +469,10 @@ function GameScreen() {
         <CenterDropRing />
         <FitChip />
         <HintToast />
+        {/* Sparky's check-in after a long pause. Momentum only, and it renders itself away for the
+            other three — the profile test lives in the component so this screen cannot disagree with
+            any future caller about who it is for. */}
+        <IdleCheckIn />
         {/* Only speaks when Spot is running and its target is somewhere the player cannot see. */}
         <SpotOrbitCue manipulator={manipulator} />
         {/* Focus mode clears the workbench: everything below is chrome the task doesn't
@@ -459,8 +485,12 @@ function GameScreen() {
         <UndoButton />
         <GameSettings />
         <View style={styles.togglesRow}>
+          {/* Wrapped so a coach can ring it. The row is right-anchored with a gap and Auto is
+              content-sized, so its position cannot be written down — it has to report itself. */}
           {focus ? null : (
-            <DevAutoStep heldDriver={heldDriver} sinkDriver={sinkDriver} />
+            <HudSpotTarget id="auto">
+              <DevAutoStep heldDriver={heldDriver} sinkDriver={sinkDriver} />
+            </HudSpotTarget>
           )}
           {focus ? null : <DevMenu />}
           <ToggleChips />
@@ -468,6 +498,9 @@ function GameScreen() {
         {/* One Map button where the cluster discs were. Same visibility rule they had: hidden in
             focus mode and in strict, where the step is chosen for you. */}
         {!focus && mode !== "strict" ? <MapButton /> : null}
+        {/* Introduces the Map button the first time an account reaches a real build. Shows itself at
+            most once ever — the flag lives on the profile, not on the device. */}
+        <MapCoach />
         <PartsTray
           items={sceneState.trayItems}
           gestureFor={gestureFor}
@@ -604,11 +637,18 @@ function GameScreen() {
             dark={dark}
           />
         </View>
-        <RecenterButton
-          enabled={sceneHasParts}
-          onPress={resetCamera}
-          style={hudControls.recenterButton}
-        />
+        <HudSpotTarget id="recenter" style={hudControls.recenterButton}>
+          {/* Recentring CLEARS THE MISS COUNT. Without this a player who recentres on their own can
+              still be told to recentre a drop or two later — the count survived the very action the
+              card was about to recommend, so the advice arrived already taken. */}
+          <RecenterButton
+            enabled={sceneHasParts}
+            onPress={() => {
+              useGameStore.getState().clearMisses();
+              resetCamera();
+            }}
+          />
+        </HudSpotTarget>
 
         {heldActionId && settings.releaseBehavior === "float" ? (
           // Float mode: a released part stays where it was set down; this is the way back to the tray. (In autoReturn mode a miss returns by itself.)
@@ -631,6 +671,10 @@ function GameScreen() {
           shown over the build, and the celebrations are their own full-screen moments. Left on the
           scope they rendered half-dark, most visibly the map's title, which is t.text on a cream
           card and so came out white on cream. */}
+      {/* OUTSIDE `chrome`, with the other full-screen overlays, and that placement is load-bearing:
+          its ghost ring positions itself from measureInWindow, and inside the inset chrome every
+          ring would be off by the safe-area margin. */}
+      <StuckCoach />
       <ThemeScope value="light">
         {mode !== "strict" ? <BuildMap /> : null}
         <ClusterCelebration />

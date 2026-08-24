@@ -38,6 +38,7 @@ import { hasTrayCard } from "@/src/game/core/evaluation/trayCard";
 import { hintText } from "@/src/game/core/presentation/hintText";
 import { instructionText } from "@/src/game/core/presentation/instructions";
 import { memberPlaceIdsForLead, componentBlockAtTail } from "@/src/game/core/model/components";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 /** Total clockwise rotation to fully tighten a fastener, in degrees. */
 export const TIGHTEN_TOTAL_DEG = 720;
@@ -181,6 +182,17 @@ interface GameState {
   setDragFit: (fitState: FitState, matchedActionId: ActionId | null) => void;
   setAimBlocked: (aimBlocked: boolean) => void;
   releaseHeld: () => "snap" | "recover";
+  /** The action the player keeps failing to place, and how many times in a row they have failed it.
+   *  Reset by a successful snap, by moving to a different part, and by clearMisses. A run of these on
+   *  ONE action is the difference between fumbling a drag and not being able to see where the part
+   *  goes — which is what the recenter prompt is for. */
+  missActionId: ActionId | null;
+  missCount: number;
+  /** Called when a drag ENDS WITHOUT PLACING — the part was set down in float mode, or flew back in
+   *  auto-return. Not by releaseHeld: that only runs when a socket matched, so a counter living
+   *  there counted successes and never saw a single failure. */
+  noteMiss: (actionId: ActionId) => void;
+  clearMisses: () => void;
   cancelHeld: () => void;
 
   examinePart: (partId: PartId) => void;
@@ -190,6 +202,27 @@ interface GameState {
    *  itself when no cluster has been chosen yet; this flag is for reopening it mid-build. */
   mapOpen: boolean;
   setMapOpen: (open: boolean) => void;
+  /** The settings panel is open over the build. Lifted out of GameSettings' own useState so the
+   *  coaches can see it: a card that pops while the player is reading Settings is talking about a
+   *  screen they are not looking at, exactly like the project map. */
+  settingsOpen: boolean;
+  setSettingsOpen: (open: boolean) => void;
+  /** Bumped whenever the player is demonstrably working — including CAMERA-ONLY work, which touches
+   *  nothing else in this store. The idle and stuck prompts restart their fuses on it. Throttled by
+   *  noteActivity, so a per-frame gesture cannot re-render the HUD sixty times a second. */
+  activityTick: number;
+  noteActivity: () => void;
+  /** The cluster whose celebration card is on screen, or null. Lifted out of ClusterCelebration's own
+   *  useState so the coaches can see it — a card popping over the celebration is the same mistake as
+   *  one popping over the map. */
+  celebratingCluster: ClusterId | null;
+  /** Clusters already celebrated for THIS furniture. In the store rather than a component ref so it
+   *  survives a remount and a return visit: going back into a finished stage from the project map
+   *  must not replay its card. Cleared by loadFurniture and reset. */
+  celebratedClusters: ClusterId[];
+  celebrateCluster: (cluster: ClusterId) => void;
+  dismissCelebration: () => void;
+  baselineCelebrated: (clusters: ClusterId[]) => void;
   /** The build map has been shown once for this furniture. Single-cluster builds open it as
    *  an intro; this is what stops it reappearing every time the player returns. */
   mapSeen: boolean;
@@ -229,6 +262,66 @@ const CLEARED = {
   hintTool: null as ToolId | null,
 };
 
+/**
+ * The settings the player has changed by hand, and where they are kept.
+ *
+ * `applyProfile` rewrites every default, and the loading gate calls it on every app start — so
+ * without this a deliberate choice survives only until the app is next opened. Remembering WHICH
+ * KEYS were touched, rather than the whole object, means a profile can still move its own defaults
+ * between releases and only the player's actual decisions are protected.
+ *
+ * Fire-and-forget: a write that fails costs a preference at next launch, which is not worth blocking
+ * a settings toggle for. Restored by `hydrateSettings`, called once at app start.
+ */
+const SETTINGS_KEY = "modu.settings.v1";
+const TOUCHED_KEY = "modu.settings.touched.v1";
+
+const touched = new Set<string>();
+
+async function persistSettings(settings: AccessibilitySettings): Promise<void> {
+  try {
+    await AsyncStorage.multiSet([
+      [SETTINGS_KEY, JSON.stringify(settings)],
+      [TOUCHED_KEY, JSON.stringify([...touched])],
+    ]);
+  } catch {
+    // Losing a preference is a small cost; a crashed settings screen is not.
+  }
+}
+
+/**
+ * Load the player's own settings back over the current defaults.
+ *
+ * Call ONCE at app start, and BEFORE the loading gate applies a profile — the gate reads the saved
+ * onboarding mode and calls applyProfile, which needs `touched` populated to know what to keep.
+ */
+export async function hydrateSettings(): Promise<void> {
+  try {
+    const [[, rawSettings], [, rawTouched]] = await AsyncStorage.multiGet([
+      SETTINGS_KEY,
+      TOUCHED_KEY,
+    ]);
+    if (rawTouched) {
+      for (const key of JSON.parse(rawTouched) as string[]) touched.add(key);
+    }
+    if (!rawSettings) return;
+    const saved = JSON.parse(rawSettings) as Partial<AccessibilitySettings>;
+    // Only the touched keys are laid back down. Anything else in the blob is a default from an older
+    // release, and the current default is the better answer.
+    const kept: Record<string, unknown> = {};
+    for (const key of touched) {
+      if (key in saved) kept[key] = (saved as Record<string, unknown>)[key];
+    }
+    useGameStore.setState((state) => ({
+      settings: { ...state.settings, ...(kept as Partial<AccessibilitySettings>) },
+    }));
+  } catch {
+    // A corrupt blob is not worth failing a launch over — the defaults are always valid.
+  }
+}
+
+let lastActivityAt = 0;
+
 export const useGameStore = create<GameState>()((set, get) => ({
   furniture: null,
   completed: [],
@@ -239,6 +332,12 @@ export const useGameStore = create<GameState>()((set, get) => ({
   combiningCluster: null,
   partBoxes: {},
   mapOpen: false,
+  missActionId: null as ActionId | null,
+  missCount: 0,
+  settingsOpen: false,
+  activityTick: 0,
+  celebratingCluster: null as ClusterId | null,
+  celebratedClusters: [] as ClusterId[],
   mapSeen: false,
   doneDismissed: false,
   completeConfirmed: false,
@@ -282,6 +381,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
       selectedTool: null,
       // Cleared HERE only: part ids collide across furnitures (`leg_1` is both a LACK leg and a DALFRED leg), so a stale map would hand the drag the previous model's geometry until the next harvest lands. The other reset paths keep the same loaded model, where the boxes are still valid and dropping them would disable the feature mid-session for nothing.
       partBoxes: {},
+      celebratingCluster: null,
+      celebratedClusters: [],
       ...CLEARED,
     }),
   reset: () =>
@@ -297,6 +398,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
       driveKind: null,
       driveProgress: {},
       selectedTool: null,
+      celebratingCluster: null,
+      celebratedClusters: [],
       ...CLEARED,
     }),
 
@@ -592,7 +695,11 @@ export const useGameStore = create<GameState>()((set, get) => ({
     if (!heldActionId) return "recover";
     const ok = fitState === "nearCorrect";
     if (ok) get().completeAction(matchedActionId ?? heldActionId);
-    set({ ...CLEARED });
+    // ONLY the success side is handled here. This function runs when a socket matched, so its
+    // "recover" return means something else — see noteMiss for where a failed drag is actually
+    // counted. A snap clears the run, so a player who gets it on the third go starts the next part
+    // clean.
+    set({ ...CLEARED, ...(ok ? { missActionId: null, missCount: 0 } : {}) });
     return ok ? "snap" : "recover";
   },
   cancelHeld: () =>
@@ -610,7 +717,37 @@ export const useGameStore = create<GameState>()((set, get) => ({
   examineCluster: (cluster) =>
     set({ ...CLEARED, examine: { kind: "cluster", cluster } }),
   clearExamine: () => set({ examine: null }),
+  // A run is counted PER ACTION, and only while it stays the same one: putting a part down to try a
+  // different one is a change of plan, not a fourth failure at the same socket.
+  noteMiss: (actionId) =>
+    set((s) => ({
+      missActionId: actionId,
+      missCount: s.missActionId === actionId ? s.missCount + 1 : 1,
+    })),
+  clearMisses: () => set({ missActionId: null, missCount: 0 }),
   setMapOpen: (open) => set({ mapOpen: open }),
+  setSettingsOpen: (open) => set({ settingsOpen: open }),
+  noteActivity: () => {
+    // AT MOST ONCE A SECOND. Orbiting fires onUpdate every frame, and the only consumers are timers
+    // measured in tens of seconds — a bump per frame would buy nothing and re-render the HUD
+    // continuously for the whole gesture.
+    const now = Date.now();
+    if (now - lastActivityAt < 1_000) return;
+    lastActivityAt = now;
+    set((s) => ({ activityTick: s.activityTick + 1 }));
+  },
+  celebrateCluster: (cluster) =>
+    set((s) => ({
+      celebratingCluster: cluster,
+      celebratedClusters: s.celebratedClusters.includes(cluster)
+        ? s.celebratedClusters
+        : [...s.celebratedClusters, cluster],
+    })),
+  dismissCelebration: () => set({ celebratingCluster: null }),
+  // Marks what is ALREADY finished as celebrated without showing anything — used when a build is
+  // first loaded or resumed, so old wins do not replay.
+  baselineCelebrated: (clusters) =>
+    set({ celebratedClusters: clusters, celebratingCluster: null }),
   setMapSeen: (seen) => set({ mapSeen: seen }),
   setDoneDismissed: (v) => set({ doneDismissed: v }),
   setCompleteConfirmed: (v) => set({ completeConfirmed: v }),
@@ -618,14 +755,37 @@ export const useGameStore = create<GameState>()((set, get) => ({
   setCombiningCluster: (cluster) => set({ combiningCluster: cluster }),
   setPartBoxes: (boxes) => set({ partBoxes: boxes }),
 
-  setSettings: (patch) => set({ settings: { ...get().settings, ...patch } }),
+  setSettings: (patch) => {
+    set({ settings: { ...get().settings, ...patch } });
+    // EVERY key the player has touched, remembered. Not the whole settings object: a profile is
+    // allowed to move its own defaults between releases, and a snapshot of every value would freeze
+    // whatever they happened to be on the day this player first opened the app.
+    for (const key of Object.keys(patch)) touched.add(key);
+    void persistSettings(get().settings);
+  },
   setHandedness: (handedness) => set({ handedness }),
-  applyProfile: (profile) =>
-    set({
-      profile,
-      settings: settingsForProfile(profile),
-      mode: PROFILE_MODE[profile],
-    }),
+  applyProfile: (profile) => {
+    // The profile's defaults, WITH the player's own choices laid back over the top.
+    //
+    // This used to replace `settings` outright, and the loading gate calls it on every app start —
+    // so a toggle the player changed lived until they next opened the app and then quietly went
+    // back. Handedness was moved out of `settings` for exactly this reason; the rest of the object
+    // needed the same protection rather than the same escape hatch.
+    //
+    // Only KEYS THE PLAYER HAS TOUCHED survive. Switching profile still does what it says — it
+    // rewrites every default — but it cannot undo a deliberate choice, and a preference stays until
+    // it is changed back by hand.
+    const base = settingsForProfile(profile);
+    const kept: Partial<AccessibilitySettings> = {};
+    for (const key of touched) {
+      if (key in get().settings) {
+        (kept as Record<string, unknown>)[key] = (get().settings as unknown as Record<string, unknown>)[key];
+      }
+    }
+    const settings = { ...base, ...kept };
+    set({ profile, settings, mode: PROFILE_MODE[profile] });
+    void persistSettings(settings);
+  },
 }));
 
 /** The "first part" case: a part is held AND the cluster it belongs to has no structural part placed yet. The very first drop gets a simplified UX — drop on a centre ring instead of aiming at a socket ghost. Shared by the scene, the drag, and the centre-ring overlay so they agree. */

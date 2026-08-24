@@ -3,16 +3,8 @@ import type { Href } from "expo-router";
 import * as Speech from "@/src/onboarding/speech";
 import { introPath, optionPath, promptPath } from "@/src/onboarding/voiceAssets";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Animated,
-  Image,
-  ImageBackground,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
-} from "react-native";
+import { Animated, Image, ImageBackground, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import {
   getRecommendedModes,
@@ -667,7 +659,9 @@ export default function QuestionnaireScreen() {
             // Apply the hand HERE, not only where it is saved. A first run goes questionnaire -> avatar -> room without passing the loading gate again, so a left-hander who waited for the gate to read it back would build their whole first session right-handed. The DB write still happens at the end of the questionnaire; this is the same answer reaching the session it was given in.
             if (handedness) useGameStore.getState().setHandedness(handedness);
             setIntroComplete(true);
-            setActiveHint("voice");
+            // The voice notice is its own screen now (app/(onboarding)/voice-intro.tsx), shown before
+            // this one. Firing it here as well would say the same thing twice, the second time on top
+            // of question 1.
           }}
           style={styles.introNextButton}
         />

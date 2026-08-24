@@ -1,24 +1,46 @@
 import { router } from "expo-router";
 import type { Href } from "expo-router";
 import { useState } from "react";
-import { StyleSheet, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { StyleSheet, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import { AccountSwitcher } from "./AccountSwitcher";
+import { useGameStore } from "@/src/game/core/store";
+import { useTutorialStore } from "@/src/game/tutorial/store";
+import type { ProfileId } from "@/src/game/core/profile";
+import { resetMapCoachSeen } from "@/src/game/ui/hud/MapCoach";
+import { useCurrentUserId, useRepos } from "@/src/data";
 
 type GmTarget = {
   label: string;
   route: Href;
   note: string;
+  /**
+   * Applied to the game store BEFORE navigating.
+   *
+   * The tutorial builds its step list from `useGameStore.profile` — Lumi's run is a hand-written
+   * list returned only for `visual`, and the other three share the composed one. Onboarding sets the
+   * profile on its way out (avatar-recommendation calls applyProfile), so the tutorial it opens
+   * always matches the avatar just chosen; jumping here set nothing, so you got whatever the store
+   * happened to hold and the tutorial looked like the wrong version of itself.
+   */
+  profile?: ProfileId;
 };
 
 const targets: GmTarget[] = [
   { label: "Welcome", route: "/" as Href, note: "Landing screen" },
-  { label: "Onboarding", route: "/onboarding-questionnaire" as Href, note: "Questionnaire" },
+  { label: "Onboarding", route: "/voice-intro" as Href, note: "Voice notice, then questionnaire" },
   {
     label: "Avatar",
     route: "/avatar-recommendation?mode=momentum&secondary=visual" as Href,
     note: "Recommendation result",
   },
-  { label: "Tutorial", route: "/tutorial" as Href, note: "Mascot guide task" },
+  // FOUR entries, not one. The four profiles run genuinely different tutorials — Lumi's is her own
+  // list, the other three are composed and differ again by mode and by softHints — so a single
+  // button could only ever test one of them, and silently.
+  { label: "Tut · Lumi", route: "/tutorial" as Href, note: "Visual", profile: "visual" },
+  { label: "Tut · Sparky", route: "/tutorial" as Href, note: "Momentum", profile: "momentum" },
+  { label: "Tut · Pebble", route: "/tutorial" as Href, note: "Clear Path", profile: "clearPath" },
+  { label: "Tut · Felix", route: "/tutorial" as Href, note: "Control", profile: "control" },
   { label: "Task", route: "/catalogue" as Href, note: "Task catalogue" },
   { label: "Room", route: "/room" as Href, note: "Virtual room" },
   { label: "Profile", route: "/profile" as Href, note: "Profile & friends" },
@@ -36,12 +58,21 @@ export function GmTestPanel() {
   const [open, setOpen] = useState(false);
   // The app is landscape-LOCKED, so the tall axis is the short one: a phone gives roughly 250 points above the panel's bottom edge, and the roster alone is taller than that once a build lists more than about three accounts. Uncapped, the lower rows — Sign out and Purge among them — render off the top of the screen where no touch can reach them. Cap against the live window rather than a constant so a tablet still gets the whole panel without scrolling.
   const { height } = useWindowDimensions();
+  const repos = useRepos();
+  const me = useCurrentUserId();
   const maxPanelHeight = Math.max(180, height - PANEL_BOTTOM_INSET - PANEL_TOP_GUTTER);
 
   // The catalogue picks the furniture now, so nothing here needs the old "/play + an id chosen from the active profile" special case — that guessed one piece when the point was to choose.
-  const jumpTo = (route: Href) => {
+  const jumpTo = (target: GmTarget) => {
     setOpen(false);
-    router.replace(route);
+    if (target.profile) {
+      // Same two calls onboarding makes, in the same order: applyProfile rewrites the settings and
+      // the mode for that profile, and resetTutorial clears any run already in progress so the
+      // screen configures from scratch rather than resuming someone else's script.
+      useGameStore.getState().applyProfile(target.profile);
+      useTutorialStore.getState().resetTutorial();
+    }
+    router.replace(target.route);
   };
 
   return (
@@ -67,7 +98,7 @@ export function GmTestPanel() {
               {targets.map((target) => (
                 <Pressable
                   key={target.label}
-                  onPress={() => jumpTo(target.route)}
+                  onPress={() => jumpTo(target)}
                   style={styles.targetButton}
                   hitSlop={4}
                 >
@@ -76,6 +107,19 @@ export function GmTestPanel() {
                 </Pressable>
               ))}
             </View>
+            {/* The Map coach is once per ACCOUNT and remembered in two places, so without this there
+                is no way to see it a second time on the same login — which makes "it did not show"
+                impossible to tell apart from "it already has". */}
+            <Pressable
+              onPress={() => {
+                void resetMapCoachSeen(repos.profiles, me).then(() => setOpen(false));
+              }}
+              style={styles.targetButton}
+              hitSlop={4}
+            >
+              <Text style={styles.targetLabel}>Reset Map coach</Text>
+              <Text style={styles.targetNote}>Show it again on the next task</Text>
+            </Pressable>
             {/* Renders nothing unless a roster is live in this build. Closes the panel before it navigates. */}
             <AccountSwitcher onDone={() => setOpen(false)} />
           </ScrollView>

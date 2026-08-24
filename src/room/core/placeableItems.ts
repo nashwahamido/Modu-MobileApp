@@ -1,6 +1,6 @@
 // The room's placeable-item catalog: everything the grid needs to place, validate, and render an item. Keyed by the DB's kebab ids (placeable_items.id) — the id that gets PERSISTED in layouts — never by the assembly engine's FurnitureId.
 //
-// The catalog is DB-DRIVEN: placeable_items carries each item's measured size + base offset (see migration 003_catalog.sql), and registerPlaceables() feeds those rows in (placeableStore syncs them, cache-then-network). The BUILT set is also baked in below as the offline fallback — those items ship bundled models, so a first launch with no network still places what it can render. Bought items exist only via the DB rows; their models live in storage (room/bought/...).
+// The catalog is DB-DRIVEN: placeable_items carries each item's measured size + base offset (see migration 003_catalog.sql), and registerPlaceables() feeds those rows in (placeableStore syncs them, cache-then-network). The BUILT set is also baked in below (BUNDLED_ROWS) so a first launch with no network still knows those items' dimensions and can validate a placement — their MODELS are not bundled and come from storage like everything else, so the piece is measurable before it is drawable.
 //
 // Dimensions are MEASURED from the GLBs (world AABB after node transforms), not typed in. The furniture is authored in real-world meters, and since 2026-07-29 the shell is TOO — it was rescaled against real-size furniture, so shell-units ARE meters and the world factor is 1. The factor stays in the code path so proportions between pieces remain governed by ONE number: a stool is still stool-sized next to a cabinet — per-item hand-tuned scales (the old sceneScale) stay dead, and if a future shell ever ships off-scale again only this constant moves.
 import { create } from "zustand";
@@ -8,7 +8,6 @@ import { create } from "zustand";
 import { modelPath, type ItemSource } from "../../data/catalog/assets";
 import { catalogUrl } from "../../data/catalog/urls";
 import type { PlaceableRoomRow, RoomItemLight } from "../../data/core/repos";
-import type { AssetSrc } from "../../game/core/type";
 import type { Footprint, PlaceableItemDef } from "./grid";
 import { ROOM_SHELL, TOP_CELL_SIZE, WALL_CELL_SIZE } from "./roomShell";
 
@@ -19,8 +18,8 @@ export type RoomItemModel = {
   size: { x: number; y: number; z: number };
   // Lift from the model's origin to its base: -worldMinY. 0 for base-origin models; EKET is authored centred and needs half its height.
   baseOffsetY: number;
-  // Only for lighting (category 'lit'), from item_lights via the placeable_items view. Undefined means the piece emits nothing — true of every item but a lamp.
-  light?: RoomItemLight;
+  // Only for lighting (category 'lit'), from item_lights via the placeable_items view. Undefined means the piece emits nothing — true of every item but a lamp. One or two entries since migration 026 (a point and a spot at once), ordered point-then-spot.
+  lights?: RoomItemLight[];
 };
 
 const CELL = ROOM_SHELL.cellSize;
@@ -65,6 +64,14 @@ function toModel(row: PlaceableRoomRow): RoomItemModel {
   const topFootprint: Footprint = { w: topCells(topSize.x), d: topCells(topSize.z) };
   // Floor and wall are mutually exclusive (one `mount`, required since migration 024); standing on a host's top (`onTop`) is orthogonal and is APPENDED to that mount, never a replacement for it. Every item therefore has at least one surface, which is what lets startPlacing answer "where does this ghost open" with a complete two-way branch instead of searching the room for a host and refusing when there is none.
   const allowedSurfaces = [row.mount, ...(row.onTop ? (["furniture"] as const) : [])];
+  // `lights` since migration 026 — a lamp may carry a point AND a spot. `light` is read as a one-element
+  // fallback purely for a STALE CACHE: placeableStore persists this mapped shape to AsyncStorage, so the
+  // first launch after an app update reads rows written by the previous build, which named the field
+  // `light`. The network sync replaces them moments later; without this the lamps in a saved room would
+  // go dark for those few seconds. Not a DB concern — repos.ts already normalised both row shapes before
+  // anything reaches here.
+  const cached = (row as PlaceableRoomRow & { light?: RoomItemLight }).light;
+  const lights = row.lights ?? (cached != null ? [cached] : undefined);
   const def: PlaceableItemDef =
     row.mount === "wall"
       ? {
@@ -85,10 +92,10 @@ function toModel(row: PlaceableRoomRow): RoomItemModel {
             ...(mask ? { mask } : {}),
             ...(row.topSurface ? { hostsTop: true } : {}),
             allowedSurfaces,
-            emitsLight: row.category === "lit" && row.light != null,
+            emitsLight: row.category === "lit" && lights != null,
           };
         })();
-  return { def, source: row.source, size: row.size, baseOffsetY: row.baseOffsetY, light: row.light };
+  return { def, source: row.source, size: row.size, baseOffsetY: row.baseOffsetY, lights };
 }
 
 // The baked-in BUILT set: sizes mirror the DB seed (003_catalog.sql) the same way seed.ts does, so offline placement matches what the catalog will say once it loads.
@@ -111,41 +118,32 @@ export const useRoomCatalogStore = create<RoomCatalogState>()(() => ({
   items: toItems(BUNDLED_ROWS),
 }));
 
-// Adopt the catalog's rows. The bundled built set stays as a floor under the DB — a row list that lost an item (or a partial fetch) must never strand an already-placed bundled piece invisible.
+// Adopt the catalog's rows. The baked-in built rows stay as a floor under the DB — a row list that lost an item (or a partial fetch) must never strand an already-placed piece unplaceable for want of its dimensions.
 export function registerPlaceables(rows: PlaceableRoomRow[]): void {
   useRoomCatalogStore.setState({ items: { ...toItems(BUNDLED_ROWS), ...toItems(rows) } });
 }
 
-// The BUILT set, as ids rather than as model assets. This used to BE the model map — "the bundle IS the built set" — which quietly coupled two unrelated questions, so removing the models below would have silently reclassified every built item as bought and sent it looking down the wrong storage subtree.
+// The BUILT set, as ids. It answers ONE question — which room/<source>/ subtree an id the catalog has not sent yet lives in — and nothing else. It used to be read off a bundled-model map on the rule "the bundle IS the built set", which coupled that classification to an asset table that no longer exists; keeping the ids here is what stops the room reclassifying every built item as bought and looking down the wrong subtree.
 const BUILT_ITEM_IDS = new Set(["dalfred-stool", "lack-table", "eket-cabinet", "bekvam-stool"]);
 
-// DELIBERATELY EMPTY, and it is a fix rather than an omission.
-//
-// This map used to point each built item at its ASSEMBLY GLB — the model the construction minigame uses, with every panel, screw and fastener as its own mesh. As a room decoration none of that geometry is ever visible (a built cabinet is closed), but all of it was parsed: EKET is 66.9 MB and BEKVAM 40.8 MB, against storage variants of 0.29 MB and 0.14 MB for the same pieces. A 230x cost to draw the same object.
-//
-// It was not merely a slow first frame either. variantModel drops to this bundle whenever a colour's URL is unprobed OR its probe fails, so an item whose default variant is missing from storage sits on the assembly model FOREVER — which is exactly what eket-cabinet does today, its default being 'black' while only white.glb exists in the bucket.
-//
-// The guarantee being given up is "a built piece is NEVER invisible", which was cheap when a bundled model was the same object at the same size and stopped being cheap when the assembly models grew. Bought items already accept it (variantModel returns null and the caller renders nothing), so built items now behave the same way. If it needs to come back, the answer is a SMALL room-sized GLB per item, never the assembly one — the shape of this map is preserved for exactly that.
-const MODEL_SOURCES: Record<string, () => AssetSrc> = {};
-
-// The BUNDLED model — one look per item, no colour axis. Nothing ships one at present (see above), so this resolves null for everything and callers wait for the storage variant, rendering nothing until it arrives.
-export function getRoomItemModelSource(itemId: string): AssetSrc | null {
-  return MODEL_SOURCES[itemId]?.() ?? null;
-}
-
-// Which room/<built|bought>/ subtree an item's assets live in. The catalog row is the authority;
-// for an id the catalog does not know (yet), acquisition still decides it — only buildable furniture ships a bundled model, so the bundle IS the built set.
+// Which room/<built|bought>/ subtree an item's assets live in. The catalog row is the authority; for an id the catalog does not know (yet), acquisition decides it — see BUILT_ITEM_IDS above.
 export function roomItemSource(itemId: string): ItemSource {
   const item = useRoomCatalogStore.getState().items[itemId];
   if (item) return item.source;
   return BUILT_ITEM_IDS.has(itemId) ? "built" : "bought";
 }
 
-// The storage path of the model to load (room/<built|bought>/<id>/<variation|'default'>.glb). Null when the caller should use the bundled model instead: unknown items always, and BUILT items with no colour picked (their bundle is the default look, no round trip needed). A BOUGHT item has no bundle, so even with no colour axis it resolves to its 'default' segment in storage. Pure (a path, not a URL), so node:test can pin the routing without a Supabase client.
+// The storage path of the model to load (room/<built|bought|workshop>/<id>/<variation|'default'>.glb). Pure (a path, not a URL), so node:test can pin the routing without a Supabase client.
+//
+// EVERY room model comes from storage, built and bought alike — there is no bundled room GLB and no source-dependent branch here any more.
+//
+// The bundle this replaces pointed each built item at its ASSEMBLY GLB, the model the construction minigame uses with every panel, screw and fastener as its own mesh. None of that geometry is visible on a closed cabinet standing in a room, but all of it was parsed: EKET is 66.9 MB and BEKVAM 40.8 MB against storage variants of 0.29 MB and 0.14 MB — a 230x cost to draw the same object — so the map was emptied. What was left behind was the BRANCH that fed it: a built item with no colour picked returned null here so the caller could load a bundle that no longer existed, and rendered nothing instead. That is the normal path, not an edge case, because startPlacing from the Inventory passes no variation and defaultVariationOf resolves to null for anything the variants store has not loaded yet.
+//
+// If a bundled room model is ever wanted again it must be a SMALL room-sized GLB per item, never the assembly one — and it belongs in variantModel's fallback, not in a branch here that hides the storage path from the caller.
 export function getRoomItemStoragePath(itemId: string, variation: string | null | undefined): string | null {
   const item = useRoomCatalogStore.getState().items[itemId];
+  // The one remaining null: an id the room cannot place has no subtree to build a path in, and a guessed one would 404 at load time.
   if (!item) return null;
-  if (!variation && item.source === "built") return null;
   return modelPath(item.source, itemId, variation ?? null);
 }
 

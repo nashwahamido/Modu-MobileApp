@@ -276,6 +276,51 @@ export function withStaging(
   return out;
 }
 
+/**
+ * Pull every cluster's OWN fasteners ahead of the first combine. The fastener appendix lands after every authored action, combines included, so a sub-assembly's hardware was asked for AFTER the sub-assembly had been joined into the furniture — and once anything is combined, the next focused cluster renders at its baked pose inside it. EKET asked for the drawer-back screws with the drawer already inside the finished cabinet (box-blocked from 72/72 sweep cameras, topPanel alone hiding 46; measured 6mm and passing with the drawer still loose); DALFRED asked for the pole's end cap after the pole was threaded down over the support pin (50mm behind it). The authored stage said otherwise in both cases and never got a say against array position.
+ *
+ * A fastener is a cluster's own when every part it attaches to sits in ONE cluster; one that bridges clusters realizes the combine joint and stays where it is, as does anything that explicitly requires a combine. Only actions sequenced after the first combine move, so hardware withStaging already placed inside a take-out → fit → carry-in window keeps that story. Each moved action lands right after its cluster's LAST pre-combine action — build the cabinet, screw the cabinet, build the drawer, screw the drawer — rather than in one hardware block before the combines; relative order among them is preserved, so each insert still precedes its tighten.
+ */
+export function withFastenersBeforeCombines(
+  drafts: readonly DraftAction[],
+  parts: Parts,
+): DraftAction[] {
+  const out = [...drafts];
+  const firstCombine = out.findIndex((d) => d.type === "combineClusters");
+  if (firstCombine < 0) return out;
+  const combineIds = new Set(out.filter((d) => d.type === "combineClusters").map((d) => d.actionId));
+  const ownCluster = (d: DraftAction): ClusterId | null => {
+    if (d.type !== "placeFastener" && d.type !== "insertFastener" && d.type !== "tightenFastener") return null;
+    const p = d.partId ? parts[d.partId] : undefined;
+    if (!p || p.type !== "fastener") return null;
+    const owners = (p.attached ?? []).map((id) => parts[id]?.cluster);
+    if (!owners.length || owners.some((c) => !c)) return null;
+    if (new Set(owners).size !== 1) return null;
+    return d.requires?.some((r) => combineIds.has(r)) ? null : owners[0]!;
+  };
+  const moved: { d: DraftAction; cluster: ClusterId }[] = [];
+  for (let i = out.length - 1; i > firstCombine; i--) {
+    const cluster = ownCluster(out[i]);
+    if (!cluster) continue;
+    moved.unshift({ d: out[i], cluster });
+    out.splice(i, 1);
+  }
+  // Group by cluster, then splice each group after the last pre-combine action touching a part of that cluster (falling back to just before the first combine). Later groups splice first so earlier indices stay valid.
+  const byCluster = new Map<ClusterId, DraftAction[]>();
+  for (const m of moved) (byCluster.get(m.cluster) ?? byCluster.set(m.cluster, []).get(m.cluster)!).push(m.d);
+  const anchorFor = (cluster: ClusterId): number => {
+    for (let i = firstCombine - 1; i >= 0; i--) {
+      const pid = out[i].partId;
+      if (pid && parts[pid]?.cluster === cluster) return i + 1;
+    }
+    return firstCombine;
+  };
+  const groups = [...byCluster.entries()].map(([cluster, list]) => ({ at: anchorFor(cluster), list }));
+  groups.sort((a, b) => b.at - a.at);
+  for (const g of groups) out.splice(g.at, 0, ...g.list);
+  return out;
+}
+
 /** Derive each combineClusters action's ordering from the cluster overlay: a cluster's combine requires the combines of every cluster it slideJoins. The overlay is then the single source of truth for combine order, and authors stop hand-writing requires that must be kept in sync with slideJoins. Furniture with no overlay passes straight through. */
 export function withClusterCombines(
   drafts: readonly DraftAction[],
@@ -308,7 +353,7 @@ export const withOrder = (
     return { ...a, ...(partTool ? { tool: partTool } : {}), order: i };
   });
 
-/** The ONE way to turn a furniture's authored drafts + fastener rules into its final action list: expand the rules, split staged parts into take-out + fit-in, then stamp `order`. Every consumer (each furniture's meta.ts, the validator and engine-test harnesses, the availability tests) must go through here — the passes are order-sensitive, and hand-rolled copies of this chain have twice silently dropped a later pass. */
+/** The ONE way to turn a furniture's authored drafts + fastener rules into its final action list: expand the rules, split staged parts into take-out + fit-in, pull each cluster's own fasteners ahead of the combines, then stamp `order`. Every consumer (each furniture's meta.ts, the validator and engine-test harnesses, the availability tests) must go through here — the passes are order-sensitive, and hand-rolled copies of this chain have twice silently dropped a later pass. */
 export function composeFurnitureActions(
   authored: readonly DraftAction[],
   rules: readonly FastenerRule[],
@@ -318,7 +363,10 @@ export function composeFurnitureActions(
 ): AssemblyAction[] {
   return withOrder(
     withClusterCombines(
-      withStaging([...authored, ...expandFastenerRules(rules, parts, hardware)], parts),
+      withFastenersBeforeCombines(
+        withStaging([...authored, ...expandFastenerRules(rules, parts, hardware)], parts),
+        parts,
+      ),
       clusters,
     ),
     parts,

@@ -3,7 +3,8 @@
 //
 // Embedded in the screen rather than floated over the app: during a demo this is what an attendee actually touches, so it has to look like part of the product. Themed with the app's own primitives for that reason — unlike ordinary dev tooling, which stays deliberately plain. Self-gating: renders null when no roster is live, so auth.tsx can mount it freely.
 import { useState } from "react";
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import Svg, { Defs, RadialGradient, Rect, Stop } from "react-native-svg";
 import { router } from "expo-router";
@@ -31,7 +32,9 @@ const LEVEL_STARS: Record<number, number> = {
 
 // A prepared account drops straight into its furnished room; a fresh one starts the questionnaire so the whole onboarding → tutorial run is on show.
 const ESTABLISHED_ROUTE = "/room" as Href;
-const FRESH_ROUTE = "/onboarding-questionnaire" as Href;
+// The FIRST screen of onboarding, which is the voice notice — it hands on to the questionnaire.
+// Pointing dev entries straight at the questionnaire skipped it, which is how it looked missing.
+const FRESH_ROUTE = "/voice-intro" as Href;
 
 /** One character card. Its own component so each card owns its own scale value — a single shared
  *  one would grow all four whenever any of them was pressed. */

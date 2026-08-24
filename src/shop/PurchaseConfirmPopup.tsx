@@ -1,5 +1,11 @@
 // The "buy this?" confirmation, as a popup over the shop. Nothing is charged until Yes — the tap that opens this is not itself a purchase
-import { StyleSheet, Image, Pressable, Text, View } from "react-native";
+import {
+  StyleSheet,
+  Image,
+  Text,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import { COIN_ICON } from "@/src/components/iconAssets";
 import {
@@ -15,11 +21,12 @@ import type { Theme } from "@/src/game/ui/system/theme";
 
 
 const YES_FILL = "#8D7BA8";
-const YES_BORDER = "#605473";
 const NO_FILL = "#595551";
-const NO_BORDER = "#393837";
 const PANEL_STROKE = "#544F4B";
-const PANEL_STROKE_WIDTH = 1.2;
+// 0 = no outline, matching the shop and inventory panels these cards open over. The cards are told
+// apart from the scrim by their fill and their lift, which is enough — an outline as well read as a
+// second border stacked on the panel behind.
+const PANEL_STROKE_WIDTH = 0;
 const BUTTON_HEIGHT = 34;
 // Shared with the surface fallback, which sizes its picture from the frame
 const WELL_SIZE = { width: 200, height: 158 };
@@ -181,18 +188,16 @@ const makeStyles = (t: Theme) =>
       minWidth: 76,
       height: BUTTON_HEIGHT,
       borderRadius: BUTTON_HEIGHT / 2,
-      borderWidth: 0.8,
       alignItems: "center",
       justifyContent: "center",
       ...CREAM_LIFT.control,
     },
+    // No outline: the fill alone says which is which, and the pair sits on a card that has none either
     yes: {
       backgroundColor: YES_FILL,
-      borderColor: YES_BORDER,
     },
     no: {
       backgroundColor: NO_FILL,
-      borderColor: NO_BORDER,
     },
     pressed: {
       opacity: 0.75,

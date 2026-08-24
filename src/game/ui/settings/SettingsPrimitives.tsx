@@ -1,7 +1,13 @@
 // The row vocabulary every settings surface is built from, and the styles they share. Visual language adopted from the on-release engine: a compact arrow Stepper (‹ Value ›) for multi-choice settings, Switch rows for booleans.
 //
 // Split out of SettingsControls so the two panels — the tabbed /settings screen and the reduced in-build gear panel — compose the SAME rows instead of each carrying a copy that can drift.
-import { StyleSheet, Pressable, Switch, Text, View } from "react-native";
+import {
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import { useFixedStyles, useTheme, FONT } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 

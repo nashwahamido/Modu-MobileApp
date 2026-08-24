@@ -1,6 +1,12 @@
 // The "you can't buy this" notice, as a popup over the shop. The twin of
 // PurchaseConfirmPopup — same card, same scrim, one button instead of two
-import { StyleSheet, Image, Pressable, Text, View } from "react-native";
+import {
+  StyleSheet,
+  Image,
+  Text,
+  View,
+} from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 
 import { COIN_ICON, STAR_ICON, levelIcon } from "@/src/components/iconAssets";
 import {
@@ -18,7 +24,10 @@ import type { PurchaseBlock } from "./purchaseBlock";
 
 // The shop and inventory panels' edge, so every surface in this family shares one outline
 const PANEL_STROKE = "#544F4B";
-const PANEL_STROKE_WIDTH = 1.2;
+// 0 = no outline, matching the shop and inventory panels these cards open over. The cards are told
+// apart from the scrim by their fill and their lift, which is enough — an outline as well read as a
+// second border stacked on the panel behind.
+const PANEL_STROKE_WIDTH = 0;
 // Shared with the surface fallback, which sizes its picture from the frame
 const WELL_SIZE = { width: 200, height: 158 };
 const LOCK_STAR_SIZE = 86;

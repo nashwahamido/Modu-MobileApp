@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import { ORIENTATION_TOTAL_DEG, useGameStore } from "@/src/game/core/store";
 import { AssemblyAction, Vec3 } from "@/src/game/core/type";
 import { SCREW_SPIN_DEG, screwSpinInfo } from "@/src/game/core/evaluation/engagement";

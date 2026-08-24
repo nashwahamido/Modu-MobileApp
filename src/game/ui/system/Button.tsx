@@ -11,10 +11,12 @@ import {
   StyleProp,
   StyleSheet,
   Text,
+  TextStyle,
   View,
   ViewStyle,
 } from "react-native";
 
+import { playSfx } from "@/src/game/audio/sfx";
 import { ELEVATION, RADIUS, SIZE, SPACE, Theme, TYPE, useTheme } from "./theme";
 
 /**
@@ -49,6 +51,9 @@ interface ButtonProps {
   /** A count, rendered in the accent (the Hint button's "2" in the reference). */
   badge?: number | string;
   style?: StyleProp<ViewStyle>;
+  /** Overrides on top of the label's `TYPE.label`/`TYPE.labelSm` — e.g. a bigger `fontSize` for
+   *  one screen's buttons, without touching every other caller of this shared component. */
+  labelStyle?: StyleProp<TextStyle>;
   hitSlop?: number;
   /** Overrides the label for screen readers — needed for icon-only buttons that have no
    *  visible text label to announce. */
@@ -74,6 +79,25 @@ function textFor(t: Theme, variant: ButtonVariant, pressed: boolean): string {
   return t.text;
 }
 
+/**
+ * THE CLICK, added here rather than at 140 call sites.
+ *
+ * Every button in the app goes through one of these four primitives, so wrapping the handler once
+ * means a new button is audible for free and nobody has to remember. Dragging a part is deliberately
+ * NOT a button: it runs through usePartDrag's gestures and keeps its own pickup and drop sounds,
+ * which are about the PART rather than about a control being pressed.
+ *
+ * A disabled button never reaches here — Pressable does not call onPress — so a refused tap stays
+ * silent, which is the right answer: a sound would read as "that worked".
+ */
+function withClick(onPress?: () => void) {
+  if (!onPress) return undefined;
+  return () => {
+    playSfx("click");
+    onPress();
+  };
+}
+
 export function Button({
   label,
   icon,
@@ -84,6 +108,7 @@ export function Button({
   small,
   badge,
   style,
+  labelStyle,
   hitSlop = 8,
   accessibilityLabel,
 }: ButtonProps) {
@@ -92,7 +117,7 @@ export function Button({
 
   return (
     <Pressable
-      onPress={onPress}
+      onPress={withClick(onPress)}
       disabled={disabled}
       hitSlop={hitSlop}
       accessibilityRole="button"
@@ -129,6 +154,7 @@ export function Button({
                     : textFor(t, variant, pressed && !disabled),
                 },
                 icon ? { marginLeft: SPACE.sm } : null,
+                labelStyle,
               ]}
             >
               {label}
@@ -170,7 +196,7 @@ export function IconButton({
 
   return (
     <Pressable
-      onPress={onPress}
+      onPress={withClick(onPress)}
       disabled={disabled}
       hitSlop={10}
       accessibilityRole="button"
@@ -218,7 +244,7 @@ export function Fab({
   const t = useTheme();
   return (
     <Pressable
-      onPress={onPress}
+      onPress={withClick(onPress)}
       hitSlop={10}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
@@ -289,7 +315,7 @@ export function PanelRow({
   const t = useTheme();
   return (
     <Pressable
-      onPress={onPress}
+      onPress={withClick(onPress)}
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={label}
@@ -441,5 +467,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.md,
   },
   track: { height: 8, borderRadius: RADIUS.pill, overflow: "hidden" },
-  fill: { height: 8, borderRadius: RADIUS.pill },
+  // 100% (not a fixed 8) so a caller overriding `track`'s height via `style` gets a fill that
+  // still fills it — at the default 8px height this renders identically to a fixed 8.
+  fill: { height: "100%", borderRadius: RADIUS.pill },
 });

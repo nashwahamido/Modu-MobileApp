@@ -1,11 +1,11 @@
 // The player's profile hub: their card (avatar, level, editable nickname, stats) beside a friends list. Reads/writes entirely through the repo seam (src/data), so it works on fixtures today and swaps to Supabase untouched.
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { StyleSheet, ActivityIndicator, Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { StyleSheet, ActivityIndicator, Image, ScrollView, Text, TextInput, View } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import { useScreenInsets } from '@/src/hooks/use-safe-insets';
 
 import { Button } from "@/src/game/ui/system/Button";
-import { StarIcon } from "@/src/components/Icons";
 import { avatarForProfile } from "@/src/components/avatarAssets";
 import { RADIUS, TYPE, SPACE, useStyles, useTheme, useUiScale, SIZE } from "@/src/game/ui/system/theme";
 import { FURNITURE_METAS } from "@/src/game/content/furnitures/furnitures";
@@ -13,6 +13,8 @@ import { useCurrentUserId, useRepos } from "@/src/data";
 import type { FriendRequest, Profile } from "@/src/data";
 import type { Theme } from "@/src/game/ui/system/theme";
 import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
+import { ASSEMBLE_ICON, STAR_ICON, levelIcon } from "@/src/components/iconAssets";
+import { titleCase } from "@/src/data/player/levels";
 
 // The "/N" denominator for items assembled: the same buildable set the catalogue counts.
 const TOTAL_BUILDS = FURNITURE_METAS.length;
@@ -21,10 +23,6 @@ type FriendsTab = "friends" | "requests";
 
 /** "an ambitious newbie" -> "An Ambitious Newbie". The titles are authored lowercase, and a rank
  *  reads as a rank when it is capitalised like one. */
-function titleCase(s: string): string {
-  return s.replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
 /** The avatar recommendation's backdrop, so the two "who you are" screens share a look. */
 /** Shared with the avatar recommendation screen — the two are the same moment either side of
  *  onboarding ("this is who you are"), so they wear the same art rather than each tuning a ramp. */
@@ -44,12 +42,18 @@ const GUTTER_H = 28;
  *  ignores shadowColor/shadowOpacity entirely and draws its own soft grey ramp. The remaining keys
  *  are the iOS fallback for the old architecture. Darker: raise the alpha. Softer: raise the blur. */
 const PANEL_SHADOW = {
-  boxShadow: "0px 5px 4px rgba(0,0,0,0.40)",
+  // 0.40 -> 0.12, and the blur widened 4 -> 10. At two fifths alpha over a four-pixel blur this was a
+  // hard dark band under every cream surface rather than a lift — five of them stacked down the
+  // screen, so the whole page read as harsh. A wide, faint shadow reads as height; a tight, dark one
+  // reads as an outline.
+  boxShadow: "0px 4px 10px rgba(0,0,0,0.12)",
   shadowColor: "#000",
-  shadowOpacity: 0.8,
-  shadowRadius: 2,
-  shadowOffset: { width: 0, height: 4 },
-  elevation: 6,
+  // The iOS fallback, matched to the same weight rather than left at its old 0.8.
+  shadowOpacity: 0.14,
+  shadowRadius: 8,
+  shadowOffset: { width: 0, height: 3 },
+  // Android's own ramp, for the old architecture where boxShadow is not honoured. Down with the rest.
+  elevation: 3,
 } as const;
 
 /** How far the friends column starts below the top of the screen. It clears the avatar's own top
@@ -252,6 +256,10 @@ export default function ProfileScreen() {
     );
   }
 
+  // Below the guard, so `profile` is known. Null past the last numbered star, which is what switches
+  // the badge to the plain star with the level drawn as text.
+  const levelStar = levelIcon(profile.level);
+
   return (
     // The artwork is the screen ROOT, through SceneBackdrop — an ImageBackground, never an
     // <Image absoluteFill>, which scales the same file differently and renders it zoomed (see the
@@ -304,14 +312,25 @@ export default function ProfileScreen() {
               source={avatarForProfile(profile.avatarMode)}
               style={[styles.avatar, { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }]}
             />
+            {/* The numbered star ARTWORK, not a drawn star with a number typed over it — the same
+                rule RoomTopStats follows, so a player's level looks identical in the room and on
+                their profile. Past the last numbered star the artwork runs out, and only then does
+                the plain star carry the level as text. */}
             <View style={styles.levelBadge}>
-              <StarIcon size={40} color={t.accent} />
-              <Text style={styles.levelText}>{profile.level}</Text>
+              <Image
+                source={levelStar ?? STAR_ICON}
+                style={styles.levelStar}
+                resizeMode="contain"
+              />
+              {levelStar ? null : <Text style={styles.levelText}>{profile.level}</Text>}
             </View>
             {/* Straddling the avatar's lower edge, so the rank reads as belonging TO the face above
                 it rather than as the first line of a list below it. */}
             <View style={styles.titleBadge}>
-              <StarIcon size={13} color={t.accent} />
+              {/* The universal star, not a numbered one: this marks a RANK ("A Seasoned Builder"),
+                  which has nothing to do with the level, and a numbered star here would read as a
+                  second, contradicting level. */}
+              <Image source={STAR_ICON} style={styles.titleStar} resizeMode="contain" />
               <Text style={styles.titleBadgeText}>{titleCase(profile.title ?? "newcomer")}</Text>
             </View>
           </View>
@@ -355,7 +374,7 @@ export default function ProfileScreen() {
           <View style={styles.statList}>
           <View style={styles.statRow}>
             <Image
-              source={require("@/src/assets/ui/icons/Assemble-icon.png")}
+              source={ASSEMBLE_ICON}
               style={styles.statIcon}
               resizeMode="contain"
             />
@@ -552,6 +571,9 @@ const makeStyles = (t: Theme) =>
       backgroundColor: t.surfaceRaised,
     },
     levelBadge: { position: "absolute", top: -6, left: -6, alignItems: "center", justifyContent: "center" },
+    // 44 where the drawn star was 40: the artwork leaves ~7% of its canvas empty on each axis, so a
+    // matched box would have drawn it smaller than the vector it replaced.
+    levelStar: { width: 44, height: 44 },
     levelText: { position: "absolute", color: t.onAccent, fontSize: 13, fontWeight: "900" },
 
     nameRow: {
@@ -584,7 +606,10 @@ const makeStyles = (t: Theme) =>
     // fill it, so the two icons still share a left edge as they always did.
     statList: { alignSelf: "center", marginTop: SPACE.xs },
     statRow: { flexDirection: "row", alignItems: "center", gap: SPACE.md, alignSelf: "stretch", marginBottom: SPACE.md },
-    statIcon: { width: 26, height: 26 },
+    // Wider than the 26 the row's other glyph gets, because the artwork carries its own margin: it
+    // fills 67% of its canvas, so 36 draws about 24pt of mark — level with the heart beside it
+    // rather than a third smaller than it.
+    statIcon: { width: 36, height: 36 },
     statGlyph: { fontSize: 20, color: t.textDim, width: 26, textAlign: "center" },
     statBody: { flexShrink: 1 },
     statTitle: { ...TYPE.label, color: t.text },
@@ -600,6 +625,10 @@ const makeStyles = (t: Theme) =>
       borderRadius: RADIUS.pill,
       backgroundColor: t.surface,
     },
+    // 14 against the drawn star's 13, and the same reason: this asset is trimmed to its own edges,
+    // but it is a wide star (151x144) where the vector was square, so height leads and the width
+    // follows through `contain`.
+    titleStar: { width: 14, height: 14 },
     titleBadgeText: { ...TYPE.labelSm, color: t.text, letterSpacing: 0.3 },
     // Filled, and red: an outline heart reads as "not yet liked", the opposite of a count received.
     heartGlyph: { color: "#C2544B" },

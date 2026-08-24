@@ -111,10 +111,18 @@ export interface FastenerFields {
 }
 export interface PartDef extends PartCore, StructuralFields, FastenerFields {}
 
-/** A part's world-space axis-aligned bounds at its BAKED pose. Harvested from Filament at model load; the unit the joint derivation works in. */
+/** The same box kept in the part's OWN frame: `axes` are the frame's unit directions in world space, `half` the half-extents along them, `center` in world. Tight where the world-aligned min/max is a slab of air — every splay in these GLBs lives in the node rotation, not the vertices (DALFRED leg: a 35mm stick whose AABB is a 192mm slab; BEKVAM leg: a 22mm plank in a 64mm AABB) — so the visibility gate measures sightlines and burial against this when present. AABB ⊇ OBB ⊇ mesh: still conservative, just far less wasteful. */
+export interface OrientedBox {
+  center: Vec3;
+  axes: [Vec3, Vec3, Vec3];
+  half: Vec3;
+}
+
+/** A part's world-space axis-aligned bounds at its BAKED pose. Harvested from Filament at model load; the unit the joint derivation works in. `obb` is optional so every min/max consumer (joint frames, hold reach) keeps working unchanged. */
 export interface PartBox {
   min: Vec3;
   max: Vec3;
+  obb?: OrientedBox;
 }
 
 /** Where two parts actually meet, derived per liaison at baked pose. `anchor` is the shared world contact point; the per-endpoint offsets are what the drag uses as hold/aim points, each clamped into its own part's bounds. */

@@ -1,7 +1,8 @@
 // One component per settings SECTION, plus the option tables they read from. Nothing here decides which sections a surface shows — that is the composing panel's job (SettingsControls for the in-build gear panel, app/(presentation)/settings.tsx for the tabbed screen).
 //
 // Where a section differs between the two panels it takes a named boolean rather than a variant string, so the call site reads as a list of what that panel shows.
-import { Alert, Pressable, Text, View, type LayoutChangeEvent } from "react-native";
+import { Alert, Text, View, type LayoutChangeEvent } from "react-native";
+import { Pressable } from "@/src/components/Pressable";
 import { router } from "expo-router";
 import { useGameStore } from "@/src/game/core/store";
 import { setMusicEnabled, setMusicVolume } from "@/src/game/audio/music";
@@ -113,14 +114,24 @@ function useFocusHandlers({
 // ── sections ─────────────────────────────────────────────────────────────────
 
 /** Restart — top of every assembly surface: infrequent (vs the on-HUD undo/redo), so it lives here instead of taking a HUD slot. */
-export function RestartRow() {
+export function RestartRow({ onRestarted }: { onRestarted?: () => void } = {}) {
   const completedCount = useGameStore((s) => s.completed.length);
   const reset = useGameStore((s) => s.reset);
   const confirmReset = () => {
     if (completedCount === 0) return;
     Alert.alert("Start over?", "This clears all assembly progress.", [
       { text: "Cancel", style: "cancel" },
-      { text: "Reset", style: "destructive", onPress: reset },
+      {
+        text: "Reset",
+        style: "destructive",
+        // CLOSE THE PANEL TOO. Resetting rebuilds the project map behind this card, so leaving it up
+        // hides the one thing the player just asked to see and makes them dismiss a panel they are
+        // finished with. Optional because the tabbed /settings screen has nothing to close.
+        onPress: () => {
+          reset();
+          onRestarted?.();
+        },
+      },
     ]);
   };
   return (

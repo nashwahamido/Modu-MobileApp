@@ -108,8 +108,10 @@ export type PlaceableRoomRow = {
   footprintMask?: string;
   /** This item's top is a placement surface (placeable_items.top_surface, migration 016) — tables and cabinets. Absent/false = nothing stands on it. */
   topSurface?: boolean;
-  /** Present only for category 'lit' (Lighting) — one item_lights row, joined in by the placeable_items view. Absent means the item emits nothing, which is every item but a lamp. A 'lit' row without this is a seeding mistake (see the audit query in migration 012), and the room degrades to placing it as ordinary furniture. */
-  light?: RoomItemLight;
+  /** Present only for category 'lit' (Lighting) — the item's item_lights rows, aggregated into placeable_items.lights by the view. Absent means the item emits nothing, which is every item but a lamp. A 'lit' row without this is a seeding mistake (see the audit query in migration 012), and the room degrades to placing it as ordinary furniture.
+   *
+   * ONE OR TWO ENTRIES, never more and never two of the same type: item_lights is keyed (item_id, type) since migration 026, so a lamp may carry a point and a spot at once — a soft glow from the shade AND an aimed beam, each with its own brightness, colour, reach and bulb position. Ordered point-then-spot by the view. */
+  lights?: RoomItemLight[];
   /** Where this item mounts — floor and wall are MUTUALLY EXCLUSIVE, so this is one choice rather than two flags (placeable_items.mount). REQUIRED since migration 024: it was briefly nullable under 021 to allow a "tops only" item, and withdrawing that is what keeps the room's surface choice a complete two-way question. `onTop` below only ever ADDS a surface to this one, never replaces it. */
   mount: "floor" | "wall";
   /** May stand on a hosting item's TOP, independent of mount — a lamp sits on a desk whether that desk stands on the floor or hangs on the wall, because either way it is placed on the desk's OWN top grid, not on this item's own mount (placeable_items.on_top, migration 021). Absent/false = nothing stands on it there. */
@@ -120,7 +122,7 @@ export type PlaceableRoomRow = {
   contactSize?: { x: number; z: number };
 };
 
-// A lamp's light, as authored in item_lights. `lumens` is calibrated by eye, NOT physical — Filament scales by camera exposure and react-native-filament does not bridge setExposure, so no derived value predicts on-screen brightness. `reachMetres` is in authored metres; the renderer scales it into scene units. `coneDeg` is set for 'spot' and absent for 'point'.
+// ONE of a lamp's lights, as authored in one item_lights row. `lumens` is calibrated by eye, NOT physical — Filament scales by camera exposure and react-native-filament does not bridge setExposure, so no derived value predicts on-screen brightness. `reachMetres` is in authored metres; the renderer scales it into scene units. `coneDeg` is set for 'spot' and absent for 'point'.
 export type RoomItemLight = {
   type: "point" | "spot";
   lumens: number;
@@ -133,6 +135,92 @@ export type RoomItemLight = {
   aim?: { pitchDeg: number; yawDeg: number };
 };
 
+// One light in the SNAKE_CASE shape the database uses — item_lights column-for-column.
+//
+// ONE TYPE FOR TWO PLACES, which is the point of it. Migration 026 made placeable_items.lights and
+// workshop_drafts.lights carry the identical element shape, so the published item and the draft it was
+// published from are now literally the same object; before 026 they were an object and ten flat columns,
+// and workshopDraftToPlaceableRoomRow existed almost entirely to translate between them. Declaring it
+// once means a key renamed on one side is a type error on the other rather than a silently absent field.
+//
+// Every field but `type` is nullable, matching what the DB permits rather than what a correct row holds:
+// cone_deg/aim_* are genuinely NULL for a point, and the rest can only be null on a row hand-edited past
+// item_lights' own NOT NULLs — which toRoomItemLight treats as a reason to drop the light, not to render
+// a NaN one.
+export type LightRow = {
+  type: "point" | "spot";
+  lumens?: number | null;
+  kelvin?: number | null;
+  reach_m?: number | null;
+  cone_deg?: number | null;
+  bulb_x?: number | null;
+  bulb_y?: number | null;
+  bulb_z?: number | null;
+  aim_pitch_deg?: number | null;
+  aim_yaw_deg?: number | null;
+};
+
+// LightRow -> RoomItemLight, or null when the row cannot describe a light at all.
+//
+// The null return is not defensive padding: the catalog is a network fetch backed by an AsyncStorage
+// cache, so a row can arrive hand-edited, half-migrated, or written by a portal version this build has
+// never seen. A light with a NaN intensity or a NaN position is taken literally by Filament and there is
+// no error to catch afterwards — only a lamp that has silently stopped existing, or worse, one that has
+// blacked out the piece it sits in. Dropping such a light is the same graceful degradation a 'lit' row
+// with no item_lights row already gets (migration 012's audit query): the piece places as ordinary
+// furniture and emits nothing.
+function toRoomItemLight(row: LightRow): RoomItemLight | null {
+  if (row.type !== "point" && row.type !== "spot") return null;
+  const lumens = row.lumens;
+  const kelvin = row.kelvin;
+  const reachMetres = row.reach_m;
+  if (typeof lumens !== "number" || typeof kelvin !== "number" || typeof reachMetres !== "number") return null;
+  if (!Number.isFinite(lumens) || !Number.isFinite(kelvin) || !Number.isFinite(reachMetres)) return null;
+  return {
+    type: row.type,
+    lumens,
+    kelvin,
+    reachMetres,
+    coneDeg: row.cone_deg ?? undefined,
+    // bulb_* are NOT NULL with a 0 default in item_lights, hence the ?? 0: a row written before migration 014 reads as a bulb at the piece's own origin, which is wrong but harmless (RoomLit treats y === 0 as "not authored" and falls back to its own heuristic), rather than as NaN.
+    bulb: { x: row.bulb_x ?? 0, y: row.bulb_y ?? 0, z: row.bulb_z ?? 0 },
+    // Both angles or neither — item_lights constrains them together, so a half-set pair means a hand-edited row and is treated as no aim rather than as half an aim.
+    aim:
+      row.aim_pitch_deg != null && row.aim_yaw_deg != null
+        ? { pitchDeg: row.aim_pitch_deg, yawDeg: row.aim_yaw_deg }
+        : undefined,
+  };
+}
+
+// The lights an item actually has, from whichever of the two shapes the row arrived in.
+//
+// `lights` wins when present; the flat light_* columns are the fallback for a database that has not
+// applied 026 yet, or a cached row captured before it did. They are never MERGED — a row carrying both
+// is a post-026 view, where the flat columns are a projection OF the array and merging them would
+// duplicate the point light.
+function lightsFrom(r: PlaceableRoomRowInput): RoomItemLight[] | undefined {
+  const rows: LightRow[] =
+    r.lights != null && Array.isArray(r.lights)
+      ? r.lights
+      : r.light_type != null
+        ? [{
+            type: r.light_type,
+            lumens: r.light_lumens,
+            kelvin: r.light_kelvin,
+            reach_m: r.light_reach_m,
+            cone_deg: r.light_cone_deg,
+            bulb_x: r.light_bulb_x,
+            bulb_y: r.light_bulb_y,
+            bulb_z: r.light_bulb_z,
+            aim_pitch_deg: r.light_aim_pitch_deg,
+            aim_yaw_deg: r.light_aim_yaw_deg,
+          }]
+        : [];
+  const mapped = rows.map(toRoomItemLight).filter((l): l is RoomItemLight => l !== null);
+  // undefined rather than [] for "no lights", so `lights != null` stays the single test for "does this emit" everywhere downstream — an empty array is truthy and would make every chair look like a lamp to a careless check.
+  return mapped.length > 0 ? mapped : undefined;
+}
+
 // One placeable_items row exactly as Postgrest hands it back — the snake_case shape the view's select() names. Loose on purpose (mirrors ShopItemRow in shop/items.ts): a column the live schema does not have yet is simply absent rather than fatal.
 export type PlaceableRoomRowInput = {
   id: string;
@@ -142,16 +230,21 @@ export type PlaceableRoomRowInput = {
   size_y: number;
   size_z: number;
   base_offset_y: number;
-  light_type: "point" | "spot" | null;
-  light_lumens: number | null;
-  light_kelvin: number | null;
-  light_reach_m: number | null;
-  light_cone_deg: number | null;
-  light_bulb_x: number | null;
-  light_bulb_y: number | null;
-  light_bulb_z: number | null;
-  light_aim_pitch_deg: number | null;
-  light_aim_yaw_deg: number | null;
+  /** placeable_items.lights (migration 026) — the item's item_lights rows aggregated into one jsonb array, ordered point-then-spot, NULL for everything that is not a lamp. This is the column to read; the ten light_* below are the projection it replaced.
+   *
+   * OPTIONAL for the same load-bearing reason mount/on_top/opens_wall are: listPlaceables selects `*`, so a database that has not applied 026 simply returns rows without this key, and declaring it required would let the mapper narrow the absent case to `never` and drop the light_* fallback that keeps such a database working. */
+  lights?: LightRow[] | null;
+  /** The pre-026 flat projection. Still emitted by the view — deliberately, so an app build older than 026 keeps working — and still read HERE, for the mirror-image case: a build newer than 026 talking to a database that has not applied it yet, or reading a cached row captured before it did. Every one is optional now, since a pre-012 database has none of them either. */
+  light_type?: "point" | "spot" | null;
+  light_lumens?: number | null;
+  light_kelvin?: number | null;
+  light_reach_m?: number | null;
+  light_cone_deg?: number | null;
+  light_bulb_x?: number | null;
+  light_bulb_y?: number | null;
+  light_bulb_z?: number | null;
+  light_aim_pitch_deg?: number | null;
+  light_aim_yaw_deg?: number | null;
   footprint_mask: string | null;
   top_surface: boolean | null;
   // OPTIONAL on purpose, and the `?` is load-bearing rather than defensive typing: listPlaceables selects `*`, so a database that has not applied migration 021 simply returns rows without these keys. Declaring them required would let the mapper narrow the absent case to `never` and silently drop the fallback that keeps such a database working — which is the whole reason the select is `*` in the first place.
@@ -170,23 +263,8 @@ export function toPlaceableRoomRow(r: PlaceableRoomRowInput): PlaceableRoomRow {
     category: r.category_id as PlaceableRoomRow["category"],
     size: { x: r.size_x, y: r.size_y, z: r.size_z },
     baseOffsetY: r.base_offset_y,
-    // Null for everything but a lamp — the view LEFT JOINs item_lights. The required columns are NOT NULL in that table, so light_type carrying a value means the rest do too. bulb_* are NOT NULL with a 0 default, hence the ?? 0: a row written before migration 014 reads as a bulb at the piece's own origin, which is wrong but harmless, rather than as NaN.
-    light:
-      r.light_type != null
-        ? {
-            type: r.light_type,
-            lumens: r.light_lumens as number,
-            kelvin: r.light_kelvin as number,
-            reachMetres: r.light_reach_m as number,
-            coneDeg: r.light_cone_deg ?? undefined,
-            bulb: { x: r.light_bulb_x ?? 0, y: r.light_bulb_y ?? 0, z: r.light_bulb_z ?? 0 },
-            // Both angles or neither — item_lights constrains them together, so a half-set pair means a hand-edited row and is treated as no aim rather than as half an aim.
-            aim:
-              r.light_aim_pitch_deg != null && r.light_aim_yaw_deg != null
-                ? { pitchDeg: r.light_aim_pitch_deg, yawDeg: r.light_aim_yaw_deg }
-                : undefined,
-          }
-        : undefined,
+    // Undefined for everything but a lamp. See lightsFrom for which of the two row shapes this reads and why it never merges them.
+    lights: lightsFrom(r),
     ...(r.footprint_mask ? { footprintMask: r.footprint_mask } : {}),
     ...(r.top_surface ? { topSurface: true } : {}),
     // Null and absent now mean the SAME thing — "this row predates a migration" — and both fall back to the pre-021 rule the category used to carry. Under 021 they were opposite (a deliberate null meant tops-only) and had to be told apart with `in` rather than `??`; migration 024 made the column NOT NULL, so a null can only come from a database that has not caught up, exactly like an absent column from the `*` select. Collapsing them is what that migration earns.
@@ -200,7 +278,9 @@ export function toPlaceableRoomRow(r: PlaceableRoomRowInput): PlaceableRoomRow {
   };
 }
 
-// One workshop_drafts row (status='testing'), as Postgrest hands it back for the dev-only merge into the room's placeable catalogue — see listPlaceables in adapters/supabase.ts, and workshopDraftsDevGateOpen (catalog/workshopDraftsGate.ts) for the gate that decides whether this merge runs at all. Deliberately NOT PlaceableRoomRowInput, even though the two tables share most column names verbatim (id/category_id/size_x.../footprint_mask/top_surface/mount/on_top/opens_wall — 011_workshop.sql, 019_workshop_kinds.sql, 022_workshop_placement.sql): the one real difference is `light`, which the portal writes as ONE jsonb object matching its own LightPayload form, where placeable_items' view has already flattened item_lights into ten separate light_* columns. workshopDraftToPlaceableRoomRow's whole job below is undoing that one difference before handing off to toPlaceableRoomRow, which already owns every other mapping rule (mount/onTop/opensWall fallbacks, footprint mask sanitising is the room's job not this one's, etc.) — re-deriving that logic here a second time is exactly the kind of drift toShopItem's own header comment warns about.
+// One workshop_drafts row (status='testing'), as Postgrest hands it back for the dev-only merge into the room's placeable catalogue — see listPlaceables in adapters/supabase.ts, and workshopDraftsDevGateOpen (catalog/workshopDraftsGate.ts) for the gate that decides whether this merge runs at all.
+//
+// Still deliberately NOT PlaceableRoomRowInput, though the reason has shrunk. The two tables share most column names verbatim (id/category_id/size_x.../footprint_mask/top_surface/mount/on_top/opens_wall — 011_workshop.sql, 019_workshop_kinds.sql, 022_workshop_placement.sql), and since migration 026 they share the LIGHT shape too: both carry a `lights` array of the same element type, so the ten-column flattening this function used to perform is gone entirely. What is left that differs is the nullability — a draft's size_x/y/z are null on a surface row, where the view's never are — which is exactly what workshopModelDraftsToPlaceableRoomRows filters on, and reason enough to keep the types apart rather than widening the view's.
 export type WorkshopDraftRow = {
   id: string;
   category_id: string;
@@ -214,18 +294,10 @@ export type WorkshopDraftRow = {
   mount: "floor" | "wall" | null;
   on_top: boolean | null;
   opens_wall: boolean | null;
-  light: {
-    type: "point" | "spot";
-    lumens: number;
-    kelvin: number;
-    reach_m: number;
-    cone_deg?: number | null;
-    bulb_x?: number | null;
-    bulb_y?: number | null;
-    bulb_z?: number | null;
-    aim_pitch_deg?: number | null;
-    aim_yaw_deg?: number | null;
-  } | null;
+  /** workshop_drafts.lights (migration 026), the portal's own payload — the SAME element shape placeable_items.lights carries, which is what lets this hand straight to toPlaceableRoomRow with no translation. NULL for a draft that is not a lighting item. */
+  lights?: LightRow[] | null;
+  /** The pre-026 single-object column, dropped from the schema by that migration but still readable here: the dev-only draft merge runs against whatever database the developer is pointed at, which may not have been migrated yet. Read only when `lights` is absent. */
+  light?: LightRow | null;
   // The draft's own colour axis, as the portal writes it (workshop_drafts.variants jsonb, 011_workshop.sql) —
   // the same {variation, is_default} pairs the publish RPC later explodes into item_variants rows. Optional
   // because listPlaceables selects `*` and a row written before a column existed simply arrives absent; a
@@ -233,7 +305,14 @@ export type WorkshopDraftRow = {
   variants?: { variation: string | null; is_default?: boolean }[] | null;
 };
 
-// A MODEL draft (size present) -> PlaceableRoomRow, source "workshop". Flattens the one jsonb `light` field into the ten light_* columns toPlaceableRoomRow already knows how to read, then delegates to it entirely — see the WorkshopDraftRow comment above for why that split exists rather than re-deriving toPlaceableRoomRow's own mapping rules here.
+// A MODEL draft (size present) -> PlaceableRoomRow, source "workshop". Delegates entirely to
+// toPlaceableRoomRow, which owns every mapping rule (mount/onTop/opensWall fallbacks, the light shape,
+// contact size) — re-deriving any of that here a second time is exactly the kind of drift toShopItem's
+// own header comment warns about.
+//
+// The `lights` array now passes straight through, because 026 gave the draft and the view the same
+// element shape. The one thing still done here is folding a pre-026 draft's single `light` object into a
+// one-element array, so a developer pointed at an unmigrated database still sees their lamp light up.
 export function workshopDraftToPlaceableRoomRow(r: WorkshopDraftRow): PlaceableRoomRow {
   return toPlaceableRoomRow({
     id: r.id,
@@ -244,16 +323,7 @@ export function workshopDraftToPlaceableRoomRow(r: WorkshopDraftRow): PlaceableR
     size_y: r.size_y as number,
     size_z: r.size_z as number,
     base_offset_y: r.base_offset_y,
-    light_type: r.light?.type ?? null,
-    light_lumens: r.light?.lumens ?? null,
-    light_kelvin: r.light?.kelvin ?? null,
-    light_reach_m: r.light?.reach_m ?? null,
-    light_cone_deg: r.light?.cone_deg ?? null,
-    light_bulb_x: r.light?.bulb_x ?? null,
-    light_bulb_y: r.light?.bulb_y ?? null,
-    light_bulb_z: r.light?.bulb_z ?? null,
-    light_aim_pitch_deg: r.light?.aim_pitch_deg ?? null,
-    light_aim_yaw_deg: r.light?.aim_yaw_deg ?? null,
+    lights: r.lights ?? (r.light != null ? [r.light] : null),
     footprint_mask: r.footprint_mask,
     top_surface: r.top_surface,
     mount: r.mount,
