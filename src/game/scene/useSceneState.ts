@@ -74,8 +74,6 @@ export function deriveSceneState(
   matchedActionId: ActionId | null = null,
   mode: AssemblyMode = "free",
   focusMode = false,
-  /** Static-socket ghosts: hint EVERY available same-group socket, not just the proximity-matched one (the ghost component colors matched vs unmatched). */
-  showAllGroupSockets = false,
   /** The part Spot is pointing at. Shows that ONE socket's ghost with nothing held — a parameter
    *  rather than a store read so this stays a pure function the tests can drive. */
   hintPartId: PartId | null = null,
@@ -211,6 +209,9 @@ export function deriveSceneState(
       ? furniture.parts[heldAction.partId].group
       : null;
   const heldIsInsert = heldAction?.type === "insertFastener";
+  // Socket ghosts, by what is in hand — this used to be the `ghostStyle` dev setting, and it is now decided by the part. A fastener group is a field of near-identical holes and the player is choosing WHICH one, so every open socket of the group is ghosted at once. A structural part is big, its sockets are few and far apart, and a scene full of translucent panels reads as clutter — so only the proximity-matched one shows. The ghost component colors matched vs unmatched.
+  const showAllGroupSockets =
+    !!heldAction?.partId && furniture.parts[heldAction.partId].type === "fastener";
   // When the held part is a multi-body component's LEAD, its unplaced sibling bodies ride along with it (see PartModel's "riding" case) instead of popping in only on release; already-placed siblings (a re-drag after undo) fall through to their normal placed modes below.
   const heldComponentId = heldAction?.partId ? furniture.components?.byBody[heldAction.partId] : undefined;
   const ridingComponent =
@@ -305,12 +306,11 @@ export function useSceneState(): SceneState {
   const hintPartId = useGameStore((s) => s.hintPartId);
   const mode = useGameStore((s) => s.mode);
   const focusMode = useGameStore((s) => s.settings.focusMode);
-  const staticSockets = useGameStore((s) => s.settings.ghostStyle === "staticSockets");
   return useMemo(
     () =>
       furniture
-        ? deriveSceneState(furniture, completed, heldActionId, activeCluster, matchedActionId, mode, focusMode, staticSockets, hintPartId)
+        ? deriveSceneState(furniture, completed, heldActionId, activeCluster, matchedActionId, mode, focusMode, hintPartId)
         : { modes: {}, heldAction: null, trayItems: [], allTrayItems: [], activeTighten: null, activeInsertPress: null, stagedSeat: null, activeBeat: null },
-    [furniture, completed, heldActionId, activeCluster, matchedActionId, mode, focusMode, staticSockets, hintPartId],
+    [furniture, completed, heldActionId, activeCluster, matchedActionId, mode, focusMode, hintPartId],
   );
 }

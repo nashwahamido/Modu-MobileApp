@@ -102,6 +102,8 @@ export interface FastenerFields {
   screwMover?: PartId;
   attached?: readonly PartId[];
   engageDir?: Vec3;
+  /** GENERATED world-space offset from pose.position to the centre of the HEAD FACE (the mesh's local −Z bbox face — the loose/head side the extractor derives engageDir from). ToolModel projects it onto the live tool axis so the tool contacts the head instead of hovering TIP_GAP off the part ORIGIN — which only looked right when a screw's half-length happened to equal the old 12mm gap (EKET ~24mm screws) and buried the driver 12–18mm into BEKVÄM's 47.5/60mm shafts. Projection (not the raw point) keeps it harmless where an authored engageDir override redirects the axis away from the mesh frame (EKET cams); an authored `toolAnchor` overrides it outright. */
+  headOffset?: Vec3;
   /** Meters this fastener sits RETRACTED into its carrier at insert (−engageDir), instead of the default proud loose pose (+engageDir). Its `drawTurn` tighten then DRAWS it back OUT to flush while turning — the EKET stabiliser-rod dowels: pressed into the rod, then drawn into the slider hole and quarter-turned to lock. */
   insertRetract?: number;
   /** Opt-in to the 3-phase fastener lifecycle: meters the fastener sits at its STAGE pose (fully outside the hole, +engageDir) when first dropped from the tray. Presence splits the fastener into placeFastener (drag → stage) + insertFastener (PRESS gesture → loose) + tightenFastener (tool → flush). Absent ⇒ the classic 2-phase drag-to-loose insert + tighten. */
@@ -287,6 +289,8 @@ export interface FurnitureMeta {
    *  no art, means the catalogue shows no finish arrow for this furniture — so a variation declared
    *  in the table before its artwork ships degrades to the plain tile rather than a broken image. */
   variantThumbnails?: Record<string, ThumbSet>;
+  /** Assembly mode this furniture STARTS in, overriding the player's profile mode (PROFILE_MODE) when the build is loaded. A DEFAULT only: the player can still switch mode in the settings panel, and their switch survives — it is autosaved with the build and restored by applyBuild, which runs after loadFurniture. Absent = the player's own mode, unchanged. */
+  mode?: AssemblyMode;
   partCount: number;
   stageCount: number;
   stepCount: number;

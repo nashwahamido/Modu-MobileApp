@@ -7,8 +7,8 @@ import { LEXEND, Theme, useFixedStyles, useIsTablet } from "@/src/game/ui/system
 import { advance, type Milestone } from "./loadingProgress";
 
 const clayPattern = require("@/src/assets/ui/landing/clay-pattern.png");
-const purpleWaveLeft = require("@/src/assets/ui/landing/Purple wave_left.png");
-const purpleWaveRight = require("@/src/assets/ui/landing/Purple wave_right.png");
+const purpleWaveLeft = require("@/src/assets/ui/landing/purple-wave-left.png");
+const purpleWaveRight = require("@/src/assets/ui/landing/purple-wave-right.png");
 const wavyLeft2 = require("@/src/assets/ui/landing/wavy-left-2.png");
 const wavyRight1 = require("@/src/assets/ui/landing/wavy-right-1.png");
 const modumascot = require("@/src/assets/images/mascot/modu-mascot.png");

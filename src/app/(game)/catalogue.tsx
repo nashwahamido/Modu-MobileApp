@@ -108,7 +108,8 @@ export default function CatalogueScreen() {
     Promise.all([
       repos.builds.listCompleted(me),
       repos.builds.list(me),
-      Promise.all(items.map((m) => repos.builds.buildReward(m.id).then((r) => [m.id, r.xp] as const))),
+      // Each tile's reward read falls back to 0 rather than rejecting, because it shares a Promise.all with the two PROGRESS reads: since migration 027 buildReward embeds item_buy through the reward_item_id foreign key, so it now fails on a database that has not applied 027 (or whose PostgREST schema cache has not reloaded), and an unguarded rejection here would take listCompleted and list down with it — every card would read "Start" with no completion ticks. A missing XP figure is a worse-looking tile; a missing progress state is a wrong one.
+      Promise.all(items.map((m) => repos.builds.buildReward(m.id).then((r) => [m.id, r.xp] as const).catch(() => [m.id, 0] as const))),
     ])
       .then(([ids, saves, rewards]) => {
         if (!alive) return;

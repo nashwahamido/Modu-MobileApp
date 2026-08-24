@@ -10,7 +10,6 @@ import {
   BuildAudioSection,
   BuildDisplaySection,
   GuidanceSection,
-  ProfileSection,
   RestartRow,
   type FocusProps,
   type SettingsFocusTarget,
@@ -25,11 +24,6 @@ export function SettingsControls({
   const styles = useFixedStyles(makeSettingsStyles);
   return (
     <View style={styles.list}>
-      {/* The preset that sets every default below it, back in the build panel: switching profile is
-          how a player changes the WHOLE interaction model (Control / Momentum / Clear path /
-          Visual), and having to leave the assembly for the app settings screen to do it put the
-          most consequential control the furthest away. */}
-      <ProfileSection />
       <BuildDisplaySection showLighting={false} {...props} />
       <GuidanceSection showManualTools={false} showFocusMode={false} {...props} />
       <BuildAudioSection />

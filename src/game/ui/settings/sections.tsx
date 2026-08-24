@@ -18,7 +18,6 @@ import {
 } from "@/src/game/ui/settings/SettingsPrimitives";
 import type {
   DragPlane,
-  GhostStyle,
   LightingPreset,
   ReleaseBehavior,
 } from "@/src/game/core/accessibility";
@@ -36,10 +35,6 @@ const PROFILES: { value: ProfileId; label: string }[] = [
   { value: "visual", label: "Visual" },
   { value: "momentum", label: "Momentum" },
   { value: "clearPath", label: "Clear Path" },
-];
-const GHOST: { value: GhostStyle; label: string }[] = [
-  { value: "movingGhost", label: "Matched" },
-  { value: "staticSockets", label: "All sockets" },
 ];
 const RELEASE: { value: ReleaseBehavior; label: string }[] = [
   { value: "autoReturn", label: "Auto-return" },
@@ -169,13 +164,6 @@ export function InteractionDevSection() {
   return (
     <>
       <SectionHeader>Interaction (dev)</SectionHeader>
-      <Choice
-        label="Socket ghosts"
-        desc="Ghost only the matched socket, or every open one"
-        value={settings.ghostStyle}
-        options={GHOST}
-        onChange={(v) => setSettings({ ghostStyle: v })}
-      />
       <Choice
         label="Released part"
         desc="Auto-return to tray, or float where you set it down (float includes canvas re-grab)"
