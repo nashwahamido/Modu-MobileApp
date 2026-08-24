@@ -1,18 +1,8 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState } from 'react';
-import { router,
-  useLocalSearchParams,
-  useRootNavigationState } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { router, useLocalSearchParams, useRootNavigationState } from 'expo-router';
 import type { Href } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { StyleSheet,
-  Image,
-  Text,
-  View,
-} from "react-native";
+import { StyleSheet, Image, Text, View } from "react-native";
 import { Pressable } from "@/src/components/Pressable";
 import { SETTINGS_ICON } from '../../components/iconAssets';
 import { Button } from '../../game/ui/system/Button';
@@ -38,6 +28,8 @@ import {
   type PlacementGuideInteraction,
   type PlacementGuideTarget,
 } from './PlacementRail';
+import { useProfileHud } from '../../hooks/useProfileHud';
+import { LevelUpCelebration } from './LevelUpCelebration';
 import { RoomTopStats } from './RoomTopStats';
 import { ShopOverlay } from '../../shop/ShopOverlay';
 import { InventoryOverlay } from '../../inventory/InventoryOverlay';
@@ -104,6 +96,9 @@ export function RoomExperience() {
   const hydrate = usePlacementStore((p) => p.hydrate);
   const hydrated = usePlacementStore((p) => p.hydrated);
   const editing = usePlacementStore((p) => p.activeEdit !== null);
+  // The level the profile currently reports. LevelUpCelebration compares it against the last one it
+  // congratulated, so this is just "what they are now", not "did something happen".
+  const hudProfile = useProfileHud();
   const placedFurnitureCount = usePlacementStore((p) => p.layout.length);
   useEffect(() => {
     hydrate(me);
@@ -286,6 +281,15 @@ export function RoomExperience() {
       </View>
 
       <RoomTopStats />
+
+      {/* Fires only when the level has climbed past the last one celebrated — see the component.
+          Held back while a placement is in progress or a guide is up: those are the player steering
+          something, and a full-screen reward over them takes the room away mid-action. */}
+      <LevelUpCelebration
+        level={hudProfile?.level ?? null}
+        title={hudProfile?.title ?? null}
+        blocked={editing || showRoomWelcomeGuide}
+      />
 
       {/* TWO LAYOUTS, chosen by device — not one layout scaled.
           A phone is narrow and tall-ish in landscape: a band across the bottom eats the floor, which is

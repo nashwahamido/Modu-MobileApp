@@ -20,13 +20,35 @@ export const STAR_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/sta
 export const XP_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/icon-xp.png");
 
 // Stars with the number baked into the artwork, indexed by level
+/**
+ * LEVEL -> the star that has THAT NUMBER PAINTED ON IT.
+ *
+ * THE FILENAMES DO NOT MATCH THEIR ARTWORK, and this table is the correction. Open the assets and
+ * lvl-3.png has a 6 on it, lvl-6.png has a 3, lvl-4 has a 5 and lvl-5 has a 4 — the middle of the
+ * set was exported in reverse. Levels 1 and 2 happen to be right.
+ *
+ *     file        drawn on it
+ *     lvl-1  ->   1
+ *     lvl-2  ->   2
+ *     lvl-3  ->   6
+ *     lvl-4  ->   5
+ *     lvl-5  ->   4
+ *     lvl-6  ->   3
+ *
+ * Mapped here rather than by renaming the files, deliberately: the names are referenced from the
+ * room HUD, the profile page, both shop lock badges and the level-up card, and a rename would touch
+ * every one of them plus anything outside this repo that expects them. The crossing looks wrong
+ * because it IS wrong — the mismatch is in the artwork, and this is the single place that knows it.
+ *
+ * If the art is ever re-exported in order, straighten this table and delete this comment.
+ */
 const LEVEL_ICONS: Record<number, ImageSourcePropType> = {
   1: require("@/src/assets/ui/icons/lvl-1.png"),
   2: require("@/src/assets/ui/icons/lvl-2.png"),
-  3: require("@/src/assets/ui/icons/lvl-3.png"),
-  4: require("@/src/assets/ui/icons/lvl-4.png"),
-  5: require("@/src/assets/ui/icons/lvl-5.png"),
-  6: require("@/src/assets/ui/icons/lvl-6.png"),
+  3: require("@/src/assets/ui/icons/lvl-6.png"),
+  4: require("@/src/assets/ui/icons/lvl-5.png"),
+  5: require("@/src/assets/ui/icons/lvl-4.png"),
+  6: require("@/src/assets/ui/icons/lvl-3.png"),
 };
 
 // Null past the last numbered star, so callers fall back to STAR_ICON with the level drawn as text

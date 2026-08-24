@@ -1,20 +1,4 @@
-// The companion speaking up when a step is going badly — every profile, not just Sparky's.
-//
-// TWO PROMPTS, ONE CARD, because they are the same interruption for the same reason and only one of
-// them can be true at a time. Which one it is decides the copy and nothing else:
-//
-//   STALLED   — the step has sat untouched for STUCK_MS. Points at the skip.
-//   FUMBLING  — the same part has been dropped and missed MISS_LIMIT times in a row. Points at
-//               Recenter, because a run of misses on ONE socket usually means the player cannot SEE
-//               where the part goes, and re-framing the build is the fix for that.
-//
-// FUMBLING WINS when both are true. It is the more specific reading of the same silence: someone who
-// has missed four times is not idle, they are trying.
-//
-// Deliberately NOT momentum-only. IdleCheckIn is Sparky's own "are you still here", which is about
-// the player having left; this is about the BUILD being stuck, which happens to everyone. The two
-// are kept from stacking by IdleCheckIn giving up its card before this one arrives — see the note on
-// ASK_VISIBLE_MS there.
+
 import {
   useEffect,
   useRef,
@@ -36,45 +20,26 @@ import { HudGhostLayer, HudGhostRing, useHudSpots, type HudSpotId } from "@/src/
 import { useBuildPaused } from "@/src/game/ui/hud/useBuildPaused";
 import { ELEVATION, RADIUS, SPACE, ThemeScope, TYPE, type Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 
-/** How long a step sits untouched before the companion offers the way out. */
+
 const STUCK_MS = 30_000;
 
-/**
- * How many misses in a row on the SAME part before Recenter is offered.
- *
- * Four, as asked. Three is inside the range of ordinary fumbling — a long part, an awkward angle, a
- * finger that slipped — and a prompt that arrives there reads as the app watching over the player's
- * shoulder. By the fourth the problem is usually the camera, not the hand.
- */
+
 const MISS_LIMIT = 4;
 
-/** How long the card waits before putting itself away when nothing happens. It is an offer, not a
- *  question, so it should not need dismissing to get on with the build. */
 const LINGER_MS = 12_000;
 
-/** The card's floating-panel colours, matching IdleCheckIn and the project map. */
-/** How far the beside-a-button card clears the control, and how far it rides above its top edge so
- *  the portrait sits level with a 36pt chip rather than hanging below it. */
 const BESIDE_GAP = 14;
 const BESIDE_RISE = 10;
-/** Smaller than the centred card's 64: this one sits in a rail beside a 36pt button. */
+
 const BESIDE_PORTRAIT = 44;
 
 const CARD_CREAM = "#FBF8F3";
 const CARD_INK = "#231F20";
 
-/**
- * Which control the copy names for the SKIP.
- *
- * Auto only exists in dev and showcase builds — DevAutoStep ends with
- * `if (!__DEV__ && !SHOWCASE_ENABLED) return null;` — so naming it in a shipped build would send a
- * stuck player hunting for a button that is not on their screen, which is a worse place to be than
- * stuck. Spot is the release equivalent and renders for everyone: it plays a ghost of the next part
- * travelling into its socket, which is the same "show me" the skip was standing in for.
- */
+
 const SKIP_CONTROL = __DEV__ || SHOWCASE_ENABLED ? "Auto" : "Spot";
 
-/** …and the control the ring goes round, which must be the same one the copy names. */
+
 const SKIP_SPOT: HudSpotId = __DEV__ || SHOWCASE_ENABLED ? "auto" : "spot";
 
 type Prompt = "stalled" | "fumbling";
@@ -85,43 +50,25 @@ export function StuckCoach() {
   const furniture = useGameStore((s) => s.furniture);
   const focus = useGameStore((s) => s.settings.focusMode);
 
-  // The same activity set IdleCheckIn watches. Camera moves are NOT here — orbiting never reaches
-  // the store — which is why the layer below also watches raw touches.
   const heldActionId = useGameStore((s) => s.heldActionId);
   const driveActionId = useGameStore((s) => s.driveActionId);
   const orientationActionId = useGameStore((s) => s.orientationActionId);
   const activeCluster = useGameStore((s) => s.activeCluster);
   const hintPulse = useGameStore((s) => s.hintPulse);
   const missCount = useGameStore((s) => s.missCount);
-  // The Recenter button's measured frame, so the fumbling card can sit BESIDE it rather than in the
-  // middle of the screen. Window coords, which is why this layer is outside `chrome` — see
-  // hudSpotlight.
+ 
   const recenterFrame = useHudSpots((sp) => sp.frames.recenter);
   const { width: screenW } = useWindowDimensions();
 
   const [prompt, setPrompt] = useState<Prompt | null>(null);
-  const [touchTick, setTouchTick] = useState(0);
+  const activityTick = useGameStore((s) => s.activityTick);
   const fade = useRef(new Animated.Value(0)).current;
 
-  // PAUSED covers the stage chooser and the one-time intro as well as the Map button — see
-  // useBuildPaused. Testing `mapOpen` alone let this fire over the chooser, which is how the map
-  // opens on every multi-stage build.
+  
   const paused = useBuildPaused();
   const completed = useGameStore((s) => s.completed);
   const mode = useGameStore((s) => s.mode);
 
-  // IS THERE ANYTHING TO BE STUCK ON? Two cases sent the card up when the answer was no.
-  //
-  // NOT BEFORE THE FIRST STEP. Arriving at a fresh build and reading the objective for half a minute
-  // is not being stuck, it is starting — and "press Spot to skip this step" is a strange first thing
-  // to hear from a companion before the player has touched anything. It waits for one completed
-  // action, so the offer only ever follows a step they have actually managed.
-  //
-  // NOT WITH THE STAGE FINISHED. When the last action of a cluster lands there is nothing left to
-  // place: the player has to open the map and choose another stage. Offering to skip a step that
-  // does not exist, or to recentre a build that is done, points at the wrong thing entirely.
-  // `availableInMode` is the same function the HUD uses to decide what the next step IS, so this
-  // agrees with the objective bar by construction rather than by a second guess at the rule.
   const somethingToDo =
     !!furniture &&
     availableInMode(furniture, new Set(completed), mode, activeCluster).length > 0;
@@ -152,7 +99,7 @@ export function StuckCoach() {
     orientationActionId,
     activeCluster,
     hintPulse,
-    touchTick,
+    activityTick,
   ]);
 
   useEffect(() => {
@@ -165,7 +112,22 @@ export function StuckCoach() {
     };
   }, [prompt, fade]);
 
-  if (!prompt || !live) return null;
+  // NOT LIVE means nothing to watch — the build is paused, or there is nothing to be stuck on.
+  if (!live) return null;
+
+  // WAITING, not absent. The touch observer below is the only thing that sees camera-only work:
+  // orbiting and pinching never touch the store, so with the component returning null while the
+  // 30-second fuse burned, looking round the build did not count as activity and the card arrived
+  // mid-orbit offering to skip a step the player was busy working on. The observer layer stays
+  // mounted the whole time; only the bubble waits for `prompt`.
+  if (!prompt) {
+    return (
+      <View
+        style={styles.layer}
+        pointerEvents="box-none"
+      />
+    );
+  }
 
   const message =
     prompt === "fumbling"
@@ -210,10 +172,6 @@ export function StuckCoach() {
         // Observes touches without taking them, so the build underneath stays live AND camera-only
         // work still counts as activity. Returning false from the capture handler lets the gesture
         // continue to whatever the player actually aimed at.
-        onStartShouldSetResponderCapture={() => {
-          setTouchTick((n) => n + 1);
-          return false;
-        }}
       >
         <Animated.View
           style={[styles.row, beside ? [styles.besideRow, beside] : null, { opacity: fade }]}

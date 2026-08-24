@@ -1,5 +1,5 @@
 import * as Haptics from "expo-haptics";
-import { CONTROL } from "@/src/game/ui/system/theme";
+import { CONTROL, useTheme } from "@/src/game/ui/system/theme";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Image, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -21,6 +21,7 @@ interface Props {
 
 /** Slide-in seat for a staged sub-assembly (EKET stabiliser rod): the finished rod+dowels rests directly above its seat, so a vertical slider drives it straight DOWN into place — no re-fetching it from the tray. First drag grabs the on-screen part (beginPickup) so the tray card stays a fallback until this is touched; each drag eases the carrier (heldDriver) and its riding dowels (slideDriver mirror) from the stage offset to flush; at the bottom the placement commits. */
 export function SeatSlideControl({ action, offset, heldDriver, slideDriver }: Props) {
+  const t = useTheme();
   const [prog, setProg] = useState(0);
   const progRef = useRef(0); // authoritative (setState is async; the pan reads this)
   const lastY = useRef<number | null>(null);
@@ -88,6 +89,15 @@ export function SeatSlideControl({ action, offset, heldDriver, slideDriver }: Pr
 
   return (
     <View style={styles.wrap} pointerEvents="box-none">
+      {/* ABOVE the track, not under it — see SlideControl, which had the same problem: below, this
+          sat on top of the HUD row and overlapped the auto button, grey on a busy background.
+          Styled as ToolBar's "Pick a Tool" prompt: the app's one "here is what to do" label. */}
+      <Text
+        style={[styles.hint, { color: t.onAccent, backgroundColor: t.accent }]}
+        pointerEvents="none"
+      >
+        Slide it in · {Math.round(prog * 100)}%
+      </Text>
       <GestureDetector gesture={pan}>
         <View style={styles.track}>
           <View style={[styles.fill, { height: TRACK * prog }]} />
@@ -118,10 +128,6 @@ export function SeatSlideControl({ action, offset, heldDriver, slideDriver }: Pr
           ) : null}
         </View>
       </GestureDetector>
-      {/* pointerEvents none: this label is drawn over the HUD row below it, and a Text child of a
-          box-none wrapper still swallows touches — it was eating presses meant for the auto button
-          sitting underneath. Nothing here is interactive. */}
-      <Text style={styles.hint} pointerEvents="none">Slide it in · {Math.round(prog * 100)}%</Text>
     </View>
   );
 }
@@ -152,5 +158,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   thumbText: { fontSize: 26, color: "#fff", fontWeight: "800" },
-  hint: { fontSize: 12, color: "#6b6257", fontWeight: "700" },
+  // ToolBar's `prompt`. Colours come from the live theme at the call site — this sheet is static.
+  hint: {
+    fontSize: 12,
+    fontWeight: "800",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 3,
+    overflow: "hidden",
+  },
 });

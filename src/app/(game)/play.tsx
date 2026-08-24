@@ -318,6 +318,7 @@ function GameScreen() {
           lastScale.current = 1;
         })
         .onUpdate((e) => {
+          useGameStore.getState().noteActivity();
           onZoomDelta(e.scale - lastScale.current);
           lastScale.current = e.scale;
         }),
@@ -331,8 +332,12 @@ function GameScreen() {
         .minPointers(2)
         .activeOffsetX([-22, 22])
         .activeOffsetY([-22, 22])
-        .onStart((e) => onPanStart(e.x, e.y))
+        .onStart((e) => {
+          useGameStore.getState().noteActivity();
+          onPanStart(e.x, e.y);
+        })
         .onUpdate((e) => {
+          useGameStore.getState().noteActivity();
           if (e.numberOfPointers >= 2) onPanMove(e.x, e.y);
         })
         .onEnd(() => onPanEnd())
@@ -351,9 +356,15 @@ function GameScreen() {
         .activeOffsetY([-12, 12])
         .onStart((e) => {
           strafing.current = true;
+          // THE PLAYER IS WORKING. Orbiting and strafing touch nothing else in the store, so without
+          // this the idle and stuck fuses burn right through a player who is busy looking round the
+          // build — which is exactly how those cards kept arriving mid-gesture.
+          useGameStore.getState().noteActivity();
           onPanStart(e.x, e.y);
         })
         .onUpdate((e) => {
+          // Throttled inside the store, so a long orbit costs one bump a second rather than one a frame.
+          useGameStore.getState().noteActivity();
           if (strafing.current) onPanMove(e.x, e.y);
         })
         .onFinalize(() => {
@@ -627,7 +638,16 @@ function GameScreen() {
           />
         </View>
         <HudSpotTarget id="recenter" style={hudControls.recenterButton}>
-          <RecenterButton enabled={sceneHasParts} onPress={resetCamera} />
+          {/* Recentring CLEARS THE MISS COUNT. Without this a player who recentres on their own can
+              still be told to recentre a drop or two later — the count survived the very action the
+              card was about to recommend, so the advice arrived already taken. */}
+          <RecenterButton
+            enabled={sceneHasParts}
+            onPress={() => {
+              useGameStore.getState().clearMisses();
+              resetCamera();
+            }}
+          />
         </HudSpotTarget>
 
         {heldActionId && settings.releaseBehavior === "float" ? (
