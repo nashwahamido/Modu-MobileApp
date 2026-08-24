@@ -197,12 +197,23 @@ export const CONTROL = {
 export const CREAM = {
   /** Text and icons on cream. */
   ink: "#231F20",
+  /** Secondary text on cream — a subtitle, a row's meta line. `ink` softened rather than a new hue, so
+   *  a quiet line still belongs to the same ink. Use this rather than the theme's textDim: these
+   *  surfaces are theme-INVARIANT, and textDim follows the theme — in dark mode it resolves to a stone
+   *  grey that lands at about 2.4:1 on this cream. */
+  inkDim: "rgba(35,31,32,0.62)",
   /** Panels, cards, popups. */
   card: "#FBFAF3",
   /** Chrome sitting ON a card: the tab pill, the badge disc. */
   chrome: "#F7F0E6",
   /** The active category tile: the one lavender in these surfaces, meaning exactly one thing — where you are. */
   activeTile: "#D3CBD2",
+  /** The room navigation's active mark: the disc behind Shop or Inventory while that popup is open.
+   *  Sand rather than `activeTile`'s lavender — the room's chrome is warm cream, and the lavender is
+   *  already spoken for by the assemble button, which is an action rather than a place. Shared, so the
+   *  phone's rail and the tablet's bar cannot drift: they are separate components on purpose, and this
+   *  is exactly the kind of thing that must LOOK the same in both. */
+  navActive: "#E4D9C9",
   hairline: "#D7D1CE",
   hairlineWidth: 0.4,
   /** The bloom behind a badge icon. */
