@@ -28,6 +28,7 @@ import type {
   TextLevel,
 } from "@/src/game/core/type";
 import type { ProfileId } from "@/src/game/core/profile";
+import { ROOM_BACKGROUND_IDS, type RoomBackgroundId } from "@/src/room/ui/roomBackdrops";
 
 // ── option tables ────────────────────────────────────────────────────────────
 const PROFILES: { value: ProfileId; label: string }[] = [
@@ -78,6 +79,11 @@ const LEVELS: { value: TextLevel; label: string }[] = [
   { value: "standard", label: "Standard" },
   { value: "simple", label: "Simple" },
 ];
+// bg7 first: it is the default. Labelled by position, not by scene, because the photos are plain
+// numbered scenery with no theme of their own to name.
+const ROOM_BACKGROUNDS: { value: RoomBackgroundId; label: string }[] = ROOM_BACKGROUND_IDS.map(
+  (id, i) => ({ value: id, label: i === 0 ? "Default" : `View ${i + 1}` }),
+);
 
 // ── tutorial focus plumbing ──────────────────────────────────────────────────
 /** A row the settings walkthrough can scroll to and wait on. Every id here must name a row the IN-BUILD panel renders — the walkthrough opens that panel, not the /settings screen. */
@@ -438,6 +444,8 @@ export function AppDisplaySection() {
   const setSettings = useGameStore((s) => s.setSettings);
   const handedness = useGameStore((s) => s.handedness);
   const setHandedness = useGameStore((s) => s.setHandedness);
+  const roomBackground = useGameStore((s) => s.roomBackground);
+  const setRoomBackground = useGameStore((s) => s.setRoomBackground);
   const changeFont = (delta: number) =>
     setSettings({
       fontScale: Math.min(1.5, Math.max(0.9, +(settings.fontScale + delta).toFixed(2))),
@@ -478,6 +486,13 @@ export function AppDisplaySection() {
         desc="Mirrors the assembly controls, trays and buttons"
         value={handedness === "left"}
         onValueChange={(v) => setHandedness(v ? "left" : "right")}
+      />
+      <Choice
+        label="Room Background"
+        desc="The view outside your room's window. Switches with the day/sunset/night light on the room screen."
+        value={roomBackground}
+        options={ROOM_BACKGROUNDS}
+        onChange={setRoomBackground}
       />
     </>
   );

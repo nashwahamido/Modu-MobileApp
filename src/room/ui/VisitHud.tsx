@@ -8,10 +8,19 @@ import {
 import { Pressable } from "@/src/components/Pressable";
 
 import { avatarForProfile } from "@/src/components/avatarAssets";
-import { CREAM, useFixedStyles, useTheme, LEXEND } from "@/src/game/ui/system/theme";
+import { BackIcon } from "@/src/components/Icons";
+import { CARD_CHROME, CREAM, useFixedStyles, useTheme, LEXEND } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 import type { Profile } from "@/src/data";
 import { useScreenInsets } from '../../hooks/use-safe-insets';
+import { ROOM_CHIP_RADIUS, ROOM_CHIP_SIZE } from './RoomLightControls';
+
+/** The chips' cream, shared with the room's other chrome. */
+const CHIP_FILL = '#FBFAF3';
+
+// The arrow inside the back chip. Sized so the drawn angle matches the weight the typed "‹" had at
+// 26pt bold — the icon's own box is 14 of its 24 units tall, so this renders about 13pt of chevron.
+const BACK_ICON_SIZE = 22;
 
 
 export function VisitHud({
@@ -42,7 +51,7 @@ export function VisitHud({
     <>
       <View style={[s.header, { top: padTop, left: padL }]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Back to your room" style={s.backButton} onPress={onBack} hitSlop={10}>
-          <Text style={s.backGlyph}>‹</Text>
+          <BackIcon size={BACK_ICON_SIZE} color={CREAM.ink} />
         </Pressable>
         <View style={s.hostCard}>
           <Image source={avatarForProfile(host?.avatarMode)} style={s.hostAvatar} />
@@ -81,47 +90,47 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       gap: 12,
     },
+    // THE SAME CHIP the light switch and the hour button below it wear — same box, same corner, same
+    // cream, same shadow, taken from their constants rather than matched by eye. It heads that column,
+    // so it has to be one of them: at 42pt and fully round it read as a different kind of control that
+    // happened to be parked above them, and it sat 6pt narrower than the chips it was leading.
     backButton: {
-      width: 42,
-      height: 42,
-      borderRadius: 21,
+      width: ROOM_CHIP_SIZE,
+      height: ROOM_CHIP_SIZE,
+      borderRadius: ROOM_CHIP_RADIUS,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: "#FBFAF3",
-      borderWidth: 0.4,
-      borderColor: "#D7D1CE",
+      backgroundColor: CHIP_FILL,
+      ...CARD_CHROME,
+      borderWidth: 0,
     },
-    backGlyph: {
-      color: CREAM.ink,
-      ...LEXEND.bold,
-      fontSize: 26,
-      // The glyph reads right-heavy in its box; nudge it back onto the centre.
-      marginRight: 3,
-      marginTop: -3,
-    },
+    // Its height follows the chip beside it, and its chrome does too: the two are one row, and a
+    // hairline pill next to a shadowed chip reads as one of them being a mistake.
     hostCard: {
       flexDirection: "row",
       alignItems: "center",
       gap: 10,
-      height: 42,
+      height: ROOM_CHIP_SIZE,
       paddingLeft: 5,
       paddingRight: 16,
-      borderRadius: 21,
-      backgroundColor: "#FBFAF3",
-      borderWidth: 0.4,
-      borderColor: "#D7D1CE",
+      borderRadius: ROOM_CHIP_RADIUS,
+      backgroundColor: CHIP_FILL,
+      ...CARD_CHROME,
+      borderWidth: 0,
     },
     hostAvatar: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
+      width: 38,
+      height: 38,
+      borderRadius: 19,
       backgroundColor: t.surfaceRaised,
     },
     hostName: {
       color: CREAM.ink,
       ...LEXEND.semibold,
-      fontSize: 13,
-      maxWidth: 180,
+      fontSize: 16.5,
+      // Raised WITH the type: at the old 180 a longer name simply hit the ellipsis sooner at the
+      // larger size, which would have read as the name shrinking rather than growing.
+      maxWidth: 260,
     },
     emptyNote: {
       position: "absolute",

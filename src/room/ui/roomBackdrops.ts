@@ -52,3 +52,49 @@ export function roomBackdropView(
   const source = dark && entry.dark !== undefined ? entry.dark : entry.light;
   return { source, fit: entry.fit ?? "cover" };
 }
+
+// The player-chosen "Room Background" (Settings > General), independent of the hour: this picks
+// WHICH photo hangs outside the window, while the hour (RoomLightControls, on the room HUD) picks
+// what time of day it shows. Each background carries exactly three shots — day, sunset, night — so
+// the two settings compose into one view without a separate entry per hour of TIME_OF_DAY.
+// bg8 is deliberately absent: unlike every other id here it has no -sunset/-night shots, only a day
+// one, so it cannot follow the hour the way the rest of this set does.
+export type RoomBackgroundId = "bg4" | "bg6" | "bg7" | "bg9";
+
+// bg7 first: it is the default, so it heads the list rather than sitting among the scenery (see the
+// same ordering rule on BACKDROPS in game/ui/settings/sections.tsx).
+export const ROOM_BACKGROUND_IDS: readonly RoomBackgroundId[] = ["bg7", "bg4", "bg6", "bg9"];
+
+export type RoomBackgroundPhase = "day" | "sunset" | "night";
+
+const ROOM_BACKGROUNDS: Record<RoomBackgroundId, Record<RoomBackgroundPhase, number>> = {
+  bg4: {
+    day: require("../../assets/images/backdrops/room/bg4.jpg"),
+    sunset: require("../../assets/images/backdrops/room/bg4-sunset.jpg"),
+    night: require("../../assets/images/backdrops/room/bg4-night.jpg"),
+  },
+  bg6: {
+    day: require("../../assets/images/backdrops/room/bg6.jpg"),
+    sunset: require("../../assets/images/backdrops/room/bg6-sunset.jpg"),
+    night: require("../../assets/images/backdrops/room/bg6-night.jpg"),
+  },
+  bg7: {
+    day: require("../../assets/images/backdrops/room/bg7.jpg"),
+    sunset: require("../../assets/images/backdrops/room/bg7-sunset.jpg"),
+    night: require("../../assets/images/backdrops/room/bg7-night.jpg"),
+  },
+  bg9: {
+    day: require("../../assets/images/backdrops/room/bg9.jpg"),
+    sunset: require("../../assets/images/backdrops/room/bg9-sunset.jpg"),
+    night: require("../../assets/images/backdrops/room/bg9-night.jpg"),
+  },
+};
+
+/** What the room screen hands to SceneBackdrop for the player's chosen background, at the given
+ * phase of the day (see timeOfDayPhase in room/core/timeOfDay.ts for how an hour maps to one). */
+export function roomBackgroundView(
+  background: RoomBackgroundId,
+  phase: RoomBackgroundPhase,
+): { source: number; fit: "cover" } {
+  return { source: ROOM_BACKGROUNDS[background][phase], fit: "cover" };
+}
