@@ -12,6 +12,8 @@
 // It is deliberately device-independent: nothing here names a tablet model. A Tab A8 (1280x800dp)
 // lands at 1.20, an iPad Air 3 (1112x834) at 1.04, a 12.9" iPad Pro at 1.28 — each from its own
 // screen, so a tablet nobody has tested on still gets a sensible size.
+import { useWindowDimensions } from "react-native";
+
 import { useUiScale } from "@/src/game/ui/system/theme";
 
 /** Multiplier on the shared tablet scale. 1 = follow it exactly; lower = a smaller room HUD. */
@@ -48,7 +50,10 @@ const TOP_STATS_LIFT = 1.1;
 
 export function useTopStatsScale(): number {
   const k = useRoomScale();
-  return k === 1 ? 1 : k * TOP_STATS_LIFT;
+  // The phone guard is the shape test itself: it is false below a 600dp short side, so a phone's
+  // exact 1 goes through untouched — see useSquareTablet.
+  const square = useSquareTablet();
+  return (k === 1 ? 1 : k * TOP_STATS_LIFT) * (square ? TOP_STATS_SQUARE_LIFT : 1);
 }
 
 /**
@@ -64,9 +69,48 @@ export function useLeftColumnScale(): number {
   return k === 1 ? 1 : k * LEFT_COLUMN_LIFT;
 }
 
+/**
+ * THE SQUARISH-TABLET LIFTS, one per surface, on top of everything above.
+ *
+ * The shared scale clamps on the LONG side as well as the short one (min of short/360 and long/800),
+ * and a 4:3 tablet is the shape that clamp bites hardest on: a 1080x810dp panel has a generous short
+ * side but a long side barely over the 800 the clamp measures against, so it lands near 1.0 — and the
+ * trims above then hold it there. The result is HUD drawn at phone size in a tablet-sized room.
+ *
+ * A 16:10 tablet does not have this problem: its long side runs well past 800, so it earns its scale
+ * from the clamp and needs nothing here. Hence lifts keyed to the screen's SHAPE rather than bigger
+ * trims, which would inflate every tablet to fix one.
+ *
+ * One constant per surface rather than a single shared number, for the same reason the trims above
+ * are separate: these are tuned by eye against different things — a bar spanning the screen, a pair of
+ * pills read at a glance — and a shape fix is no reason to fuse them.
+ */
+const BOTTOM_BAR_SQUARE_LIFT = 1.15;
+const TOP_STATS_SQUARE_LIFT = 1.15;
+
+/** Below this short side the device is a phone; matches TABLET_MIN_SHORT_DP elsewhere in the app. */
+const TABLET_MIN_SHORT_DP = 600;
+
+/** Squarer than this counts as a 4:3 tablet. 4:3 is 1.333 and 16:10 is 1.6, so the bar sits between
+ *  the two — it catches an iPad-shaped screen (and the 1260x1620 @264ppi panel, which is 1.286) and
+ *  leaves every widescreen tablet exactly as it was. */
+const SQUARE_MAX_ASPECT = 1.4;
+
+/** Is this one of those screens? False on every phone, so a caller can apply its lift unconditionally. */
+function useSquareTablet(): boolean {
+  const { width, height } = useWindowDimensions();
+  const short = Math.min(width, height);
+  const long = Math.max(width, height);
+  return short >= TABLET_MIN_SHORT_DP && long / short <= SQUARE_MAX_ASPECT;
+}
+
 export function useBottomBarScale(): number {
   const k = useRoomScale();
-  return k === 1 ? 1 : k * BOTTOM_BAR_TRIM;
+  // Phones are still pinned at exactly 1: the shape test is false there, so this multiplies the
+  // phone's 1 by 1. The rail and the standalone assemble button share this hook and are the PHONE
+  // layout, which is why the guard has to live in the test rather than at the call site.
+  const square = useSquareTablet();
+  return (k === 1 ? 1 : k * BOTTOM_BAR_TRIM) * (square ? BOTTOM_BAR_SQUARE_LIFT : 1);
 }
 
 /**
