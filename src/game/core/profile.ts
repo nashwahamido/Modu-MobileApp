@@ -69,7 +69,6 @@ export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>>
     // dev-setting
     releaseBehavior: "float",
     snapDistance: 0.18, // wider than baseline: quick, low-effort placement — a near-miss should still seat.
-    dragPlane: "level", // her engine: drag on a horizontal plane at the target's height
   },
 
   // Structured, predictable, step-by-step guidance (assembly mode: guide).
