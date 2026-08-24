@@ -108,6 +108,16 @@ export function RoomExperience() {
   const [shopOpen, setShopOpen] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(open === 'inventory');
   const [visitPickerOpen, setVisitPickerOpen] = useState(false);
+  // Which navigation item is marked as active, for whichever of the two layouts is on screen. Derived
+  // rather than a third piece of state: the popups' own flags already say which one is up, and a
+  // separate "current tab" would be one more thing that can disagree with them.
+  const navActive = shopOpen
+    ? 'shop'
+    : inventoryOpen
+      ? 'inventory'
+      : visitPickerOpen
+        ? 'friends'
+        : null;
   const [showRoomEditGuide, setShowRoomEditGuide] = useState(false);
   const [showRoomWelcomeGuide, setShowRoomWelcomeGuide] = useState(false);
   const [firstPlacementGuideSession, setFirstPlacementGuideSession] =
@@ -304,6 +314,7 @@ export function RoomExperience() {
           onOpenShop={() => setShopOpen(true)}
           onOpenInventory={() => setInventoryOpen(true)}
           onOpenVisit={() => setVisitPickerOpen(true)}
+          active={navActive}
         />
       ) : (
         <>
@@ -311,6 +322,7 @@ export function RoomExperience() {
             onOpenShop={() => setShopOpen(true)}
             onOpenInventory={() => setInventoryOpen(true)}
             onOpenVisit={() => setVisitPickerOpen(true)}
+            active={navActive}
           />
 
           {/* Opposite the rail, and clear of it: the one action, not one of the places to go. Hidden mid-placement, like the light controls — the room is being edited, not navigated. */}

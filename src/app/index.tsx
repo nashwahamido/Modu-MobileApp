@@ -58,6 +58,15 @@ const PHONE_ACTIONS_LIFT = 14;
 const PHONE_GROUP_RAISE = 20;
 const PHONE_ACTIONS_BOTTOM_GAP = 2 * GROUP_LIFT - 44 + PHONE_ACTIONS_LIFT + PHONE_GROUP_RAISE;
 
+/** Galaxy S22 Ultra (167.3 x 77.9mm) has an unusually long ~19.3:9 aspect ratio that this
+ *  fixed-px layout doesn't otherwise account for — on it the buttons crept up far enough to clip
+ *  the mascot/disk. Matched by aspect ratio (survives the device's own display-resolution/screen-
+ *  zoom setting, since those scale width and height together, unlike a raw dp width/height match)
+ *  rather than a hardcoded size, so it still catches the device regardless of display settings. */
+const S22_ULTRA_ASPECT = 167.3 / 77.9;
+const S22_ULTRA_ASPECT_TOLERANCE = 0.015;
+const S22_ULTRA_EXTRA_DROP = 24;
+
 const TABLET_ACTIONS_LIFT = 46;
 
 const STILL_MS = 1800;
@@ -134,6 +143,10 @@ export default function App() {
   const waveSize = useWaveSizes();
   const k = useUiScale();
   const isTablet = useIsTablet();
+  const { width: winW, height: winH } = useWindowDimensions();
+  const isS22UltraLike =
+    !isTablet &&
+    Math.abs(Math.max(winW, winH) / Math.min(winW, winH) - S22_ULTRA_ASPECT) < S22_ULTRA_ASPECT_TOLERANCE;
   const { user } = useAuth();
   const homeRoute = SESSION_REQUIRED && !user ? SIGN_IN_ROUTE : "/room";
 
@@ -254,7 +267,7 @@ export default function App() {
           {
             bottom: isTablet
               ? ACTIONS_BOTTOM_GAP * k + TABLET_ACTIONS_LIFT * k + safe.bottom
-              : PHONE_ACTIONS_BOTTOM_GAP + safe.bottom,
+              : PHONE_ACTIONS_BOTTOM_GAP + safe.bottom - (isS22UltraLike ? S22_ULTRA_EXTRA_DROP : 0),
             left: safe.left,
             right: safe.right,
           },

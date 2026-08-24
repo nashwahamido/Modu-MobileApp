@@ -10,13 +10,18 @@ import { StyleSheet,
 } from "react-native";
 import { Pressable } from "@/src/components/Pressable";
 
-import { GRID_EDGE, PANEL_EDGE } from "@/src/components/popupInsets";
+import { GRID_EDGE } from "@/src/components/popupInsets";
+import {
+  BOARD_DROP,
+  BOARD_LABEL_OUTLINE,
+  POPUP_BOARD,
+  boardHeight,
+  spanBoardWidth,
+} from "@/src/components/popupBoard";
 import { CATEGORY_LABELS, SHOP_CATEGORY_TABS } from "@/src/data";
 import type { ShopCategory } from "@/src/data";
 import { CREAM, LEXEND, useScaledStyles } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
-
-const BOARD = require("@/src/assets/ui/icons/cream-panel.png");
 
 // One drawing per category, each in a box SOLVED so the six read at the same size.
 //
@@ -63,53 +68,10 @@ const CATEGORY_ART: Record<
 // Paired with the row's `gap`: the board is measured FROM the row, so widening the gaps would
 // widen the board too. Half of any gap increase has to come off here to hold the board still
 const BOARD_OVERHANG_X = 21;
-// The PNG's real proportions (2639x355). Height follows width by this, so the panel is never squashed
-// or stretched. Re-measure if the artwork is re-exported.
+// THE BOARD'S OWN GEOMETRY — the asset, its aspect, its stretch, the tablet widen and the span solve —
+// lives in components/popupBoard. The friend picker wears the same plank, and a second copy of those
+// numbers here would drift differently on every screen shape rather than merely drifting.
 //
-// NOTE the width is unchanged from the wooden board this replaced, but the HEIGHT is not: that plank
-// was 6.67:1 and this panel is 7.43:1, so at the same width it draws about 11% shorter. Forcing the
-// old height instead would mean stretching the artwork, which is the one thing this ratio exists to
-// prevent.
-const BOARD_ASPECT = 2639 / 355;
-// Drawn TALLER than the artwork's own proportion, by this much.
-//
-// A deliberate distortion, and safe here in a way it would not have been on the wooden plank this
-// replaced: the panel is a flat cream shape with no grain or detail to skew, so stretching it reads as
-// a taller panel rather than as squashed artwork. It also needs resizeMode="stretch" below — `contain`
-// would letterbox the drawing inside the taller box instead of filling it.
-const BOARD_STRETCH_Y = 1.18;
-// TABLET ONLY: how far past the tile span the panel runs. On a phone the panel is measured from the
-// tab row and is narrower than the tiles by design, so none of this applies there.
-//
-// It is keyed to the screen's ASPECT rather than to a model, because that is what the problem actually
-// is. A 4:3 tablet (an iPad at 1080x810pt) has a canvas 200pt narrower than a 16:10 one at the same
-// height, and the popup's side inset is a SHARE of the width — so the panel, the tile span and the
-// board all come out proportionally shorter, and the header ends up with more empty space around a
-// smaller panel. The squarer the screen, the more of it the panel takes back.
-//
-// Anchored at the two shapes in use and interpolated between; anything squarer or wider than those is
-// clamped, so an unusual tablet lands on one of the tested ends rather than off the scale.
-const BOARD_WIDEN_BY_ASPECT = [
-  { aspect: 4 / 3, widen: 1.02 },
-  { aspect: 16 / 10, widen: 1.06 },
-];
-
-function tabletBoardWiden(aspect: number): number {
-  const [square, wide] = BOARD_WIDEN_BY_ASPECT;
-  if (aspect <= square.aspect) return square.widen;
-  if (aspect >= wide.aspect) return wide.widen;
-  const t = (aspect - square.aspect) / (wide.aspect - square.aspect);
-  return square.widen + (wide.widen - square.widen) * t;
-}
-
-// How much cream is left between the board's rounded end and the panel's own edge, at the widest.
-//
-// A CEILING, not the usual case: the widens above are what set the board's length, and at 4:3 they sit
-// well inside this. It exists because the panel CLIPS (overflow: hidden) — a board solved past its edge
-// does not overhang, it loses its stadium ends to a straight cut — so anything that widens the board
-// later runs into a rounded stop rather than a square one.
-const BOARD_EDGE_BREATH = 4;
-
 // THE TABLET FILL.
 //
 // The board is measured FROM the tab row, so the only way to make it span the panel is to make the row
@@ -131,10 +93,6 @@ const TAB_FILL = 0.88;
 // them — reads heavy for a header at full size. It is ONE number rather than six edits: everything
 // on the tab is drawn through this same k.
 const PHONE_TAB_SCALE = 0.9;
-// How far the board hangs below the panel's top edge, ON TABLETS ONLY. The panel's own paddingTop is
-// authored for a phone, where it is most of the panel's height; on a tablet the same 18pt leaves the
-// plank pinned to the border with the grid stranded below it. Scaled, so it grows with the board.
-const BOARD_DROP = 16;
 // The row at scale 1: six discs, five gaps, and the padding either side. Kept in step with the sheet
 // below by hand — it is the one measurement that cannot be taken from a rendered row, since the row's
 // width is what this decides.
@@ -148,7 +106,6 @@ const ROW_PADDING_X = 18;
 // shadow LAYER, which at this size dissolves into the wood instead of edging the letters. So the
 // outline is drawn the only way RN text can really do it — the same word repeated behind itself, once
 // per direction, in the outline colour.
-const OUTLINE_COLOUR = "#FAF7F2";
 const OUTLINE_WIDTH = 0.6;
 const OUTLINE_OFFSETS: { width: number; height: number }[] = [
   { width: -OUTLINE_WIDTH, height: 0 },
@@ -216,20 +173,15 @@ export function CategoryBoardTabs({
             // On a tablet the panel spans the grid outright; on a phone it stays what it always
             // was — the row plus its overhang, which is narrower than the tiles by design.
             const width = tablet
-              ? Math.min(
-                  tileSpan *
-                    tabletBoardWiden(
-                      Math.max(screenW, screenH) / Math.min(screenW, screenH),
-                    ),
-                  // The panel's inner edge, from the inside: the header sits within the panel's own
-                  // side padding, so the board may run out over that padding but no further.
-                  available + (PANEL_EDGE - BOARD_EDGE_BREATH) * 2,
+              ? spanBoardWidth(
+                  available,
+                  Math.max(screenW, screenH) / Math.min(screenW, screenH),
                 )
               : row.width + BOARD_OVERHANG_X * 2 * k;
-            const height = (width / BOARD_ASPECT) * BOARD_STRETCH_Y;
+            const height = boardHeight(width);
             return (
               <Image
-                source={BOARD}
+                source={POPUP_BOARD}
                 style={[
                   s.board,
                   {
@@ -379,6 +331,6 @@ const makeStyles = (t: Theme) =>
       position: "absolute",
       left: 0,
       right: 0,
-      color: OUTLINE_COLOUR,
+      color: BOARD_LABEL_OUTLINE,
     },
   });

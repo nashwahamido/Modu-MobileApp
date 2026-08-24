@@ -54,15 +54,33 @@ const ICON_SLOT = 44;
 const ITEM_WIDTH = 72;
 const CHEVRON_SIZE = 26;
 const LABEL_LINE_HEIGHT = 13;
+/** The rail's own side padding. A constant because the active disc below is solved against it. */
+const RAIL_PAD_X = 3;
+
+// THE ACTIVE MARK — the disc behind Shop or Inventory while that popup is up, so the rail says which
+// place you are in rather than only that you left the room.
+//
+// Solved against the rail rather than picked, because the brief was that it must not cross the rail's
+// edge. Here the tight side is the WIDTH — a column has slack above and below every item (the rail's
+// vertical padding, and the gap between items) but only its own narrow width across. Written as a min,
+// so narrowing the rail shrinks the disc instead of pushing it out through the stroke.
+const ACTIVE_DISC_EDGE_GAP = 2;
+const ACTIVE_DISC = Math.min(
+  ICON_SLOT,
+  ITEM_WIDTH + RAIL_PAD_X * 2 - (RAIL_STROKE_WIDTH + ACTIVE_DISC_EDGE_GAP) * 2,
+);
 
 export function RoomNavRail({
   onOpenShop,
   onOpenInventory,
   onOpenVisit,
+  active,
 }: {
   onOpenShop: () => void;
   onOpenInventory: () => void;
   onOpenVisit: () => void;
+  /** Which popup is open, if any. These three and no more: they are the destinations that stay open OVER the room, so the rail is still on screen to say where you are. You navigates AWAY — the room unmounts, and there is nothing left to mark. */
+  active?: 'shop' | 'inventory' | 'friends' | null;
 }) {
   const k = useBottomBarScale();
   // The sheet takes the SAME k as the hand-scaled values below — see useScaledStyles.
@@ -114,6 +132,7 @@ export function RoomNavRail({
             label="Shop"
             icon={SHOP_ICON}
             iconStyle={s.shopIcon}
+            active={active === 'shop'}
             onPress={onOpenShop}
           />
           <RailItem
@@ -121,6 +140,7 @@ export function RoomNavRail({
             label="Inventory"
             icon={INVENTORY_ICON}
             iconStyle={s.railIcon}
+            active={active === 'inventory'}
             onPress={onOpenInventory}
           />
           <RailItem
@@ -128,6 +148,7 @@ export function RoomNavRail({
             label="Friends"
             icon={VISIT_FRIENDS_ICON}
             iconStyle={s.friendsIcon}
+            active={active === 'friends'}
             onPress={onOpenVisit}
           />
           <RailItem
@@ -152,17 +173,26 @@ function RailItem({
   label,
   icon,
   iconStyle,
+  active = false,
   onPress,
 }: {
   s: ReturnType<typeof makeStyles>;
   label: string;
   icon: ImageSourcePropType;
   iconStyle: StyleProp<ImageStyle>;
+  active?: boolean;
   onPress: () => void;
 }) {
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} style={s.item} onPress={onPress}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
+      style={s.item}
+      onPress={onPress}
+    >
       <View style={s.iconSlot}>
+        {active ? <View style={s.activeDisc} /> : null}
         <Image source={icon} style={iconStyle} resizeMode="contain" />
       </View>
       {/* One line, always: the longest label is what sets the rail's width, and letting it wrap would
@@ -190,7 +220,7 @@ const makeStyles = (t: Theme) =>
     rail: {
       alignItems: 'center',
       paddingVertical: 16,
-      paddingHorizontal: 3,
+      paddingHorizontal: RAIL_PAD_X,
       borderRadius: 40,
       backgroundColor: RAIL_FILL,
       gap: 14,
@@ -212,11 +242,28 @@ const makeStyles = (t: Theme) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
-    // Fixed height, so every label sits on the same line no matter how tall its icon draws
+    // Fixed height, so every label sits on the same line no matter how tall its icon draws. Square, so
+    // the disc below has a box to centre in — layout-neutral, since the icons are wider than this and
+    // simply overhang it, already centred on the item's own centre.
     iconSlot: {
+      width: ICON_SLOT,
       height: ICON_SLOT,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    // Absolute, so it paints UNDER the icon without taking part in the layout — the same arrangement
+    // the shop's active category uses, and for the same reason: a disc drawn as the icon's background
+    // would be clipped by the box the artwork overhangs.
+    //
+    // Centred on the ITEM, not on the drawing. The cart is nudged 4pt left of centre for optical
+    // reasons (SHOP_ICON_NUDGE_X) and following that here would sit Shop's disc 4pt off the line
+    // Inventory's disc and every label stand on, which reads as a mistake where the nudge does not.
+    activeDisc: {
+      position: 'absolute',
+      width: ACTIVE_DISC,
+      height: ACTIVE_DISC,
+      borderRadius: ACTIVE_DISC / 2,
+      backgroundColor: CREAM.navActive,
     },
     label: {
       ...LEXEND.medium,
