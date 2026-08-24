@@ -2,8 +2,8 @@
 import type { PostgrestError } from "@supabase/supabase-js";
 import { supabase } from "@/src/config/supabase";
 import type { AssemblyMode, BrandId, FurnitureId } from "@/src/game/core/type";
-import type { BuildProgressRepo, CatalogRepo, FriendRequestsRepo, FriendsRepo, ItemVariant, PlaceableRoomRowInput, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo, VariantsRepo, WorkshopDraftRow } from "../core/repos";
-import { toPlaceableRoomRow, workshopDraftsToItemVariants, workshopModelDraftsToPlaceableRoomRows } from "../core/repos";
+import type { BuildProgressRepo, BuildRewardRow, CatalogRepo, FriendRequestsRepo, FriendsRepo, ItemVariant, PlaceableRoomRowInput, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo, VariantsRepo, WorkshopDraftRow } from "../core/repos";
+import { toBuildRewardAmount, toPlaceableRoomRow, workshopDraftsToItemVariants, workshopModelDraftsToPlaceableRoomRows } from "../core/repos";
 import type { BuildSave, FriendRequest, Profile, ProfilePatch, RoomLayout } from "../core/types";
 import { ROOM_LAYOUT_VERSION } from "../core/types";
 import type { ShopCategory, ShopItem, WorkshopDraftShopRow } from "../shop/items";
@@ -364,22 +364,29 @@ const buildRepo: BuildProgressRepo = {
     check(clearError);
   },
   async reward(_ownerId, furnitureId) {
-    // Atomic + idempotent + server-authoritative: reward_build reads the amount from item_build, inserts the one-per-build ledger row, and bumps the profile as the authenticated caller.
+    // Atomic + idempotent + server-authoritative: reward_build reads the amount from item_build, inserts the one-per-build ledger row, bumps the profile, and (since migration 027) grants reward_item_id into user_buy — all as the authenticated caller, in one transaction, so a build cannot pay its coins and lose its item.
     const { data, error } = await supabase.rpc("reward_build", { p_furniture_id: furnitureId });
     check(error);
-    const res = data as { ok: boolean; already_rewarded?: boolean; coins?: number; xp?: number };
-    return { coins: res.coins ?? 0, xp: res.xp ?? 0, alreadyRewarded: res.already_rewarded ?? false };
+    const res = data as { ok: boolean; already_rewarded?: boolean; coins?: number; xp?: number; reward_item?: string | null };
+    return {
+      coins: res.coins ?? 0,
+      xp: res.xp ?? 0,
+      alreadyRewarded: res.already_rewarded ?? false,
+      // The RPC returns null for a furniture that grants no item, and a database that has not applied 027 omits the key entirely — both mean the same thing here, so both collapse to absent rather than to a null the caller would have to test for separately.
+      ...(res.reward_item ? { rewardItemId: res.reward_item } : {}),
+    };
   },
   async buildReward(furnitureId) {
-    // Read-only: the configured reward for the completion screen. Same source the grant uses.
+    // Read-only: the configured reward for the completion screen. Same source the grant uses — including the item, embedded through reward_item_id's foreign key so the name and category arrive in the SAME round trip rather than in a second lookup the screen would have to sequence. Same embedded-select shape listCompletedItems uses.
     const { data, error } = await supabase
       .from("item_build")
-      .select("coin_reward, xp_reward")
+      .select("coin_reward, xp_reward, item_buy(id, name, category_id)")
       .eq("id", furnitureId)
       .maybeSingle();
     check(error);
-    const row = data as { coin_reward: number; xp_reward: number } | null;
-    return { coins: row?.coin_reward ?? 0, xp: row?.xp_reward ?? 0 };
+    const row = data as BuildRewardRow | null;
+    // A furniture with no catalog row at all reads as zero, which is what reward_build would grant it.
+    return row ? toBuildRewardAmount(row) : { coins: 0, xp: 0 };
   },
   async syncCounts(furnitureId, counts) {
     // Push the recipe's derived counts so item_build' generated reward tracks the local model. Only counts cross; the per-step rates stay DB-authored. Best-effort — a failure here just means the catalog keeps its last-synced values.

@@ -11,7 +11,8 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url)); // .../src/game/helper-scripts
 const MODELS = path.join(ROOT, "..", "..", "assets", "models", "furnitures");
-const OUT = path.join(ROOT, '..', 'data', 'furnitures');
+// The furnitures moved to game/content/ — this used to say game/data/, which no longer exists, so a re-run mkdir'd a dead tree nobody imports and still printed success.
+const OUT = path.join(ROOT, '..', 'content', 'furnitures');
 
 // Furnitures are AUTO-DISCOVERED: every assets/models/furnitures/<ID>/<ID>.glb is ingested — dropping a new model in needs zero script edits. `CONFIG` is the rare escape hatch (typeOverrides forces a part's structural/fastener type).
 const CONFIG = {};
@@ -68,10 +69,11 @@ function rotateByQuat([x, y, z, w], [vx, vy, vz]) {
     vz + w * tz + (x * ty - y * tx),
   ];
 }
-// snap a near-axis unit vector to the exact principal axis (fasteners are axis-aligned).
+// snap a near-axis unit vector to the exact principal axis. This is a FLOAT-NOISE filter, not a tolerance for real geometry: 0.9999 is 0.81°, and across all four furnitures the genuinely cardinal fasteners land within 0.02° while BEKVÄM's splayed-leg screws/dowels sit at a real 5.00° (the side panels' splay) and EKET's screw109041 at 29–31°. The old 0.9 threshold was 25.8° and silently flattened BEKVÄM's 5° tilt to pure ±Z, which cost the drive-in axis its −Y component and made the screws precess in a 5° cone while turning (they are spun ABOUT engageAxis in TightenControl/PartModel).
+const AXIS_SNAP_MIN = 0.9999;
 function snapAxis(u) {
   const i = u.map(Math.abs).indexOf(Math.max(...u.map(Math.abs)));
-  if (Math.abs(u[i]) > 0.9) {
+  if (Math.abs(u[i]) > AXIS_SNAP_MIN) {
     const e = [0, 0, 0];
     e[i] = Math.sign(u[i]);
     return e;
@@ -106,7 +108,7 @@ function readVec3(json, bin, accessorIndex) {
   return out;
 }
 
-function visualCenterOffset(json, bin, node) {
+function meshBounds(json, bin, node) {
   if (node.mesh == null) return undefined;
   const min = [Infinity, Infinity, Infinity];
   const max = [-Infinity, -Infinity, -Infinity];
@@ -119,10 +121,25 @@ function visualCenterOffset(json, bin, node) {
       }
     }
   }
-  if (!Number.isFinite(min[0])) return undefined;
+  return Number.isFinite(min[0]) ? { min, max } : undefined;
+}
+
+// world offset origin -> mesh bounds centre
+function visualCenterOffset(node, bounds) {
   const scale = node.scale ?? [1, 1, 1];
-  const localCenter = min.map((v, i) => ((v + max[i]) / 2) * scale[i]);
+  const localCenter = bounds.min.map((v, i) => ((v + bounds.max[i]) / 2) * scale[i]);
   return rotateByQuat(node.rotation ?? [0, 0, 0, 1], localCenter).map((v) => +v.toFixed(6));
+}
+
+// world offset origin -> HEAD FACE centre: the local −Z bbox face (LOCAL_ENGAGE side). Works for any origin placement — it reads the bounds, not the origin. ToolModel projects this onto the tool axis so the tool meets the head instead of hovering a fixed gap off the ORIGIN, which buried the driver up to 18mm into BEKVÄM's long screws.
+function headOffset(node, bounds) {
+  const scale = node.scale ?? [1, 1, 1];
+  const local = [
+    ((bounds.min[0] + bounds.max[0]) / 2) * scale[0],
+    ((bounds.min[1] + bounds.max[1]) / 2) * scale[1],
+    bounds.min[2] * scale[2],
+  ];
+  return rotateByQuat(node.rotation ?? [0, 0, 0, 1], local).map((v) => +v.toFixed(6));
 }
 
 // nodes -> { partId: <model facts> }
@@ -135,6 +152,7 @@ function buildParts(json, bin, typeOverrides = {}) {
     const joinsTwo = p.attached?.length === 2;
     const type = typeOf(p.group, typeOverrides[p.group], joinsTwo);
     const rotation = n.rotation ?? [0, 0, 0, 1];
+    const bounds = meshBounds(json, bin, n);
     parts[p.partId] = {
       partId: p.partId,
       group: p.group,
@@ -142,11 +160,12 @@ function buildParts(json, bin, typeOverrides = {}) {
       type,
       cluster: p.cluster,
       ...(p.attached ? { attached: p.attached } : {}),
-      ...(n.mesh != null ? { visualCenterOffset: visualCenterOffset(json, bin, n) } : {}),
+      ...(bounds ? { visualCenterOffset: visualCenterOffset(n, bounds) } : {}),
       // NO kind field: the runtime derives it from the group name (fastenerKindOf ← core/fastener-kinds.json).
       ...(type === 'fastener'
         ? { engageDir: snapAxis(rotateByQuat(rotation, LOCAL_ENGAGE)) }
         : {}),
+      ...(type === 'fastener' && bounds ? { headOffset: headOffset(n, bounds) } : {}),
       pose: {
         position: (n.translation ?? [0, 0, 0]).map((v) => +v.toFixed(6)),
         rotation: rotation.map((v) => +v.toFixed(6)),

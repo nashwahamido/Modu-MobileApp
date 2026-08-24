@@ -20,6 +20,17 @@ export const STAR_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/sta
 export const XP_ICON: ImageSourcePropType = require("@/src/assets/ui/icons/icon-xp.png");
 
 // Stars with the number baked into the artwork, indexed by level
+/**
+ * LEVEL -> its star.
+ *
+ * STRAIGHT AGAIN. The art used to be misnumbered — lvl-3.png carried a 6, lvl-6.png a 3, and 4 and 5
+ * were swapped — so this table crossed them back and a comment here explained why. The files have now
+ * been re-exported in order, which means the crossing was actively inverting correct art: a level-3
+ * player was shown a 6. Verified by opening all six.
+ *
+ * If a star ever looks wrong again, open the PNGs before touching this table — the number is painted
+ * into the artwork, so it is the one thing no amount of reading the code will tell you.
+ */
 const LEVEL_ICONS: Record<number, ImageSourcePropType> = {
   1: require("@/src/assets/ui/icons/lvl-1.png"),
   2: require("@/src/assets/ui/icons/lvl-2.png"),

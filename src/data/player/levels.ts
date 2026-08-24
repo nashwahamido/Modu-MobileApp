@@ -23,6 +23,21 @@ export function levelForXp(xp: number, rows: LevelRow[]): number {
   return best.level;
 }
 
+/**
+ * A level title as a LABEL: "a steady hand" -> "A Steady Hand".
+ *
+ * The titles are authored as sentence fragments because that is how they read in prose ("you are a
+ * steady hand"). Shown on their own — on a badge, under a name — a lowercase fragment reads as
+ * unfinished rather than as a rank, so every surface that displays one on its own capitalises it.
+ *
+ * Here rather than in a screen, because two screens now want it: the profile page's title badge and
+ * the level-up card's. The first copy lived privately in profile.tsx, which meant the second would
+ * have been a second implementation of the same rule.
+ */
+export function titleCase(s: string): string {
+  return s.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 // The title for a level: the nearest non-null title at or below it. Null if none applies.
 export function titleForLevel(level: number, rows: LevelRow[]): string | null {
   let best: LevelRow | null = null;

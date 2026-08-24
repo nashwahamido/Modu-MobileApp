@@ -26,7 +26,6 @@ export const DEFAULT_SETTINGS: AccessibilitySettings = {
   fontScale: 1,
 
   // dev-setting
-  ghostStyle: "movingGhost",
   releaseBehavior: "autoReturn",
   lightingPreset: "auto",
   snapDistance: 0.14,
@@ -49,7 +48,6 @@ export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>>
     softHints: true,
     manualTools: true,
     // dev-setting
-    ghostStyle: "movingGhost",
     releaseBehavior: "autoReturn",
     snapDistance: 0.14, // baseline: the magnet reaches no further than the default — this profile asks for the most precision.
   },
@@ -60,7 +58,6 @@ export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>>
     fontScale: 1.1,
     softHints: false,
     // dev-setting
-    ghostStyle: "staticSockets",
     releaseBehavior: "autoReturn",
     snapDistance: 0.18, // wider than baseline: aiming is done by feel here, so the magnet takes over sooner.
   },
@@ -70,10 +67,8 @@ export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>>
     focusMode: false,
     softHints: true,
     // dev-setting
-    ghostStyle: "staticSockets",
     releaseBehavior: "float",
     snapDistance: 0.18, // wider than baseline: quick, low-effort placement — a near-miss should still seat.
-    dragPlane: "level", // her engine: drag on a horizontal plane at the target's height
   },
 
   // Structured, predictable, step-by-step guidance (assembly mode: guide).
@@ -83,7 +78,6 @@ export const PROFILE_DEFAULTS: Record<ProfileId, Partial<AccessibilitySettings>>
     softHints: true,
     manualTools: false,
     // dev-setting
-    ghostStyle: "staticSockets",
     releaseBehavior: "autoReturn",
     snapDistance: 0.2, // the most forgiving fit, at the geometry-safe cap (SNAP_DIST_MAX) — one step at a time, so a socket is rarely contested.
   },

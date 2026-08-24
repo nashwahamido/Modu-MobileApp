@@ -1,6 +1,6 @@
 // In-memory adapter for the repo seam. Values are cloned on the way in and out so callers can't mutate the backing store by reference — the same isolation a network round-trip gives you.
 import type { FurnitureId } from "@/src/game/core/type";
-import type { BuildProgressRepo, CatalogRepo, FriendRequestsRepo, FriendsRepo, ProfileRepo, Repos, RoomLayoutRepo, RoomLikesRepo, StoreRepo, VariantsRepo } from "../core/repos";
+import type { BuildProgressRepo, CatalogRepo, FriendRequestsRepo, FriendsRepo, ProfileRepo, Repos, RewardItem, RoomLayoutRepo, RoomLikesRepo, StoreRepo, VariantsRepo } from "../core/repos";
 import type { BuildSave, Friend, FriendRequest, Profile, ProfilePatch, RoomLayout, UserId } from "../core/types";
 import { ROOM_LAYOUT_VERSION } from "../core/types";
 import type { ShopItemId } from "../shop/items";
@@ -23,6 +23,13 @@ const DEFAULT_BUILT_REWARDS: Record<string, { coins: number; xp: number }> = {
   "bekvam-stool": { coins: 105, xp: 210 },
   "dalfred-stool": { coins: 174, xp: 348 },
   "lack-table": { coins: 42, xp: 84 },
+};
+
+// Mirror of item_build.reward_item_id (migration 027) — which furniture grants which item_buy item on completion. Every id here MUST exist in seedShopItems(): the inventory renders by filtering the catalogue down to owned ids, so a grant of an id with no catalogue row would silently vanish and this fixture would be testing nothing.
+//
+// ONE ENTRY, and it is a shape fixture rather than a design decision: the live catalogue wires none of these yet, because no reward item has been authored (there is no plant model, and the completion screen's "succulent plant" was a literal with nothing behind it). lack-table -> neiden-bedframe is chosen only because DEMO_ME does not already own the bedframe, which is what makes a grant observable in a test. The real mapping is DB-authored and belongs in a migration, not here.
+const DEFAULT_BUILT_REWARD_ITEMS: Record<string, RewardItem> = {
+  "lack-table": { id: "neiden-bedframe", name: "NEIDEN Bedframe", category: "fur" },
 };
 
 export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
@@ -207,20 +214,31 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
       if (!profile) throw new Error(`No profile for ${ownerId}`);
       // Server-authoritative amount, mirrored from the item_build seed (0 if not configured).
       const { coins, xp } = DEFAULT_BUILT_REWARDS[furnitureId] ?? { coins: 0, xp: 0 };
+      const rewardItem = DEFAULT_BUILT_REWARD_ITEMS[furnitureId];
       const set = rewarded.get(ownerId) ?? new Set<FurnitureId>();
-      // Idempotent: already rewarded → return current totals unchanged (mirrors the DB no-op).
-      if (set.has(furnitureId)) return { coins: profile.coins, xp: profile.xp, alreadyRewarded: true };
+      // The item lands in the same inventory a purchase writes to, because that is the set the Inventory popup reads, and it happens BEFORE the already-rewarded return so that rewardItemId always names something genuinely owned — mirroring where reward_build does it in migration 027, and for the reason recorded there. A Set, so a repeat is a no-op and a player who already bought this item keeps their one entry: the fixture's mirror of the RPC's `on conflict do nothing`.
+      if (rewardItem) {
+        const owned = inventory.get(ownerId) ?? new Set<ShopItemId>();
+        owned.add(rewardItem.id);
+        inventory.set(ownerId, owned);
+      }
+      // Idempotent: already rewarded → return current totals unchanged (mirrors the DB no-op). Only the CURRENCY is gated here; ownership was settled above.
+      if (set.has(furnitureId)) {
+        return { coins: profile.coins, xp: profile.xp, alreadyRewarded: true, ...(rewardItem ? { rewardItemId: rewardItem.id } : {}) };
+      }
       set.add(furnitureId);
       rewarded.set(ownerId, set);
       // level is DERIVED from the new xp total, not incremented — mirrors reward_build in the migration.
       const nextXp = profile.xp + xp;
       const next = { ...profile, coins: profile.coins + coins, xp: nextXp, level: levelForXp(nextXp, levels) };
       profiles.set(ownerId, next);
-      return { coins: next.coins, xp: next.xp, alreadyRewarded: false };
+      return { coins: next.coins, xp: next.xp, alreadyRewarded: false, ...(rewardItem ? { rewardItemId: rewardItem.id } : {}) };
     },
     async buildReward(furnitureId) {
       await delay(latency);
-      return DEFAULT_BUILT_REWARDS[furnitureId] ?? { coins: 0, xp: 0 };
+      const item = DEFAULT_BUILT_REWARD_ITEMS[furnitureId];
+      // Spread rather than an explicit undefined, matching toBuildRewardAmount: a furniture with no reward item yields an object with no item key at all.
+      return { ...(DEFAULT_BUILT_REWARDS[furnitureId] ?? { coins: 0, xp: 0 }), ...(item ? { item } : {}) };
     },
     async syncCounts() {
       // No-op: the in-memory fixtures use pre-computed flat rewards (DEFAULT_BUILT_REWARDS), so there is no catalog row to mirror counts into. Only the Supabase adapter tracks the live recipe.

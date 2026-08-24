@@ -15,14 +15,14 @@
 // full-screen layer while the button lives inside the inset HUD chrome. It also means a ring must be
 // rendered in a full-screen layer, NOT inside `chrome`: inside it, every frame would be off by the
 // safe-area inset.
-import { useEffect, useRef } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { Animated, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { create } from "zustand";
 
 import { RADIUS, type Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 
 /** The controls a coach can point at. Add an id here and wrap the control in HudSpotTarget. */
-export type HudSpotId = "auto" | "spot" | "recenter";
+export type HudSpotId = "auto" | "spot" | "recenter" | "map";
 
 export interface HudSpotFrame {
   x: number;
@@ -111,6 +111,10 @@ export function HudSpotTarget({
 /** How far the ring stands proud of the control on every side. */
 const BLEED = 6;
 
+/** How far the halo stands proud of the control, beyond BLEED. Small enough to read as the button's
+ *  own glow rather than a second shape floating near it. */
+const HALO = 5;
+
 /**
  * A pulsing ring around a registered control.
  *
@@ -120,7 +124,9 @@ const BLEED = 6;
 export function HudGhostRing({ id, visible }: { id: HudSpotId; visible: boolean }) {
   const styles = useFixedStyles(makeStyles);
   const frame = useHudSpots((s) => s.frames[id]);
-  const pulse = useRef(new Animated.Value(1)).current;
+  const origin = useLayerOrigin();
+  // 0 → 1 across one flash. Drives opacity only, so it stays on the native driver.
+  const wash = useRef(new Animated.Value(0)).current;
   const fade = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -129,19 +135,30 @@ export function HudGhostRing({ id, visible }: { id: HudSpotId; visible: boolean 
       return;
     }
     Animated.timing(fade, { toValue: 1, duration: 220, useNativeDriver: true }).start();
-    // The tutorial's breath, so a ring in the build reads as the same voice as a ring in the guide.
-    const breath = Animated.loop(
+    // THE PARTS TRAY'S FLASH, not the tutorial's breath.
+    //
+    // The tray already had a way of saying "this one" — a wash of the accent over the card, pulsed
+    // three times at 240ms — and a player meets it the first time they press Spot. Reusing it here
+    // means the coaches point with the same gesture the tray points with, instead of teaching a
+    // second vocabulary for the same idea.
+    //
+    // It loops rather than stopping at three, because these rings stay up as long as the card that
+    // owns them: the tray's flash answers a button press and is done, while a coach is waiting for
+    // the player to act, and a highlight that finishes before they look has pointed at nothing.
+    const flash = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.08, duration: 700, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(wash, { toValue: 1, duration: 240, useNativeDriver: true }),
+        Animated.timing(wash, { toValue: 0, duration: 240, useNativeDriver: true }),
+        // A beat between pulses, so it reads as a tap on the shoulder rather than a strobe.
+        Animated.delay(520),
       ]),
     );
-    breath.start();
+    flash.start();
     return () => {
-      breath.stop();
-      pulse.setValue(1);
+      flash.stop();
+      wash.setValue(0);
     };
-  }, [visible, pulse, fade]);
+  }, [visible, wash, fade]);
 
   if (!visible || !frame) return null;
 
@@ -151,15 +168,36 @@ export function HudGhostRing({ id, visible }: { id: HudSpotId; visible: boolean 
       style={[
         styles.ring,
         {
-          left: frame.x - BLEED,
-          top: frame.y - BLEED,
+          left: frame.x - origin.x - BLEED,
+          top: frame.y - origin.y - BLEED,
           width: frame.width + BLEED * 2,
           height: frame.height + BLEED * 2,
           opacity: fade,
-          transform: [{ scale: pulse }],
         },
       ]}
-    />
+    >
+      {/* TWO LAYERS, because one colour cannot highlight every button.
+          The wash alone works on the cream chips — Recenter, Auto, Spot — but the Map button is
+          itself lavender, so an accent wash over it is accent over accent and all but invisible.
+          The halo sits OUTSIDE the control, on the teal backdrop, where the accent always contrasts;
+          the wash brightens the face of a pale control. Together they read on both. */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.halo,
+          { opacity: wash.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }) },
+        ]}
+      />
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.wash,
+          // Up from 0.5: at half opacity the pulse was easy to miss on a busy HUD, and this is the
+          // app asking for a specific press rather than decorating a card.
+          { opacity: wash.interpolate({ inputRange: [0, 1], outputRange: [0, 0.8] }) },
+        ]}
+      />
+    </Animated.View>
   );
 }
 
@@ -169,13 +207,84 @@ export const HUD_GHOST_LAYER: ViewStyle = {
   zIndex: 57,
 };
 
+/**
+ * Where the ring layer's own top-left sits in WINDOW coordinates.
+ *
+ * THIS IS WHY A HIGHLIGHT CAN LAND OFF ITS BUTTON. Controls report themselves with
+ * `measureInWindow`, which is measured from the window's top-left, but a ring is positioned inside
+ * some View — and that View's top-left is only the same point if nothing above it is inset. Any
+ * difference becomes a constant offset in one direction, which is exactly what a shifted halo looks
+ * like.
+ *
+ * It bit two identical S22s differently because it is not a hardware difference: Samsung's per-app
+ * "Full screen apps" setting decides whether the app window starts at the display edge or beside the
+ * camera cutout, so the same build gets a different window origin on each phone. Anything read off
+ * the safe-area insets has the same problem — the app runs immersive, and Android reports zero
+ * insets once the bars are hidden even though the cutout is still physically there.
+ *
+ * So the layer measures ITSELF and rings subtract it. Both numbers then come from the same API and
+ * the same frame of reference, and the offset cancels whatever the window is doing.
+ */
+const LayerOrigin = createContext<{ x: number; y: number }>({ x: 0, y: 0 });
+
+export function HudGhostLayer({ children }: { children: React.ReactNode }) {
+  const ref = useRef<View>(null);
+  const [origin, setOrigin] = useState({ x: 0, y: 0 });
+
+  const measure = () => {
+    requestAnimationFrame(() => {
+      ref.current?.measureInWindow((x, y) => {
+        setOrigin((was) =>
+          Math.abs(was.x - x) < 0.5 && Math.abs(was.y - y) < 0.5 ? was : { x, y },
+        );
+      });
+    });
+  };
+
+  return (
+    <View
+      ref={ref}
+      style={HUD_GHOST_LAYER}
+      pointerEvents="none"
+      onLayout={measure}
+      collapsable={false}
+    >
+      <LayerOrigin.Provider value={origin}>{children}</LayerOrigin.Provider>
+    </View>
+  );
+}
+
+/** The offset a ring must subtract from a window-measured frame to land in its own layer. */
+export function useLayerOrigin() {
+  return useContext(LayerOrigin);
+}
+
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
+    // NO BORDER any more. The outline and the wash together read as two separate signals stacked on
+    // one button; the wash alone is what the parts tray uses, and it is enough.
+    // NO overflow:hidden — the halo has to draw OUTSIDE these bounds.
     ring: {
       position: "absolute",
       borderRadius: RADIUS.pill,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    // The glow around the control. Inset negatively so it stands proud on every side.
+    halo: {
+      position: "absolute",
+      left: -HALO,
+      right: -HALO,
+      top: -HALO,
+      bottom: -HALO,
+      borderRadius: RADIUS.pill,
       borderWidth: 3,
-      // The app's one interactive accent — the ring means "press this".
       borderColor: t.accent,
+    },
+    // Matches PartsTray.flashOverlay: the accent at half opacity over the whole control.
+    wash: {
+      ...StyleSheet.absoluteFillObject,
+      borderRadius: RADIUS.pill,
+      backgroundColor: t.accent,
     },
   });

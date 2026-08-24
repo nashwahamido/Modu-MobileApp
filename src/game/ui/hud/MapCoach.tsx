@@ -20,11 +20,12 @@ import { Pressable } from "@/src/components/Pressable";
 
 import { avatarHeadForProfile } from "@/src/components/avatarAssets";
 import { CompanionPortrait } from "@/src/game/ui/hud/CompanionPortrait";
+import { HudGhostLayer, useHudSpots, useLayerOrigin } from "@/src/game/ui/hud/hudSpotlight";
 import { useBuildPaused } from "@/src/game/ui/hud/useBuildPaused";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import { useGameStore } from "@/src/game/core/store";
 import { useMirror } from "@/src/game/ui/system/handedness";
-import { ELEVATION, RADIUS, SIZE, SPACE, ThemeScope, TYPE, type Theme, useFixedStyles } from "@/src/game/ui/system/theme";
+import { ELEVATION, RADIUS, SPACE, ThemeScope, TYPE, type Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 
 /** Long enough for the build to have drawn and the player to have looked at it, short enough that
  *  the card is part of arriving rather than an interruption partway into the first step. */
@@ -43,13 +44,11 @@ const PORTRAIT = 64;
 const MAP_CREAM = "#FBF8F3";
 const MAP_INK = "#231F20";
 
-/** The Map button's own slot and size (ClusterFocusControl's `mapSlot` / `mapButton`), so the ring
- *  below lands exactly on it. Copied for the same reason as the colours above — they want to be
- *  exported from there, and this card is not the change that should do it. */
-const MAP_SLOT = { right: 14, top: 8 };
-const MAP_BUTTON_W = 86;
 /** How far the ring sits proud of the button on every side. */
 const RING_BLEED = 6;
+
+/** How far the halo stands proud of the chip, beyond RING_BLEED. Matches HudGhostRing's HALO. */
+const HALO = 5;
 
 /**
  * Shown at most once per app RUN, on top of the once-per-account flag.
@@ -124,6 +123,63 @@ export async function resetMapCoachSeen(
   }
 }
 
+/**
+ * The highlight on the Map chip.
+ *
+ * Its own component because it must live INSIDE HudGhostLayer to read that layer's measured origin,
+ * and a hook cannot be called conditionally in the parent's tree.
+ */
+function MapRingHighlight({
+  frame,
+  fade,
+  wash,
+  styles,
+}: {
+  frame: { x: number; y: number; width: number; height: number } | undefined;
+  fade: Animated.Value;
+  wash: Animated.Value;
+  styles: ReturnType<typeof makeStyles>;
+}) {
+  const origin = useLayerOrigin();
+  // Nothing until the button has reported where it is — a frameless box would render as a dot in the
+  // corner for the frame or two before the measurement lands.
+  if (!frame) return null;
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.ringBox,
+        {
+          left: frame.x - origin.x - RING_BLEED,
+          top: frame.y - origin.y - RING_BLEED,
+          width: frame.width + RING_BLEED * 2,
+          height: frame.height + RING_BLEED * 2,
+          opacity: fade,
+        },
+      ]}
+    >
+      {/* THE HALO IS THE ONE THAT READS HERE. The Map chip is LAVENDER — the app's one "you can act
+          on this" colour — so an accent wash over its face is accent over accent and nearly
+          invisible. The halo sits outside the chip on the teal backdrop, where the accent always
+          contrasts. Same two layers as HudGhostRing. */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.ringHalo,
+          { opacity: wash.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }) },
+        ]}
+      />
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.ringWash,
+          { opacity: wash.interpolate({ inputRange: [0, 1], outputRange: [0, 0.8] }) },
+        ]}
+      />
+    </Animated.View>
+  );
+}
+
 export function MapCoach() {
   const styles = useFixedStyles(makeStyles);
   // The card points at the Map button, which sits in the mirrored right-hand rail — so the card has
@@ -144,9 +200,15 @@ export function MapCoach() {
   const mapVisible = useBuildPaused();
 
   const [visible, setVisible] = useState(false);
+  /** Decided to show, but not on screen yet. Separate STATE rather than a timer inside the decision
+   *  effect — see the appearance effect below for why that distinction is load-bearing. */
+  const [armed, setArmed] = useState(false);
   const decided = useRef(false);
   const fade = useRef(new Animated.Value(0)).current;
-  const ringPulse = useRef(new Animated.Value(1)).current;
+  // 0 → 1 across one flash of the accent wash. See HudGhostRing — the same signal, same timing.
+  const ringWash = useRef(new Animated.Value(0)).current;
+  // Where the Map button actually is, in window coordinates, as it reported itself.
+  const mapFrame = useHudSpots((h) => h.frames.map);
 
   // The Map button is hidden in focus mode and in strict, so the coach must be too — pointing at a
   // control that is not on screen is worse than never mentioning it.
@@ -181,27 +243,10 @@ export function MapCoach() {
           return;
         }
         if (row.mapCoachSeen || seenLocally || shownThisRunFor === me) return;
+        // The in-run latch is claimed HERE, at the decision, so two mounts in one session cannot both
+        // arm. The DURABLE flags are not — they wait until the card is actually on screen.
         shownThisRunFor = me;
-        // Written first and unconditionally: this one cannot fail for a schema reason.
-        AsyncStorage.setItem(seenKey(me), "1").catch((err) =>
-          console.warn("[map coach] could not save seen state locally", err),
-        );
-        // Saved on APPEAR, not on dismiss — see the header. A failure here is logged and otherwise
-        // ignored: the player still gets the coach, and the worst case is seeing it once more.
-        void repos.profiles
-          .update(me, { mapCoachSeen: true })
-          // LOUD, because a silent failure here is indistinguishable from the feature working: the
-          // card shows, the flag never sticks, and it returns on the next build. The usual cause is
-          // migration 025 not having run, or its column grant missing — see 009_grants.sql.
-          .catch((err) =>
-            console.warn(
-              "[map coach] could not save seen state — the coach will reappear next launch. Has migration 025_map_coach_seen.sql run, with its column grant?",
-              err,
-            ),
-          );
-        setTimeout(() => {
-          if (alive) setVisible(true);
-        }, APPEAR_DELAY_MS);
+        setArmed(true);
       })
       .catch((err) => {
         // No profile, no network: say nothing THIS time, but let it try again — the same reasoning as
@@ -216,21 +261,67 @@ export function MapCoach() {
     };
   }, [repos, me, mapButtonShowing, mapVisible, heldActionId]);
 
+  /**
+   * THE APPEARANCE, on its own effect, keyed only on `armed`.
+   *
+   * The delay used to be a setTimeout inside the decision effect above — whose dependencies include
+   * `mapVisible` and `heldActionId`, both of which change constantly in the first seconds of a build
+   * (the map intro closing, the first part picked up). Any one of them changing inside the 1.4s
+   * window tore that effect down, `alive` went false, and the card never appeared — but the decision
+   * had already written the profile flag, so the coach was marked SEEN having never been shown. Once
+   * per account, silently spent. That is the worst possible failure for a one-off.
+   *
+   * `armed` flips once and never back, so this effect is not at the mercy of store churn.
+   */
+  useEffect(() => {
+    if (!armed) return;
+    const timer = setTimeout(() => setVisible(true), APPEAR_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [armed]);
+
+  /**
+   * THE DURABLE FLAGS, written when the card is genuinely on screen — not when it was decided.
+   *
+   * "Saved on appear, not on dismiss" was always the intent: a player who backgrounds the app
+   * mid-card has still been shown it. But the write used to happen at the DECISION, a second and a
+   * half earlier, so a card that never reached the screen still spent its one showing. Keyed on
+   * `visible`, the two cannot come apart.
+   */
+  useEffect(() => {
+    if (!visible) return;
+    // Written first and unconditionally: this one cannot fail for a schema reason.
+    AsyncStorage.setItem(seenKey(me), "1").catch((err) =>
+      console.warn("[map coach] could not save seen state locally", err),
+    );
+    void repos.profiles
+      .update(me, { mapCoachSeen: true })
+      // LOUD, because a silent failure here is indistinguishable from the feature working: the card
+      // shows, the flag never sticks, and it returns on the next build. The usual cause is migration
+      // 025 not having run, or its column grant missing — see 009_grants.sql.
+      .catch((err) =>
+        console.warn(
+          "[map coach] could not save seen state — the coach will reappear next launch. Has migration 025_map_coach_scene.sql run, with its column grant?",
+          err,
+        ),
+      );
+  }, [visible, me, repos]);
+
   useEffect(() => {
     if (!visible) return;
     Animated.timing(fade, { toValue: 1, duration: 220, useNativeDriver: true }).start();
     const breath = Animated.loop(
       Animated.sequence([
-        Animated.timing(ringPulse, { toValue: 1.06, duration: 700, useNativeDriver: true }),
-        Animated.timing(ringPulse, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(ringWash, { toValue: 1, duration: 240, useNativeDriver: true }),
+        Animated.timing(ringWash, { toValue: 0, duration: 240, useNativeDriver: true }),
+        Animated.delay(520),
       ]),
     );
     breath.start();
     return () => {
       breath.stop();
-      ringPulse.setValue(1);
+      ringWash.setValue(0);
     };
-  }, [visible, fade, ringPulse]);
+  }, [visible, fade, ringWash]);
 
   const dismiss = () => {
     Animated.timing(fade, { toValue: 0, duration: 160, useNativeDriver: true }).start(
@@ -262,14 +353,20 @@ export function MapCoach() {
     <View style={styles.layer} pointerEvents="box-none">
       {/* THE TUTORIAL'S SHAPE: the companion's head is a tile BESIDE the bubble, not an avatar inside
           it. The row is transparent; `copy` is the only surface. */}
-      {/* THE BUTTON ITSELF, ringed. A card that says "press here" while pointing at nothing in
-          particular leaves the player scanning a HUD full of chips — the ring is the "here". It
-          pulses with the same breath the tutorial's cards use, sits proud of the chip on every side,
-          and takes no touches, so the button underneath stays pressable through it. */}
-      <Animated.View
-        style={[m(styles.ring), { opacity: fade, transform: [{ scale: ringPulse }] }]}
-        pointerEvents="none"
-      />
+      {/* THE BUTTON ITSELF, HIGHLIGHTED. A card that says "press here" while pointing at nothing in
+          particular leaves the player scanning a HUD full of chips — this is the "here". It uses the
+          PARTS TRAY's flash rather than an outline: the tray already washes a card in the accent to
+          mean "this one", and a player has met that the first time they pressed Spot. Sits proud of
+          the chip on every side and takes no touches, so the button stays pressable through it. */}
+      {/* Nothing until the button has reported where it is — a frameless box would render as a dot
+          in the corner for the frame or two before the measurement lands. The card still shows; it
+          simply has no highlight to point with yet. */}
+      {/* THE RING GETS ITS OWN MEASURED LAYER, and this card needs it more than StuckCoach does: this
+          component renders INSIDE play.tsx's inset `chrome`, so its own origin is not the window's
+          even before Samsung's cutout setting is involved. */}
+      <HudGhostLayer>
+        <MapRingHighlight frame={mapFrame} fade={fade} wash={ringWash} styles={styles} />
+      </HudGhostLayer>
       <Animated.View style={[m(styles.row), { opacity: fade }]}>
         <CompanionPortrait source={avatarHeadForProfile(profile)} size={PORTRAIT} />
         <View style={styles.copy}>
@@ -298,16 +395,30 @@ const makeStyles = (t: Theme) =>
     // Tucked under the Map button's own slot (ClusterFocusControl.mapSlot: right 14, top 8) and
     // inset from the right edge so the card sits beside the parts tray rather than over it. The
     // whole block mirrors with the rail in left-hand mode.
-    // Sits ON the Map button, not near it: same slot, same size, grown by RING_BLEED all round.
-    ring: {
+    // Sits ON the Map button, not near it. Position comes from the MEASURED frame the button reports
+    // (see HudSpotTarget id="map"), because this layer is full-screen while the button's own slot is
+    // inside play.tsx's inset chrome — a copied "right: 14" lands somewhere else entirely on a device
+    // with a side inset.
+    ringBox: {
       position: "absolute",
-      right: MAP_SLOT.right - RING_BLEED,
-      top: MAP_SLOT.top - RING_BLEED,
-      width: MAP_BUTTON_W + RING_BLEED * 2,
-      height: SIZE.controlHeightSm + RING_BLEED * 2,
+      borderRadius: RADIUS.pill,
+    },
+    // Stands proud of the chip on every side, on the backdrop rather than on the button.
+    ringHalo: {
+      position: "absolute",
+      left: -HALO,
+      right: -HALO,
+      top: -HALO,
+      bottom: -HALO,
       borderRadius: RADIUS.pill,
       borderWidth: 3,
       borderColor: t.accent,
+    },
+    // Matches PartsTray.flashOverlay and HudGhostRing.
+    ringWash: {
+      ...StyleSheet.absoluteFillObject,
+      borderRadius: RADIUS.pill,
+      backgroundColor: t.accent,
     },
     // TRANSPARENT layout row — the portrait tile and the bubble are two surfaces, as the tutorial
     // draws them. The whole block mirrors with the right-hand rail in left-hand mode.

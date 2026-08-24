@@ -207,6 +207,11 @@ interface GameState {
    *  screen they are not looking at, exactly like the project map. */
   settingsOpen: boolean;
   setSettingsOpen: (open: boolean) => void;
+  /** Bumped whenever the player is demonstrably working — including CAMERA-ONLY work, which touches
+   *  nothing else in this store. The idle and stuck prompts restart their fuses on it. Throttled by
+   *  noteActivity, so a per-frame gesture cannot re-render the HUD sixty times a second. */
+  activityTick: number;
+  noteActivity: () => void;
   /** The cluster whose celebration card is on screen, or null. Lifted out of ClusterCelebration's own
    *  useState so the coaches can see it — a card popping over the celebration is the same mistake as
    *  one popping over the map. */
@@ -315,6 +320,8 @@ export async function hydrateSettings(): Promise<void> {
   }
 }
 
+let lastActivityAt = 0;
+
 export const useGameStore = create<GameState>()((set, get) => ({
   furniture: null,
   completed: [],
@@ -328,6 +335,7 @@ export const useGameStore = create<GameState>()((set, get) => ({
   missActionId: null as ActionId | null,
   missCount: 0,
   settingsOpen: false,
+  activityTick: 0,
   celebratingCluster: null as ClusterId | null,
   celebratedClusters: [] as ClusterId[],
   mapSeen: false,
@@ -357,6 +365,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
   loadFurniture: (f) =>
     set({
       furniture: f,
+      // A furniture may pin the mode its build OPENS in (meta.mode), outranking the profile mode this store was left in. Only the opening value: a resumed build's own mode lands right after, via applyBuild, so a player who switched mid-build gets their switch back rather than this.
+      mode: f.meta.mode ?? get().mode,
       completed: [],
       undoneActions: [],
       activeCluster: null,
@@ -719,6 +729,15 @@ export const useGameStore = create<GameState>()((set, get) => ({
   clearMisses: () => set({ missActionId: null, missCount: 0 }),
   setMapOpen: (open) => set({ mapOpen: open }),
   setSettingsOpen: (open) => set({ settingsOpen: open }),
+  noteActivity: () => {
+    // AT MOST ONCE A SECOND. Orbiting fires onUpdate every frame, and the only consumers are timers
+    // measured in tens of seconds — a bump per frame would buy nothing and re-render the HUD
+    // continuously for the whole gesture.
+    const now = Date.now();
+    if (now - lastActivityAt < 1_000) return;
+    lastActivityAt = now;
+    set((s) => ({ activityTick: s.activityTick + 1 }));
+  },
   celebrateCluster: (cluster) =>
     set((s) => ({
       celebratingCluster: cluster,

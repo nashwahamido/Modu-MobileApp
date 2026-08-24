@@ -31,10 +31,20 @@ interface Props {
   highlightGroups?: GroupId[];
   /** Bumped per hint press so the same groups can flash again. */
   highlightPulse?: number;
+  /**
+   * The measured height of the FIRST card, reported as it lays out.
+   *
+   * Only the tutorial passes this. Its spotlight has to frame one card, and a card's height is not
+   * knowable up front: the label wraps or does not depending on the part's name, so "Table top" is
+   * two lines and "Leg" is one — a written-down number is right for one furniture and wrong for the
+   * next. Measuring is the only way to be exact, and the card is here rather than where the
+   * spotlight is drawn.
+   */
+  onFirstCardHeight?: (height: number) => void;
 }
 
 /** Inventory column (right edge): everything the current stage uses, grouped with remaining counts. Long-press an enabled card to take one in hand and drag it into the scene; locked cards are waiting on other steps. */
-export function PartsTray({ items, gestureFor, header, thumbs, highlightGroups, highlightPulse }: Props) {
+export function PartsTray({ items, gestureFor, header, thumbs, highlightGroups, highlightPulse, onFirstCardHeight }: Props) {
   const styles = useFixedStyles(makeStyles);
   // The rail crosses to the other edge in left-hand mode; everything INSIDE a card keeps its own layout.
   const m = useMirror();
@@ -77,12 +87,20 @@ export function PartsTray({ items, gestureFor, header, thumbs, highlightGroups, 
         showsVerticalScrollIndicator={false}
       >
         {header}
-        {ordered.map((item) => {
+        {ordered.map((item, index) => {
           const thumb = thumbs ? thumbFor(thumbs, item.group, theme) : undefined;
           const card = (
             <View
               key={item.group}
               style={[styles.card, !item.enabled && styles.cardDisabled]}
+              // FIRST CARD ONLY, and only when someone asked. `ordered` sorts highlighted groups to
+              // the top, so index 0 is whichever card is currently first in the column — which is
+              // exactly the one a spotlight should frame.
+              onLayout={
+                index === 0 && onFirstCardHeight
+                  ? (e) => onFirstCardHeight(e.nativeEvent.layout.height)
+                  : undefined
+              }
             >
               <GrainOverlay radius={12} />
               {thumb ? (

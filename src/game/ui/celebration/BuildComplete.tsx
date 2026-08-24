@@ -14,10 +14,14 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
+import { CatalogThumb } from "@/src/components/CatalogThumb";
 import { COIN_ICON } from "@/src/components/iconAssets";
+import type { BuildRewardAmount } from "@/src/data/core/repos";
+import { isSurfaceCategory } from "@/src/data/shop/items";
 import { useGameStore } from "@/src/game/core/store";
 import { modelThumbSet } from "@/src/game/core/presentation/finish";
-import { useFixedStyles, FONT } from "@/src/game/ui/system/theme";
+import { useScaledStyles, FONT } from "@/src/game/ui/system/theme";
+import { useCelebrationScale } from "./celebrationScale";
 import { useRepos } from "@/src/data";
 import { usePlacementStore } from "@/src/room/core/placement";
 import { ConfettiRain } from "@/src/game/ui/celebration/Confetti";
@@ -28,6 +32,9 @@ import { playSfx } from "@/src/game/audio/sfx";
 /** The banner art's aspect (900x218 after trimming), so the height is derived from the width rather
  *  than being a second number that has to be kept in step with it. */
 const RIBBON_W = 200;
+
+// The one size both rewards are drawn at — see the rewardIcon style for why they must match.
+const REWARD_ICON_SIZE = 26;
 const RIBBON_H = Math.round(RIBBON_W * (218 / 900));
 const REVEAL_MS = 520;
 
@@ -127,7 +134,10 @@ function SlideIn({ delay, style, children }: { delay: number; style?: StyleProp<
  * the banner being unfurled, which a drop or a fade does not.
  */
 function CompletedRibbon({ label }: { label: string }) {
-  const styles = useFixedStyles(makeStyles);
+  // THE SAME k as its parent, and it has to be: the ribbon is positioned by a negative margin that
+  // pulls it onto the panel below it. A ribbon on one scale overlapping a panel on another does not
+  // overlap by the amount either of them intends.
+  const styles = useScaledStyles(makeStyles, useCelebrationScale());
   const reveal = useSharedValue(0);
   useEffect(() => {
     reveal.value = withDelay(STAGE.ribbon, withTiming(1, { duration: REVEAL_MS, easing: Easing.out(Easing.cubic) }));
@@ -161,15 +171,16 @@ function CompletedRibbon({ label }: { label: string }) {
 
 /**
  * The finished-build screen.
- * The coins and XP shown are the catalog's configured reward (item_build) — the same source the
- * grant uses — so the display can't drift from what's awarded. The "succulent plant" reward is from
- * the wireframe and has nothing behind it yet — no item model.
+ * The coins, XP and ITEM shown are the catalog's configured reward (item_build) — the same source the grant uses — so the display can't drift from what's awarded. The item comes from item_build.reward_item_id (migration 027) and is granted into user_buy by reward_build in the same transaction as the currency; it is ABSENT, not blank, for a furniture that grants none, which is every furniture until a reward item is authored. It replaced a hardcoded "succulent plant" that no row described and no grant ever delivered.
  * Both action buttons go to the inventory: the built piece appears there now, and placement is not
  * wired yet, so "place in the room now!" has nothing to place. They stay separate buttons so the
  * placement route can be restored to the first one without touching the layout.
  */
 export function BuildComplete() {
-  const styles = useFixedStyles(makeStyles);
+  // SCALED on a tablet, fixed on a phone. A single centred panel with generous padding — the shape
+  // theme.ts calls safe to grow — so it opts in to the shared celebration scale. See
+  // celebrationScale for why it is trimmed below the app-wide number.
+  const styles = useScaledStyles(makeStyles, useCelebrationScale());
   const router = useRouter();
   const repos = useRepos();
   const furniture = useGameStore((s) => s.furniture);
@@ -178,7 +189,8 @@ export function BuildComplete() {
   const completed = useGameStore((s) => s.completed);
   const dismissed = useGameStore((s) => s.doneDismissed);
   const confirmed = useGameStore((s) => s.completeConfirmed);
-  const [reward, setReward] = useState({ coins: 0, xp: 0 });
+  // Annotated rather than inferred from the initial value. Inference would type this {coins, xp}, and the failure would be SILENT rather than a type error: BuildRewardAmount is structurally assignable to that, so setReward(r) still compiles and simply drops `item` on the floor — exactly what ClusterFocusControl does with it today. Destructuring `item` below is what turns it into an error here.
+  const [reward, setReward] = useState<BuildRewardAmount>({ coins: 0, xp: 0 });
   const safe = useSafeInsets();
 
   const furnitureId = furniture?.meta.id ?? null;
@@ -209,7 +221,7 @@ export function BuildComplete() {
   // Wait for the player to tap "Complete" — until then the FinishBuildButton is showing and they can still orbit the finished model.
   if (!isDone || dismissed || !confirmed) return null;
 
-  const { coins, xp } = reward;
+  const { coins, xp, item: rewardItem } = reward;
   // One navigation, because the inventory is a POPUP inside the room now rather than a route: the room opens it from ?open=inventory (see RoomExperience). Replacing play rather than pushing is still what drops the finished build off the back stack, and the room remount is still what makes the new piece show up in it.
   const goToInventory = () => {
     router.replace({ pathname: "/room", params: { open: "inventory" } });
@@ -289,15 +301,16 @@ export function BuildComplete() {
                     />
                     <Text style={styles.rewardText}>+ {coins} coins</Text>
                   </View>
-                  <View style={styles.rewardItem}>
-                    {/* Still nothing behind this reward — no item model — but the art is real now. */}
-                    <Image
-                      source={require("@/src/assets/ui/icons/icon-plant.png")}
-                      style={styles.rewardIcon}
-                      resizeMode="contain"
-                    />
-                    <Text style={styles.rewardText}>succulent plant</Text>
-                  </View>
+                  {/* ABSENT, not blank, when the furniture grants no item (item_build.reward_item_id null) — which is every furniture until one is authored. This panel used to promise a "succulent plant" that no row described and no grant delivered; showing the coins alone is the honest form of that. */}
+                  {rewardItem ? (
+                    <View style={styles.rewardItem}>
+                      {/* The item's own catalogue art, at the coin's size — see the rewardIcon comment on why the two must match. `variation` is deliberately not passed: CatalogThumb resolves an undefined variation to the item's default, which is the right answer for a reward nobody has chosen a finish for. `surface` is passed because a wallpaper or floor IS its picture and is fetched from a different path than a model's render — without it a surface reward would silently draw nothing, which is the only reason RewardItem carries a category at all. The fixed-size View is the well that path needs: the surface branch ignores `size` and absolute-fills its parent, the same reason every other surface-capable caller wraps the thumb. Renders nothing rather than a broken-image box if the art has not been uploaded yet, leaving the name to stand alone. */}
+                      <View style={{ width: REWARD_ICON_SIZE, height: REWARD_ICON_SIZE }}>
+                        <CatalogThumb source="bought" itemId={rewardItem.id} surface={isSurfaceCategory(rewardItem.category)} size={REWARD_ICON_SIZE} />
+                      </View>
+                      <Text style={styles.rewardText}>{rewardItem.name}</Text>
+                    </View>
+                  ) : null}
                 </View>
               </SlideIn>
 
@@ -386,7 +399,11 @@ const makeStyles = (t: Theme) =>
       // 0.32 rather than the body's true middle at 0.36: the fold along the ribbon's lower edge is
       // darker than the face above it, and a label centred by measurement sat visually low against
       // it. Optical centring, which is what the eye reads.
-      top: RIBBON_H * 0.32 - 9,
+      // PERCENT, not points. `top` is deliberately outside SCALED_PROPS, so a value derived from
+      // RIBBON_H would stay put while the ribbon it labels grew — the text would slide off the art on
+      // a tablet. 13.2% is the same optical position, expressed so it follows whatever the ribbon
+      // becomes.
+      top: "13.2%",
       fontFamily: FONT,
       fontSize: 14,
       fontWeight: "800",
@@ -449,8 +466,8 @@ const makeStyles = (t: Theme) =>
     },
     rewardRow: { flexDirection: "row", gap: 18 },
     rewardItem: { alignItems: "center", gap: 4, maxWidth: 84 },
-    // One size for both rewards: they sit side by side, so a coin drawn larger than the plant would read as worth more.
-    rewardIcon: { width: 26, height: 26 },
+    // One size for both rewards: they sit side by side, so a coin drawn larger than the item would read as worth more. REWARD_ICON_SIZE is that one size — the item's art is a CatalogThumb, which takes its size as a prop rather than a style, so a literal here would be a second number nothing keeps in step with it.
+    rewardIcon: { width: REWARD_ICON_SIZE, height: REWARD_ICON_SIZE },
     rewardText: {
       fontFamily: FONT, fontSize: 10,
       fontWeight: "700",

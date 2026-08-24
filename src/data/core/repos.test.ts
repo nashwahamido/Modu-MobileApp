@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { defaultVariation } from "../catalog/assets";
-import { toPlaceableRoomRow, workshopDraftsToItemVariants, workshopDraftToPlaceableRoomRow, workshopModelDraftsToPlaceableRoomRows, type PlaceableRoomRowInput, type WorkshopDraftRow } from "./repos";
+import { toBuildRewardAmount, toPlaceableRoomRow, workshopDraftsToItemVariants, workshopDraftToPlaceableRoomRow, workshopModelDraftsToPlaceableRoomRows, type BuildRewardRow, type PlaceableRoomRowInput, type WorkshopDraftRow } from "./repos";
 
 // A full, valid row — every test below overrides only the field(s) it cares about, so a mapper that
 // silently drops a field shows up as a specific, narrow assertion failure rather than a crash.
@@ -70,8 +70,8 @@ test("toPlaceableRoomRow maps the plain columns (id, source, category, size, bas
   assert.equal(row.baseOffsetY, 0);
 });
 
-test("toPlaceableRoomRow leaves light undefined for a non-lamp row, and maps a lamp's light through", () => {
-  assert.equal(toPlaceableRoomRow(baseRow).light, undefined);
+test("toPlaceableRoomRow leaves lights undefined for a non-lamp row, and maps a lamp's flat light_* columns into a one-element lights array", () => {
+  assert.equal(toPlaceableRoomRow(baseRow).lights, undefined);
   const lamp = toPlaceableRoomRow({
     ...baseRow,
     id: "astid-table-lamp",
@@ -84,7 +84,7 @@ test("toPlaceableRoomRow leaves light undefined for a non-lamp row, and maps a l
     light_reach_m: 3.2,
     light_bulb_y: 0.44,
   });
-  assert.deepEqual(lamp.light, {
+  assert.deepEqual(lamp.lights, [{
     type: "point",
     lumens: 22000,
     kelvin: 2700,
@@ -92,7 +92,7 @@ test("toPlaceableRoomRow leaves light undefined for a non-lamp row, and maps a l
     coneDeg: undefined,
     bulb: { x: 0, y: 0.44, z: 0 },
     aim: undefined,
-  });
+  }]);
   // The obvious on_top seed from migration 021: an ASTRID table lamp stands on a desk, not just the floor.
   assert.equal(lamp.onTop, true);
 });
@@ -162,7 +162,7 @@ test("workshopDraftToPlaceableRoomRow maps a model draft to a workshop-source ro
   assert.equal(row.mount, "floor");
 });
 
-test("workshopDraftToPlaceableRoomRow flattens the draft's single `light` jsonb object into a lamp's light, same as a live lit row", () => {
+test("workshopDraftToPlaceableRoomRow folds a pre-026 draft's single `light` jsonb object into a one-element lights array, same as a live lit row", () => {
   const lamp = workshopDraftToPlaceableRoomRow({
     ...baseDraft,
     id: "prototype-lamp",
@@ -170,7 +170,7 @@ test("workshopDraftToPlaceableRoomRow flattens the draft's single `light` jsonb 
     on_top: true,
     light: { type: "point", lumens: 18000, kelvin: 2700, reach_m: 3.5, bulb_y: 0.5 },
   });
-  assert.deepEqual(lamp.light, {
+  assert.deepEqual(lamp.lights, [{
     type: "point",
     lumens: 18000,
     kelvin: 2700,
@@ -178,7 +178,7 @@ test("workshopDraftToPlaceableRoomRow flattens the draft's single `light` jsonb 
     coneDeg: undefined,
     bulb: { x: 0, y: 0.5, z: 0 },
     aim: undefined,
-  });
+  }]);
 });
 
 // The regression this pins: a surface draft (floor/wall) has NO room model at all — it tiles the shell, not the placement grid — and workshop_drafts_kind_shape (019_workshop_kinds.sql) guarantees its size columns are null. Placing it here would try to derive a footprint from a null size.
@@ -274,4 +274,32 @@ test("workshopDraftsToItemVariants preserves a null variation rather than string
 test("workshopDraftsToItemVariants defaults a missing is_default to false", () => {
   const rows = workshopDraftsToItemVariants([{ ...baseDraft, id: "e", variants: [{ variation: "oak" }] }]);
   assert.deepEqual(rows, [{ itemId: "e", variation: "oak", isDefault: false }]);
+});
+
+// The reward mapper gets the same treatment toPlaceableRoomRow gets, for the same reason: `item` is OPTIONAL on BuildRewardAmount, so a hand-written object literal in the adapter can drop it with no type error at all — which is exactly how toShopItem lost `granted` for a whole migration's lifetime while the in-memory adapter kept the suite green.
+test("toBuildRewardAmount leaves item undefined when the furniture has no reward item — the state every row ships in", () => {
+  const reward = toBuildRewardAmount({ coin_reward: 42, xp_reward: 84 });
+  assert.deepEqual(reward, { coins: 42, xp: 84 });
+  assert.equal(reward.item, undefined);
+});
+
+test("toBuildRewardAmount treats an explicitly null embed as no item, not as a half-built one", () => {
+  assert.equal(toBuildRewardAmount({ coin_reward: 42, xp_reward: 84, item_buy: null }).item, undefined);
+});
+
+// Postgrest returns an embedded row as an OBJECT or as a ONE-ELEMENT ARRAY depending on the relationship it infers from the FK, and it has returned both shapes for this codebase before — listCompletedItems already normalises exactly this. A mapper that handles only one shape works until the day the schema cache decides otherwise.
+test("toBuildRewardAmount reads the embedded item in both of Postgrest's shapes", () => {
+  const asObject = toBuildRewardAmount({ coin_reward: 42, xp_reward: 84, item_buy: { id: "succulent", name: "Succulent Plant", category_id: "deco" } });
+  const asArray = toBuildRewardAmount({ coin_reward: 42, xp_reward: 84, item_buy: [{ id: "succulent", name: "Succulent Plant", category_id: "deco" }] });
+  assert.deepEqual(asObject.item, { id: "succulent", name: "Succulent Plant", category: "deco" });
+  assert.deepEqual(asArray.item, asObject.item);
+});
+
+test("toBuildRewardAmount reads an empty embed array as no item", () => {
+  assert.equal(toBuildRewardAmount({ coin_reward: 42, xp_reward: 84, item_buy: [] }).item, undefined);
+});
+
+// A furniture with no catalog row at all reads as zero, matching reward_build's own coalesce — the screen shows "+ 0 coins" rather than "+ NaN coins".
+test("toBuildRewardAmount reads null currency as zero, mirroring reward_build's coalesce", () => {
+  assert.deepEqual(toBuildRewardAmount({ coin_reward: null, xp_reward: null }), { coins: 0, xp: 0 });
 });
