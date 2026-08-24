@@ -68,6 +68,13 @@ export function ChevronIcon({ size = 28, color = '#807277', up = false, outlineC
     {shadow ? <G filter="url(#chevronDrop)">{body}</G> : body}
   </Svg>;
 }
+// A back arrow for a round button. The points are chosen so the ANGLE'S OWN BOX is centred on the
+// 24x24 viewBox — x runs 8.75..15.25 and y 5..19, both centred on 12 — and the stroke grows evenly
+// around it, so the glyph sits in the middle of whatever disc it is dropped into. That is the whole
+// reason this exists rather than a "‹" in a Text: a typed chevron carries the font's own side bearings
+// and baseline, which put it off-centre in a circle, and the fix was hand-tuned margins that only held
+// for one font at one size.
+export function BackIcon({ size = 22, color = '#231F20' }: Props) { return <Svg {...base(size)} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><Polyline points="15.25,5 8.75,12 15.25,19"/></Svg> }
 export function CheckIcon({ size, color = '#555' }: Props) { return <Svg {...base(size)} fill="none" stroke={color} strokeWidth="2.5"><Polyline points="4,12 9,17 20,6"/></Svg> }
 export function CloseIcon({ size, color = '#555' }: Props) { return <Svg {...base(size)} fill="none" stroke={color} strokeWidth="2.5"><Line x1="5" y1="5" x2="19" y2="19"/><Line x1="19" y1="5" x2="5" y2="19"/></Svg> }
 export function StarIcon({ size, color = '#555' }: Props) { return <Svg {...base(size)} fill={color}><Path d="m12 2.5 2.9 5.9 6.5.9-4.7 4.6 1.1 6.5-5.8-3-5.8 3 1.1-6.5-4.7-4.6 6.5-.9L12 2.5Z"/></Svg> }

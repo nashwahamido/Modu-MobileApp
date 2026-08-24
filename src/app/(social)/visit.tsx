@@ -11,14 +11,18 @@ import { TYPE, SPACE, useFixedStyles } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import type { Profile } from "@/src/data";
-import { ceilingLightOn, sunPreset, type CeilingLightOverride } from "@/src/room/core/timeOfDay";
+import { ceilingLightOn, timeOfDayPhase, type CeilingLightOverride } from "@/src/room/core/timeOfDay";
 import { readRoomFinishes } from "@/src/data/room/layoutMigrate";
 import { sanitizeLayout } from "@/src/room/core/layoutSanitise";
 import { toGrid, usePlacementStore } from "@/src/room/core/placement";
 import { ORBIT } from "@/src/room/input/orbit";
 import { RoomScene } from "@/src/room/scene/RoomScene";
-import { roomBackdropView } from "@/src/room/ui/roomBackdrops";
-import { RoomLightControls } from "@/src/room/ui/RoomLightControls";
+import { roomBackgroundView } from "@/src/room/ui/roomBackdrops";
+import {
+  LIGHT_COLUMN_GAP,
+  ROOM_CHIP_SIZE,
+  RoomLightControls,
+} from "@/src/room/ui/RoomLightControls";
 import { RoomLoadingOverlay } from "@/src/room/ui/RoomLoadingOverlay";
 import { VisitHud } from "@/src/room/ui/VisitHud";
 import { useScreenInsets } from '@/src/hooks/use-safe-insets';
@@ -30,14 +34,13 @@ export default function VisitScreen() {
   const { ownerId } = useLocalSearchParams<{ ownerId?: string }>();
   // Immersive mode reports 0 insets, so these floors sit UNDER the design's own offsets — the same treatment VisitHud gives its own header.
   const safe = useScreenInsets();
-  // The visitor's own dressing: the backdrop follows the hour they chose, same as in their room.
+  // The visitor's own dressing: the backdrop follows the hour AND the Room Background they chose, same as in their own room.
   const hour = useGameStore((g) => g.roomTimeOfDay);
-  const roomBackdrop = sunPreset(hour).backdrop;
+  const roomBackground = useGameStore((g) => g.roomBackground);
   // A visitor gets the SAME light controls they have at home, and that is safe precisely because neither half of them is the host's: the hour is the visitor's own store setting and the switch is local state, so relighting a friend's room changes nothing the friend owns and needs no write permission. What you are adjusting is your VIEW of their furniture.
   const setRoomTimeOfDay = useGameStore((g) => g.setRoomTimeOfDay);
   const [lightOverride, setLightOverride] = useState<CeilingLightOverride>(null);
   const ceilingLight = ceilingLightOn(hour, lightOverride);
-  const darkTheme = useGameStore((g) => g.theme) === "dark";
   const startViewing = usePlacementStore((p) => p.startViewing);
   const stopViewing = usePlacementStore((p) => p.stopViewing);
 
@@ -152,7 +155,7 @@ export default function VisitScreen() {
   return (
     <View style={s.screen}>
       {/* The backdrop sits UNDER a transparent Filament view, so the artwork frames the diorama without touching the 3D scene. */}
-      <SceneBackdrop {...roomBackdropView(roomBackdrop, darkTheme)} style={s.stage}>
+      <SceneBackdrop {...roomBackgroundView(roomBackground, timeOfDayPhase(hour))} style={s.stage}>
         {/* Mounted only once the fetch has landed, and that is not merely tidiness: RoomScene reads `viewing ?? layout`, so a scene standing up before startViewing() would load the PLAYER'S OWN furniture into a friend's room and then swap it out piece by piece. */}
         {loading ? null : (
           <RoomScene
@@ -166,7 +169,7 @@ export default function VisitScreen() {
         )}
       </SceneBackdrop>
 
-      {/* Sits under VisitHud's header row, the same way it sits under the settings button at home — 42 for the back button plus the 8 gap. */}
+      {/* Sits under VisitHud's header row, the same way it sits under the settings chip at home: the back chip's own height plus the gap this column uses everywhere else. Both are read from their source rather than written out, so growing the chip cannot leave this behind — which is exactly what the old hardcoded "42 + 8" did. */}
       <RoomLightControls
         hour={hour}
         onHourChange={setRoomTimeOfDay}
@@ -175,7 +178,7 @@ export default function VisitScreen() {
         style={[
           s.lightControls,
           {
-            top: 12 + safe.top + 50,
+            top: 12 + safe.top + ROOM_CHIP_SIZE + LIGHT_COLUMN_GAP,
             left: 22 + safe.left,
           },
         ]}

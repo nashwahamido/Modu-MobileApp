@@ -33,6 +33,13 @@ export const LIGHT_COLUMN_GAP = 16;
  * Exported for the same reason as the gap: the settings chip above has to match.
  */
 export const ROOM_CHIP_RADIUS = 18;
+/**
+ * The chip's box. Exported for the same reason the radius is: anything that must read as one of this
+ * column's controls — the settings chip stacked above these, the visit screen's back button heading
+ * the same column — has to take this number rather than match it by eye. A chip 6pt off the ones
+ * below it does not look like a smaller chip, it looks like a different control.
+ */
+export const ROOM_CHIP_SIZE = BUTTON;
 // The catalogue cards' edge, the same one the bottom bar and the HUD bars carry
 const BUTTON_STROKE = CARD_CHROME.borderColor;
 const BUTTON_STROKE_WIDTH = CARD_CHROME.borderWidth;
