@@ -23,6 +23,7 @@ import {
 } from "react-native";
 
 import { useCurrentUserId } from "@/src/data";
+import { useCelebrationScale } from "@/src/game/ui/celebration/celebrationScale";
 import { titleCase } from "@/src/data/player/levels";
 import { playSfx } from "@/src/game/audio/sfx";
 import { levelIcon, STAR_ICON } from "@/src/components/iconAssets";
@@ -31,7 +32,7 @@ import {
   ThemeScope,
   TYPE,
   type Theme,
-  useFixedStyles,
+  useScaledStyles,
 } from "@/src/game/ui/system/theme";
 
 /**
@@ -126,7 +127,15 @@ export function LevelUpCelebration({
   title: string | null;
   blocked?: boolean;
 }) {
-  const styles = useFixedStyles(makeStyles);
+  // SCALED on a tablet, fixed on a phone. One star and one badge on an otherwise empty screen — the
+  // shape theme.ts calls safe to grow.
+  //
+  // EVERY hand-computed distance below is multiplied by this SAME k. The sheet scales itself, but
+  // the burst distances, the fall height and the confetti spread are arithmetic in the render, and
+  // theme.ts is explicit about the trap: a scaled star with unscaled sparks is not a bigger version
+  // of the layout, it is a broken one — the sparks would land inside a star that had grown past them.
+  const k = useCelebrationScale();
+  const styles = useScaledStyles(makeStyles, k);
   const me = useCurrentUserId();
   // So the launch clears the top of the screen on any device rather than a guessed distance.
   const { height: screenH } = useWindowDimensions();
@@ -410,7 +419,7 @@ export function LevelUpCelebration({
                       width: size,
                       height: i % 2 === 0 ? size : size * 1.7,
                       borderRadius: i % 2 === 0 ? size / 2 : 2,
-                      left: STAGE_SIZE / 2 + spread * STAGE_SIZE * 1.15,
+                      left: (STAGE_SIZE / 2 + spread * STAGE_SIZE * 1.15) * k,
                       opacity: confetti.interpolate({
                         inputRange: [0, 0.08, 0.75, 1],
                         outputRange: [0, 1, 1, 0],
@@ -420,7 +429,7 @@ export function LevelUpCelebration({
                           translateY: confetti.interpolate({
                             inputRange: [0, 1],
                             // Staggered starts, so they do not arrive as a single line.
-                            outputRange: [-260 - lead * 220, STAGE_SIZE * 0.95],
+                            outputRange: [(-260 - lead * 220) * k, STAGE_SIZE * 0.95 * k],
                           }),
                         },
                         {
@@ -458,13 +467,13 @@ export function LevelUpCelebration({
                         Animated.add(
                           fall.interpolate({
                             inputRange: [0, 1],
-                            outputRange: [-MASCOT_FALL, 0],
+                            outputRange: [-MASCOT_FALL * k, 0],
                           }),
                           hop,
                         ),
                         Animated.add(
                           // The crouch: a few points DOWN before he goes.
-                          crouch.interpolate({ inputRange: [0, 1], outputRange: [0, 16] }),
+                          crouch.interpolate({ inputRange: [0, 1], outputRange: [0, 16 * k] }),
                           // …then clear off the top of the screen.
                           exit.interpolate({
                             inputRange: [0, 1],
@@ -491,7 +500,7 @@ export function LevelUpCelebration({
                     {
                       translateY: squash.interpolate({
                         inputRange: [0, 1],
-                        outputRange: [0, MASCOT_H * 0.13],
+                        outputRange: [0, MASCOT_H * 0.13 * k],
                       }),
                     },
                     // The crouch squashes him; the launch STRETCHES him. Squash and stretch on the
@@ -576,7 +585,7 @@ export function LevelUpCelebration({
               const n = outer ? SPARKS_OUTER : SPARKS_INNER;
               const idx = outer ? i - SPARKS_INNER : i;
               const angle = ((idx + (outer ? 0.5 : 0)) / n) * Math.PI * 2;
-              const distance = (outer ? 200 : 128) + (idx % 3) * 28;
+              const distance = ((outer ? 200 : 128) + (idx % 3) * 28) * k;
               const size = outer ? 8 + (idx % 3) * 4 : 6 + (idx % 4) * 5;
               return (
                 <Animated.View
@@ -718,7 +727,10 @@ const makeStyles = (t: Theme) =>
       ...TYPE.title,
       position: "absolute",
       alignSelf: "center",
-      top: 88,
+      // PERCENT, not points. `top` is deliberately not in SCALED_PROPS, so a fixed 88 would stay put
+      // while the star it sits on grew — the number would slide off centre on a tablet. A percentage
+      // passes through the scaler untouched and stays proportional to whatever the star becomes.
+      top: "35%",
       fontSize: 72,
       color: CARD_INK,
     },

@@ -15,11 +15,16 @@ import {
 } from "@/src/game/core/evaluation/clusters";
 import { useGameStore } from "@/src/game/core/store";
 import { Button } from "@/src/game/ui/system/Button";
-import { Theme, useFixedStyles } from "@/src/game/ui/system/theme";
+import { Theme, useScaledStyles } from "@/src/game/ui/system/theme";
+import { useCelebrationScale } from "./celebrationScale";
 
 /** Fires the moment a cluster's last action lands: names what was finished and offers the one move that follows — the next unfinished cluster, or the combine stage when they are all done. The full-screen "choose a section" moment stays with BuildMap at game start; this popup owns the mid-build transitions so a finished cluster never has to become a card while you build the next one. */
 export function ClusterCelebration() {
-  const styles = useFixedStyles(makeStyles);
+  // SCALED on a tablet, fixed on a phone. This card is a single panel with one line of copy and a
+  // badge — the shape theme.ts calls safe to grow — so it takes the shared celebration scale rather
+  // than opting out the way the dense HUD surfaces do. See celebrationScale.
+  const k = useCelebrationScale();
+  const styles = useScaledStyles(makeStyles, k);
   const win = useWindowDimensions();
   const furniture = useGameStore((s) => s.furniture);
   const completed = useGameStore((s) => s.completed);
