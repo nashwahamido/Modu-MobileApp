@@ -273,7 +273,7 @@ export default function App() {
           },
         ]}
       >
-        <Link href="/auth" asChild>
+        <Link href="/onboarding-questionnaire" asChild>
           <Button
             label="New User"
             variant="primary"
