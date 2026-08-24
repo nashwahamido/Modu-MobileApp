@@ -53,7 +53,12 @@ export function useTutorialEvents(onPickupDuringPlacement?: () => void): void {
           if (
             currentStepId === "install-four-legs" ||
             currentStepId === "place-connector" ||
-            currentStepId === "visual-pickup-and-place"
+            currentStepId === "visual-pickup-and-place" ||
+            // Pebble's merged first step. It closes on the SNAP, not the pickup, so without this the
+            // card would sit over the tray for the whole drag still saying "long-press a part card"
+            // — the one profile whose run no longer has a separate drag step is the one that most
+            // needs the bubble out of the way while the drag happens.
+            currentStepId === "long-press-part"
           ) {
             onPickupDuringPlacement?.();
           }

@@ -45,7 +45,6 @@ import {
 } from "@/src/game/content/furnitures/furnitures";
 
 import { GreenFlash } from "@/src/game/ui/feedback/GreenFlash";
-import { HintToast } from "@/src/game/ui/feedback/HintToast";
 import { CenterDropRing } from "@/src/game/ui/feedback/CenterDropRing";
 import { FitChip } from "@/src/game/ui/feedback/FitChip";
 import { PartsTray } from "@/src/game/ui/hud/PartsTray";
@@ -86,7 +85,6 @@ import { DevAutoStep } from "@/src/dev/DevAutoStep";
 import {
   TUTORIAL_STEP_REWARD_TOKENS,
   type ToolTutorialKind,
-  type TutorialTargetId,
 } from "@/src/game/tutorial/steps";
 
 const TUTORIAL_FURNITURE_ID = asFurnitureId("lack-table");
@@ -330,8 +328,20 @@ function TutorialScreen() {
   const settings = useGameStore((s) => s.settings);
   // The tutorial is an assembly task too, and it is the first one a player sees — starting silent
   // here and playing in the build would read as a bug rather than as a setting.
+  // THE WAY BACK OUT OF FOCUS MODE. The focus step closes when Focus goes ON, which leaves the
+  // player inside a stripped HUD; this puts up "Tap Focus again to return to the tutorial" and rings
+  // the chip on the step that follows, so nobody is stranded there.
+  //
+  // ONE ID, shared by Felix's run and Sparky's: both toggle focus on at the step before and both
+  // need the way out. It used to be `hud-spot`, which no run has any more. Lumi's
+  // `visual-stuck-help` is deliberately NOT this id — she also toggles focus on and simply stays
+  // there, which her remaining steps all survive, and that is the whole reason the two runs use
+  // different ids for the same card.
+  //
+  // Pebble reaches it and correctly does nothing: it starts INSIDE focus mode, so its focus step
+  // turns focus OFF and `settings.focusMode` is false by the time the next step opens.
   const focusPreviewActive =
-    tutorialStepId === "hud-spot" && settings.focusMode;
+    tutorialStepId === "hud-stuck-help" && settings.focusMode;
   const showingUndoPreview =
     undoPreviewActive && tutorialStepId === "hud-undo";
   useEffect(() => {
@@ -443,52 +453,19 @@ function TutorialScreen() {
     }
     return `Install all four legs · ${installedLegCount}/4`;
   }, [firstAvailable, furniture, installedLegCount, tutorialStepId]);
-  const repeatedAssemblyGuide = useMemo<{
-    targetId: TutorialTargetId;
-    message: string;
-  } | null>(() => {
-    // NOT FOR LUMI. This guide rewrites the last step's card to name whatever action comes next —
-    // "Tighten bolt 2 of 4", "Long-press leg 3" — which is right for the profiles that want to be
-    // walked through every remaining action.
-    //
-    // For the visual profile it broke the step. LACK alternates bolt, tighten, leg, so a card that
-    // follows the next action swung back to tighten guidance the moment a bolt came up, and the step
-    // read as though the tutorial had gone backwards to step 6. It also retargets to `tool`, which
-    // filters the tray to nothing, so the parts column vanished. Lumi's step says "Continue
-    // assembling." and means it: one card, one arrow at the tray, until the table is done.
-    if (profile === "visual") return null;
-    if (tutorialStepId !== "install-four-legs") return null;
-    const nextAction = furniture?.actions.find(
-      (action) => action.actionId === firstAvailable,
-    );
-    const ordinal = Math.min(installedLegCount + 1, 4);
-
-    if (
-      nextAction?.type === "placeFastener" ||
-      nextAction?.type === "insertFastener"
-    ) {
-      return {
-        targetId: "partsTray",
-        message: `Long-press bolt ${ordinal}, then place it into the highlighted hole.`,
-      };
-    }
-    if (nextAction?.type === "tightenFastener") {
-      return {
-        targetId: "tool",
-        message: `Turn clockwise to tighten bolt ${ordinal} by hand.`,
-      };
-    }
-    if (
-      nextAction?.type === "placePart" &&
-      nextAction.partId?.startsWith("leg_")
-    ) {
-      return {
-        targetId: "partsTray",
-        message: `Long-press leg ${ordinal}, then install it onto the bolt.`,
-      };
-    }
-    return null;
-  }, [firstAvailable, furniture, installedLegCount, profile, tutorialStepId]);
+  // THE PER-ACTION CARD IS GONE. It used to rewrite the last step's message to name whatever came
+  // next — "Tighten bolt 2 of 4", "Long-press leg 3" — and retarget the spotlight to the tool on a
+  // tighten beat.
+  //
+  // It was withdrawn one profile at a time and momentum was the last holdout, so there is nobody
+  // left to serve. What it did wrong is the same everywhere: LACK alternates bolt, tighten, leg, so
+  // a card following the next action swung back to tighten guidance the moment a bolt came up and
+  // read as though the tutorial had gone BACKWARDS a step. The tool retarget also pulled the ring
+  // off the tray. And every run's last step now says "Continue assembling." and is held to it: one
+  // card, one arrow at the tray, until the table is done.
+  //
+  // `guideTargetOverride` / `guideMessageOverride` remain as optional props on MascotGuideOverlay,
+  // defaulting to null. Nothing passes them now; they are the seam if a future run wants this back.
   const collapsedLegGuide =
     guideCollapsed && tutorialStepId === "install-four-legs";
   // THE CARD STANDS ASIDE ONCE A PART IS IN THE AIR. Every step named here puts its bubble beside
@@ -498,78 +475,50 @@ function TutorialScreen() {
   //
   // `visual-pickup-and-place` is Lumi's merged pick-up-and-drag step; useTutorialEvents already
   // reported the pickup for it, and only this list was missing it.
+  //
+  // `long-press-part` is here for Pebble, whose run merged the same two steps a different way: the
+  // card keeps the pick-up wording and the step closes on the snap, so the bubble has to stand aside
+  // for the drag or it would be left instructing a pick-up that has already happened. It is listed
+  // unconditionally rather than per profile because the composed runs that still have a separate
+  // `drag-and-snap` step advance off this one at the pickup, which resets `guideCollapsed` (see the
+  // effect on tutorialStepId) before the flag could ever be read.
   const collapsedActionGuide =
     guideCollapsed &&
     (tutorialStepId === "install-four-legs" ||
       tutorialStepId === "place-connector" ||
-      tutorialStepId === "visual-pickup-and-place");
+      tutorialStepId === "visual-pickup-and-place" ||
+      tutorialStepId === "long-press-part");
   const tutorialTrayItems = useMemo(() => {
-    // LUMI KEEPS HER TRAY — with ONE exception.
+    // THE TRAY IS CONSTANT. It is where the player's parts live, not a per-step hint, so it does not
+    // empty, shrink to one card, or vanish because the current step is about something else.
     //
-    // The filtering below walks the player through a single action at a time, which is right for a
-    // script that names each one and wrong for Lumi's, which does not. It emptied the tray on
-    // `view-under-table` and reduced it to the next card alone on `install-four-legs` — empty
-    // whenever that next action is a tighten. Both read as the parts column vanishing mid-step.
+    // There used to be a filter here that walked the player through a single action at a time —
+    // right for a script that names each one. It emptied the tray outright on `view-under-table` and
+    // `tighten-connector`, and reduced it to the next card alone on `install-four-legs`, which is
+    // also empty whenever that next action is a tighten. All three read as the parts column
+    // disappearing mid-step, and it was reported as a bug on every run that reached them.
     //
-    // The exception is the bolt step. Its arrow is drawn at the TOP of the tray, because the tray is
-    // measured as one column and the cue has no card of its own to aim at — so with the full tray
-    // showing it pointed at whatever happened to be first, which is the Leg. Narrowing to fasteners
-    // puts the bolt at the top, which is the thing the step is asking for. The original code did the
-    // same here and said why: the tutorial must not ask for a bolt while rendering a tray without
-    // one.
-    if (profile === "visual") {
-      if (tutorialStepId === "place-connector") {
-        return sceneState.allTrayItems.filter(
-          (item) =>
-            item.action?.type === "placeFastener" ||
-            item.action?.type === "insertFastener",
-        );
-      }
-      return sceneState.trayItems;
-    }
-    if (
-      tutorialAdvancing &&
-      (tutorialStepId === "install-four-legs" ||
-        tutorialStepId === "view-under-table" ||
-        tutorialStepId === "place-connector" ||
-        tutorialStepId === "tighten-connector")
-    ) {
-      return [];
-    }
-    if (tutorialStepId === "install-four-legs") {
-      // Keep the repeated assembly cycle on the authored legal order even if
-      // Focus mode is on. A started cluster makes later parts (such as a Leg)
-      // draggable in free mode, but the tutorial must still expose Bolt →
-      // tighten → Leg in sequence. Tighten has no tray card, so the tray is
-      // intentionally empty during that action.
-      const nextItem = sceneState.allTrayItems.find(
-        (item) => item.action?.actionId === firstAvailable,
-      );
-      return nextItem ? [nextItem] : [];
-    }
-    if (tutorialStepId === "view-under-table") return [];
+    // Every profile now runs a hand-written list, and not one of them names a single action at a
+    // time: their joystick steps are one rotation, their undo and stuck-help cards are things to
+    // READ, and their last steps say "Continue assembling." So the filter had no profile left to
+    // serve and is gone rather than left behind a condition nobody satisfies.
+    //
+    // THE ONE EXCEPTION is the bolt step, and it is a reordering rather than a disappearance. The
+    // step's arrow is drawn at the TOP of the tray, because the tray is measured as one column and
+    // the cue has no card of its own to aim at — so with the full tray showing it pointed at
+    // whatever happened to be first, which is the Leg. Narrowing to fasteners puts the bolt at the
+    // top, which is the thing the step is asking for. Reading from `allTrayItems` rather than the
+    // visible set also means focus mode cannot leave the tutorial asking for a bolt it is not
+    // rendering.
     if (tutorialStepId === "place-connector") {
-      // The settings tutorial may leave Focus mode enabled. In that mode the
-      // visible tray is reduced to one actionable group, which is not
-      // guaranteed to be the bolt when this guide step starts. Select the
-      // required fastener from the complete tray so the tutorial cannot ask
-      // for a bolt while rendering an empty tray.
       return sceneState.allTrayItems.filter(
         (item) =>
           item.action?.type === "placeFastener" ||
           item.action?.type === "insertFastener",
       );
     }
-    if (tutorialStepId === "tighten-connector") return [];
     return sceneState.trayItems;
-  }, [
-    sceneState.allTrayItems,
-    sceneState.trayItems,
-    firstAvailable,
-    profile,
-    tutorialAdvancing,
-    tutorialStepId,
-  ]);
+  }, [sceneState.allTrayItems, sceneState.trayItems, tutorialStepId]);
 
   useEffect(() => {
     setGuideCollapsed(false);
@@ -895,15 +844,18 @@ function TutorialScreen() {
         </View>
         <CenterDropRing />
         <FitChip />
-        {/* NOT during a step that is teaching Spot. Spot's own toast ("Try: …") lands in the same
-            band as the mascot's card and says the same thing a beat later, so the player reads the
-            instruction twice and the second copy covers the first.
+        {/* NO HINT TOAST ANYWHERE IN THE TUTORIAL. It used to be withheld on the one step that
+            teaches Spot; the problem is not that step, it is the whole screen. Every press of Spot
+            sets a "Try: …" line that lands in the same band as the mascot's card and says the same
+            thing a beat later, so the player reads the instruction twice and the second copy covers
+            the first — and the tutorial ALREADY has a guidance layer, which is the card. A second
+            bubble competing with it is the definition of noise here, whichever step is up.
 
             Spot itself is untouched — the ghost still travels into its socket, the tray still
             flashes, and `spot_used` still advances the step. Only the words are withheld, and only
             here: the toast is exactly right in a real build, which is why this is a condition on
             the tutorial's own render rather than a change to what Spot does. */}
-        {tutorialStep?.id === "visual-stuck-help" ? null : <HintToast />}
+        <SuppressHintText />
         <UndoButton onPress={handleTutorialUndo} />
         <TutorialTarget
           id="undo"
@@ -1164,8 +1116,6 @@ function TutorialScreen() {
         focusReturnPrompt={focusPreviewActive}
         undoPreviewActive={showingUndoPreview}
         onDismissUndoPreview={dismissUndoPreview}
-        guideTargetOverride={repeatedAssemblyGuide?.targetId}
-        guideMessageOverride={repeatedAssemblyGuide?.message}
         earnedXp={completedCount * furniture.xpPerStep}
         onClaimReward={() => {}}
         onSimulatePinch={() => {
@@ -1194,6 +1144,30 @@ function TutorialScreen() {
     </SceneBackdrop>
     </ThemeScope>
   );
+}
+
+/**
+ * Clears Spot's TOAST TEXT while the tutorial is on screen, and nothing else.
+ *
+ * It exists because not rendering HintToast is only half the job. `hint` is a field on the game
+ * store, not a prop, so a line set during the tutorial simply sits there — and the next screen that
+ * DOES mount a toast (play.tsx) would pop it on arrival. The player would finish the tutorial, start
+ * a real build, and be greeted by a stale "Try: …" about a LACK table they already assembled.
+ *
+ * NOT `clearHint`, which is the obvious call and the wrong one: it also drops `hintPartId` and
+ * `hintGroup`, which are Spot's ghost and its tray flash. Those are the half of Spot the tutorial
+ * WANTS — the demonstration is the point, the caption is the duplicate. So this writes the one
+ * field, and the markers end on their own timer exactly as they do in a build.
+ *
+ * A component rather than an effect in TutorialScreen so it can subscribe to `hint` alone; putting
+ * the subscription on the screen would re-render the whole HUD every time Spot is pressed.
+ */
+function SuppressHintText() {
+  const hint = useGameStore((s) => s.hint);
+  useEffect(() => {
+    if (hint) useGameStore.setState({ hint: null });
+  }, [hint]);
+  return null;
 }
 
 export default function TutorialRoute() {
