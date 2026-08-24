@@ -1,15 +1,38 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
-import { stepVoicePath, VOICEOVER_BUCKET } from "./stepVoice";
+import { SCRIPT_BLOCKS, stepVoicePath } from "./stepVoice";
 import { composeFurnitureActions } from "@/src/game/core/composition/composeActions";
 import { composeLabels } from "@/src/game/core/composition/composeLabels";
 import { applyStructure } from "@/src/game/core/model/liaisons";
 import { buildInstructions, instructionText } from "@/src/game/core/presentation/instructions";
 import { HARDWARE } from "@/src/game/content/hardware";
+import * as LACK from "@/src/game/content/furnitures/LACK/authored";
+import { PARTS as LACK_PARTS } from "@/src/game/content/furnitures/LACK/parts.gen";
+import * as BEKVAM from "@/src/game/content/furnitures/BEKVAM/authored";
+import { PARTS as BEKVAM_PARTS } from "@/src/game/content/furnitures/BEKVAM/parts.gen";
+import * as DALFRED from "@/src/game/content/furnitures/DALFRED/authored";
+import { PARTS as DALFRED_PARTS } from "@/src/game/content/furnitures/DALFRED/parts.gen";
 import * as EKET from "@/src/game/content/furnitures/EKET/authored";
 import { PARTS as EKET_PARTS } from "@/src/game/content/furnitures/EKET/parts.gen";
-import type { ActionId, Furniture, PartDef } from "@/src/game/core/type";
+import type { Furniture, PartDef, TextLevel } from "@/src/game/core/type";
+
+type AuthoredLike = {
+  AUTHORED_ACTIONS: never;
+  FASTENER_RULES: never;
+  STRUCTURE: never;
+  LABELS: never;
+  CLUSTERS?: never;
+  BEATS?: never;
+};
+
+/** A block's clips, as `line number -> the sentence recorded at it`. Read from the shipped table so
+ *  the test cannot drift from what the app resolves. */
+function blockLines(id: string, level: TextLevel): Map<number, string> {
+  const block = SCRIPT_BLOCKS[id]?.[level];
+  assert.ok(block, `no voice block for ${id} ${level}`);
+  return new Map(block.lines.map((text, i) => [block.firstLine + i, text]));
+}
 
 // A stand-in LACK: the real module requires GLBs and PNGs, which node cannot parse. What matters
 // here is the SHAPE — repeated actions sharing one line, in authored order — not the geometry.
@@ -83,102 +106,108 @@ test("a model with no recordings has no clip", () => {
 // files. These are the numbers a recording session produced; if a step is re-worded the script has
 // to be regenerated and these move, and this test is what says so out loud rather than the app
 // quietly playing the line next door.
-test("the verified blocks start where the script says they do", () => {
-  const first = (id: string, level: "standard" | "simple") =>
-    stepVoicePath({ ...lack, meta: { id } } as never, "place_tableTop" as never, level);
-
-  assert.equal(first("lack-table", "standard"), "LACK-Standard/LACK-standard-11.mp3");
-  // Capital S in the file name too — LACK's two blocks were uploaded with different casing.
-  assert.equal(first("lack-table", "simple"), "LACK-Simple/LACK-Simple-17.mp3");
-  assert.equal(first("dalfred-stool", "standard"), "dalferd-standard/dalferd-standard-68.mp3");
-  assert.equal(first("dalfred-stool", "simple"), "dalferd-simple/dalferd-simple-90.mp3");
-  assert.equal(first("bekvam-stool", "standard"), "bekvam-standard/bekvam-standard-241.mp3");
-  assert.equal(first("bekvam-stool", "simple"), "bekvam-simple/bekvam-simple-257.mp3");
-  // EKET is checked separately, against its REAL line list rather than the stand-in — see below.
-});
-
-// EKET, against the actual authored content instead of the stand-in above, because it is the block
-// that was wrong: both its levels were out by 20, and standard's wrong numbers were all real files,
-// so it played the wrong step twenty lines late rather than falling back. A first-line assertion
-// alone would not have caught that a re-worded step had moved the END of the block into the next
-// one, so this pins the LAST line too — which is the same thing as pinning the count.
-//
-// Composed the way instructionSim.test.ts composes its fixtures: exactly what EKET/index.ts does,
-// minus the GLB and thumbnail requires that node cannot parse. It is the same id as the real module,
-// which is the point — anything less would not be testing the numbers the app actually resolves.
-const eket = (() => {
-  const parts = applyStructure(EKET_PARTS, EKET.STRUCTURE);
-  return {
-    meta: { id: "eket-cabinet" },
-    parts,
-    actions: composeFurnitureActions(
-      EKET.AUTHORED_ACTIONS,
-      EKET.FASTENER_RULES,
-      parts,
-      HARDWARE,
-      EKET.CLUSTERS,
-    ),
-    clusters: EKET.CLUSTERS,
-    instructions: EKET.BEATS,
-    labels: composeLabels(EKET.LABELS, parts, HARDWARE),
-  } as unknown as Furniture;
-})();
-
-/** EKET's deduped line list, rebuilt here the same way linesFor does — action order, first
- *  occurrence wins. Used to reach the LAST line without hard-coding which action says it. */
-function eketLines(level: "standard" | "simple"): ActionId[] {
-  const set = buildInstructions(
-    eket.actions,
-    eket.parts as Record<string, PartDef>,
-    eket.labels,
-    eket.instructions,
-    eket.clusters ?? {},
-  );
-  const seen = new Set<string>();
-  const firstSayers: ActionId[] = [];
-  for (const a of eket.actions) {
-    const text = instructionText(set, a.actionId, level);
-    if (!text || seen.has(text)) continue;
-    seen.add(text);
-    firstSayers.push(a.actionId);
+test("every block starts and ends where the script says, with the folder names as uploaded", () => {
+  // Read off the shipped table rather than through a fixture. It used to borrow the LACK stand-in
+  // and relabel its meta.id, which only worked while the clip number came from a POSITION — the
+  // stand-in's sentences are not DALFRED's, and now that the number comes from the sentence, asking
+  // a stand-in for another model's first clip is meaningless.
+  //
+  // The ranges are the UPLOADED files, probed against the live bucket on 24 Aug: each block's first
+  // and last return 200, the numbers either side return 400, and all 113 files are present.
+  const expected: [string, TextLevel, string, string, number, number][] = [
+    ["lack-table", "standard", "LACK-Standard", "LACK-standard", 11, 14],
+    // Capital S in the file name too — LACK's two blocks were uploaded with different casing.
+    ["lack-table", "simple", "LACK-Simple", "LACK-Simple", 17, 20],
+    // "dalferd", as uploaded.
+    ["dalfred-stool", "standard", "dalferd-standard", "dalferd-standard", 68, 87],
+    ["dalfred-stool", "simple", "dalferd-simple", "dalferd-simple", 90, 103],
+    ["bekvam-stool", "standard", "bekvam-standard", "bekvam-standard", 241, 254],
+    ["bekvam-stool", "simple", "bekvam-simple", "bekvam-simple", 257, 265],
+    ["eket-cabinet", "standard", "eket-standard", "eket-standard", 377, 420],
+    ["eket-cabinet", "simple", "eket-simple", "eket-simple", 423, 457],
+  ];
+  for (const [id, level, folder, prefix, first, last] of expected) {
+    const block = SCRIPT_BLOCKS[id]?.[level];
+    assert.ok(block, `no voice block for ${id} ${level}`);
+    assert.equal(block.folder, folder);
+    assert.equal(block.prefix, prefix);
+    assert.equal(block.firstLine, first);
+    assert.equal(block.firstLine + block.lines.length - 1, last, `${id} ${level} runs past its files`);
+    // No sentence twice: the script lists each ONCE, and a duplicate would make indexOf pick the
+    // earlier of two clips at random.
+    assert.equal(new Set(block.lines).size, block.lines.length, `${id} ${level} has a repeated line`);
   }
-  return firstSayers;
+});
+
+// EVERY MODEL, EVERY STEP, AGAINST THE SENTENCE IT SPEAKS.
+//
+// The old tests here pinned a block's FIRST and LAST clip, which is what a wrong offset breaks. That
+// caught nothing when the fault was ordering: both ends were right and the middle was scrambled —
+// DALFRED was wrong from its first screw, EKET from its first runner screw, and every wrong number
+// still resolved to a real file, so nothing 404'd and nothing fell back.
+//
+// So this checks the invariant that actually matters: the clip a step resolves to must be the clip
+// that SAYS that step. Fixture composed exactly as instructionSim.test.ts does — what each model's
+// index.ts does, minus the GLB and thumbnail requires node cannot parse — under the real furniture
+// ids, because anything less would not be testing the numbers the app resolves.
+const fixture = (id: string, m: AuthoredLike, raw: Record<string, PartDef>): Furniture => {
+  const parts = applyStructure(raw as never, m.STRUCTURE);
+  return {
+    meta: { id },
+    parts,
+    actions: composeFurnitureActions(m.AUTHORED_ACTIONS, m.FASTENER_RULES, parts, HARDWARE, m.CLUSTERS),
+    clusters: m.CLUSTERS,
+    instructions: m.BEATS,
+    labels: composeLabels(m.LABELS, parts, HARDWARE),
+  } as unknown as Furniture;
+};
+
+const MODELS: { id: string; f: Furniture; counts: Record<TextLevel, number> }[] = [
+  // The counts are the UPLOADED FILE counts, probed against the live bucket on 24 Aug: every block's
+  // first and last file returns 200 and the numbers either side return 400. A model that grows a
+  // step needs new audio, and this is the number that says so.
+  { id: "lack-table", f: fixture("lack-table", LACK as never, LACK_PARTS as never), counts: { standard: 4, simple: 4 } },
+  { id: "dalfred-stool", f: fixture("dalfred-stool", DALFRED as never, DALFRED_PARTS as never), counts: { standard: 20, simple: 14 } },
+  { id: "bekvam-stool", f: fixture("bekvam-stool", BEKVAM as never, BEKVAM_PARTS as never), counts: { standard: 14, simple: 9 } },
+  { id: "eket-cabinet", f: fixture("eket-cabinet", EKET as never, EKET_PARTS as never), counts: { standard: 44, simple: 35 } },
+];
+
+for (const { id, f, counts } of MODELS) {
+  for (const level of ["standard", "simple"] as TextLevel[]) {
+    test(`${id} ${level}: every step resolves to the clip that speaks it`, () => {
+      const set = buildInstructions(
+        f.actions,
+        f.parts as Record<string, PartDef>,
+        f.labels,
+        f.instructions!,
+        f.clusters ?? {},
+      );
+      const block = blockLines(id, level);
+      const used = new Set<number>();
+      let checked = 0;
+      for (const action of f.actions) {
+        const text = instructionText(set, action.actionId, level);
+        if (!text) continue;
+        const path = stepVoicePath(f, action.actionId, level);
+        assert.ok(path, `${id} ${level} ${action.actionId} has no clip for: ${text}`);
+        const n = Number(path.slice(path.lastIndexOf("-") + 1, -4));
+        // THE ASSERTION. The recording at that number must be this step's own sentence.
+        assert.equal(
+          block.get(n),
+          text,
+          `${id} ${level} ${action.actionId}: clip ${n} says ${JSON.stringify(block.get(n))} but the step says ${JSON.stringify(text)}`,
+        );
+        used.add(n);
+        checked += 1;
+      }
+      assert.ok(checked > 0, `${id} ${level} produced no spoken steps`);
+      // Every uploaded clip is reachable, and no step reaches past the end of its block. Repeats are
+      // fine — four legs share one line — so this counts DISTINCT clips, which is the file count.
+      assert.equal(
+        used.size,
+        counts[level],
+        `${id} ${level} uses ${used.size} distinct clips but ${counts[level]} files are uploaded`,
+      );
+    });
+  }
 }
-
-test("EKET standard covers script lines 377 to 420, one clip per distinct line", () => {
-  const lines = eketLines("standard");
-  // 44 distinct lines against 44 uploaded files. If this number moves, the script has been re-worded
-  // and the recordings need regenerating — the offset alone will no longer save it.
-  assert.equal(lines.length, 44);
-  assert.equal(stepVoicePath(eket, lines[0], "standard"), "eket-standard/eket-standard-377.mp3");
-  assert.equal(stepVoicePath(eket, lines[43], "standard"), "eket-standard/eket-standard-420.mp3");
-});
-
-test("EKET simple covers script lines 423 to 457, one clip per distinct line", () => {
-  const lines = eketLines("simple");
-  assert.equal(lines.length, 35);
-  assert.equal(stepVoicePath(eket, lines[0], "simple"), "eket-simple/eket-simple-423.mp3");
-  assert.equal(stepVoicePath(eket, lines[34], "simple"), "eket-simple/eket-simple-457.mp3");
-});
-
-test("a repeated EKET line resolves to ONE clip, at both levels", () => {
-  // The two runner brackets say the same simple line ("Add the Bracket.") while their standard
-  // wording differs by side — so simple has fewer clips than standard, and the dedupe is what keeps
-  // the two blocks numbered independently rather than one following the other's positions.
-  assert.ok(eketLines("simple").length < eketLines("standard").length);
-});
-
-test("the misspelled DALFRED folder is preserved, not corrected", () => {
-  // The bucket has "dalferd". Storage is case- and spelling-sensitive, so the code has to match the
-  // upload rather than the model's real name — fixing the spelling here would break playback.
-  const p = stepVoicePath(
-    { ...lack, meta: { id: "dalfred-stool" } } as never,
-    "place_tableTop" as never,
-    "standard",
-  );
-  assert.ok(p?.startsWith("dalferd-"), "must use the folder name as uploaded");
-});
-
-test("the bucket name is capitalised, as storage has it", () => {
-  assert.equal(VOICEOVER_BUCKET, "Voiceover");
-});

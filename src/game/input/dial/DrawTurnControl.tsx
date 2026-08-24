@@ -6,7 +6,7 @@ import { looseDelta } from "@/src/game/core/geometry/staging";
 import { engageAxis } from "@/src/game/core/evaluation/engagement";
 import { AssemblyAction } from "@/src/game/core/type";
 import { TIGHTEN_TOTAL_DEG, useGameStore } from "@/src/game/core/store";
-import { CONTROL } from "@/src/game/ui/system/theme";
+import { CONTROL, useTheme } from "@/src/game/ui/system/theme";
 import { Dial, useDialTurn } from "@/src/game/input/dial/DialGauge";
 import type { OffsetDriver } from "../../scene/offsetDriver";
 
@@ -20,6 +20,7 @@ interface Props {
 
 /** Two-STEP tighten for `drawTurn` fasteners (EKET stabiliser-rod dowels): (1) DRAW OUT — a HORIZONTAL SLIDER (matching the dowel's travel) translates it from its loose (retracted-in-rod) pose out to flush in the slider; then (2) ROTATE LOCK — turn the dial to lock it home. The dial is prompt-only: the dowel stays baked at its final rotation throughout (a knurled cylinder's spin is unreadable anyway), the dial just accrues degrees. Commits the tightenFastener when the rotation completes. */
 export function DrawTurnControl({ action, sinkDriver }: Props) {
+  const t = useTheme();
   const [phase, setPhase] = useState<"draw" | "turn">("draw");
   const [drawP, setDrawP] = useState(0);
   const drawPRef = useRef(0); // authoritative live progress (state is async; the pan reads this)
@@ -80,6 +81,19 @@ export function DrawTurnControl({ action, sinkDriver }: Props) {
   if (phase === "draw") {
     return (
       <View style={styles.wrap} pointerEvents="box-none">
+        {/* ABOVE the track, not under it — the same fix SlideControl and SeatSlideControl already
+            carry, for the same reason. Below, this landed on the bottom HUD row and ran under the
+            auto button and the Focus chip: grey text on a busy background, most of it unreadable.
+            Styled as ToolBar's "Pick a Tool" prompt: the same lavender pill, which is the app's one
+            "here is what to do" label. That stops it being a caption on the control and makes it an
+            instruction, and it carries its own background so nothing behind it can swallow it.
+            pointerEvents none regardless: a Text child of a box-none wrapper still takes touches. */}
+        <Text
+          style={[styles.prompt, { color: t.onAccent, backgroundColor: t.accent }]}
+          pointerEvents="none"
+        >
+          Slide to draw it out · {Math.round(drawP * 100)}%
+        </Text>
         <GestureDetector gesture={drawPan}>
           <View style={styles.htrack}>
             <View style={[styles.hfill, { width: DRAW_TRACK * drawP }]} />
@@ -88,7 +102,6 @@ export function DrawTurnControl({ action, sinkDriver }: Props) {
             </View>
           </View>
         </GestureDetector>
-        <Text style={styles.hint}>Slide to draw it out · {Math.round(drawP * 100)}%</Text>
       </View>
     );
   }
@@ -132,5 +145,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   thumbText: { fontSize: 26, color: "#fff", fontWeight: "800" },
+  // The turn phase's label, still a plain caption: it sits above the bottom HUD row rather than in
+  // it, so it has nothing to fight with and nothing to be swallowed by.
   hint: { fontSize: 12, color: "#6b6257", fontWeight: "700" },
+  // ToolBar's `prompt`, to the number: 12/800, pill radius, 12x3 padding. Colours come from the
+  // theme at the call site rather than being frozen here, so it follows a theme change the way the
+  // toolbar's own does. `overflow: hidden` is what makes the radius clip the background on Android.
+  prompt: {
+    fontSize: 12,
+    fontWeight: "800",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 3,
+    overflow: "hidden",
+  },
 });
