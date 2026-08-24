@@ -1,4 +1,3 @@
-
 import {
   useEffect,
   useRef,
@@ -29,7 +28,6 @@ const MISS_LIMIT = 4;
 const LINGER_MS = 12_000;
 
 const BESIDE_GAP = 14;
-const BESIDE_RISE = 10;
 
 const BESIDE_PORTRAIT = 44;
 
@@ -144,17 +142,26 @@ export function StuckCoach() {
   // in the left-hand column and mirrors to the right one, and reading the measured frame means the
   // card follows it without this file knowing the rule. Whichever half the button is in, the card
   // takes the other — it must never sit off screen or cover the thing it is ringing.
+  //
+  // THE PORTRAIT IS WHAT LINES UP WITH THE BUTTON, not the card's top edge. `top` used to be the
+  // frame's own y less a small rise, which reads as aligned only if the card is about as tall as the
+  // button. It is not: three lines of copy plus the Got it button make the row roughly 115pt, and
+  // `row` centres its children — so the portrait landed near the MIDDLE of that, a good 45pt below
+  // the control it is pointing at, and the card as a whole hung well under it.
+  //
+  // Anchoring the portrait's centre to the button's centre fixes that without needing to know how
+  // tall the card is, which depends on how the copy wraps. `besideRow` switches the row to
+  // flex-start so the portrait sits at the row's top edge and the card grows downward from there;
+  // the ring is untouched and stays on the button.
   const beside =
     prompt === "fumbling" && recenterFrame
-      ? recenterFrame.x < screenW / 2
-        ? {
-            left: recenterFrame.x + recenterFrame.width + BESIDE_GAP,
-            top: recenterFrame.y - BESIDE_RISE,
-          }
-        : {
-            right: screenW - recenterFrame.x + BESIDE_GAP,
-            top: recenterFrame.y - BESIDE_RISE,
-          }
+      ? {
+          top:
+            recenterFrame.y + recenterFrame.height / 2 - BESIDE_PORTRAIT / 2,
+          ...(recenterFrame.x < screenW / 2
+            ? { left: recenterFrame.x + recenterFrame.width + BESIDE_GAP }
+            : { right: screenW - recenterFrame.x + BESIDE_GAP }),
+        }
       : null;
 
   return (
@@ -215,7 +222,11 @@ const makeStyles = (t: Theme) =>
     // Anchored to a measured frame, so the layer must stop centring its child.
     anchoredLayer: { alignItems: "flex-start", justifyContent: "flex-start", paddingBottom: 0 },
     // Narrower and tighter than the centred card: it is a note pinned to a control, not a panel.
-    besideRow: { position: "absolute", maxWidth: 250, gap: 8 },
+    //
+    // flex-start overrides `row`'s centring, which is what lets the anchor above be the PORTRAIT
+    // rather than the card. Centred, the portrait floated to the middle of a card several times its
+    // height and the alignment with the button was lost.
+    besideRow: { position: "absolute", maxWidth: 250, gap: 8, alignItems: "flex-start" },
     besideMessage: { fontSize: 13, lineHeight: 18 },
     row: {
       maxWidth: 440,
