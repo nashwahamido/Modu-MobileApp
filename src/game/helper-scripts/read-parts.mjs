@@ -11,7 +11,8 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url)); // .../src/game/helper-scripts
 const MODELS = path.join(ROOT, "..", "..", "assets", "models", "furnitures");
-const OUT = path.join(ROOT, '..', 'data', 'furnitures');
+// The furnitures moved to game/content/ — this used to say game/data/, which no longer exists, so a re-run mkdir'd a dead tree nobody imports and still printed success.
+const OUT = path.join(ROOT, '..', 'content', 'furnitures');
 
 // Furnitures are AUTO-DISCOVERED: every assets/models/furnitures/<ID>/<ID>.glb is ingested — dropping a new model in needs zero script edits. `CONFIG` is the rare escape hatch (typeOverrides forces a part's structural/fastener type).
 const CONFIG = {};
@@ -68,10 +69,11 @@ function rotateByQuat([x, y, z, w], [vx, vy, vz]) {
     vz + w * tz + (x * ty - y * tx),
   ];
 }
-// snap a near-axis unit vector to the exact principal axis (fasteners are axis-aligned).
+// snap a near-axis unit vector to the exact principal axis. This is a FLOAT-NOISE filter, not a tolerance for real geometry: 0.9999 is 0.81°, and across all four furnitures the genuinely cardinal fasteners land within 0.02° while BEKVÄM's splayed-leg screws/dowels sit at a real 5.00° (the side panels' splay) and EKET's screw109041 at 29–31°. The old 0.9 threshold was 25.8° and silently flattened BEKVÄM's 5° tilt to pure ±Z, which cost the drive-in axis its −Y component and made the screws precess in a 5° cone while turning (they are spun ABOUT engageAxis in TightenControl/PartModel).
+const AXIS_SNAP_MIN = 0.9999;
 function snapAxis(u) {
   const i = u.map(Math.abs).indexOf(Math.max(...u.map(Math.abs)));
-  if (Math.abs(u[i]) > 0.9) {
+  if (Math.abs(u[i]) > AXIS_SNAP_MIN) {
     const e = [0, 0, 0];
     e[i] = Math.sign(u[i]);
     return e;
