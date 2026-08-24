@@ -467,5 +467,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.md,
   },
   track: { height: 8, borderRadius: RADIUS.pill, overflow: "hidden" },
-  fill: { height: 8, borderRadius: RADIUS.pill },
+  // 100% (not a fixed 8) so a caller overriding `track`'s height via `style` gets a fill that
+  // still fills it — at the default 8px height this renders identically to a fixed 8.
+  fill: { height: "100%", borderRadius: RADIUS.pill },
 });
