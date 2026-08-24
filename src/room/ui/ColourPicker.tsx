@@ -89,7 +89,18 @@ const makeStyles = (t: Theme) =>
     },
     // The bar's INNER radius, the same number the swatches use — the two curves have to agree or one
     // of them shows through the other.
-    scroll: { borderRadius: 22 - SPACE.xs },
+    //
+    // flexGrow: 0 OVERRIDES ReactNative's own ScrollView default, which is flexGrow: 1, and it is what
+    // makes this column as tall as its swatches instead of as tall as the band the rail hands it. The
+    // bug it fixes only appeared on TABLETS, which is what made it look device-specific when nothing
+    // here branches on the device: a phone's band is barely taller than four swatches, so maxHeight
+    // clamped the growth away and the column looked right by accident. A tablet's band is some 600pt,
+    // and the same growth drew a cream column down most of the screen with the swatches parked at the
+    // top of it.
+    //
+    // flexShrink stays 1 — that is the half of the default that IS wanted. Together they mean: hug the
+    // content, until the content is taller than the band, then clamp to the band and scroll.
+    scroll: { borderRadius: 22 - SPACE.xs, flexGrow: 0, flexShrink: 1 },
     column: { flexDirection: "column", alignItems: "center", gap: SPACE.xs },
     swatch: {
       width: 58,
