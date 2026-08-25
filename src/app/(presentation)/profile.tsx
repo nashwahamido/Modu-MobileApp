@@ -326,12 +326,16 @@ export default function ProfileScreen() {
             </View>
             {/* Straddling the avatar's lower edge, so the rank reads as belonging TO the face above
                 it rather than as the first line of a list below it. */}
-            <View style={styles.titleBadge}>
-              {/* The universal star, not a numbered one: this marks a RANK ("A Seasoned Builder"),
-                  which has nothing to do with the level, and a numbered star here would read as a
-                  second, contradicting level. */}
-              <Image source={STAR_ICON} style={styles.titleStar} resizeMode="contain" />
-              <Text style={styles.titleBadgeText}>{titleCase(profile.title ?? "newcomer")}</Text>
+            {/* An anchor WIDER THAN THE AVATAR, with the pill centred in it and still sized by its
+                own text. The pill used to be the absolute child itself, which capped its width at the
+                150pt avatar — 102pt of that once the padding is taken — so a two-word rank wrapped.
+                The anchor is the only thing that stretches; the badge inside it hugs its label. */}
+            <View style={styles.titleBadgeAnchor} pointerEvents="none">
+              <View style={styles.titleBadge}>
+                <Text style={styles.titleBadgeText} numberOfLines={1}>
+                  {titleCase(profile.title ?? "newcomer")}
+                </Text>
+              </View>
             </View>
           </View>
 
@@ -613,24 +617,32 @@ const makeStyles = (t: Theme) =>
     statGlyph: { fontSize: 20, color: t.textDim, width: 26, textAlign: "center" },
     statBody: { flexShrink: 1 },
     statTitle: { ...TYPE.label, color: t.text },
-    titleBadge: {
+    // Straddles the avatar's lower edge and reaches 60pt past it on each side, so the pill inside has
+    // 270pt to grow into rather than 150. It has no background of its own — it is room, not a shape.
+    titleBadgeAnchor: {
       position: "absolute",
       bottom: -12,
-      alignSelf: "center",
-      flexDirection: "row",
+      left: -60,
+      right: -60,
       alignItems: "center",
-      gap: 5,
-      paddingHorizontal: SPACE.md,
+    },
+    titleBadge: {
+      alignItems: "center",
+      // 24 a side, which is what the removed star and its gap used to occupy — put back as air on
+      // both sides rather than as a mark on one.
+      paddingHorizontal: SPACE.xl,
       paddingVertical: 3,
       borderRadius: RADIUS.pill,
       backgroundColor: t.surface,
+      // PANEL_SHADOW, the same lift every other cream surface on this page carries — the name pill,
+      // the stat panels, the friends card. Without it this badge sat flat against the avatar while
+      // everything around it floated. NOT ELEVATION.card: the shared scale drives shadowOpacity and
+      // elevation, neither of which Android honours here, so it would have read as no shadow at all
+      // on device (see the note on PANEL_SHADOW).
       ...PANEL_SHADOW,
     },
-    // 14 against the drawn star's 13, and the same reason: this asset is trimmed to its own edges,
-    // but it is a wide star (151x144) where the vector was square, so height leads and the width
-    // follows through `contain`.
-    titleStar: { width: 14, height: 14 },
-    titleBadgeText: { ...TYPE.labelSm, color: t.text, letterSpacing: 0.3 },
+    // ONE LINE, always — the rank is a label, and a two-line pill under a face reads as a caption.
+    titleBadgeText: { ...TYPE.labelSm, color: t.text, letterSpacing: 0.3, textAlign: "center" },
     // Filled, and red: an outline heart reads as "not yet liked", the opposite of a count received.
     heartGlyph: { color: "#C2544B" },
 
