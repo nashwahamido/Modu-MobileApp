@@ -17,6 +17,7 @@ import { deriveJointFrames, partAnchorOffsets } from "@/src/game/core/model/join
 import { actionCluster, actionsForClusterFocus, clusterStarted } from "@/src/game/core/evaluation/clusters";
 import { clusterDriveKind } from "@/src/game/core/evaluation/clusterCombine";
 import {
+  adaptedTravelDir,
   placeEngagement,
   pressParkInfo,
   screwParkOffset,
@@ -332,11 +333,12 @@ export function usePartDrag({
           // part is genuinely ready to be released: hovering, lined up, about to drop in.
           const candidates = rawCandidates.map((c) => {
             const cPart = furniture.parts[c.action.partId!];
-            const dir = cPart?.placeDir;
+            // ORDER-ADAPTED travel, not the raw authored placeDir: the aim anchor and the match/park segment must back off along the direction the part will actually travel in THIS build state, or a legally reversed order (EKET backPanel after a bottom-first close) aims the whole acquisition at the closed side and the snap never arms while the release path parks correctly.
+            const dir = cPart ? adaptedTravelDir(furniture, cPart, doneSet) : null;
             const back = cPart?.parkBackoff ?? 0;
             // seatVisual is the candidate's FLUSH pose — the hole the player can actually see. For inserts, position/holdPosition are already the loose pose proud of the hole, so without this the whole match segment floats out along the screw axis and zoomed in it projects off-screen while the hole sits centered (measured: aim stuck at 0.167 with the finger dead on the hole).
             // Which point of the flush pose is the hole is targets.seatOffsetFor's call: a structural part's joint anchor, a fastener's shaft MOUTH — not its visual centre, which for a screw is mid-shaft and buried (the drawer-back screws were unassemblable from any angle because of it).
-            const off = seatOffsetFor(cPart, cPart ? partBoxes[cPart.partId] : undefined, jointAnchors, doneSet, placedBoxList);
+            const off = seatOffsetFor(cPart, cPart ? partBoxes[cPart.partId] : undefined, jointAnchors, doneSet, placedBoxList, dir);
             // The seat rides the SAME staging displacement as the delivery target (targets.stagingShiftFor, exemptions included) — built from the raw baked pose alone, the gate judged visibility of a spot 5cm from a staged group's real socket (EKET stabiliser rod).
             const sShift = stagingShiftFor(c.action, furniture.parts) ?? [0, 0, 0];
             const seatVisual: Vec3 = cPart
