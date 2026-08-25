@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { TIME_OF_DAY, TIME_OF_DAY_IDS, ceilingLightOn, poolLength, sunDirection, sunPreset } from "./timeOfDay";
+import {
+  TIME_OF_DAY,
+  TIME_OF_DAY_IDS,
+  WALL_FILL_DIRECTIONS,
+  ceilingLightOn,
+  poolLength,
+  sunDirection,
+  sunPreset,
+} from "./timeOfDay";
 import { wallAlpha } from "./wallCulling";
 import { ORBIT } from "../input/orbit";
 
@@ -131,6 +139,49 @@ test("the hours that default the light ON are bright enough to justify it", () =
     assert.equal(defaultOn, true, `${id}: this test is about the hours the light comes on by itself`);
     assert.ok(lumens >= 150_000, `${id}: ${lumens} lm cannot carry a room whose ambient probe is deliberately starved`);
   }
+});
+
+// The wall fill's whole value is in HOW it is aimed, and both halves of that are easy to lose in a retune that only looks at intensities. Every wall inner face must be reached by exactly one of the pair — one light, or two on the same side, leaves black walls and is the problem this rig exists to fix — and the pair must stay near-horizontal, because a fill tilted down at the floor is an ambient probe by another name and washes out the sun pool the presets are built around.
+test("the wall fill reaches every wall exactly once, and lands on walls rather than the floor", () => {
+  // A wall's inner face normal points INTO the room, and a directional lights a surface only when it travels against that normal.
+  const walls = { "x-min": [1, 0, 0], "x-max": [-1, 0, 0], "z-min": [0, 0, 1], "z-max": [0, 0, -1] } as const;
+  for (const [wall, n] of Object.entries(walls)) {
+    const lit = WALL_FILL_DIRECTIONS.filter((d) => d[0] * n[0] + d[1] * n[1] + d[2] * n[2] < 0);
+    assert.equal(lit.length, 1, `${wall}: lit by ${lit.length} of the pair — the fill must be even across all four`);
+  }
+  for (const d of WALL_FILL_DIRECTIONS) {
+    const horizontal = Math.hypot(d[0], d[2]);
+    assert.ok(Math.abs(d[1]) < horizontal / 2, `${d.join()}: too steep — this is a wall fill, not a second ambient`);
+    // Not perfectly flat either: a horizontal fill grazes the wall bottoms and leaves a dark seam at the floor line.
+    assert.ok(d[1] < 0, `${d.join()}: must tilt slightly down`);
+  }
+});
+
+// The ladder, not the numbers. The fill exists for the two hours the walls read darkest — full sun, where the eye adapts to the floor pool, and after dark, where the probe is deliberately starved — but the DARK hours must stay dark: a night fill that rivals its daylight setting has turned the hour back into an overcast afternoon, which is the failure the ambient probe already recorded once.
+test("the wall fill is strongest in full sun and stays modest after dark", () => {
+  for (const id of TIME_OF_DAY_IDS) {
+    const { wallFill, interiorLight } = TIME_OF_DAY[id];
+    assert.ok(wallFill.intensity >= 0, `${id}: intensity cannot be negative`);
+    assert.ok(
+      wallFill.kelvin >= 1000 && wallFill.kelvin <= 12000,
+      `${id}: kelvin ${wallFill.kelvin} is outside any usable range`,
+    );
+    // It fills what the sun cannot reach; it is not there to be noticed as its own light, and the sun and the bulb must both out-shout it.
+    assert.ok(
+      TIME_OF_DAY[id].intensity === 0 || wallFill.intensity < TIME_OF_DAY[id].intensity,
+      `${id}: a fill brighter than its own sun is a sun`,
+    );
+    assert.ok(interiorLight.lumens > 0, `${id}: unchanged precondition — every hour authors a bulb`);
+  }
+  assert.ok(TIME_OF_DAY.midday.wallFill.intensity > TIME_OF_DAY.morning.wallFill.intensity);
+  assert.ok(TIME_OF_DAY.sunset.wallFill.intensity < TIME_OF_DAY.afternoon.wallFill.intensity);
+  assert.ok(TIME_OF_DAY.night.wallFill.intensity <= TIME_OF_DAY.sunset.wallFill.intensity);
+  assert.ok(
+    TIME_OF_DAY.night.wallFill.intensity < TIME_OF_DAY.midday.wallFill.intensity / 4,
+    "a night fill anywhere near the daylight one is an overcast afternoon, not a night",
+  );
+  // Warm after dark, cool in daylight — same reason the bulb is: a 5000 K fill at night reads as moonlight through the walls.
+  assert.ok(TIME_OF_DAY.night.wallFill.kelvin < TIME_OF_DAY.midday.wallFill.kelvin);
 });
 
 test("the switch defaults to the hour, and an override only counts at the hour it was made", () => {

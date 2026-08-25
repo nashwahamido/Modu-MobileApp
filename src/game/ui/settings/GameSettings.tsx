@@ -165,10 +165,10 @@ export function GameSettings({
               <Pressable
                 onPress={() => {
                   setOpen(false);
-                  router.navigate("/");
+                  router.replace("/room");
                 }}
                 hitSlop={8}
-                accessibilityLabel="Return to home"
+                accessibilityLabel="Return to room"
               >
                 <View style={styles.homeRow}>
                   <Image
