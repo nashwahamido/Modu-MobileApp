@@ -25,6 +25,7 @@ import {
 } from "@/src/game/ui/system/theme";
 
 const backdrop = require("../../assets/ui/onboarding-backdrop.png");
+const BG_SOLID = "#F3ECE0";
 
 /** Where this hands over. The questionnaire opens on Modu's introduction, so the player meets the
  *  voice, then meets Modu, then answers. `replace` rather than `push`: this is a one-way step, and
@@ -103,6 +104,7 @@ const makeStyles = (t: Theme) =>
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
+      backgroundColor: BG_SOLID,
     },
     // BIG, at her request: roughly twice the old 300pt hint and generous with its padding, so it
     // reads as the screen's content rather than as a note pinned to it. These are BASE numbers —

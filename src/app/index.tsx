@@ -12,8 +12,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { Button } from "@/src/game/ui/system/Button";
-import { useAuth } from "@/src/hooks/useAuth";
-import { SESSION_REQUIRED, SIGN_IN_ROUTE } from "@/src/hooks/useSessionGate";
+import { SIGN_IN_ROUTE } from "@/src/hooks/useSessionGate";
 import { CARD_CHROME, SPACE, Theme, useIsTablet, useStyles, useUiScale } from "@/src/game/ui/system/theme";
 import { useSafeInsets } from "@/src/hooks/use-safe-insets";
 
@@ -147,9 +146,6 @@ export default function App() {
   const isS22UltraLike =
     !isTablet &&
     Math.abs(Math.max(winW, winH) / Math.min(winW, winH) - S22_ULTRA_ASPECT) < S22_ULTRA_ASPECT_TOLERANCE;
-  const { user } = useAuth();
-  const homeRoute = SESSION_REQUIRED && !user ? SIGN_IN_ROUTE : "/room";
-
   const wordmarkOpacity = useSharedValue(1);
   const wordmarkScale = useSharedValue(1);
   const figureOpacity = useSharedValue(0);
@@ -273,7 +269,7 @@ export default function App() {
           },
         ]}
       >
-        <Link href="/onboarding-questionnaire" asChild>
+        <Link href="/voice-intro" asChild>
           <Button
             label="New User"
             variant="primary"
@@ -282,7 +278,7 @@ export default function App() {
             labelStyle={isTablet && styles.actionLabelTablet}
           />
         </Link>
-        <Link href={homeRoute} asChild>
+        <Link href={SIGN_IN_ROUTE} asChild>
           <Button
             label="Choose Account"
             variant="primary"

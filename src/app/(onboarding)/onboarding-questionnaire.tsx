@@ -36,9 +36,9 @@ import type { ReactNode } from "react";
 import type { PressableProps, StyleProp, ViewProps, ViewStyle } from "react-native";
 import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
 
-/** What shows for the frame before the backdrop image decodes, and behind it if the asset ever fails to load. Sampled from the artwork's centre so the swap is invisible rather than a blue flash.
- *  Was a flat #A9BFD9 when this screen painted its own field; the art is the field now. */
-const BG_SOLID = "#F3BBA9";
+/** What shows for the frame before the backdrop image decodes, and behind it if the asset ever fails to load.
+ *  Keep it cream so onboarding never opens as a full pink page while the art catches up. */
+const BG_SOLID = "#F3ECE0";
 /** The card's rim. Lavender at 3pt, matching the catalogue's selected-card treatment. */
 const BUBBLE_RIM = ACCENT_LIGHT;
 /** One source for the bubble's width: the reveal animates a clip to exactly this, and the card
