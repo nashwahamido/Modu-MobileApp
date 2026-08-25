@@ -624,6 +624,7 @@ const makeStyles = (t: Theme) =>
       paddingVertical: 3,
       borderRadius: RADIUS.pill,
       backgroundColor: t.surface,
+      ...PANEL_SHADOW,
     },
     // 14 against the drawn star's 13, and the same reason: this asset is trimmed to its own edges,
     // but it is a wide star (151x144) where the vector was square, so height leads and the width
