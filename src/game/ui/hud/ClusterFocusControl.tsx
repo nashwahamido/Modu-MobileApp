@@ -312,11 +312,13 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
             accessibilityRole="button"
             accessibilityLabel="Back to the catalogue"
           >
-            <Image
-              source={ASSEMBLE_ICON}
-              style={styles.homeIcon}
-              resizeMode="contain"
-            />
+            <View style={styles.homeIconCircle}>
+              <Image
+                source={ASSEMBLE_ICON}
+                style={styles.homeIcon}
+                resizeMode="contain"
+              />
+            </View>
             <Text style={styles.homeText}>Catalogue</Text>
           </Pressable>
 
@@ -695,10 +697,14 @@ export function ClusterFocusControl() {
  *  third smaller. Sized so the INK matches instead: 37 x 0.67 lands on the same ~25pt of mark.
  *  Re-measure both if the artwork is re-exported; it has already moved once, from a 1024 grey glyph
  *  at 62% fill to the 356 colour version at 67%. */
-const HOME_ICON = 37;
-const HOME_ICON_INK = 0.667;
-/** The empty artwork down one side of that box — what the label has to be pulled back through. */
-const HOME_ICON_MARGIN = Math.round((HOME_ICON * (1 - HOME_ICON_INK)) / 2);
+const HOME_ICON = 46;
+/** The chip behind the glyph. Sized to the INKED mark, not the image's own box — the artwork
+ *  carries a wide transparent bezel (~67% fill), so a circle matched to the full 46pt box read as
+ *  loose. The image still renders at its full, unaffected size and is centered on this circle by
+ *  the wrapper's alignItems/justifyContent; its transparent margin simply overhangs the ring
+ *  without showing. RN points are already density-independent, so this needs no separate
+ *  phone/tablet case. */
+const HOME_CIRCLE = 42;
 
 const INK = "#231F20";
 
@@ -761,14 +767,21 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       gap: 6,
     },
-    homeIcon: { width: HOME_ICON, height: HOME_ICON },
-    // Pulled back by the icon's OWN transparent margin. The gap above is 6, but the glyph only
-    // fills 67% of its 37pt box, so a further ~6pt of empty artwork sat between the two and the
-    // word read as belonging to nothing. Negating it makes the six points be six points of INK,
-    // which is what the eye measures. Derived from the same fill fraction as the size above, so
-    // both follow if the artwork is re-exported.
+    homeIcon: { width: HOME_ICON, height: HOME_ICON, marginTop: -3 },
+    // The chip: a flat circle behind the glyph so it reads as a button rather than a bare icon
+    // floating over the card. Centers the image regardless of the artwork's own transparent
+    // margin, so the ring is even on every side without a compensating negative margin.
+    homeIconCircle: {
+      width: HOME_CIRCLE,
+      height: HOME_CIRCLE,
+      borderRadius: HOME_CIRCLE / 2,
+      backgroundColor: "#E3DFE7",
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: "#C4C1BC",
+      alignItems: "center",
+      justifyContent: "center",
+    },
     homeText: {
-      marginLeft: -HOME_ICON_MARGIN,
       fontFamily: FONT,
       fontSize: 13,
       fontWeight: "700",

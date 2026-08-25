@@ -699,7 +699,7 @@ function FurnitureCard({
                 resizeMode="contain"
               />
               <Text style={styles.statText}>
-                {earnedXp}/{xp} XP
+                {earnedXp}/{xp}
               </Text>
             </View>
           ) : null}
@@ -801,8 +801,6 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       justifyContent: "center",
     },
-    // Sits on the art's LIGHTER upper band rather than dead centre: the PNG carries its own shading,
-    // with a darker sweep across the lower third, and text centred vertically straddled the two.
     headerTitle: {
       ...TYPE.title,
       fontSize: 20,
@@ -810,7 +808,6 @@ const makeStyles = (t: Theme) =>
       // umber it replaced was a second dark text colour for one title, which is the drift the theme
       // header warns about; the header is not special enough to earn its own ink.
       color: INK,
-      marginBottom: HEADER_H * 0.12,
       paddingHorizontal: SPACE.lg,
       textAlign: "center",
     },
