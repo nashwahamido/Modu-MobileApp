@@ -4,8 +4,7 @@
 //
 // The settings walkthrough opens THIS panel, so every SettingsFocusTarget has to name a row below.
 import { View } from "react-native";
-import { useFixedStyles } from "@/src/game/ui/system/theme";
-import { makeSettingsStyles } from "@/src/game/ui/settings/SettingsPrimitives";
+import { useSettingsStyles } from "@/src/game/ui/settings/SettingsPrimitives";
 import {
   BuildAudioSection,
   BuildDisplaySection,
@@ -21,7 +20,7 @@ export function SettingsControls({
   onRestarted,
   ...props
 }: FocusProps & { onRestarted?: () => void } = {}) {
-  const styles = useFixedStyles(makeSettingsStyles);
+  const styles = useSettingsStyles();
   return (
     <View style={styles.list}>
       {/* showFocusMode travelled here from GuidanceSection with the row itself — Focus mode is a Display

@@ -6,7 +6,6 @@ import { Pressable } from "@/src/components/Pressable";
 import { router } from "expo-router";
 import { useGameStore } from "@/src/game/core/store";
 import { setMusicEnabled, setMusicVolume } from "@/src/game/audio/music";
-import { useFixedStyles } from "@/src/game/ui/system/theme";
 import { signOut } from "@/src/services/auth";
 import { SIGN_IN_ROUTE } from "@/src/hooks/useSessionGate";
 import {
@@ -14,7 +13,7 @@ import {
   Choice,
   Row,
   SectionHeader,
-  makeSettingsStyles,
+  useSettingsStyles,
 } from "@/src/game/ui/settings/SettingsPrimitives";
 import type { ReleaseBehavior } from "@/src/game/core/accessibility";
 import type {
@@ -345,7 +344,7 @@ function MusicMeter({
   level: number;
   onChange: (next: number) => void;
 }) {
-  const styles = useFixedStyles(makeSettingsStyles);
+  const styles = useSettingsStyles();
   const step = (delta: number) =>
     onChange(Math.min(1, Math.max(0, +((level ?? 0) + delta).toFixed(2))));
   return (

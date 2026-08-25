@@ -17,7 +17,7 @@ import { clusterThumbSet, modelThumbSet } from "@/src/game/core/presentation/fin
 import Svg, { Circle as SvgCircle, Defs, RadialGradient, Stop } from "react-native-svg";
 import { COIN_ICON } from "@/src/components/iconAssets";
 import { ChevronIcon } from "@/src/components/Icons";
-import { Theme, useFixedStyles, FONT, RADIUS, SIZE, useIsTablet } from "@/src/game/ui/system/theme";
+import { Theme, useFixedStyles, useScaledStyles, useUiScale, FONT, RADIUS, SIZE, useIsTablet } from "@/src/game/ui/system/theme";
 import { useMirror } from "@/src/game/ui/system/handedness";
 import { useRepos } from "@/src/data";
 import { useCatalogRow } from "@/src/data/catalog/buildStore";
@@ -40,7 +40,10 @@ import * as Haptics from "expo-haptics";
  * Rises into place and then breathes, native-driven on transform and opacity only — the same
  * discipline as PulseRing, because this file deliberately keeps its loops off the JS thread.
  */
-function TapCue({ label, resuming }: { label: string; resuming: boolean }) {
+function TapCue({ label, resuming, k }: { label: string; resuming: boolean; k: number }) {
+  // The map's own scale, PASSED IN rather than read here: the pill straddles a circle whose size the
+  // card decides, so the two must be the same number or the badge slides off the rim.
+  const s = useScaledStyles(makeCueStyles, k);
   // STILL, not pulsing — and a plain View, not Animated: the ring around the circle already says
   // "this one is live", and a second thing throbbing beside it competes with the first rather than
   // reinforcing it.
@@ -49,13 +52,16 @@ function TapCue({ label, resuming }: { label: string; resuming: boolean }) {
   // stage you have opened before is marked the same way there and here. Lavender stays the invitation
   // to begin something.
   return (
-    <View pointerEvents="none" style={[styles_cue.wrap, resuming && styles_cue.wrapResume]}>
-      <Text style={styles_cue.text}>{label}</Text>
+    <View
+      pointerEvents="none"
+      // The offset is applied HERE because the sheet scaler deliberately skips top/left/right/bottom — see SCALED_PROPS in theme.ts. This one is geometry, not an inset, so it has to track the circle.
+      style={[s.wrap, { top: (CIRCLE - PILL_H / 2) * k }, resuming && s.wrapResume]}
+    >
+      <Text style={s.text}>{label}</Text>
     </View>
   );
 }
 
-/** Plain sheet: the cue takes no theme — it is one fixed accent either way. */
 /** The panel cream shared by this card and the build-completion screen — the two are the same kind
  *  of surface (a summary floating over a build) and drifting apart is what makes an app look
  *  assembled from parts. */
@@ -70,38 +76,41 @@ const PILL_H = 22;
  *  the same way in both places. */
 const RESUME_BLUE = "#A9BFD9";
 
-const styles_cue = StyleSheet.create({
-  wrap: {
-    // Centred on the circle's bottom edge: the circle is CIRCLE tall and starts at the node's top,
-    // so half the pill above that line and half below puts it on the rim. zIndex clears the circle,
-    // which draws its own gradient and would otherwise cover it.
-    position: "absolute",
-    top: CIRCLE - PILL_H / 2,
-    height: PILL_H,
-    zIndex: 3,
-    paddingHorizontal: 12,
-    // No vertical padding: the height is fixed and `justifyContent` centres the label in it. Padding
-    // plus a fixed height fight each other, and that fight is what left the text sitting high.
-    justifyContent: "center",
-    borderRadius: 999,
-    backgroundColor: "#8D7BA8",
-  },
-  // The Continue blue, as used by the catalogue's in-progress pill.
-  wrapResume: { backgroundColor: RESUME_BLUE },
-  text: {
-    color: "#FBF8F3",
-    fontFamily: FONT,
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 0.3,
-    // Both lines are about Android. It pads a Text by the font's own ascent and descent, which are
-    // not symmetric — so a label centred by its BOX sits visibly high in a short pill. Dropping that
-    // padding and pinning lineHeight to the pill's own height centres the glyphs instead.
-    lineHeight: PILL_H,
-    includeFontPadding: false,
-    textAlign: "center",
-  },
-});
+/** Takes no theme — the cue is one fixed accent either way — but it is still a `make` so the map can
+ *  hand it the same scale as the rest of the card. */
+const makeCueStyles = () =>
+  StyleSheet.create({
+    wrap: {
+      // Centred on the circle's bottom edge: the circle is CIRCLE tall and starts at the node's top,
+      // so half the pill above that line and half below puts it on the rim. The `top` that does that
+      // lives at the call site, where it can be scaled. zIndex clears the circle, which draws its own
+      // gradient and would otherwise cover it.
+      position: "absolute",
+      height: PILL_H,
+      zIndex: 3,
+      paddingHorizontal: 12,
+      // No vertical padding: the height is fixed and `justifyContent` centres the label in it. Padding
+      // plus a fixed height fight each other, and that fight is what left the text sitting high.
+      justifyContent: "center",
+      borderRadius: 999,
+      backgroundColor: "#8D7BA8",
+    },
+    // The Continue blue, as used by the catalogue's in-progress pill.
+    wrapResume: { backgroundColor: RESUME_BLUE },
+    text: {
+      color: "#FBF8F3",
+      fontFamily: FONT,
+      fontSize: 11,
+      fontWeight: "900",
+      letterSpacing: 0.3,
+      // Both lines are about Android. It pads a Text by the font's own ascent and descent, which are
+      // not symmetric — so a label centred by its BOX sits visibly high in a short pill. Dropping that
+      // padding and pinning lineHeight to the pill's own height centres the glyphs instead.
+      lineHeight: PILL_H,
+      includeFontPadding: false,
+      textAlign: "center",
+    },
+  });
 
 function PulseRing({ style }: { style: StyleProp<ViewStyle> }) {
   const t = useRef(new Animated.Value(0)).current;
@@ -139,7 +148,11 @@ interface BuildMapProps {
 }
 
 export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
-  const styles = useFixedStyles(makeStyles);
+  // THE MAP SCALES, where the rest of the assembly HUD does not — and the difference is what kind of surface it is. The HUD is chrome around a build, laid out to the point with no slack, so theme.ts opts it out; this is a full-screen modal with one thing on it, which is the shape that file calls safe to grow. Left fixed it drew a phone-sized card in the middle of a tablet, with 92dp circles a player is meant to read a stage name inside.
+  // THE FULL SHARED SCALE, not the celebration cards' trim: those float over a scene they must not swamp, and this owns the screen while it is up. The card's widest layout is 620dp against a clamp that never exceeds long/800, so even at the 1.75 ceiling it cannot outgrow the window — see useUiScale.
+  const k = useUiScale();
+  // The sheet takes the SAME k as the hand-scaled values below — see useScaledStyles.
+  const styles = useScaledStyles(makeStyles, k);
   const isTablet = useIsTablet();
   const router = useRouter();
   const furniture = useGameStore((s) => s.furniture);
@@ -281,9 +294,13 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
       );
     };
 
-    const cardMax = nodes.length >= 4 ? 620 : nodes.length === 3 ? 520 : 460;
-    const INNER = cardMax - 60;
-    const nodeWidth = Math.min(116, (INNER - (nodes.length - 1) * 24) / nodes.length);
+    // Authored against a phone, then multiplied — so the proportions are the ones that were tuned here and only the size changes. Everything below that measures the card carries the same k, including the connector maths, or the bands stop meeting the circles they join.
+    const cardMax = (nodes.length >= 4 ? 620 : nodes.length === 3 ? 520 : 460) * k;
+    const INNER = cardMax - 60 * k;
+    const slot = NODE_SLOT * k;
+    const nodeWidth = Math.min(116 * k, (INNER - (nodes.length - 1) * slot) / nodes.length);
+    // The stage circle, and the SVG halo inside it. Rounded, because the sheet rounds too — a half-pixel between the gradient and the View that clips it shows as a hairline at the rim.
+    const circleSize = Math.round(CIRCLE * k);
 
     const totalSteps = furniture.actions.length;
     const pct = totalSteps ? Math.round((done.size / totalSteps) * 100) : 0;
@@ -298,7 +315,7 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
 
     return (
       <View style={styles.scrim}>
-        <View style={[styles.card, { maxWidth: cardMax }]}>
+        <View style={[styles.card, { maxWidth: cardMax }, isTablet && { paddingVertical: CARD_VPAD * k * TABLET_VPAD_LIFT }]}>
           {/* NO close button. Every stage's Start/Resume closes the map by opening that stage, and
               this leaves the build entirely — an ✕ on the corner was a third exit that did the same
               thing as the first two, and on a card this size it read as the loudest control on it.
@@ -326,7 +343,8 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                   own point is centred on its box) and rotated 90° left, so nothing about the
                   glyph's font metrics can throw off its centring beside the label. */}
               <View style={styles.homeChevron}>
-                <ChevronIcon size={13} color={INK} up />
+                {/* A `size` PROP, not a style — the sheet scaler never sees it, so it takes the scale by hand. */}
+                <ChevronIcon size={Math.round(13 * k)} color={INK} up />
               </View>
               <Text style={styles.homeText}>Catalogue</Text>
             </Pressable>
@@ -354,8 +372,8 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                 styles.connectorLayer,
                 {
                   // The row centres its children, so a full-width layer would put the bands off by half the slack. Pin it to the content box instead.
-                  width: nodes.length * nodeWidth + (nodes.length - 1) * 24,
-                  marginLeft: -(nodes.length * nodeWidth + (nodes.length - 1) * 24) / 2,
+                  width: nodes.length * nodeWidth + (nodes.length - 1) * slot,
+                  marginLeft: -(nodes.length * nodeWidth + (nodes.length - 1) * slot) / 2,
                 },
               ]}
               pointerEvents="none"
@@ -367,9 +385,11 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                     style={[
                       styles.connectorLine,
                       {
-                        // Midpoint of the two circle centres: node i-1's centre plus half a node, plus the 24dp slot between them, less half the band's length.
+                        // Midpoint of the two circle centres: node i-1's centre plus half a node, plus the slot between them, less half the band's length.
                         left:
-                          (i - 1) * (nodeWidth + 24) + nodeWidth + 12 - CONNECTOR_LEN / 2,
+                          (i - 1) * (nodeWidth + slot) + nodeWidth + slot / 2 - (CONNECTOR_LEN * k) / 2,
+                        // Both offsets are applied here because the sheet scaler skips top/left/right/bottom — see SCALED_PROPS in theme.ts.
+                        top: CONNECTOR_TOP * k,
                       },
                       i % 2 === 1 ? styles.connectorDown : styles.connectorUp,
                     ]}
@@ -403,7 +423,7 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                       the node no height at all, so a finished or locked stage still lines up with
                       its neighbours without reserving a slot it never fills. */}
                   {n.enabled && !n.finished ? (
-                    <TapCue label={n.doneCount > 0 ? "Resume" : "Start"} resuming={n.doneCount > 0} />
+                    <TapCue label={n.doneCount > 0 ? "Resume" : "Start"} resuming={n.doneCount > 0} k={k} />
                   ) : null}
                   {/* Available: pulsing. Finished: a steady outline plus the tick. Both are
                       SIBLINGS of the circle, never a border on it — the circle clips its own
@@ -419,7 +439,8 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                       <View style={styles.doneRing} pointerEvents="none" />
                       <Image
                         source={require("@/src/assets/ui/icons/icon-success.png")}
-                        style={styles.doneCheck}
+                        // Its corner offsets ride the circle, so they carry the scale the sheet skips — see SCALED_PROPS in theme.ts.
+                        style={[styles.doneCheck, { bottom: 14 * k, left: 6 * k }]}
                         resizeMode="contain"
                       />
                     </>
@@ -434,7 +455,7 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                     {/* The wireframe's sphere: a light halo in the middle falling off to a
                         deeper cream at the rim. A flat fill read as a sticker; the gradient is
                         what gives the node its volume. */}
-                    <Svg width={92} height={92} style={StyleSheet.absoluteFill}>
+                    <Svg width={circleSize} height={circleSize} style={StyleSheet.absoluteFill}>
                       <Defs>
                         <RadialGradient id={`halo-${n.key}`} cx="50%" cy="42%" r="65%">
                           {/* A locked stage is drawn PALER, never more transparent: dropping the
@@ -447,7 +468,12 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                           />
                         </RadialGradient>
                       </Defs>
-                      <SvgCircle cx="46" cy="46" r="46" fill={`url(#halo-${n.key})`} />
+                      <SvgCircle
+                        cx={circleSize / 2}
+                        cy={circleSize / 2}
+                        r={circleSize / 2}
+                        fill={`url(#halo-${n.key})`}
+                      />
                     </Svg>
                     {n.thumb ? (
                       <Image
@@ -462,7 +488,11 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                     {/* INSIDE the circle, under the thumbnail: the stage's name belongs to the
                         stage, and outside it the row read as a caption floating beneath a picture.
                         Absolutely positioned so it cannot push the thumbnail off centre. */}
-                    <View style={styles.nodeLabelBox} pointerEvents="none">
+                    {/* Its inset from the circle's own edges carries the scale the sheet skips — see SCALED_PROPS in theme.ts. */}
+                    <View
+                      style={[styles.nodeLabelBox, { left: 4 * k, right: 4 * k, bottom: 12 * k }]}
+                      pointerEvents="none"
+                    >
                       <Text
                         style={[styles.nodeLabel, !n.enabled && !n.finished && styles.nodeLabelLocked]}
                         numberOfLines={2}
@@ -703,6 +733,26 @@ const INK = "#231F20";
 /** Centre-to-centre span of the band between two stage circles (node 116 + slot 24). */
 const CONNECTOR_LEN = 140;
 
+/** The card's own top and bottom padding on a phone. */
+const CARD_VPAD = 10;
+
+/**
+ * How much more of it the card takes on a tablet.
+ *
+ * PHONES ARE NOT TOUCHED, and that is not caution for its own sake: this card is sized to fit a
+ * landscape phone WITHOUT scrolling, and on a 360dp screen a four-stage EKET clears the scrim's
+ * gutters by about 20dp. Spending that on padding is how the reward row ends up cut off at the
+ * bottom edge, because the card has no scroll to fall back on. A tablet has the room, so it gets the
+ * air.
+ */
+const TABLET_VPAD_LIFT = 2.2;
+
+/** The gap between two stage circles in the row. Shared by `connectorSlot`'s width and the connector maths, which have to agree about where the next circle starts. */
+const NODE_SLOT = 24;
+
+/** The band's own top offset inside the node row. Circle centres sit at y=46 and y=80 (the 34dp stagger); their midpoint is 63, less half the band's 14dp height. Applied at the call site rather than in the sheet: the scaler skips absolute offsets (see SCALED_PROPS), and this one is geometry rather than an inset. */
+const CONNECTOR_TOP = 63 - 7;
+
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
     scrim: {
@@ -711,6 +761,7 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       justifyContent: "center",
       // The same floors the assembly HUD uses, so the modal never sits closer to the glass than the controls behind it. Immersive mode reports 0 insets, hence the constants.
+      // These are paddings, so the map's scale grows them with the card — deliberately: a card half again as big wants a gutter to match, and the card's own maxWidth is capped well inside what is left.
       paddingHorizontal: HUD_SIDE_MARGIN,
       // A real gutter, not the HUD's floor — but only just: at +18 the card had to give back more
       // height than the reward row could spare, so the tiles ran past its edge. 10 keeps a visible
@@ -736,8 +787,9 @@ const makeStyles = (t: Theme) =>
       // to read as part of it rather than as a panel on top of it.
       backgroundColor: PANEL_CREAM,
       borderRadius: 22,
-      paddingTop: 10,
-      paddingBottom: 10,
+      // The phone's own vertical padding; a tablet overrides it at the call site with room to spare — see TABLET_VPAD_LIFT.
+      paddingTop: CARD_VPAD,
+      paddingBottom: CARD_VPAD,
       paddingHorizontal: 20,
       shadowColor: "#000",
       shadowOpacity: 0.3,
@@ -762,7 +814,7 @@ const makeStyles = (t: Theme) =>
       height: 24,
       paddingHorizontal: 10,
       borderRadius: 999,
-      // A lighter tint of the "Start" pill's own lavender (#8D7BA8, styles_cue.wrap), not an
+      // A lighter tint of the "Start" pill's own lavender (#8D7BA8, makeCueStyles' wrap), not an
       // unrelated purple — ties this pill back to the same accent family as the card's other pill.
       backgroundColor: "#CCC4D8",
     },
@@ -837,8 +889,7 @@ const makeStyles = (t: Theme) =>
     // The rims are 58.8dp apart on the diagonal; drawing 44 leaves ~7dp clear at each end so the line stops short of both circles instead of butting into them. Spans CENTRE to CENTRE (node 116 + slot 24 = 140), not rim to rim: the long run makes the tilt shallow (atan 34/140 ≈ 13.7°) and buries both rounded ends under the circles, which draw after it and carry elevation. A short rim-to-rim band showed its own caps.
     connectorLine: {
       position: "absolute",
-      // Circle centres sit at y=46 and y=80 (the 34dp stagger); their midpoint is 63.
-      top: 63 - 7,
+      // `top` comes from the call site, with the scale on it — see CONNECTOR_TOP.
       width: CONNECTOR_LEN,
       height: 14,
       borderRadius: 7,
@@ -897,6 +948,7 @@ const makeStyles = (t: Theme) =>
     // Bottom-left of the circle. It used to share this spot with the resume badge, which is now
     // retired — a finished stage is the only thing marked here.
     // Measured from the BOTTOM, so it follows the circle without needing the cue-slot offset above.
+    // The two offsets below are the PHONE values; the map re-applies them scaled at the call site.
     doneCheck: {
       position: "absolute",
       bottom: 14,
@@ -916,6 +968,7 @@ const makeStyles = (t: Theme) =>
     // A FIXED box that centres whatever it holds. Bottom-anchored text grew upward as it wrapped,
     // so a one-line name ("Top Drawer") sat lower than a two-line one ("Bottom Drawer") in the same
     // row — the box gives both the same midline, whatever they wrap to.
+    // Its three offsets are the PHONE values; the map re-applies them scaled at the call site.
     nodeLabelBox: {
       position: "absolute",
       // Full width inside the circle: the per-word break is decided by stacksLabel above, so this

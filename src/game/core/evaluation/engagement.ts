@@ -365,6 +365,25 @@ export function screwParkOffset(
   ];
 }
 
+/**
+ * Displacement from a part's SEATED pose to the pose the drag actually DELIVERS it to — the park it drives home from — or null when the placement drops flush and there is no park at all.
+ *
+ * One branch for the whole engine, per engagement kind, so that everything downstream of a drop asks the same question of the same function. It existed as an inline branch at the release site alone, and the visibility gate — which has to judge the point the player is aiming AT — could only read the AUTHORED placeDir/parkBackoff instead. The two disagreed wherever a park is DERIVED rather than authored: a LACK leg screws up onto its tightened bolt from 45mm below (screw engagement, no authoring anywhere in the furniture), so the gate judged a seat flush against the tabletop's underside and passed it only from an eye below that plane — measured, elevation ≤5° at a 1.2m orbit, with the gap jumping straight to 27mm against a 6mm threshold one step higher.
+ *
+ * `eng` is a parameter so the release site can pass the engagement it has already computed for its own branching, and the two can never drift apart.
+ */
+export function parkOffsetFor(
+  f: Furniture,
+  action: AssemblyAction,
+  done: ReadonlySet<ActionId>,
+  eng: PlaceEngagement = placeEngagement(f, action, done),
+): Vec3 | null {
+  if (eng === "screw") return screwParkOffset(f, action, done);
+  if (eng === "slide") return slideParkInfo(f, action, done)?.offset ?? null;
+  if (eng === "press") return pressParkInfo(f, action, done)?.offset ?? null;
+  return null;
+}
+
 /** Displacement of the PLACED spinner at the start of the screw phase (reverse path: the flush leg backs off away from the incoming top, then rises in as the gesture progresses). Null when the spinner is the later part instead. */
 export function screwMoverParkOffset(
   f: Furniture,

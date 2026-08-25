@@ -30,7 +30,10 @@ import type { Theme } from "@/src/game/ui/system/theme";
 import { playSfx } from "@/src/game/audio/sfx";
 
 /** The banner art's aspect (900x218 after trimming), so the height is derived from the width rather
- *  than being a second number that has to be kept in step with it. */
+ *  than being a second number that has to be kept in step with it.
+ *
+ *  THE PHONE WIDTH. The sheet scales its own copy of it; anything driven by animation or by an
+ *  absolute offset multiplies by the panel's k at the call site — see CompletedRibbon. */
 const RIBBON_W = 200;
 
 // The one size both rewards are drawn at — see the rewardIcon style for why they must match.
@@ -137,12 +140,15 @@ function CompletedRibbon({ label }: { label: string }) {
   // THE SAME k as its parent, and it has to be: the ribbon is positioned by a negative margin that
   // pulls it onto the panel below it. A ribbon on one scale overlapping a panel on another does not
   // overlap by the amount either of them intends.
-  const styles = useScaledStyles(makeStyles, useCelebrationScale());
+  const k = useCelebrationScale();
+  const styles = useScaledStyles(makeStyles, k);
+  // The banner's own width AT THIS SCALE. The clip and the sparks below are driven by animation and by absolute offsets, neither of which the sheet scaler can reach — so they take the scale by hand or they keep working in phone points inside a tablet-sized ribbon. Left unscaled the wipe stopped at 200pt across a 270pt banner and the last third never opened.
+  const ribbonW = RIBBON_W * k;
   const reveal = useSharedValue(0);
   useEffect(() => {
     reveal.value = withDelay(STAGE.ribbon, withTiming(1, { duration: REVEAL_MS, easing: Easing.out(Easing.cubic) }));
   }, [reveal]);
-  const clip = useAnimatedStyle(() => ({ width: RIBBON_W * reveal.value }));
+  const clip = useAnimatedStyle(() => ({ width: ribbonW * reveal.value }));
   return (
     <View style={styles.ribbonWrap} pointerEvents="none">
       <Animated.View style={[styles.ribbonClip, clip]}>
@@ -158,9 +164,10 @@ function CompletedRibbon({ label }: { label: string }) {
       {SPARKS.map((sp, i) => (
         <Spark
           key={i}
-          x={sp.x * RIBBON_W}
-          y={sp.y}
-          size={sp.size}
+          x={sp.x * ribbonW}
+          // y and size in points, so both take the scale — a spark left at phone size sits inside the banner's edge rather than on it.
+          y={sp.y * k}
+          size={sp.size * k}
           delay={sp.delay}
           color={SPARK_COLORS[i % SPARK_COLORS.length]}
         />
@@ -180,7 +187,10 @@ export function BuildComplete() {
   // SCALED on a tablet, fixed on a phone. A single centred panel with generous padding — the shape
   // theme.ts calls safe to grow — so it opts in to the shared celebration scale. See
   // celebrationScale for why it is trimmed below the app-wide number.
-  const styles = useScaledStyles(makeStyles, useCelebrationScale());
+  const k = useCelebrationScale();
+  const styles = useScaledStyles(makeStyles, k);
+  // The reward item's art is sized by a PROP, not a style, so the scaler never sees it — and the coin beside it is styled, so it does grow. Left alone the two ended up different sizes, which is the one thing the rewardIcon comment says must never happen.
+  const rewardIconSize = Math.round(REWARD_ICON_SIZE * k);
   const router = useRouter();
   const repos = useRepos();
   const furniture = useGameStore((s) => s.furniture);
@@ -253,7 +263,8 @@ export function BuildComplete() {
             the steps but NOT the two completion flags, so both are cleared here — otherwise
             finishing a second time would skip the Complete button and slam this screen back up. */}
         <Pressable
-          style={styles.redoBtn}
+          // Its corner offsets are absolute, which the scaler skips (see SCALED_PROPS) — so they take the scale here, or the button drifts out of the corner as the card's own padding grows around it.
+          style={[styles.redoBtn, { top: 12 * k, left: 14 * k }]}
           onPress={() => {
             useGameStore.getState().setCompleteConfirmed(false);
             useGameStore.getState().setDoneDismissed(false);
@@ -305,8 +316,8 @@ export function BuildComplete() {
                   {rewardItem ? (
                     <View style={styles.rewardItem}>
                       {/* The item's own catalogue art, at the coin's size — see the rewardIcon comment on why the two must match. `variation` is deliberately not passed: CatalogThumb resolves an undefined variation to the item's default, which is the right answer for a reward nobody has chosen a finish for. `surface` is passed because a wallpaper or floor IS its picture and is fetched from a different path than a model's render — without it a surface reward would silently draw nothing, which is the only reason RewardItem carries a category at all. The fixed-size View is the well that path needs: the surface branch ignores `size` and absolute-fills its parent, the same reason every other surface-capable caller wraps the thumb. Renders nothing rather than a broken-image box if the art has not been uploaded yet, leaving the name to stand alone. */}
-                      <View style={{ width: REWARD_ICON_SIZE, height: REWARD_ICON_SIZE }}>
-                        <CatalogThumb source="bought" itemId={rewardItem.id} surface={isSurfaceCategory(rewardItem.category)} size={REWARD_ICON_SIZE} />
+                      <View style={{ width: rewardIconSize, height: rewardIconSize }}>
+                        <CatalogThumb source="bought" itemId={rewardItem.id} surface={isSurfaceCategory(rewardItem.category)} size={rewardIconSize} />
                       </View>
                       <Text style={styles.rewardText}>{rewardItem.name}</Text>
                     </View>
@@ -370,7 +381,8 @@ export function BuildComplete() {
         </ScrollView>
       </View>
       </View>
-      <ConfettiRain delay={STAGE.confetti} />
+      {/* Paper sized for a phone reads as dust on a tablet — the burst falls across the whole window, so its scraps take the screen's scale rather than the card's. */}
+      <ConfettiRain delay={STAGE.confetti} size={k} />
     </View>
   );
 }
@@ -428,9 +440,8 @@ const makeStyles = (t: Theme) =>
     redoBtn: {
       position: "absolute",
       // Higher on the card: at 24 it sat level with the title block rather than up in the corner
-      // where a secondary control belongs.
-      top: 12,
-      left: 14,
+      // where a secondary control belongs. Both offsets come from the call site, with the scale on
+      // them.
       width: 30,
       height: 30,
       alignItems: "center",

@@ -15,7 +15,7 @@ import {
 } from "@/src/game/core/evaluation/clusters";
 import { useGameStore } from "@/src/game/core/store";
 import { Button } from "@/src/game/ui/system/Button";
-import { Theme, useScaledStyles } from "@/src/game/ui/system/theme";
+import { FONT, RADIUS, SIZE, SPACE, Theme, TYPE, useScaledStyles } from "@/src/game/ui/system/theme";
 import { useCelebrationScale } from "./celebrationScale";
 
 /** Fires the moment a cluster's last action lands: names what was finished and offers the one move that follows — the next unfinished cluster, or the combine stage when they are all done. The full-screen "choose a section" moment stays with BuildMap at game start; this popup owns the mid-build transitions so a finished cluster never has to become a card while you build the next one. */
@@ -101,7 +101,8 @@ export function ClusterCelebration() {
       {/* Behind the card and across the whole scrim: the confetti belongs to the MOMENT, not to the
           panel, and boxed inside it the fall was over before it read as celebration. */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <ConfettiRain key={shown} delay={0} width={win.width} height={win.height} count={26} />
+        {/* `size` is the scrap multiplier, and it takes the card's scale for the same reason the fall spans the window: paper cut for a phone reads as dust across a tablet. */}
+        <ConfettiRain key={shown} delay={0} width={win.width} height={win.height} count={26} size={k} />
       </View>
       <Animated.View style={[styles.panel, popStyle]}>
         <Image
@@ -110,10 +111,18 @@ export function ClusterCelebration() {
           resizeMode="contain"
         />
         <Text style={styles.title}>{clusterLabel(furniture, shown)} finished</Text>
+        {/* Button carries its OWN fixed sheet — it is a shared control sized for the HUD, and nothing about a card growing reaches inside it. On a tablet that left a phone-sized button under a card half again as big, so the card hands it its scale: the same k, on the three measurements that decide the control's size. */}
         <Button
           label={allDone ? "Put it together ›" : `Build the ${clusterLabel(furniture, next).toLowerCase()} ›`}
           variant="primary"
           onPress={onPress}
+          style={{
+            minHeight: SIZE.controlHeight * k,
+            paddingHorizontal: SPACE.lg * k,
+            borderRadius: RADIUS.control * k,
+          }}
+          // TYPE is typed as Record<…, TextStyle>, so the size reads as optional — the fallback is that same 14, not a second opinion about it.
+          labelStyle={{ fontSize: (TYPE.label.fontSize ?? 14) * k }}
         />
       </Animated.View>
     </View>
@@ -161,5 +170,8 @@ const makeStyles = (t: Theme) =>
     badge: { width: 48, height: 48 },
     // FIXED ink, not t.text: the panel is a fixed cream, so a theme-driven colour turns near-white
     // on it in dark mode. Same reasoning as the objective bar's instruction line.
-    title: { color: "#231F20", fontSize: 18, fontWeight: "800" },
+    // fontFamily was MISSING here, which in React Native is not a small thing: there is no font
+    // inheritance, so a weight without a family renders in the system font — this one line was set in
+    // something other than Lexend on every device. See convention 5 in theme.ts.
+    title: { fontFamily: FONT, color: "#231F20", fontSize: 18, fontWeight: "800" },
   });
