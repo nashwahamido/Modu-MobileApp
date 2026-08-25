@@ -9,7 +9,7 @@ import { quatConjugate, quatMultiply, quatRotateVec3, quatSlerp, screenRay } fro
 import { FOV_Y_DEG } from "@/src/game/scene/cameraConfig";
 import { projectToScreen } from "@/src/game/scene/projectToScreen";
 import type { Vec3 } from "@/src/game/core/type";
-import { AIM_BAND_MAX_PX, aimBandScale, CARRY_CLEARANCE_ENABLED, CARRY_NEAR_MARGIN_M, clusterCarryAnchor, holdReachFrom, dragPlanePoint, dragRayPoint, DRIFT_CAP_FACTOR, RAY_CARRY_MIN_FRACTION, RAY_CARRY_MIN_M, burialDepthM, rayBoxEntryT, rayPointNearest, sightlineGapM, VIS_GAP_SLACK_M, segmentHitsBox, segmentInFrame } from "./dragPlane";
+import { AIM_BAND_MAX_PX, aimBandScale, CARRY_CLEARANCE_ENABLED, CARRY_NEAR_MARGIN_M, clusterCarryAnchor, holdReachFrom, dragPlanePoint, dragRayPoint, DRIFT_CAP_FACTOR, RAY_CARRY_MIN_FRACTION, RAY_CARRY_MIN_M, burialDepthM, ghostSamplePoints, rayBoxEntryT, rayPointNearest, sightlineGapM, VIS_GAP_SLACK_M, segmentHitsBox, segmentInFrame } from "./dragPlane";
 import { MIN_ORBIT_DISTANCE_M } from "@/src/game/scene/cameraConfig";
 
 // Landscape, the only orientation the game runs in (app.json).
@@ -352,6 +352,34 @@ test("sightline gap replaces halo sampling for the under-rim leg socket: blocked
   assert.ok(sightlineGapM([0, 1.6, 0.2], anchor, [plate]).gap > thr);
   // From below/side the anchor is the first thing the eye meets.
   assert.ok(sightlineGapM([0.5, 0.1, 0.3], anchor, [plate]).gap <= thr);
+});
+
+test("ghost body second chance: a leg hanging under a tabletop is seen from anywhere its seat is not", () => {
+  // LACK, measured: the top is a 55cm slab at y 0.400–0.449 and a leg's seat is its own top face, at y=0.400 — ON the slab's underside plane, 26mm inside the footprint edge. Judged as a point, that seat exists only for an eye BELOW the plane (elevation ≤5° at a 1.2m orbit); one step up the gap is 27mm against a 6mm threshold, so there is no near-miss band to widen — the camera is either under the table or the socket is not there.
+  const top = { min: [-0.275, 0.4, -0.275] as Vec3, max: [0.275, 0.449, 0.275] as Vec3, pid: "tableTop" };
+  const seat: Vec3 = [0.2485, 0.4, -0.2485];
+  const thr = burialDepthM(seat, [top]) + VIS_GAP_SLACK_M;
+  assert.equal(burialDepthM(seat, [top]), 0, "the seat sits on the underside face, not inside the slab");
+  const eyeAt = (elevDeg: number, r = 1.2): Vec3 => {
+    const el = (elevDeg * Math.PI) / 180;
+    // Out along the leg's own diagonal, the most favourable azimuth there is.
+    return [r * Math.cos(el) * 0.7071, 0.224 + r * Math.sin(el), -r * Math.cos(el) * 0.7071];
+  };
+  assert.ok(sightlineGapM(eyeAt(3), seat, [top]).gap <= thr, "under the tabletop plane the seat is seen");
+  assert.ok(sightlineGapM(eyeAt(20), seat, [top]).gap > thr, "a normal raised view is blocked by the top");
+  // The GHOST is 40cm of leg standing at the delivered pose (45mm down the bolt's axis, where the release parks it). The player can see it from every ordinary angle, which is the whole claim: if you can see where the part goes, you can put it there.
+  const leg = { min: [0.224, 0, -0.273] as Vec3, max: [0.273, 0.4, -0.224] as Vec3, pid: "leg_1" };
+  const samples = ghostSamplePoints(leg, [0, -0.045, 0]);
+  assert.equal(samples.length, 9, "centre plus eight corners");
+  const seen = (elevDeg: number) =>
+    samples.some((p) => sightlineGapM(eyeAt(elevDeg), p, [top]).gap <= VIS_GAP_SLACK_M);
+  for (const elev of [20, 35, 60]) assert.ok(seen(elev), `the ghost must be visible at ${elev}°`);
+  // Not a blank cheque: from nearly overhead the tabletop covers the leg's whole length and the gate still says turn the camera.
+  assert.ok(!seen(85), "near-overhead must still be blocked");
+  // Samples are pulled IN from the corners: a corner is the one place a box is guaranteed to be air, and a sample sitting in that air reports a part visible that isn't (the halo bug, in miniature).
+  for (const p of samples) {
+    assert.ok(p[1] > leg.min[1] - 0.045 + 1e-9 && p[1] < leg.max[1] - 0.045 - 1e-9, "no sample sits on the box face");
+  }
 });
 
 test("sightline gap: one visibility rule for cam, countersunk screw, dowel bridge, and buried rod", () => {

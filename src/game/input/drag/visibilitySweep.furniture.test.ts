@@ -13,9 +13,10 @@ import { applyStructure, buildLiaisons } from "@/src/game/core/model/liaisons";
 import { deriveJointFrames, partAnchorOffsets } from "@/src/game/core/model/jointFrames";
 import { composeFurnitureActions } from "@/src/game/core/composition/composeActions";
 import { seatOffsetFor, stagingShiftFor } from "@/src/game/core/scene/targets";
+import { parkOffsetFor } from "@/src/game/core/evaluation/engagement";
 import { isPickupType, placeId } from "@/src/game/core/ids";
-import { burialDepthM, sightlineGapM, VIS_GAP_SLACK_M } from "./dragPlane";
-import type { ClusterId, PartBox, PartId, Vec3 } from "@/src/game/core/type";
+import { burialDepthM, ghostSamplePoints, sightlineGapM, VIS_GAP_SLACK_M } from "./dragPlane";
+import type { ClusterId, Furniture, PartBox, PartId, Vec3 } from "@/src/game/core/type";
 
 const MODELS = path.join(process.cwd(), "src", "assets", "models", "furnitures");
 const CONTENT = path.join(process.cwd(), "src", "game", "content", "furnitures");
@@ -133,6 +134,9 @@ for (const F of FURNITURES) {
       authored.HARDWARE ?? {},
       authored.CLUSTERS,
     );
+    // Enough of a Furniture for the engagement engine: the park the runtime hands the gate is derived from the liaison graph, the cluster overlay and the sweep data, so the replay has to carry all three or it would model a park nobody gets.
+    const { SWEEP } = await import(`@/src/game/content/furnitures/${F}/sweep.gen`);
+    const furniture = { parts, actions, liaisons, clusters: authored.CLUSTERS, sweep: SWEEP } as unknown as Furniture;
     const all = Object.values(boxes);
     const center: Vec3 = [
       (Math.min(...all.map((b) => b.min[0])) + Math.max(...all.map((b) => b.max[0]))) / 2,
@@ -168,10 +172,24 @@ for (const F of FURNITURES) {
           part.pose.position[2] + off[2] + shift[2],
         ];
         const burial = burialDepthM(seat, occluders);
-        // The runtime's park-point second chance (usePartDrag's parkVisual): a parked part's drop target, the mouth backed off along −placeDir by parkBackoff, passes when its own sightline is clear.
+        // The runtime's second chance (usePartDrag's clearPoints): a structural part's whole GHOST BODY standing at the pose the release delivers it to, a fastener's park point alone. Either passes when its own sightline is clear.
+        const parkShift = parkOffsetFor(furniture, a, done) ?? [0, 0, 0];
+        const delivered: Vec3 = [shift[0] + parkShift[0], shift[1] + parkShift[1], shift[2] + parkShift[2]];
+        // Same precedence as the runtime for the fastener case: the engagement's park, then the authored back-off.
         const pd = part.placeDir;
         const pl = pd ? Math.hypot(pd[0], pd[1], pd[2]) : 0;
-        const park: Vec3 | null = pd && pl > 0 && part.parkBackoff ? [seat[0] - (pd[0] / pl) * part.parkBackoff, seat[1] - (pd[1] / pl) * part.parkBackoff, seat[2] - (pd[2] / pl) * part.parkBackoff] : null;
+        const fastenerPark: Vec3 | null =
+          parkShift[0] || parkShift[1] || parkShift[2]
+            ? (parkShift as Vec3)
+            : pd && pl > 0 && part.parkBackoff
+              ? [-(pd[0] / pl) * part.parkBackoff, -(pd[1] / pl) * part.parkBackoff, -(pd[2] / pl) * part.parkBackoff]
+              : null;
+        const clearPoints: Vec3[] =
+          part.type !== "fastener"
+            ? ghostSamplePoints(boxes[part.partId], delivered)
+            : fastenerPark
+              ? [[seat[0] + fastenerPark[0], seat[1] + fastenerPark[1], seat[2] + fastenerPark[2]]]
+              : [];
         let best = Infinity;
         let bestBy: string | null = null;
         for (const eye of eyes) {
@@ -181,7 +199,7 @@ for (const F of FURNITURES) {
             bestBy = g.by;
           }
           if (best <= burial + VIS_GAP_SLACK_M) break;
-          if (park && sightlineGapM(eye, park, occluders).gap <= VIS_GAP_SLACK_M) {
+          if (clearPoints.some((p) => sightlineGapM(eye, p, occluders).gap <= VIS_GAP_SLACK_M)) {
             best = 0;
             break;
           }

@@ -18,10 +18,8 @@ import { actionCluster, actionsForClusterFocus, clusterStarted } from "@/src/gam
 import { clusterDriveKind } from "@/src/game/core/evaluation/clusterCombine";
 import {
   adaptedTravelDir,
+  parkOffsetFor,
   placeEngagement,
-  pressParkInfo,
-  screwParkOffset,
-  slideParkInfo,
 } from "@/src/game/core/evaluation/engagement";
 import type { ParkInfo } from "@/src/game/core/evaluation/engagement";
 import type { ISharedValue } from "react-native-worklets-core";
@@ -31,7 +29,7 @@ import { computeFit, APPROACH_FACTOR } from "@/src/game/core/geometry/fit";
 import { isPickupType } from "@/src/game/core/ids";
 import { stagedMembers } from "@/src/game/core/model/staging";
 import { quatConjugate, quatMultiply, quatRotateVec3, quatSlerp, screenRay } from "@/src/game/core/geometry/math";
-import { AIM_BAND_MAX_PX, aimBandScale, clusterCarryAnchor, holdReachFrom, burialDepthM, pointToSegmentPx, sightlineGapM, VIS_GAP_SLACK_M, rayPointNearest, segmentInFrame } from "./dragPlane";
+import { AIM_BAND_MAX_PX, aimBandScale, clusterCarryAnchor, holdReachFrom, burialDepthM, ghostSamplePoints, pointToSegmentPx, sightlineGapM, VIS_GAP_SLACK_M, rayPointNearest, segmentInFrame } from "./dragPlane";
 import { ActionId, AssemblyAction, PartId, Vec3 } from "@/src/game/core/type";
 import { selectFirstDrop, useGameStore } from "@/src/game/core/store";
 import type { OrbitManipulator } from "../../scene/AssemblyScene";
@@ -349,13 +347,36 @@ export function usePartDrag({
                   cPart.pose.position[2] + off[2] + sShift[2],
                 ]
               : c.holdPosition;
+            // The park the release will actually deliver this candidate to (engagement.parkOffsetFor — authored where the part authors one, derived from the engagement where it does not), so the ghost below stands where the ghost renderer draws it.
+            const engShift = parkOffsetFor(furniture, c.action, doneSet) ?? [0, 0, 0];
+            const delivered: Vec3 = [sShift[0] + engShift[0], sShift[1] + engShift[1], sShift[2] + engShift[2]];
+            /**
+             * clearPoints — the visibility gate's SECOND CHANCE: points whose own clear sightline passes this candidate when its seat is box-blocked.
+             *
+             * A STRUCTURAL part offers its whole ghost body, the copy of the part standing at the delivered pose. The rule that buys is "if you can see where the part goes, you can put it there", and it is the rule the player is already playing by — they are aiming a 40cm leg at a spot under a tabletop, not aiming at a 6mm-wide contact patch. Judging the seat alone made a LACK leg's socket exist only for an eye BELOW the tabletop's underside plane (measured: elevation ≤5° at a 1.2m orbit; one step higher the gap is 27mm against a 6mm threshold), which is the camera pinned under the table for all four legs.
+             *
+             * A FASTENER offers its park point and nothing more — the engagement's where it derives one, its AUTHORED back-off otherwise, which is what it has always offered. Its body is a screw: a sliver of it peeking past a silhouette says nothing about whether the player can see the hole, and that is not hypothetical — box/halo sampling shipped once and armed a wood screw's socket at 9% visible. The park point is different in kind: one point, in open air on the approach side, where the part visibly waits before its drive.
+             *
+             * The ghost body takes the ENGAGEMENT's park only, never the authored fallback, because it has to stand where scene/PartModel draws the ghost — and a `dropOn` part authoring a back-off still has its ghost sitting at the seat (pressParkInfo returns null for exactly that reason).
+             */
+            const fastenerPark: Vec3 | null =
+              engShift[0] || engShift[1] || engShift[2]
+                ? engShift
+                : dir && back
+                  ? [-dir[0] * back, -dir[1] * back, -dir[2] * back]
+                  : null;
+            const clearPoints: Vec3[] =
+              cPart && cPart.type !== "fastener"
+                ? ghostSamplePoints(partBoxes[cPart.partId], delivered)
+                : fastenerPark
+                  ? [[seatVisual[0] + fastenerPark[0], seatVisual[1] + fastenerPark[1], seatVisual[2] + fastenerPark[2]]]
+                  : [];
             // matchVisual only — position and holdPosition stay AS AUTHORED. The release path
             // applies the park offset itself, so shifting the real position here parked the part
             // twice: the pin jumped a further 12cm up on release and had to be slid all the way back
             // down. Matching and placing are two different questions about the same socket.
-            if (!dir || !back) return { ...c, matchVisual: c.holdPosition, seatVisual };
+            if (!dir || !back) return { ...c, matchVisual: c.holdPosition, seatVisual, clearPoints };
             const shift: Vec3 = [-dir[0] * back, -dir[1] * back, -dir[2] * back];
-            // parkVisual: the hole's mouth backed off to where the part PARKS before its drive — open air on the approach side. The visibility gate accepts it as a second chance when the mouth itself is box-blocked: a slider's hole is a feature of a face (DALFRED's pin hole is in the plate's top), invisible at a grazing angle, while the ghost 12cm above it is exactly what the player is aiming at. Directionally safe because it lies along −placeDir: from the wrong side of the receiver it is behind the receiver.
             return {
               ...c,
               matchVisual: [
@@ -364,7 +385,7 @@ export function usePartDrag({
                 c.holdPosition[2] + shift[2],
               ] as Vec3,
               seatVisual,
-              parkVisual: [seatVisual[0] + shift[0], seatVisual[1] + shift[1], seatVisual[2] + shift[2]] as Vec3,
+              clearPoints,
             };
           });
           const candidatesWithFacing = candidates.map((c) => {
@@ -576,10 +597,10 @@ export function usePartDrag({
               if (laF) {
                 const g = sightlineGapM(laF[0], c.seatVisual, s.placedBoxes);
                 visStat = `${(g.gap * 1000).toFixed(0)}/${((c.burial + VIS_GAP_SLACK_M) * 1000).toFixed(0)}mm`;
-                // Park point second chance (parkVisual): a parked part's drop target sits in open air on the approach side, so a clear sightline to it passes a mouth that is merely grazed — the side view of DALFRED's pin hole, where the plate's rim stands 60mm before the centre of its own top face.
-                const parkClear = !!c.parkVisual && sightlineGapM(laF[0], c.parkVisual, s.placedBoxes).gap <= VIS_GAP_SLACK_M;
-                if (parkClear && g.gap > c.burial + VIS_GAP_SLACK_M) visStat += "+park";
-                if (g.gap > c.burial + VIS_GAP_SLACK_M && !parkClear) {
+                // Second chance (clearPoints): a structural part's whole GHOST BODY at the delivered pose, a fastener's park point. Either passes a seat that is merely grazed — the side view of DALFRED's pin hole, where the plate's rim stands 60mm before the centre of its own top face; a LACK leg hanging in plain sight under the tabletop it bolts into. No burial slack on these: they are points on the PART, not mouths inside a receiver, so a sample that reports itself buried is a sample standing inside something and is exactly what should not count.
+                const seenClear = c.clearPoints.some((p) => sightlineGapM(laF[0], p, s.placedBoxes).gap <= VIS_GAP_SLACK_M);
+                if (seenClear && g.gap > c.burial + VIS_GAP_SLACK_M) visStat += "+ghost";
+                if (g.gap > c.burial + VIS_GAP_SLACK_M && !seenClear) {
                   // Renderer second opinion (layer 2, pickConfirm.ts): the box can only over-block — AABB ⊇ mesh — so a box-blocked socket earns a pickEntityWithDepth check of what is REALLY frontmost at its pixel. A live confirmed-visible verdict lets the candidate through; anything less keeps the conservative box verdict. The sweep counts 48 sockets reachable only through this path (round plates' corner air, hollow runner channels).
                   const confirmed = s.pickCache.isConfirmedVisible(c.action.actionId, laF[0], now);
                   if (!confirmed) {
@@ -907,17 +928,10 @@ export function usePartDrag({
                 ? placeEngagement(st.furniture, matched.action, doneSet)
                 : "drop";
             const isScrew = eng === "screw";
-            const backoff = !st.furniture
-              ? null
-              : eng === "screw"
-                ? screwParkOffset(st.furniture, matched.action, doneSet)
-                : eng === "slide"
-                  ? (slideParkInfo(st.furniture, matched.action, doneSet)
-                      ?.offset ?? null)
-                  : eng === "press"
-                    ? (pressParkInfo(st.furniture, matched.action, doneSet)
-                        ?.offset ?? null)
-                    : null;
+            // The SAME park the visibility gate judged this candidate's second chance on (the mapping above) — one function, so the point the player was allowed to aim at and the point the part is delivered to cannot drift apart. `eng` is handed over rather than recomputed: this site's own "drop" for a non-placePart action is part of the contract.
+            const backoff = st.furniture
+              ? parkOffsetFor(st.furniture, matched.action, doneSet, eng)
+              : null;
             const dest: Float3 = [
               matched.position[0] - s.bakedPos[0] + (backoff?.[0] ?? 0),
               matched.position[1] - s.bakedPos[1] + (backoff?.[1] ?? 0),

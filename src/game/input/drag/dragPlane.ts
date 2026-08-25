@@ -272,6 +272,56 @@ export function rayBoxEntryT(
 /** Slack (m) added to an anchor's own burial depth to form its visibility threshold: the first surface the sightline meets must be within (burial + slack) of the anchor. 6mm passes a countersunk screw seen face-on (gap ~0) and a cam seen from its bore side (gap = its 4mm burial), while a 15mm panel's far side (gap 11mm vs 4+6) and a leg's far side (gap 20mm+ vs 0+6) fail. */
 export const VIS_GAP_SLACK_M = 0.006;
 
+/** How far a ghost sample is pulled in from its box corner, as a fraction of the half-extent. A corner is the one place an AABB is guaranteed to be air for anything round, bevelled or diagonal, and a sample sitting in that air is the halo bug in miniature — it reports the part as visible from an angle where only its bounding box is. 0.2 keeps every sample inside the mesh's own quarter of the box while still spreading them to the extremities, which is the whole point of sampling a BODY rather than a point. */
+const GHOST_SAMPLE_INSET = 0.2;
+
+/**
+ * Points on a part's GHOST — the copy of it standing where the release will deliver it — for the "can the player see where this goes" question. The centre first (the most likely to be clear and the cheapest early exit), then the eight inset corners.
+ *
+ * `shift` displaces the part's baked box to that delivered pose: the staging displacement plus the engagement's own park, which is exactly what the ghost renderer draws (scene/PartModel's `at` pose).
+ *
+ * Oriented box when the part carries one, world-aligned otherwise. A DALFRED leg is a 35mm stick in its own frame and a 192mm slab in world, so sampling the world box would put half its samples in mid-air beside the leg.
+ */
+export function ghostSamplePoints(box: BoxLike | undefined, shift: Vec3): Vec3[] {
+  if (!box) return [];
+  const k = 1 - GHOST_SAMPLE_INSET;
+  const out: Vec3[] = [];
+  if (box.obb) {
+    const { center, axes, half } = box.obb;
+    const c: Vec3 = [center[0] + shift[0], center[1] + shift[1], center[2] + shift[2]];
+    out.push(c);
+    for (const sx of [-1, 1])
+      for (const sy of [-1, 1])
+        for (const sz of [-1, 1]) {
+          const a = sx * half[0] * k;
+          const b = sy * half[1] * k;
+          const d = sz * half[2] * k;
+          out.push([
+            c[0] + a * axes[0][0] + b * axes[1][0] + d * axes[2][0],
+            c[1] + a * axes[0][1] + b * axes[1][1] + d * axes[2][1],
+            c[2] + a * axes[0][2] + b * axes[1][2] + d * axes[2][2],
+          ]);
+        }
+    return out;
+  }
+  const c: Vec3 = [
+    (box.min[0] + box.max[0]) / 2 + shift[0],
+    (box.min[1] + box.max[1]) / 2 + shift[1],
+    (box.min[2] + box.max[2]) / 2 + shift[2],
+  ];
+  out.push(c);
+  const h: Vec3 = [
+    ((box.max[0] - box.min[0]) / 2) * k,
+    ((box.max[1] - box.min[1]) / 2) * k,
+    ((box.max[2] - box.min[2]) / 2) * k,
+  ];
+  for (const sx of [-1, 1])
+    for (const sy of [-1, 1])
+      for (const sz of [-1, 1])
+        out.push([c[0] + sx * h[0], c[1] + sy * h[1], c[2] + sz * h[2]]);
+  return out;
+}
+
 /** How deep `target` sits inside the boxes that contain it — the distance to the nearest boundary of the tightest containing box, 0 when nothing contains it. An anchor buried d metres deep cannot possibly be seen closer than d, so d joins its visibility threshold: this is what lets ONE rule serve a flush screw head (d=0), a cam 4mm into its bore, and a bridge anchor at a dowel's centre, with no per-type exemptions. */
 export function burialDepthM(
   target: Vec3,
