@@ -1,8 +1,6 @@
 import {
   ActionId,
   AssemblyAction,
-  AssetSrc,
-  AudioMap,
   ClusterDef,
   ClusterId,
   InstructionContent,
@@ -196,7 +194,7 @@ export function buildInstructions(
   );
 }
 
-/** The wording for a step at a given text level, falling back to standard.  When the audio setting is on the clip is the primary channel (see  `stepAudio`); this text stays as the on-screen fallback. */
+/** The wording for a step at a given text level, falling back to standard.  When the audio setting is on the recorded voiceover is the primary channel (see  `audio/useStepAudio`); this text stays as the on-screen fallback. */
 export function instructionText(
   instructions: InstructionSet,
   actionId: ActionId,
@@ -208,10 +206,3 @@ export function instructionText(
   return c.text ?? "";
 }
 
-/** The spoken clip for a step, if the furniture ships audio. Undefined when the  furniture has no `audio` map or no clip for this step (caller falls back to  reading `instructionText`). */
-export function stepAudio(
-  audio: AudioMap | undefined,
-  actionId: ActionId,
-): AssetSrc | undefined {
-  return audio?.[actionId];
-}

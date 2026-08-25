@@ -227,9 +227,6 @@ export interface InstructionContent {
 
 export type InstructionSet = Record<ActionId, InstructionContent>;
 
-export type AudioClip = AssetSrc;
-export type AudioMap = Record<ActionId, AudioClip>;
-
 export interface LabelSet {
   standard: string;
   simple?: string;
@@ -315,7 +312,6 @@ export interface Furniture {
    *  A missing finish, or a finish missing one cluster, falls back to `clusterThumbs` for that
    *  cluster alone (see presentation/finish.ts), so art can ship one stage at a time. */
   clusterVariantThumbs?: Record<string, ClusterThumbMap>;
-  audio?: AudioMap;
   styles?: StyleSet;
   styleModels?: Partial<Record<RenderStyleId, AssetSrc>>;
   shadow?: AssetSrc;

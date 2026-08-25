@@ -5,7 +5,6 @@ import { assertValidFurniture } from "@/src/game/core/composition/validateFurnit
 import { composeLabels } from "@/src/game/core/composition/composeLabels";
 import { HARDWARE } from "@/src/game/content/hardware";
 import { toolsUsed } from "@/src/game/content/tools";
-import { audio } from "./audio.gen";
 import { BEATS, CLUSTERS, LABELS, STRUCTURE } from "./authored";
 import { ACTIONS, DALFRED_META } from "./meta";
 import { PARTS } from "./parts.gen";
@@ -44,7 +43,6 @@ export const DALFRED: Furniture = {
   thumbs,
   clusterThumbs,
   clusterVariantThumbs: CLUSTER_VARIANT_THUMBS,
-  audio,
   tools: toolsUsed(ACTIONS),
   instructions: INSTRUCTIONS,
   labels: LABELS_ALL,
