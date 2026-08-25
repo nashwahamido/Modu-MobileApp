@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { deriveSceneState } from "./useSceneState";
+import { actionableFirst, deriveSceneState } from "./useSceneState";
 import { availableInMode } from "@/src/game/core/evaluation/availability";
 import { LACK_FIXTURE } from "@/src/game/content/furnitures/fixtures.testutil";
 import { ActionId } from "@/src/game/core/type";
@@ -59,4 +59,32 @@ test("free mode tray keeps authored order (not reordered by actionability)", () 
     state.allTrayItems.map((t) => t.group),
     "free mode must not reorder the tray relative to authored order",
   );
+});
+
+// THE TUTORIAL'S CARD, which is the one its spotlight rings. The rectangle over the parts tray frames the FIRST card (tutorial.tsx's partsTrayTarget), so on a free-mode profile — Control pins free — "first" was whatever the model authored first: LACK's Leg. Finish a leg and the only legal move is the next bolt, but the ring stayed on the Leg card, which free mode's grab-anything also lets the player lift and then fail to place. tutorial.tsx runs `actionableFirst` over its tray for exactly this state.
+test("actionableFirst puts the bolt under the tutorial's spotlight after a leg is finished", () => {
+  const done: ActionId[] = [
+    "place_tableTop",
+    "insert_bolt115980_1",
+    "tighten_bolt115980_1",
+    "place_leg_1",
+  ].map((id) => LACK_FIXTURE.actions.find((a) => (a.actionId as string) === id)!.actionId);
+
+  const available = availableInMode(LACK_FIXTURE, new Set(done), "free", null);
+  assert.ok(
+    available.length > 0 && available.every((a) => a.type === "insertFastener"),
+    "guard: with one leg on, the only legal moves must be the remaining bolt inserts",
+  );
+
+  const state = deriveSceneState(LACK_FIXTURE, done, null, null, null, "free", false);
+  assert.equal(
+    state.trayItems[0].kind,
+    "structural",
+    "guard: free mode must still hand the tutorial a leg-first tray, or this test is not exercising the bug",
+  );
+
+  const sorted = actionableFirst(state.trayItems, new Set(available.map((a) => a.actionId)));
+  assert.equal(sorted[0].group, "bolt115980", "the spotlight's card must be the one the player can actually use");
+  // Nothing is dropped: the tray still holds every group it held before, so no card vanishes mid-step.
+  assert.deepEqual([...sorted].map((t) => t.group).sort(), [...state.trayItems].map((t) => t.group).sort());
 });

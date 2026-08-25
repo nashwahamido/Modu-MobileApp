@@ -9,7 +9,7 @@ import { FilamentScene } from "react-native-filament";
 
 import { AssemblyScene } from "@/src/game/scene/AssemblyScene";
 import { useAssemblyDrivers } from "@/src/game/scene/useAssemblyDrivers";
-import { useSceneState } from "@/src/game/scene/useSceneState";
+import { actionableFirst, useSceneState } from "@/src/game/scene/useSceneState";
 
 import { Joystick } from "@/src/game/input/camera/Joystick";
 import { useOrbitCamera } from "@/src/game/input/camera/useOrbitCamera";
@@ -374,17 +374,21 @@ function TutorialScreen() {
     (m) => m !== "hidden" && m !== "socket_hint",
   );
   const dark = theme === "dark";
-  // nextAction, not [0]. LACK composes its four legs BEFORE its bolts, so from the first tighten onwards `[0]` is a leg no matter what the player is doing — push the second bolt into its hole and the objective bar still read "Install leg 1 of 4" over a screw waiting to be turned, with its own tighten control on screen. See the note on nextAction.
-  const nextActionId = useMemo(
+  const offered = useMemo(
     () =>
       furniture
-        ? nextAction(
-            furniture,
-            availableInMode(furniture, completedSet, mode, activeCluster),
-            completedSet,
-          )?.actionId
-        : undefined,
+        ? availableInMode(furniture, completedSet, mode, activeCluster)
+        : [],
     [furniture, completedSet, mode, activeCluster],
+  );
+  const offeredIds = useMemo(
+    () => new Set(offered.map((a) => a.actionId)),
+    [offered],
+  );
+  // nextAction, not [0]. LACK composes its four legs BEFORE its bolts, so from the first tighten onwards `[0]` is a leg no matter what the player is doing — push the second bolt into its hole and the objective bar still read "Install leg 1 of 4" over a screw waiting to be turned, with its own tighten control on screen. See the note on nextAction.
+  const nextActionId = useMemo(
+    () => (furniture ? nextAction(furniture, offered, completedSet)?.actionId : undefined),
+    [furniture, offered, completedSet],
   );
   const completedCount = useGameStore((s) => s.completed.length);
   const [skipAsked, setSkipAsked] = useState(false);
@@ -523,8 +527,13 @@ function TutorialScreen() {
           item.action?.type === "insertFastener",
       );
     }
-    return sceneState.trayItems;
-  }, [sceneState.allTrayItems, sceneState.trayItems, tutorialStepId]);
+    // AND THE SAME PROBLEM ON EVERY OTHER STEP, which the exception above only fixed for the bolt.
+    //
+    // The spotlight is one rectangle over the FIRST CARD (see partsTrayTarget) because a step that says "long-press a part" means one card, not the column. Which card is first comes from the tray, and in free mode the tray is in AUTHORED order — LACK composes its legs before its bolts, so the Leg card leads the column from the tabletop onwards. Finish a leg and the only legal move is the next bolt, but the ring is still sitting on the Leg: the tutorial reads as asking for a leg the model will not accept, and free mode's grab-anything makes that card liftable, so the player gets to carry it around and fail to place it.
+    //
+    // Actionable-first, the same sort guide and strict already get from useSceneState — the tutorial is a guided run whatever mode the profile pins, and this is what makes "the first card" and "the card the step is about" the same card. Stable, so nothing else reshuffles: the tray still holds every group, in its authored order within each half.
+    return actionableFirst(sceneState.trayItems, offeredIds);
+  }, [sceneState.allTrayItems, sceneState.trayItems, offeredIds, tutorialStepId]);
 
   useEffect(() => {
     setGuideCollapsed(false);

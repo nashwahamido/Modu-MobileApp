@@ -66,6 +66,24 @@ export interface SceneState {
   activeBeat: AssemblyAction | null;
 }
 
+/**
+ * The cards the player can actually use, first.
+ *
+ * Sorted on the AVAILABLE ids, not on `enabled`: enabled also covers free mode's grab-anything cards, and trusting it here is what put a LEG at the top of focus mode while the only legal step was a bolt. Stable, so everything keeps its authored order within the actionable and non-actionable halves.
+ *
+ * Shared with the tutorial, which applies it whatever mode the profile pins — its spotlight frames the FIRST card, so "first" and "the card this step is about" have to be the same card there. Guide and strict use it for the ordinary reason: a run that leads should list what can be done next before what cannot.
+ */
+export function actionableFirst(
+  items: readonly TrayItem[],
+  availableIds: ReadonlySet<ActionId>,
+): TrayItem[] {
+  return [...items].sort(
+    (a, b) =>
+      Number(!!b.action && availableIds.has(b.action.actionId)) -
+      Number(!!a.action && availableIds.has(a.action.actionId)),
+  );
+}
+
 export function deriveSceneState(
   furniture: Furniture,
   completed: readonly ActionId[],
@@ -150,15 +168,8 @@ export function deriveSceneState(
     }
   }
   const allTray = [...groups.values()];
-  // Guided mode leads, so the cards the player can actually use come first — authored order is the right default in free mode, where reordering the tray would railroad a player who is deliberately building their own way. Sorted on availableIds, NOT on `enabled`: enabled also covers free mode's grab-anything cards, and trusting it here is what put a LEG at the top of focus mode while the only legal step was a bolt. Stable sort, so everything keeps its authored order within the actionable and non-actionable halves.
-  const guidedOrder =
-    mode !== "free"
-      ? [...allTray].sort(
-          (a, b) =>
-            Number(!!b.action && availableIds.has(b.action.actionId)) -
-            Number(!!a.action && availableIds.has(a.action.actionId)),
-        )
-      : allTray;
+  // Guided mode leads, so the cards the player can actually use come first — authored order is the right default in free mode, where reordering the tray would railroad a player who is deliberately building their own way.
+  const guidedOrder = mode !== "free" ? actionableFirst(allTray, availableIds) : allTray;
   let trayItems = guidedOrder;
   if (focusMode && allTray.length > 0) {
     if (heldAction?.partId) {
