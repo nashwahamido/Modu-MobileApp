@@ -761,7 +761,7 @@ const makeStyles = (t: Theme) =>
       // 6, was 12. The row sat a card's-corner below the top edge with nothing above it, so the
       // pair read as floating rather than as the card's own header.
       top: 6,
-      left: 16,
+      left: 6,
       zIndex: 3,
       flexDirection: "row",
       alignItems: "center",

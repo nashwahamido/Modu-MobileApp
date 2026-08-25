@@ -72,19 +72,19 @@ export function buildInstructions(
     switch (a.type) {
       case "stagePart":
         return {
-          // SHORTENED to fit the objective bar in two lines at the player's own font size. The
-          // long form ("…set it down in front of you — you will fit its hardware before it goes
-          // in.") ran to three, which is what pushed it onto the shrink path and set the app's most
-          // detailed instruction in its smallest type. Same meaning, and the em dash still carries
-          // the "before it goes in" beat.
-          text: `Take out the ${std} and set it down — its hardware goes on first.`,
+          // JUST THE ACTION. The long form explained WHY ("you will fit its hardware before it goes
+          // in"), which is a thing the next two steps then do in front of the player — the objective
+          // bar is a prompt for the current move, not a preview of the two after it.
+          text: `Take out the ${std} and set it down.`,
           simpleText: `Take out the ${sim}.`,
         };
       case "placePart": {
         // a staged carrier is already out on the canvas when its placement comes up, so its prompt has to send the player back to the part rather than to a tray card
         if (parts[a.partId ?? ""]?.stageOffset) {
           return {
-            text: `Pick the assembled ${std} back up and fit it into position.`,
+            // "Fit … into position", not "Pick … back up and fit it into position": the picking up
+            // is how every placement in the game starts, so saying it here only lengthens the line.
+            text: `Fit the assembled ${std} into position.`,
             simpleText: `Put the ${sim} in.`,
           };
         }
@@ -93,7 +93,10 @@ export function buildInstructions(
         if (lockDir && keyholeMover(a.partId ?? "")) {
           const word = lockShoveWord(lockDir);
           return {
-            text: `Press the ${std} onto its pins, then push it ${word} to lock.`,
+            // THE FIRST MOTION ONLY. The lock shove is still named in the SIMPLE line below and is
+            // still what the control asks for; in the standard line it doubled the sentence for a
+            // move the player cannot make until the press has landed anyway.
+            text: `Press the ${std} onto its pins.`,
             simpleText: `Press the ${sim} on, then push ${word}.`,
           };
         }
@@ -110,9 +113,13 @@ export function buildInstructions(
         const carrierLabel = carrier
           ? labelFor(labels, parts[carrier]?.group ?? "", "standard")
           : "";
+        const carrierShort = carrierLabel.split(" ").pop()?.toLowerCase() ?? carrierLabel;
         return carrier
           ? {
-              text: `Set the ${std} at the end of the ${carrierLabel}.`,
+              // Short carrier here too — this step and the "Press … into the end of the rod" one
+              // below are consecutive, and naming the rod in full in one and not the other would
+              // read as two different things being talked about.
+              text: `Set the ${std} at the end of the ${carrierShort}.`,
               simpleText: `Add the ${sim}.`,
             }
           : {
@@ -128,9 +135,13 @@ export function buildInstructions(
         const carrierLabel = carrier
           ? labelFor(labels, parts[carrier]?.group ?? "", "standard")
           : "";
+        const carrierShort = carrierLabel.split(" ").pop()?.toLowerCase() ?? carrierLabel;
         return carrier
           ? {
-              text: `Press the ${std} into the end of the ${carrierLabel}.`,
+              // The carrier's LAST WORD, lowercased — "Stabiliser rod" becomes "rod". By the time
+              // this step comes up the carrier is the only thing out on the canvas and the player
+              // has just staged it by name, so the full label is a re-introduction.
+              text: `Press the ${std} into the end of the ${carrierShort}.`,
               simpleText: `Press the ${sim} in.`,
             }
           : {
@@ -157,7 +168,10 @@ export function buildInstructions(
           };
         if (m === "drawTurn")
           return {
-            text: `Draw the ${std} out into the slider, then turn it a quarter turn to lock.`,
+            // The quarter turn is the control's own second phase — the dial appears and asks for it
+            // when the draw completes, so the bar naming it up front described a move that is not
+            // available yet.
+            text: `Draw the ${std} out into the slider.`,
             simpleText: `Pull the ${sim} out and turn to lock.`,
           };
         return {

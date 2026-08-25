@@ -135,7 +135,7 @@ const makeStyles = (t: Theme) =>
     objectiveBar: {
       justifyContent: "center",
       // FIXED, not capped. A max width still lets the bar shrink to a short instruction and grow back on the next one, which is the jitter itself. 360 + the pause button keeps the group clear of the cluster chips at right:14.
-      width: 360,
+      width: 420,
       backgroundColor: t.surface,
       borderColor: t.border,
       borderWidth: StyleSheet.hairlineWidth * 2,

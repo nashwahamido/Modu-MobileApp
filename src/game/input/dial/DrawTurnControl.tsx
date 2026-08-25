@@ -115,7 +115,14 @@ export function DrawTurnControl({ action, sinkDriver }: Props) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { position: "absolute", right: 60, bottom: 40, alignItems: "center", gap: 8 },
+  // ABOVE THE BOTTOM HUD ROW, not across it. At bottom 40 the 64pt track ran from 40 to 104 while
+  // the toggles row sits at 16 with ~44pt chips — so the slider crossed auto, Focus and Spot, and
+  // the same finger that drags it could hit one of them on the way past.
+  //
+  // 96 clears the row's top edge (60) with a comfortable margin, and the prompt above the track
+  // rises with it since the wrap is bottom-anchored. Right stays 60: the horizontal position was
+  // never the problem.
+  wrap: { position: "absolute", right: 60, bottom: 96, alignItems: "center", gap: 8 },
   dialWrap: { position: "absolute", right: 220, bottom: 120, alignItems: "center" },
   htrack: {
     width: DRAW_TRACK,
