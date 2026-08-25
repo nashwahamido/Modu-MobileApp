@@ -15,8 +15,9 @@ import { HudSpotTarget } from "@/src/game/ui/hud/hudSpotlight";
 import { useGameStore } from "@/src/game/core/store";
 import { clusterThumbSet, modelThumbSet } from "@/src/game/core/presentation/finish";
 import Svg, { Circle as SvgCircle, Defs, RadialGradient, Stop } from "react-native-svg";
-import { ASSEMBLE_ICON, COIN_ICON } from "@/src/components/iconAssets";
-import { Theme, useFixedStyles, FONT, RADIUS, SIZE } from "@/src/game/ui/system/theme";
+import { COIN_ICON } from "@/src/components/iconAssets";
+import { ChevronIcon } from "@/src/components/Icons";
+import { Theme, useFixedStyles, FONT, RADIUS, SIZE, useIsTablet } from "@/src/game/ui/system/theme";
 import { useMirror } from "@/src/game/ui/system/handedness";
 import { useRepos } from "@/src/data";
 import { useCatalogRow } from "@/src/data/catalog/buildStore";
@@ -139,6 +140,7 @@ interface BuildMapProps {
 
 export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
   const styles = useFixedStyles(makeStyles);
+  const isTablet = useIsTablet();
   const router = useRouter();
   const furniture = useGameStore((s) => s.furniture);
   const completed = useGameStore((s) => s.completed);
@@ -305,24 +307,29 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
               below in the stack and popping back to it never remounts. If it somehow is not there —
               a build reached from the tutorial or a deep link — dismissTo replaces the current
               screen with it instead, so the exit works from anywhere. */}
-          <Pressable
-            style={({ pressed }) => [styles.home, pressed && { opacity: 0.6 }]}
-            onPress={() => router.dismissTo("/catalogue")}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Back to the catalogue"
-          >
-            <View style={styles.homeIconCircle}>
-              <Image
-                source={ASSEMBLE_ICON}
-                style={styles.homeIcon}
-                resizeMode="contain"
-              />
-            </View>
-            <Text style={styles.homeText}>Catalogue</Text>
-          </Pressable>
-
           <View style={styles.titleRow}>
+            {/* Anchored to THIS row rather than the card corner, and centred on it by top:'50%' +
+                a negative half-height — that ties it to the title's own vertical centre instead of
+                a hand-tuned offset that drifts whenever the title's line height changes. */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.home,
+                !isTablet && styles.homePhone,
+                pressed && { opacity: 0.6 },
+              ]}
+              onPress={() => router.dismissTo("/catalogue")}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Back to the catalogue"
+            >
+              {/* A solid triangle, not a typed "‹" — a chevron drawn as an up-arrow (ChevronIcon's
+                  own point is centred on its box) and rotated 90° left, so nothing about the
+                  glyph's font metrics can throw off its centring beside the label. */}
+              <View style={styles.homeChevron}>
+                <ChevronIcon size={13} color={INK} up />
+              </View>
+              <Text style={styles.homeText}>Catalogue</Text>
+            </Pressable>
             <Text style={styles.title}>{catalogRow?.name ?? ""}</Text>
           </View>
 
@@ -690,21 +697,6 @@ export function ClusterFocusControl() {
 }
 
 /** Every text on this modal, per the wireframe. */
-/** The catalogue glyph's box, and how much of that box the artwork actually inks.
- *
- *  37 rather than the 26 of the house it replaced: the two assets are framed differently — the house
- *  filled 94% of its canvas where this fills 67% — so at a matched BOX this would have drawn about a
- *  third smaller. Sized so the INK matches instead: 37 x 0.67 lands on the same ~25pt of mark.
- *  Re-measure both if the artwork is re-exported; it has already moved once, from a 1024 grey glyph
- *  at 62% fill to the 356 colour version at 67%. */
-const HOME_ICON = 46;
-/** The chip behind the glyph. Sized to the INKED mark, not the image's own box — the artwork
- *  carries a wide transparent bezel (~67% fill), so a circle matched to the full 46pt box read as
- *  loose. The image still renders at its full, unaffected size and is centered on this circle by
- *  the wrapper's alignItems/justifyContent; its transparent margin simply overhangs the ring
- *  without showing. RN points are already density-independent, so this needs no separate
- *  phone/tablet case. */
-const HOME_CIRCLE = 42;
 
 const INK = "#231F20";
 
@@ -758,29 +750,33 @@ const makeStyles = (t: Theme) =>
     // control now.)
     home: {
       position: "absolute",
-      // 6, was 12. The row sat a card's-corner below the top edge with nothing above it, so the
-      // pair read as floating rather than as the card's own header.
-      top: 6,
-      left: 6,
+      // Centred on titleRow's own height rather than pinned to a fixed top, so it tracks the
+      // title's vertical centre instead of the card's edge.
+      top: "50%",
+      marginTop: -12,
+      left: 0,
       zIndex: 3,
       flexDirection: "row",
       alignItems: "center",
-      gap: 6,
+      gap: 4,
+      height: 24,
+      paddingHorizontal: 10,
+      borderRadius: 999,
+      // A lighter tint of the "Start" pill's own lavender (#8D7BA8, styles_cue.wrap), not an
+      // unrelated purple — ties this pill back to the same accent family as the card's other pill.
+      backgroundColor: "#CCC4D8",
     },
-    homeIcon: { width: HOME_ICON, height: HOME_ICON, marginTop: -3 },
-    // The chip: a flat circle behind the glyph so it reads as a button rather than a bare icon
-    // floating over the card. Centers the image regardless of the artwork's own transparent
-    // margin, so the ring is even on every side without a compensating negative margin.
-    homeIconCircle: {
-      width: HOME_CIRCLE,
-      height: HOME_CIRCLE,
-      borderRadius: HOME_CIRCLE / 2,
-      backgroundColor: "#E3DFE7",
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: "#C4C1BC",
-      alignItems: "center",
-      justifyContent: "center",
+    // Phone only. Text and icon sizes are untouched — only the chip around them shrinks — so this
+    // overrides just the box, including a matching marginTop to keep the shorter pill centred on
+    // titleRow (that offset is half of `home`'s own height, and this height is smaller).
+    homePhone: {
+      height: 24,
+      marginTop: -12,
+      paddingHorizontal: 8,
     },
+    // `home`'s own alignItems: "center" centres this on the row's cross-axis, which is what puts
+    // it level with "Catalogue" regardless of the icon's fixed pixel size.
+    homeChevron: { transform: [{ rotate: "-90deg" }] },
     homeText: {
       fontFamily: FONT,
       fontSize: 13,
@@ -788,6 +784,7 @@ const makeStyles = (t: Theme) =>
       color: INK,
     },
     titleRow: {
+      position: "relative",
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
