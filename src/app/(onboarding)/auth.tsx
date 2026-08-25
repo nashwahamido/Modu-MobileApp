@@ -1,11 +1,11 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- restored with the buttons below
-import { Link } from "expo-router";
+import { Link, router } from "expo-router";
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- restored with the buttons below
 import type { Href } from "expo-router";
 // `Image` and `Text` are unused while the brand block is commented out — both come back with it,
 // so they are kept imported and silenced rather than removed and re-added during the rebuild.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { StyleSheet, Image, Text, View } from "react-native";
+import { Pressable, StyleSheet, Image, Text, View } from "react-native";
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- restored with the buttons below
 import { Button } from "@/src/game/ui/system/Button";
@@ -37,6 +37,16 @@ const backdrop = require("@/src/assets/ui/profile-backdrop.jpg");
 const BG_SOLID = "#E9E6DF";
 const SLOGAN_INK = "#595551";
 
+/** THE ONBOARDING ARROW, the same PNG the questionnaire's own nav uses, at the same 26pt. There is a
+ *  second back glyph in the app — the `BackIcon` SVG in components/Icons — but that one belongs to
+ *  the room and visit HUDs, where it sits on a cream chip among other chips. This screen is part of
+ *  the onboarding run, so it takes onboarding's arrow, and a player moving between these screens
+ *  sees one mark rather than two.
+ *
+ *  Bare, with no disc behind it, for the same reason: the questionnaire's arrows are bare, and the
+ *  54x42 hit area is the questionnaire's too. */
+const BACK_ARROW = require("@/src/assets/ui/icons/arrow-back.png");
+
 // const mascot = require("../../assets/images/mascot/mascot.png");
 // const wordmark = require("../../assets/ui/brand/logo-modu.png");
 // const createAccountRoute = "/create-account" as Href;
@@ -45,6 +55,20 @@ const SLOGAN_INK = "#595551";
 export default function AuthScreen() {
   const styles = useStyles(makeStyles);
   const safe = useSafeInsets();
+
+  // BACK TO THE LANDING PAGE, and specifically to the one already under this screen rather than a
+  // fresh copy of it. `dismissTo` unwinds the stack to "/" if it is there — which it is whenever the
+  // player arrived by tapping Choose Account or Home — so the landing animation does not replay and
+  // the stack does not grow a "/" → /auth → "/" chain that Android's own back button would then walk
+  // through one screen at a time.
+  //
+  // The fallback matters because this screen is ALSO where the session gate bounces an unauthorised
+  // deep link, and in that case there is no landing page underneath to return to. `replace` puts one
+  // there instead of leaving Back dead.
+  const onBack = () => {
+    if (router.canDismiss()) router.dismissTo("/");
+    else router.replace("/");
+  };
   return (
     // The artwork is the screen ROOT, through SceneBackdrop (an ImageBackground) — a bare
     // <Image absoluteFill> scales the same file differently and renders it zoomed.
@@ -61,6 +85,26 @@ export default function AuthScreen() {
         },
       ]}
     >
+      {/* OUTSIDE `content`, which is centred and would carry this into the middle of the screen with
+          the cards. Positioned against the root's own padding so it sits in the top-left gutter the
+          screen already reserves, clear of the picker at every width. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Back to the start screen"
+        hitSlop={10}
+        onPress={onBack}
+        style={({ pressed }) => [
+          styles.back,
+          {
+            top: 22 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
+            left: 42 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+          },
+          pressed && styles.backPressed,
+        ]}
+      >
+        <Image source={BACK_ARROW} style={styles.backArrow} resizeMode="contain" />
+      </Pressable>
+
       <View style={styles.content}>
         <View style={styles.intro}>
           <View style={styles.header}>
@@ -97,6 +141,18 @@ const makeStyles = (t: Theme) =>
       // cards, caption and Start Fresh together — without moving any of them relative to each other.
       paddingBottom: 110,
     },
+    // Absolute, so it never joins the centred column's layout and never shifts the cards.
+    // 54x42 is the questionnaire's own `navButton` box — the arrow is 26pt and the rest is tap area.
+    back: {
+      position: "absolute",
+      width: 54,
+      height: 42,
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 2,
+    },
+    backArrow: { width: 26, height: 26 },
+    backPressed: { opacity: 0.35 },
     content: {
       width: "100%",
       maxWidth: 980,

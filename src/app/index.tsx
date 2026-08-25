@@ -1,5 +1,5 @@
 // Home. The workbench palette: a warm near-black, one lavender action, everything else quiet. animations css for landing come from here
-import { Link } from "expo-router";
+import { Link, router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo } from "react";
 import { Image, StyleSheet, useWindowDimensions, View } from "react-native";
@@ -12,12 +12,16 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { Button } from "@/src/game/ui/system/Button";
-import { SIGN_IN_ROUTE } from "@/src/hooks/useSessionGate";
+import { useAuth } from "@/src/hooks/useAuth";
+import { SESSION_REQUIRED, SIGN_IN_ROUTE } from "@/src/hooks/useSessionGate";
 import { CARD_CHROME, SPACE, Theme, useIsTablet, useStyles, useUiScale } from "@/src/game/ui/system/theme";
 import { useSafeInsets } from "@/src/hooks/use-safe-insets";
 
 
 const BG_CREAM = "#F3ECE0";
+
+/** The player's own room — what "Home" means once there is somebody to be home as. */
+const HOME_ROUTE = "/room" as const;
 
 const clayPattern = require("@/src/assets/ui/landing/clay-pattern.png");
 const wordmark = require("@/src/assets/ui/brand/logo-modu.png");
@@ -142,6 +146,10 @@ export default function App() {
   const waveSize = useWaveSizes();
   const k = useUiScale();
   const isTablet = useIsTablet();
+  // For Home. `loading` matters as much as `user`: on a cold start the session resolves a beat after
+  // the first paint, so a tap during that window would read a null user and send a signed-in player
+  // to the picker. Waiting is the honest answer — see onHome.
+  const { user, loading } = useAuth();
   const { width: winW, height: winH } = useWindowDimensions();
   const isS22UltraLike =
     !isTablet &&
@@ -196,6 +204,24 @@ export default function App() {
     opacity: figureOpacity.value,
     transform: [{ translateX: figureXShift }],
   }));
+  // HOME GOES HOME, or to the picker if there is nobody to go home as.
+  //
+  // The room is a protected route, so navigating there signed-out does not fail quietly — the
+  // session gate bounces it straight back to /auth. That would work, in the sense that the player
+  // ends up in the right place, but it would flash the room's loading state on the way and read as
+  // the app changing its mind. Deciding here means one navigation either way.
+  //
+  // A tap while the session is still resolving does nothing rather than guessing. That window is a
+  // few hundred milliseconds at most, and guessing wrong sends someone who IS signed in to a login
+  // screen — the more annoying of the two failures by far.
+  //
+  // On the in-memory backend there is no session to have: SESSION_REQUIRED is false, every screen
+  // runs as the demo user, and Home should just go home.
+  const onHome = () => {
+    if (SESSION_REQUIRED && loading) return;
+    router.push(!SESSION_REQUIRED || user ? HOME_ROUTE : SIGN_IN_ROUTE);
+  };
+
   const actionsStyle = useAnimatedStyle(() => ({
     opacity: actionsOpacity.value,
     transform: [{ translateY: actionsY.value }],
@@ -269,15 +295,6 @@ export default function App() {
           },
         ]}
       >
-        <Link href="/voice-intro" asChild>
-          <Button
-            label="New User"
-            variant="primary"
-            pill
-            style={{ ...styles.actionButton, ...(isTablet ? styles.actionButtonTablet : null) }}
-            labelStyle={isTablet && styles.actionLabelTablet}
-          />
-        </Link>
         <Link href={SIGN_IN_ROUTE} asChild>
           <Button
             label="Choose Account"
@@ -287,6 +304,16 @@ export default function App() {
             labelStyle={isTablet && styles.actionLabelTablet}
           />
         </Link>
+        {/* push, not replace — the picker adds a Back that returns here, and that only works if this
+            screen is still on the stack under it. */}
+        <Button
+          label="Home"
+          variant="primary"
+          pill
+          onPress={onHome}
+          style={{ ...styles.actionButton, ...(isTablet ? styles.actionButtonTablet : null) }}
+          labelStyle={isTablet && styles.actionLabelTablet}
+        />
       </Animated.View>
 
       {/* D */}

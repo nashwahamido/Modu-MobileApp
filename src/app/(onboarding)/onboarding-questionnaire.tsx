@@ -572,6 +572,43 @@ export default function QuestionnaireScreen() {
           },
         ]}
       >
+        {/* THE WAY OUT OF ONBOARDING. This is the first screen a new player reaches, so it is the
+            only one where Back means "I did not mean to start this" rather than "previous question"
+            — everything after it is served by the nav arrows at the foot of the questionnaire.
+            Without it, a player who tapped into onboarding by accident had no route back to the
+            landing page except the hardware button, which Android has and iOS does not.
+
+            `dismissTo` unwinds to the landing page already under this run rather than pushing a
+            fresh one, so its intro animation does not replay; `replace` covers the case where this
+            screen was reached directly and there is nothing beneath it to return to.
+
+            The same arrow and the same 54x42 box as the questionnaire's own nav below, so it is one
+            control the player learns once. Absolute, so it sits in the screen's top-left gutter
+            without joining introStage's centred row and shifting the mascot. */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back to the start screen"
+          hitSlop={10}
+          onPress={() => {
+            Speech.stop();
+            if (router.canDismiss()) router.dismissTo("/");
+            else router.replace("/");
+          }}
+          style={({ pressed }) => [
+            styles.introBack,
+            {
+              top: 22 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
+              left: 44 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+            },
+            pressed && styles.disabledNavButton,
+          ]}
+        >
+          <Image
+            source={require("@/src/assets/ui/icons/arrow-back.png")}
+            style={styles.navArrow}
+            resizeMode="contain"
+          />
+        </Pressable>
         <View style={styles.introStage}>
           {/* Dropped by however far the art's tail sits below the box's centre, so the tail lands on the character rather than above his shoulder. Derived from the MEASURED bubble height, so it stays right when the text reflows. */}
           <PopIn
@@ -928,6 +965,16 @@ const makeStyles = (t: Theme) =>
       // Only what shows before the backdrop art decodes — SceneBackdrop is the root element now, so the image covers this.
       backgroundColor: BG_SOLID,
       // Padding is applied inline (base + safe inset) so the questionnaire clears the cutout and the immersive-hidden bars the same way every other screen does.
+    },
+    // The intro's own Back, in the top-left gutter. Absolute so it cannot push the mascot row; the
+    // box matches `navButton` below so both arrows have the same target.
+    introBack: {
+      position: "absolute",
+      width: 54,
+      height: 42,
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 5,
     },
     introStage: {
       flex: 1,
