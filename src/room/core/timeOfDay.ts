@@ -30,6 +30,24 @@ export type CounterFill = {
   kelvin: number;
 };
 
+// The flat layer of light whose ONLY job is to keep the WALLS readable. It is not a second sun and not a mood light: with a ceiling overhead the sun can only enter through a window, so every wall outside a shaft is lit by the probe alone — and the probe is deliberately starved after dark (see night's `ambient`) precisely so that placed lights do the lighting. That left the walls themselves with nothing, at the two hours where they are most of the picture: full sun (the eye adapts to the bright floor pool and the walls read as near-black beside it) and night. Raising `ambient` is the wrong lever for it — that lifts EVERYTHING, floor and furniture included, which is the "night still read as daylight" failure the scale warning above records. This lifts the vertical surfaces almost alone, because of HOW it is rigged rather than how strong it is: see WALL_FILL_DIRECTIONS.
+export type WallFill = {
+  /** Strength in lux, PER DIRECTIONAL — the rig burns two of them, so a wall facing either one receives roughly this much, never double (no wall faces both). May be zero for an hour that genuinely does not want it. */
+  intensity: number;
+  /** Colour temperature. Free to follow the hour's mood: unlike the counter-fill this light is not countering anything, it is filling in what the sun cannot reach. */
+  kelvin: number;
+};
+
+// The two directions the wall fill burns from, shared by every hour — the values are the rig, the per-hour WallFill is only its volume.
+//
+// WHY A PAIR, AND WHY DIAGONAL. A directional lights a surface only when it travels AGAINST that surface's normal. The four wall inner faces point +x, -x, +z, -z, so one directional can ever reach at most two of them, and a room lit by one has two bright walls and two black ones. These two are exact opposites on the diagonal: the first travels +x/+z and so lands on x-max and z-max, the second travels -x/-z and lands on x-min and z-min. Every wall is lit by exactly one of them — which is what makes them EVEN, and why the intensity above is per-light rather than a total.
+//
+// WHY NEARLY HORIZONTAL. The y term is the whole reason this can be strong enough to matter without flattening the room. Lambert scales by the cosine, so at y = -0.12 a wall (facing the light square-on) receives ~0.7 of the light while the FLOOR receives ~0.12 from each, ~0.24 from the pair — about a third of what the walls take. Tilt these down toward -1 and the fill becomes a second ambient that washes out the sun's pool, which is the one thing on the floor worth protecting. It is not zero on purpose: a fill that is perfectly horizontal grazes the wall bottoms and leaves a dark seam where wall meets floor.
+export const WALL_FILL_DIRECTIONS: readonly [number, number, number][] = [
+  [0.7, -0.12, 0.7],
+  [-0.7, -0.12, -0.7],
+];
+
 /** The player's deviation from an hour's default, STAMPED WITH THE HOUR IT WAS MADE AT. The stamp is what makes "forget it when the hour changes" a derivation instead of an effect — a stale override is simply never read. Null means they have not touched the switch. */
 export type CeilingLightOverride = { hour: TimeOfDayId; on: boolean } | null;
 
@@ -50,6 +68,8 @@ export type SunPreset = {
   interiorLight: CeilingLight;
   /** The cool directional fill at this hour. Tracks the hour for the same reason interiorLight does — see CounterFill. */
   counterFill: CounterFill;
+  /** The wall-readability layer at this hour — see WallFill. Per-hour like everything else here, because how dark the walls read depends entirely on what the eye is adapted to: a bright floor pool at midday makes them look blacker than the same walls at morning. */
+  wallFill: WallFill;
 };
 
 // Every direction below has x > 0 and z < 0 — the quadrant that enters through x-min and z-max. Breaking that is what produces pools with no visible window; the test asserts it.
@@ -64,6 +84,8 @@ export const TIME_OF_DAY: Record<TimeOfDayId, SunPreset> = {
     ambient: 6_000,
     interiorLight: { defaultOn: false, lumens: 155_000, kelvin: 3_000 },
     counterFill: { intensity: 4_000, kelvin: 6_800 },
+    // Cool-neutral rather than tinted: at the daylight hours the walls' own cream is the colour that should read, and a warm fill on top of it turns them yellow.
+    wallFill: { intensity: 9_000, kelvin: 5_200 },
   },
   // High and near-vertical: a short bright patch under each window and the flattest shadows of the day.
   midday: {
@@ -75,6 +97,8 @@ export const TIME_OF_DAY: Record<TimeOfDayId, SunPreset> = {
     ambient: 7_500,
     interiorLight: { defaultOn: false, lumens: 200_000, kelvin: 3_200 },
     counterFill: { intensity: 4_000, kelvin: 6_800 },
+    // The most fill of any hour, and that is not a contradiction: midday's 135k sun is what the eye adapts to, so the walls it never reaches read darker here than at any other daylight hour.
+    wallFill: { intensity: 12_000, kelvin: 6_000 },
   },
   // The reference look: dropping, golden, pools stretched across the floor.
   afternoon: {
@@ -86,6 +110,7 @@ export const TIME_OF_DAY: Record<TimeOfDayId, SunPreset> = {
     ambient: 4_500,
     interiorLight: { defaultOn: false, lumens: 165_000, kelvin: 2_900 },
     counterFill: { intensity: 3_000, kelvin: 6_500 },
+    wallFill: { intensity: 8_000, kelvin: 5_000 },
   },
   // Nearly horizontal and deep orange. Dim enough that a lamp would start to matter.
   sunset: {
@@ -100,6 +125,8 @@ export const TIME_OF_DAY: Record<TimeOfDayId, SunPreset> = {
     interiorLight: { defaultOn: true, lumens: 190_000, kelvin: 2_500 },
     // Backed well off the daylight figure: the low sun is already warm, and a 4000 lux cool fill on top of it was cancelling exactly the golden cast sunset exists to produce.
     counterFill: { intensity: 800, kelvin: 5_000 },
+    // Warm and modest. Sunset's identity is the long orange rake against dimming walls, so this only has to stop those walls crushing to black — push it and the rake has nothing left to be brighter than.
+    wallFill: { intensity: 2_200, kelvin: 3_200 },
   },
   // No sun at all. The ambient floor is deliberately generous rather than realistic: this is the screen a player arranges furniture on, and it has to stay workable. Lamps are what should make it inviting, not legible.
   night: {
@@ -114,6 +141,8 @@ export const TIME_OF_DAY: Record<TimeOfDayId, SunPreset> = {
     interiorLight: { defaultOn: true, lumens: 170_000, kelvin: 2_400 },
     // NOT ZERO, and do not make it zero. This is the hour the constant 4000 lux fill did its real damage — with the sun at 0 and ambient at 200 it was the brightest and coldest thing in the room — but the fix is to back it off, not to remove it: a faint cool rim is what gives the warm bulb something to read against, and a flat-warm room is the same failure as a flat-cold one in a different hue.
     counterFill: { intensity: 300, kelvin: 4_500 },
+    // The hour this rig was asked for, alongside full sun. It is the answer the note on `ambient` above demands — "do not raise the probe to fix too dark, place a light" — and this IS the placed light, aimed so it lands on the walls rather than lifting the whole room back to daylight. Warm, to sit with the 2400 K bulb rather than against it; that is the counter-fill's job, not this one's.
+    wallFill: { intensity: 1_400, kelvin: 2_900 },
   },
 };
 
