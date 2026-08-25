@@ -598,7 +598,10 @@ export default function QuestionnaireScreen() {
             styles.introBack,
             {
               top: 22 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
-              left: 44 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+              // Same corner and the same reasoning as the account picker's — see the note there. The
+              // 44pt it used to carry aligned it with the mascot stage, which made it look like part
+              // of the card rather than a way off the screen.
+              left: Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
             },
             pressed && styles.disabledNavButton,
           ]}
