@@ -60,14 +60,14 @@ import {
   FocusToggleButton,
 } from "@/src/game/ui/hud/ToggleChips";
 import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
-import { ThemeScope } from "@/src/game/ui/system/theme";
+import { isTabletScreen, ThemeScope } from "@/src/game/ui/system/theme";
 import type { ThemeId } from "@/src/game/core/type";
 import { backdropSource } from "@/src/game/ui/backdrop/backdrops";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 import {
   requiresClusterFocus,
 } from "@/src/game/core/evaluation/clusters";
-import { availableInMode } from "@/src/game/core/evaluation/availability";
+import { availableInMode, nextAction } from "@/src/game/core/evaluation/availability";
 import { TutorialTarget } from "@/src/game/tutorial/TutorialTarget";
 import { MascotGuideOverlay } from "@/src/game/tutorial/MascotGuideOverlay";
 import { GripCoach } from "@/src/game/tutorial/GripCoach";
@@ -285,6 +285,7 @@ function TutorialScreen() {
       mode: state.mode,
       manualTools: state.settings.manualTools,
       softHints: state.settings.softHints,
+      tablet: isTabletScreen(),
     });
     loadFurnitureById(TUTORIAL_FURNITURE_ID)
       .then((f) => {
@@ -373,10 +374,15 @@ function TutorialScreen() {
     (m) => m !== "hidden" && m !== "socket_hint",
   );
   const dark = theme === "dark";
-  const firstAvailable = useMemo(
+  // nextAction, not [0]. LACK composes its four legs BEFORE its bolts, so from the first tighten onwards `[0]` is a leg no matter what the player is doing — push the second bolt into its hole and the objective bar still read "Install leg 1 of 4" over a screw waiting to be turned, with its own tighten control on screen. See the note on nextAction.
+  const nextActionId = useMemo(
     () =>
       furniture
-        ? availableInMode(furniture, completedSet, mode, activeCluster)[0]?.actionId
+        ? nextAction(
+            furniture,
+            availableInMode(furniture, completedSet, mode, activeCluster),
+            completedSet,
+          )?.actionId
         : undefined,
     [furniture, completedSet, mode, activeCluster],
   );
@@ -432,7 +438,7 @@ function TutorialScreen() {
   const repeatedAssemblyLabel = useMemo(() => {
     if (tutorialStepId !== "install-four-legs") return null;
     const nextAction = furniture?.actions.find(
-      (action) => action.actionId === firstAvailable,
+      (action) => action.actionId === nextActionId,
     );
     const ordinal = Math.min(installedLegCount + 1, 4);
 
@@ -452,7 +458,7 @@ function TutorialScreen() {
       return `Install leg ${ordinal} of 4`;
     }
     return `Install all four legs · ${installedLegCount}/4`;
-  }, [firstAvailable, furniture, installedLegCount, tutorialStepId]);
+  }, [nextActionId, furniture, installedLegCount, tutorialStepId]);
   // THE PER-ACTION CARD IS GONE. It used to rewrite the last step's message to name whatever came
   // next — "Tighten bolt 2 of 4", "Long-press leg 3" — and retarget the spotlight to the tool on a
   // tighten beat.
@@ -617,7 +623,7 @@ function TutorialScreen() {
     !activeCluster;
   const objective = useStepObjective({
     furniture,
-    firstAvailable,
+    nextActionId,
     needsFocusChoice,
     mode,
     textLevel: settings.textLevel,

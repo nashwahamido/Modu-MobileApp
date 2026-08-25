@@ -91,6 +91,27 @@ export function actionableGroups(
   return out;
 }
 
+/**
+ * Of the actions on offer, the ONE that a "what next" surface should name — the objective bar, the spoken step, Spot's demonstration.
+ *
+ * NOT `offered[0]`, which is what every one of those used to take. The offered list is `f.actions` filtered, so its order is the order the model was AUTHORED in, and that is not a priority: LACK composes its four legs before any of its bolts, so from the moment the first leg unlocks it sits at the head of the list until it is placed. Push a second bolt into its hole and the list reads `[place_leg_1, tighten_bolt_2, …]` — the screw is half-driven, its tighten control is on screen under the player's finger, and every surface says "Install leg 1 of 4".
+ *
+ * So a part ALREADY IN THE SCENE outranks one still in the box. A tighten becomes legal only once its fastener is in, a staged carrier is seated only once it has been taken out — an action whose part has a completed action behind it is the continuation of a move the player has already started, and finishing it is what they are in the middle of doing. Ties fall back to composed order, which is the authored reading of "first".
+ *
+ * The LIST is left alone: availability is legality, not ranking, and reordering it there would move the tray, `resumeFocusCluster` and every group-ordered hint with it.
+ */
+export function nextAction(
+  f: Furniture,
+  offered: readonly AssemblyAction[],
+  done: ReadonlySet<ActionId>,
+): AssemblyAction | undefined {
+  const inScene = new Set<PartId>();
+  for (const a of f.actions) {
+    if (a.partId && done.has(a.actionId)) inScene.add(a.partId);
+  }
+  return offered.find((a) => a.partId && inScene.has(a.partId)) ?? offered[0];
+}
+
 /** How many ways the WHOLE build is open right now. Decides whether a blocked-grab hint may name one blocker or has to stay generic: with several moves legal, the ranked "first actionable" candidate is one arbitrary pick among many. */
 export function openWayCount(f: Furniture, done: ReadonlySet<ActionId>): number {
   return actionableGroups(f, availableActions(f, done)).length;

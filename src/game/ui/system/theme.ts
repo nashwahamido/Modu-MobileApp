@@ -29,7 +29,7 @@
 //   Three accents, three meanings, no overlap. Lavender = interactive (press this).
 //   Green = complete (you did this). Gold = earned (XP, score). If a fourth meaning shows up, it does NOT get a fourth colour — it gets a shape or a position.
 
-import { StyleSheet, useWindowDimensions } from "react-native";
+import { Dimensions, StyleSheet, useWindowDimensions } from "react-native";
 import { createContext, useContext, useMemo } from "react";
 import type { TextStyle } from "react-native";
 import { ThemeId } from "@/src/game/core/type";
@@ -428,6 +428,14 @@ const PHONE_LONG_DP = 800;
  */
 export function useIsTablet(): boolean {
   const { width, height } = useWindowDimensions();
+  return Math.min(width, height) >= TABLET_MIN_SHORT_DP;
+}
+
+/** The same question outside React, for code that decides once rather than re-rendering — the
+ *  tutorial builds its step list in an effect and a hook's value cannot be read there without
+ *  making device size a reason to rebuild the run. */
+export function isTabletScreen(): boolean {
+  const { width, height } = Dimensions.get("window");
   return Math.min(width, height) >= TABLET_MIN_SHORT_DP;
 }
 

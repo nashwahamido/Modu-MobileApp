@@ -17,7 +17,7 @@ import {
 } from "@/src/onboarding/questionnaire";
 import { VoiceButton } from "@/src/game/ui/hud/VoiceButton";
 import { Button } from "@/src/game/ui/system/Button";
-import { ACCENT_LIGHT, ELEVATION, FONT, SPACE, TYPE, useStyles, useUiScale } from "@/src/game/ui/system/theme";
+import { ACCENT_LIGHT, ELEVATION, FONT, SIZE, SPACE, TYPE, useIsTablet, useStyles, useUiScale } from "@/src/game/ui/system/theme";
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import { saveOnboardingResults } from "@/src/services/onboarding";
 import { useGameStore } from "@/src/game/core/store";
@@ -63,6 +63,11 @@ const BUBBLE_BAND = 0.0485;
 
 /** Extra room in the reveal's clip so nothing is sliced at the right edge as it opens. */
 const SHADOW_ROOM = 12;
+
+/** What a TABLET lifts the intro's Next row by, on top of the root's own bottom padding — the same trick the title screen's action row uses (TABLET_ACTIONS_LIFT in app/index.tsx).
+ *
+ *  Why a lift rather than a bigger scale: useUiScale is capped by the LONG side (long / 800), so an iPad Air 3 gets k = 1.39 even though its short side is 2.31x the phone's. That cap is right for widths — the layouts have to fit across — but this is a gap under a control on a LANDSCAPE screen, so it reads against the short side. This is the difference, and it is the ONE number to turn if the button still sits low on a tablet. */
+const TABLET_NEXT_LIFT = 24;
 
 /** The option cards' lift, lifted from the catalogue's own local SHADOW (src/app/(game)/catalogue.tsx) — chrome on this screen's art should read the same as chrome on the catalogue's watercolour, and the global ELEVATION scale is tuned for the dark HUD instead.
  *
@@ -303,6 +308,7 @@ export default function QuestionnaireScreen() {
   // than the screen it sits in, at any scale.
   const win = useWindowDimensions();
   const uiScale = useUiScale();
+  const isTablet = useIsTablet();
   const bubbleW = Math.round(
     Math.min(
       // A line of text past ~62 characters is hard to track back to the next line, so the bubble
@@ -634,25 +640,21 @@ export default function QuestionnaireScreen() {
             <VoiceButton onPress={speakIntro} style={styles.bubbleVoice} />
           </View>
         </View>
+        {/* The button's OWN ROW, below the stage rather than a layer over it. Absolutely positioned it could only ever be tuned AWAY from a bubble whose height is set by its text — a row of its own cannot be overlapped at all, at any text length or scale.
+            The row is here whether or not the button is in it, so choosing a hand does not jump the bubble up by a button's height. */}
+        <View style={[styles.introFooter, isTablet && { marginBottom: TABLET_NEXT_LIFT * uiScale }]}>
         {/* Not rendered at all until a hand is chosen. A disabled button sitting there through the
             whole introduction is a dead control the eye keeps returning to; appearing on the choice
             makes it the consequence of the choice. */}
         {handedness ? (
-        <PopIn
-          delay={0}
-          style={[
-            styles.introNextWrap,
-            {
-              right: 28 + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN),
-              bottom: 24 + Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN),
-            },
-          ]}
-        >
+        <PopIn delay={0} style={styles.introNextWrap}>
           <NextHalo />
         <Button
           label="Next"
           variant="primary"
           pill
+          // small, so it clears the bubble on a phone: the bubble is the tallest thing on the screen and grows with the text, and at the full 44pt height this button's corner ran under it. The one action on the screen still reads as the one action — it is the only filled control here, and the halo is what draws the eye rather than the size.
+          small
           disabled={!handedness}
           onPress={() => {
             Speech.stop();
@@ -667,6 +669,7 @@ export default function QuestionnaireScreen() {
         />
         </PopIn>
         ) : null}
+        </View>
       </SceneBackdrop>
     );
   }
@@ -934,11 +937,7 @@ const makeStyles = (t: Theme) =>
       // Nothing in this row may be clipped by it: the bubble is the tallest thing on the screen and is allowed to use the padding below if the text runs long.
       overflow: "visible",
       gap: 20,
-      // Room at the foot for the Next button and its halo, so the bubble clears it — but modest:
-      // too much and the row is pushed into the top margin instead. Trimmed again (36 -> 20) when the
-      // bubble grew: the button is ABSOLUTELY positioned off the root's own insets, so this padding
-      // only reserves visual air, and reserving air the bubble then has to overflow into is worse
-      // than not reserving it.
+      // The GAP between the bubble and the Next row below it, and nothing more. It used to have to reserve the button's whole height as well, because the button was absolutely positioned and could sit under a bubble that had grown — introFooter holds that height for real now, so this is only air.
       paddingTop: 16,
       paddingBottom: 20,
     },
@@ -1012,8 +1011,16 @@ const makeStyles = (t: Theme) =>
     },
     // Layout only — the fill, radius, and padding now come from the shared Button.
     // Outside the bubble entirely: it is what you do NEXT, not part of what Modu is saying. Offsets are set at the call site from the safe insets: an absolute child is not inset by the parent's padding, so a literal here could never account for the device.
-    introNextWrap: { position: "absolute" },
-    introNextButton: { minWidth: 116 },
+    // The row the button sits in, right-aligned to the content edge. minHeight holds the space open while the button is still hidden, so revealing it does not move the bubble.
+    introFooter: {
+      minHeight: SIZE.controlHeightSm,
+      alignItems: "flex-end",
+      justifyContent: "center",
+    },
+    // Relative, not absolute: the button takes real height in the footer now. It stays a positioned box only so NextHalo's -10 inset has something to measure against.
+    introNextWrap: { position: "relative" },
+    // 92, not 116: a four-letter label never needed the width, and the halo insets off this box (HALO is -10 on every side), so it shrinks with it.
+    introNextButton: { minWidth: 92 },
     questionHeader: {
       flexDirection: "row",
       alignItems: "center",

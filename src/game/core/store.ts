@@ -8,6 +8,7 @@ import {
   availableActions,
   availableInMode,
   currentStage,
+  nextAction,
   openWayCount,
 } from "@/src/game/core/evaluation/availability";
 // Setting TYPES live in accessibility.ts; their defaults + the profiles in profile.ts.
@@ -605,19 +606,18 @@ export const useGameStore = create<GameState>()((set, get) => ({
     // "?" (Hint) SHOWS rather than tells. It highlights every actionable target and names none of them: with several moves legal, writing out one of them is an arbitrary pick presented as the answer. The count is by GROUP so eight legal tightens of one screw read as a single target.
     if (source === "hint") {
       const groups = actionableGroups(f, avail);
-      // A group is highlighted on the TRAY if any of its available actions earns a card, and in the SCENE otherwise — tightens, insert-presses, staged seats and beats have no card, and "tighten these eight screws" is a real state where every available action is card-less.
+      // An ACTION is highlighted on the TRAY if it earns a card, and in the SCENE if it does not — tightens, insert-presses, staged seats and beats have no card, and "tighten these eight screws" is a real state where every available action is card-less.
+      // PER ACTION, NOT PER GROUP, and the difference is a whole legal move. It used to mark a part in the scene only when NO action of its group had a card, which sounds equivalent and is not: a group with a bolt still in the box and a bolt already inserted has both an insert (carded) and a tighten (card-less) available, and the tighten was swallowed by its own group's tray card. The player asked what to do next, was pointed at the tray, and the move actually in front of them — the screw sitting in its hole waiting to be turned — was the one thing left unlit. LACK's tutorial is exactly this state: bolt in, three in the box.
       const carded = new Set<GroupId>();
-      for (const a of avail) {
-        if (a.partId && hasTrayCard(f, a)) {
-          const g = f.parts[a.partId]?.group;
-          if (g) carded.add(g);
-        }
-      }
       const hintParts: PartId[] = [];
       for (const a of avail) {
         if (!a.partId) continue;
-        const g = f.parts[a.partId]?.group;
-        if (g && !carded.has(g)) hintParts.push(a.partId);
+        if (hasTrayCard(f, a)) {
+          const g = f.parts[a.partId]?.group;
+          if (g) carded.add(g);
+        } else if (!hintParts.includes(a.partId)) {
+          hintParts.push(a.partId);
+        }
       }
       // A partless action names no part, so nothing above can point at it. The combine stage is entirely partless — that is where the toast used to claim a highlight that did not exist — and its cards live in the cluster tray, so the section IS the target.
       const hintClusters: ClusterId[] = [];
@@ -664,7 +664,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
     // Spot is the DEMONSTRATION: the ghost travels into its socket (hintPartId) and the tray flashes
     // the card to pick up (hintGroup) — the two halves of "which part, and where". No text in Control,
     // which has "?" for the words; kept on profiles without a "?" button so they still get a nudge.
-    const next = avail[0];
+    // nextAction, not avail[0]: with a fastener half-driven, `[0]` is whatever the model happened to author first — on LACK a leg — so Spot demonstrated fetching a new part while the screw the player had just pushed in sat there waiting to be turned.
+    const next = nextAction(f, avail, new Set(s.completed)) ?? avail[0];
     const text = instructionText(f.instructions, next.actionId, s.settings.textLevel);
     // A pickup step also names a tray card — its group lets the tray flash it and scroll it into view.
     const part = next.partId ? f.parts[next.partId] : undefined;

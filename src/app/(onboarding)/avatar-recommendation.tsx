@@ -14,9 +14,9 @@ import { AVATAR_IMAGES } from "@/src/components/avatarAssets";
 import { useTutorialStore } from "@/src/game/tutorial/store";
 import { saveSelectedAvatarMode } from "@/src/services/onboarding";
 import { Button } from "@/src/game/ui/system/Button";
-import { ACCENT_LIGHT, FONT, RADIUS, SPACE, TYPE, useStyles, useTheme, useUiScale } from "@/src/game/ui/system/theme";
+import { ACCENT_LIGHT, FONT, RADIUS, SPACE, TYPE, useIsTablet, useStyles, useTheme, useUiScale } from "@/src/game/ui/system/theme";
 import { CheckIcon, StarIcon } from "@/src/components/Icons";
-import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
+import { useScreenInsets } from "@/src/hooks/use-safe-insets";
 import type { Theme } from "@/src/game/ui/system/theme";
 
 import Svg, { Defs, RadialGradient, Rect, Stop } from "react-native-svg";
@@ -225,9 +225,12 @@ const modes = avatarModes.map((mode) => ({
 
 // How far the tutorial popup's right edge sits from the screen's right edge. Absolute offsets do NOT scale (see SCALED_PROPS in ui/system/theme), so this is raw device points on every device — which is exactly why the popup needs the clamp below: its WIDTH does scale, and an unscaled anchor plus a scaled width has nothing keeping the far edge on screen. Shared between the sheet and the clamp so the two cannot drift.
 const POPUP_RIGHT = 92;
+const TABLET_RECOMMENDATION_STACK_GAP = 22;
 
 export default function AvatarRecommendationScreen() {
-  const scale = useUiScale();
+  const k = useUiScale();
+  // The room asks this way too: the device question belongs to useIsTablet, and `scale > 1` only happens to agree with it.
+  const isTablet = useIsTablet();
   const styles = useStyles(makeStyles);
   // The icons take their colour as a prop, so this screen needs the tokens as values, not just the sheet.
   const t = useTheme();
@@ -261,7 +264,8 @@ export default function AvatarRecommendationScreen() {
     loop.start();
     return () => loop.stop();
   }, [badgePulse]);
-  const safe = useSafeInsets();
+  // The floored insets, per axis. RoomTopStats and the title screen read them exactly like this — the hand-rolled Math.max is what this hook was added to replace.
+  const safe = useScreenInsets();
   // The widest the tutorial popup may be before it runs off the LEFT edge, in raw device points. It is right-anchored at POPUP_RIGHT, so everything it is allowed to occupy is what remains once that anchor and the left safe margin are taken off. Measured, not assumed: the sheet asks for 620 * k, which on an iPad Air 3 (1112pt wide, k capped at 1.75) came to 1085 and put the left edge 65pt off the screen.
   const { width: windowWidth } = useWindowDimensions();
   const popupMaxWidth = windowWidth - POPUP_RIGHT - safe.left;
@@ -351,6 +355,200 @@ export default function AvatarRecommendationScreen() {
     }
   };
 
+  const recommendationContent = (
+    <View
+      style={[
+        styles.recommendationLayout,
+        isTablet && styles.recommendationLayoutTablet,
+      ]}
+    >
+      {/* No card. The avatar IS the object here, and a frame around a circle was two shapes
+        competing to be the thing you look at. */}
+      <View style={styles.modeColumn}>
+        <PopIn delay={STAGE.avatar} big animate={introPlaying}>
+          {/* ONE circle colour for every mode. Per-mode tints made the four cards read as four
+            different components, and the avatars — which now carry their own colour — had to
+            sit on whatever hue the mode happened to own. Control's light lavender is the one
+            that worked against all four characters. */}
+          <View style={styles.avatarCircle}>
+            {/* White at the centre falling to cream at the rim, matching the tutorial portrait and
+              the hint toast — one backing for a character wherever it appears. */}
+            <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+              <Defs>
+                {/* The SAME three stops as the auth screen's character cards (dev/AccountPicker):
+                  a character sits on one backing wherever it is chosen. */}
+                <RadialGradient id="avatarglow" cx="50%" cy="40%" r="62%">
+                  <Stop offset="0" stopColor="#FFFFFF" />
+                  <Stop offset="0.55" stopColor="#F7F1E6" />
+                  <Stop offset="1" stopColor="#DCCFB8" />
+                </RadialGradient>
+              </Defs>
+              <Rect
+                x="0"
+                y="0"
+                width="100%"
+                height="100%"
+                fill="url(#avatarglow)"
+              />
+            </Svg>
+            <Image
+              source={selectedMode.image}
+              style={styles.avatarImage}
+              // contain: these are FULL BODY portraits, and cropping them to fill the circle cut
+              // heads off — the head tiles elsewhere are cover because a head has no such problem.
+              resizeMode="contain"
+            />
+          </View>
+          {/* Outside the circle's overflow:hidden, so the glints can sit ON its rim. */}
+          <View style={styles.sparkLayer} pointerEvents="none">
+            {(introPlaying ? SPARKS : []).map((sp, i) => (
+              <Spark
+                key={i}
+                x={sp.x}
+                y={sp.y}
+                size={sp.size}
+                delay={STAGE.spark + sp.delay}
+              />
+            ))}
+          </View>
+        </PopIn>
+        {/* Straddling the top of the circle, so it reads as pinned ON the avatar rather than
+          floating beside it. */}
+        {selectedMode.id === initialModeId ? (
+          <Animated.View
+            style={[
+              styles.recommendedBadge,
+              {
+                transform: [
+                  {
+                    scale: badgePulse.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [1, 1.06],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <Text style={styles.recommendedBadgeText}>Recommended</Text>
+          </Animated.View>
+        ) : null}
+      </View>
+
+      <View style={styles.recommendationCopy}>
+        <SlideDown delay={STAGE.title} animate={introPlaying}>
+          <Text style={styles.title}>
+            {selectedMode.avatarName}: {selectedMode.title}
+          </Text>
+        </SlideDown>
+        {/* The three traits become chips: short, parallel, and read at a glance rather than as a
+          sentence to parse. */}
+        <View style={styles.traitRow}>
+          {selectedMode.personality.split(",").map((trait, i) => (
+            <PopIn
+              key={trait}
+              delay={STAGE.traits + i * STAGE.traitStep}
+              animate={introPlaying}
+              style={styles.traitChip}
+            >
+              <StarIcon size={12} color={t.accent} />
+              <Text style={styles.traitText}>{sentenceCase(trait)}</Text>
+            </PopIn>
+          ))}
+        </View>
+        <View style={styles.bulletList}>
+          {selectedMode.bullets.map((bullet, i) => (
+            <SlideDown
+              key={bullet}
+              delay={STAGE.bullets + i * STAGE.bulletStep}
+              animate={introPlaying}
+              style={styles.bulletRow}
+            >
+              {/* A tick, not a dot: these are what the mode GIVES you, and a check says that where
+                a bullet only separates lines. */}
+              <CheckIcon size={15} color={t.success} />
+              <Text style={styles.bulletText}>{bullet}</Text>
+            </SlideDown>
+          ))}
+        </View>
+        {saveError ? (
+          <Text style={styles.saveErrorText}>{saveError}</Text>
+        ) : null}
+        <PopIn
+          delay={STAGE.confirm}
+          animate={introPlaying}
+          style={styles.confirmWrap}
+        >
+          <ConfirmHalo />
+          <Button
+            label={savingChoice ? "Saving..." : "Confirm"}
+            variant="primary"
+            style={styles.confirmButton}
+            onPress={confirmAvatar}
+            disabled={savingChoice}
+          />
+        </PopIn>
+      </View>
+    </View>
+  );
+
+  const modeTabs = (
+    <SlideDown
+      delay={STAGE.tabs}
+      animate={introPlaying}
+      style={[
+        styles.modeTabsWrap,
+        isTablet
+          ? styles.modeTabsWrapTablet
+          : {
+              // 38 to match the content column's own inset, so the tab row lines up with the copy above it rather than running wider than everything else on the screen.
+              left: 38 + safe.left,
+              right: 38 + safe.right,
+              // The design offset scales, the device inset does not — same split as RoomTopStats' padTop.
+              bottom: 28 * k + safe.bottom,
+            },
+      ]}
+    >
+      {/* Names what the row is for. Without it the four tabs read as navigation the player is
+        expected to work through, rather than an alternative to the one choice already made for
+        them. Inside the same SlideDown as the row so the label and its tabs arrive together. */}
+      <Text style={styles.modeTabsLabel}>
+        Or, you can choose another mode:
+      </Text>
+      <View style={styles.modeTabs}>
+        {modes.map((mode) => {
+          const isSelected = mode.id === selectedModeId;
+          const isRecommended = mode.id === initialModeId;
+          return (
+            <Pressable
+              key={mode.id}
+              onPress={() => {
+                Speech.stop();
+                endIntro();
+                setSelectedModeId(mode.id as ModeId);
+                setShowModeTip(false);
+                setSaveError(null);
+              }}
+              style={[styles.modeTab, isSelected && styles.modeTabSelected]}
+            >
+              <Text
+                style={[
+                  styles.modeTabText,
+                  isSelected && styles.modeTabTextSelected,
+                ]}
+              >
+                {mode.title}
+              </Text>
+              {isRecommended ? (
+                <Text style={styles.modeTabRecommended}>Recommended</Text>
+              ) : null}
+            </Pressable>
+          );
+        })}
+      </View>
+    </SlideDown>
+  );
+
   return (
     // The artwork is FULL-BLEED, as the screen's root. It cannot be an absolute child of the padded
     // root below: absolute positioning resolves against the padding box, which is what once left the
@@ -361,11 +559,10 @@ export default function AvatarRecommendationScreen() {
         style={[
           styles.root,
           {
-            paddingLeft: 38 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
-            paddingRight: 38 + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN),
-            paddingTop: 18 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
-            paddingBottom:
-              18 + Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN),
+            paddingLeft: 38 + safe.left,
+            paddingRight: 38 + safe.right,
+            paddingTop: 18 + safe.top,
+            paddingBottom: 18 + safe.bottom,
           },
         ]}
       >
@@ -373,8 +570,8 @@ export default function AvatarRecommendationScreen() {
           style={[
             styles.header,
             {
-              top: 20 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
-              right: 4 + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN),
+              top: 20 + safe.top,
+              right: 4 + safe.right,
             },
           ]}
         >
@@ -403,195 +600,23 @@ export default function AvatarRecommendationScreen() {
           style={[
             styles.audioButton,
             {
-              top: 20 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
-              left: 4 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+              top: 20 + safe.top,
+              left: 4 + safe.left,
             },
           ]}
         />
 
-        <View style={styles.recommendationLayout}>
-          {/* No card. The avatar IS the object here, and a frame around a circle was two shapes
-            competing to be the thing you look at. */}
-          <View style={styles.modeColumn}>
-            <PopIn delay={STAGE.avatar} big animate={introPlaying}>
-              {/* ONE circle colour for every mode. Per-mode tints made the four cards read as four
-                different components, and the avatars — which now carry their own colour — had to
-                sit on whatever hue the mode happened to own. Control's light lavender is the one
-                that worked against all four characters. */}
-              <View style={styles.avatarCircle}>
-                {/* White at the centre falling to cream at the rim, matching the tutorial portrait and
-                  the hint toast — one backing for a character wherever it appears. */}
-                <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
-                  <Defs>
-                    {/* The SAME three stops as the auth screen's character cards (dev/AccountPicker):
-                      a character sits on one backing wherever it is chosen. */}
-                    <RadialGradient id="avatarglow" cx="50%" cy="40%" r="62%">
-                      <Stop offset="0" stopColor="#FFFFFF" />
-                      <Stop offset="0.55" stopColor="#F7F1E6" />
-                      <Stop offset="1" stopColor="#DCCFB8" />
-                    </RadialGradient>
-                  </Defs>
-                  <Rect
-                    x="0"
-                    y="0"
-                    width="100%"
-                    height="100%"
-                    fill="url(#avatarglow)"
-                  />
-                </Svg>
-                <Image
-                  source={selectedMode.image}
-                  style={styles.avatarImage}
-                  // contain: these are FULL BODY portraits, and cropping them to fill the circle cut
-                  // heads off — the head tiles elsewhere are cover because a head has no such problem.
-                  resizeMode="contain"
-                />
-              </View>
-              {/* Outside the circle's overflow:hidden, so the glints can sit ON its rim. */}
-              <View style={styles.sparkLayer} pointerEvents="none">
-                {(introPlaying ? SPARKS : []).map((sp, i) => (
-                  <Spark
-                    key={i}
-                    x={sp.x}
-                    y={sp.y}
-                    size={sp.size}
-                    delay={STAGE.spark + sp.delay}
-                  />
-                ))}
-              </View>
-            </PopIn>
-            {/* Straddling the top of the circle, so it reads as pinned ON the avatar rather than
-              floating beside it. */}
-            {selectedMode.id === initialModeId ? (
-              <Animated.View
-                style={[
-                  styles.recommendedBadge,
-                  {
-                    transform: [
-                      {
-                        scale: badgePulse.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [1, 1.06],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-              >
-                <Text style={styles.recommendedBadgeText}>Recommended</Text>
-              </Animated.View>
-            ) : null}
+        {isTablet ? (
+          <View style={styles.tabletContentStack}>
+            {recommendationContent}
+            {modeTabs}
           </View>
-
-          <View style={styles.recommendationCopy}>
-            <SlideDown delay={STAGE.title} animate={introPlaying}>
-              <Text style={styles.title}>
-                {selectedMode.avatarName}: {selectedMode.title}
-              </Text>
-            </SlideDown>
-            {/* The three traits become chips: short, parallel, and read at a glance rather than as a
-              sentence to parse. */}
-            <View style={styles.traitRow}>
-              {selectedMode.personality.split(",").map((trait, i) => (
-                <PopIn
-                  key={trait}
-                  delay={STAGE.traits + i * STAGE.traitStep}
-                  animate={introPlaying}
-                  style={styles.traitChip}
-                >
-                  <StarIcon size={12} color={t.accent} />
-                  <Text style={styles.traitText}>{sentenceCase(trait)}</Text>
-                </PopIn>
-              ))}
-            </View>
-            <View style={styles.bulletList}>
-              {selectedMode.bullets.map((bullet, i) => (
-                <SlideDown
-                  key={bullet}
-                  delay={STAGE.bullets + i * STAGE.bulletStep}
-                  animate={introPlaying}
-                  style={styles.bulletRow}
-                >
-                  {/* A tick, not a dot: these are what the mode GIVES you, and a check says that where
-                    a bullet only separates lines. */}
-                  <CheckIcon size={15} color={t.success} />
-                  <Text style={styles.bulletText}>{bullet}</Text>
-                </SlideDown>
-              ))}
-            </View>
-            {saveError ? (
-              <Text style={styles.saveErrorText}>{saveError}</Text>
-            ) : null}
-            <PopIn
-              delay={STAGE.confirm}
-              animate={introPlaying}
-              style={styles.confirmWrap}
-            >
-              <ConfirmHalo />
-              <Button
-                label={savingChoice ? "Saving..." : "Confirm"}
-                variant="primary"
-                style={styles.confirmButton}
-                onPress={confirmAvatar}
-                disabled={savingChoice}
-              />
-            </PopIn>
-          </View>
-        </View>
-
-        <SlideDown
-          delay={STAGE.tabs}
-          animate={introPlaying}
-          style={[
-            styles.modeTabsWrap,
-            {
-              // 38 to match the content column's own inset, so the tab row lines up with the copy above it rather than running wider than everything else on the screen.
-              left: 38 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
-              right: 38 + Math.max(safe.raw.right, SCREEN_SIDE_MARGIN),
-              bottom:
-                Math.max(28 * scale) +
-                Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN),
-            },
-          ]}
-        >
-          {/* Names what the row is for. Without it the four tabs read as navigation the player is
-            expected to work through, rather than an alternative to the one choice already made for
-            them. Inside the same SlideDown as the row so the label and its tabs arrive together. */}
-          <Text style={styles.modeTabsLabel}>
-            Or, you can choose another mode:
-          </Text>
-          <View style={styles.modeTabs}>
-            {modes.map((mode) => {
-              const isSelected = mode.id === selectedModeId;
-              const isRecommended = mode.id === initialModeId;
-              return (
-                <Pressable
-                  key={mode.id}
-                  onPress={() => {
-                    Speech.stop();
-                    endIntro();
-                    setSelectedModeId(mode.id as ModeId);
-                    setShowModeTip(false);
-                    setSaveError(null);
-                  }}
-                  style={[styles.modeTab, isSelected && styles.modeTabSelected]}
-                >
-                  <Text
-                    style={[
-                      styles.modeTabText,
-                      isSelected && styles.modeTabTextSelected,
-                    ]}
-                  >
-                    {mode.title}
-                  </Text>
-                  {isRecommended ? (
-                    <Text style={styles.modeTabRecommended}>Recommended</Text>
-                  ) : null}
-                </Pressable>
-              );
-            })}
-          </View>
-        </SlideDown>
+        ) : (
+          <>
+            {recommendationContent}
+            {modeTabs}
+          </>
+        )}
 
         {showModeTip && (
           <View style={styles.dimOverlay}>
@@ -649,36 +674,46 @@ export default function AvatarRecommendationScreen() {
   );
 }
 
-// k is the device UI scale (see useUiScale): these layouts are authored in phone points,
-// and a tablet needs the same proportions at a larger size, not the same numbers.
-const makeStyles = (t: Theme, k = 1) =>
+// Authored in phone points, like every other sheet: useStyles runs it through scaleSheet, which multiplies the size props for you. The props it skips — top/left/right/bottom, borderWidth, shadow* — are scaled at the CALL SITE by k instead.
+const makeStyles = (t: Theme) =>
   StyleSheet.create({
     // The full-bleed layer. No padding here, ever: it is what the gradient measures against.
     screen: { flex: 1, backgroundColor: BG_FALLBACK },
-    root: {
-      flex: 1,
-      paddingHorizontal: Math.round(38 * k),
-      paddingVertical: Math.round(18 * k),
-    },
+    // All four paddings come from the CALL SITE, which folds in the safe insets — a shorthand here would only be overridden by them.
+    root: { flex: 1 },
     header: {
       position: "absolute",
       zIndex: 10,
       flexDirection: "row",
-      gap: Math.round(18 * k),
+      gap: 18,
     },
     navButton: {
-      width: Math.round(56 * k),
-      height: Math.round(44 * k),
+      width: 56,
+      height: 44,
       alignItems: "center",
       justifyContent: "center",
     },
-    navArrow: { width: Math.round(26 * k), height: Math.round(26 * k) },
+    navArrow: { width: 26, height: 26 },
+    tabletContentStack: {
+      flex: 1,
+      alignSelf: "stretch",
+      justifyContent: "center",
+      gap: TABLET_RECOMMENDATION_STACK_GAP,
+    },
     recommendationLayout: {
       flex: 1,
       flexDirection: "row",
       alignItems: "center",
-      gap: Math.round(34 * k),
-      paddingBottom: Math.round(82 * k),
+      gap: 34,
+      // Clearance for the absolute chooser at the bottom, and no more: the old 82 reserved a chooser's worth of space twice over and centred the avatar visibly high on the page.
+      paddingBottom: 48,
+    },
+    // Inside the tablet stack the chooser is part of the same centred group, so this row drops the phone-only bottom reserve entirely.
+    // What it takes instead is a top pad: the stack centres row + chooser together, and without it the taller row sits hard against the header.
+    recommendationLayoutTablet: {
+      flex: 0,
+      paddingBottom: 0,
+      paddingTop: 18,
     },
     audioButton: { position: "absolute", zIndex: 5 },
     // A column, not a card: width comes from the circle, and nothing draws a box around it.
@@ -686,22 +721,22 @@ const makeStyles = (t: Theme, k = 1) =>
     // Narrower than the copy column: a full-width primary action read as a banner rather than a button, and the halo needs room to swell without touching the text above it.
     confirmWrap: {
       alignSelf: "center",
-      width: Math.round(260 * k),
+      width: 260,
       marginTop: SPACE.lg,
       alignItems: "center",
     },
     // stretch + auto margin puts the title on the column's BASE, which is where the Confirm button sits in the column beside it — so the two land on the same line.
     modeColumn: {
-      width: Math.round(220 * k),
+      width: 220,
       alignItems: "center",
-      paddingTop: Math.round(12 * k),
+      paddingTop: 12,
     },
     avatarCircle: {
-      width: Math.round(210 * k),
-      height: Math.round(210 * k),
+      width: 210,
+      height: 210,
       alignItems: "center",
       justifyContent: "center",
-      borderRadius: Math.round(105 * k),
+      borderRadius: 105,
       overflow: "hidden",
       // The gradient above paints the disc; this is only what shows outside its bounds.
       backgroundColor: AVATAR_CIRCLE,
@@ -709,8 +744,8 @@ const makeStyles = (t: Theme, k = 1) =>
     // Sized INSIDE the circle now (was 232 in a 210 circle, which relied on the crop). With contain
     // the art fits the box, so the box has to sit within the rim or the character floats in a gap.
     avatarImage: {
-      width: Math.round(196 * k),
-      height: Math.round(196 * k),
+      width: 196,
+      height: 196,
     },
     // Straddling the circle's top edge. alignSelf centre plus a negative top pulls it back over the rim, so it reads as pinned to the avatar rather than floating above it.
     recommendedBadge: {
@@ -725,20 +760,20 @@ const makeStyles = (t: Theme, k = 1) =>
     recommendedBadgeText: {
       color: t.onSuccess,
       fontFamily: FONT,
-      fontSize: Math.round(9 * k),
+      fontSize: 9,
       fontWeight: "900",
     },
     recommendationCopy: {
       flex: 1,
-      minWidth: Math.round(0 * k),
-      gap: Math.round(7 * k),
+      minWidth: 0,
+      gap: 7,
     },
     title: {
       color: t.text,
       fontFamily: FONT,
-      fontSize: Math.round(20 * k),
+      fontSize: 20,
       fontWeight: "900",
-      lineHeight: Math.round(24 * k),
+      lineHeight: 24,
     },
     // Space above the primary action, so it is not the next thing after the last tick — a gap is what makes it read as the conclusion rather than a fourth list item.
     confirmButton: { width: "100%" },
@@ -746,31 +781,31 @@ const makeStyles = (t: Theme, k = 1) =>
     traitChip: {
       flexDirection: "row",
       alignItems: "center",
-      gap: Math.round(5 * k),
+      gap: 5,
       paddingHorizontal: SPACE.sm,
-      paddingVertical: Math.round(3 * k),
+      paddingVertical: 3,
       borderRadius: RADIUS.pill,
       backgroundColor: t.surface,
     },
     traitText: {
       color: t.text,
       fontFamily: FONT,
-      fontSize: Math.round(13 * k),
+      fontSize: 13,
       fontWeight: "800",
     },
     bulletList: {
-      gap: Math.round(5 * k),
+      gap: 5,
     },
     bulletRow: {
       flexDirection: "row",
       alignItems: "center",
-      gap: Math.round(9 * k),
+      gap: 9,
     },
     bulletText: {
       flex: 1,
       color: t.text,
       fontFamily: FONT,
-      fontSize: Math.round(13 * k),
+      fontSize: 13,
       fontWeight: "700",
     },
     // Offsets come from the CALL SITE, not from here: absolute children are not inset by the parent's padding, so a literal here can never account for a device's safe insets.
@@ -781,16 +816,20 @@ const makeStyles = (t: Theme, k = 1) =>
       flexDirection: "column",
       gap: SPACE.xs,
     },
+    modeTabsWrapTablet: {
+      position: "relative",
+      alignSelf: "stretch",
+    },
     modeTabsLabel: {
       ...TYPE.body,
-      fontSize: Math.round(13 * k),
+      fontSize: 13,
       color: t.textDim,
       // Centred over the four tabs rather than left-aligned to the first one — it introduces the row
       // as a whole, so it belongs to the row's middle, not to its start.
       textAlign: "center",
     },
     modeTabs: {
-      height: Math.round(56 * k),
+      height: 56,
       flexDirection: "row",
       gap: SPACE.sm,
     },
@@ -799,11 +838,11 @@ const makeStyles = (t: Theme, k = 1) =>
       alignItems: "center",
       justifyContent: "center",
       borderColor: t.border,
-      borderRadius: Math.round(8 * k),
+      borderRadius: 8,
       borderWidth: 2,
       backgroundColor: t.surface,
       paddingHorizontal: SPACE.sm,
-      paddingVertical: Math.round(5 * k),
+      paddingVertical: 5,
     },
     modeTabSelected: {
       borderColor: t.accent,
@@ -822,9 +861,9 @@ const makeStyles = (t: Theme, k = 1) =>
     modeTabRecommended: {
       color: t.success,
       fontFamily: FONT,
-      fontSize: Math.round(9 * k),
+      fontSize: 9,
       fontWeight: "900",
-      marginTop: Math.round(1 * k),
+      marginTop: 1,
     },
     saveErrorText: {
       ...TYPE.labelSm,
@@ -841,16 +880,16 @@ const makeStyles = (t: Theme, k = 1) =>
       position: "absolute",
       right: POPUP_RIGHT,
       bottom: 58,
-      // The CALL SITE clamps this with an inline maxWidth — see POPUP_RIGHT. A maxWidth here could not: the sheet is run through scaleSheet, which would multiply the cap by the very k that overflows it.
-      width: Math.round(620 * k),
-      minHeight: Math.round(142 * k),
+      // The CALL SITE clamps this with an inline maxWidth — see POPUP_RIGHT. A maxWidth here could not: the sheet is run through scaleSheet, which would multiply the cap by the very scale that overflows it.
+      width: 620,
+      minHeight: 142,
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "flex-end",
       // No rim. The shadow already lifts this off the dimmed screen behind it, and an outline on top of that was drawing a box around something already clearly separated.
-      borderRadius: Math.round(28 * k),
+      borderRadius: 28,
       shadowColor: "#000",
-      shadowOffset: { width: Math.round(0 * k), height: Math.round(8 * k) },
+      shadowOffset: { width: 0, height: 8 },
       shadowOpacity: 0.26,
       shadowRadius: 16,
     },
@@ -858,35 +897,35 @@ const makeStyles = (t: Theme, k = 1) =>
       flex: 1,
       borderRadius: RADIUS.panel,
       backgroundColor: t.surface,
-      paddingHorizontal: Math.round(20 * k),
+      paddingHorizontal: 20,
       paddingVertical: SPACE.lg,
     },
     noteTitle: {
       color: t.text,
       fontFamily: FONT,
-      fontSize: Math.round(21 * k),
+      fontSize: 21,
       fontWeight: "900",
-      marginBottom: Math.round(5 * k),
+      marginBottom: 5,
     },
     noteText: {
       color: t.text,
       fontFamily: FONT,
-      fontSize: Math.round(14 * k),
+      fontSize: 14,
       fontWeight: "700",
-      lineHeight: Math.round(19 * k),
+      lineHeight: 19,
     },
     taskActions: {
       flexDirection: "row",
-      gap: Math.round(10 * k),
+      gap: 10,
       marginTop: SPACE.md,
     },
     smallMascotCircle: {
-      width: Math.round(88 * k),
-      height: Math.round(88 * k),
+      width: 88,
+      height: 88,
       alignItems: "center",
       justifyContent: "center",
       borderColor: t.accent,
-      borderRadius: Math.round(44 * k),
+      borderRadius: 44,
       borderWidth: 1,
       backgroundColor: t.surface,
       marginLeft: -8,
@@ -895,7 +934,7 @@ const makeStyles = (t: Theme, k = 1) =>
     // empty than the old bust's was. Sized up to keep the same amount of drawn mark inside the same
     // 88 circle. No borderRadius — it rounded the corners of a picture that no longer has any.
     smallMascot: {
-      width: Math.round(78 * k),
-      height: Math.round(78 * k),
+      width: 78,
+      height: 78,
     },
   });

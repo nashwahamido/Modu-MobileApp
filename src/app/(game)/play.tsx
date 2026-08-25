@@ -83,7 +83,7 @@ import {
   combineReady,
   requiresClusterFocus,
 } from "@/src/game/core/evaluation/clusters";
-import { availableInMode } from "@/src/game/core/evaluation/availability";
+import { availableInMode, nextAction } from "@/src/game/core/evaluation/availability";
 import type { FurnitureId, ThemeId } from "@/src/game/core/type";
 import { LoadingOverlay } from "@/src/game/ui/loading/LoadingOverlay";
 import type { Milestone } from "@/src/game/ui/loading/loadingProgress";
@@ -213,10 +213,15 @@ function GameScreen() {
     // styles.root is a dependency now that `styles` comes from useHudChrome rather than a module constant — it changes identity when the player's hand does. `theme` stays because t is derived from it.
     [styles.root, t, backdrop, theme],
   );
-  const firstAvailable = useMemo(
+  // nextAction, not [0]: the offered list is in AUTHORED order, so a part still in the box can sit ahead of the half-finished one in the scene — see the note on nextAction.
+  const nextActionId = useMemo(
     () =>
       furniture
-        ? availableInMode(furniture, completedSet, mode, activeCluster)[0]?.actionId
+        ? nextAction(
+            furniture,
+            availableInMode(furniture, completedSet, mode, activeCluster),
+            completedSet,
+          )?.actionId
         : undefined,
     [furniture, completedSet, mode, activeCluster],
   );
@@ -272,7 +277,7 @@ function GameScreen() {
   const buildPaused = useBuildPaused();
   const objective = useStepObjective({
     furniture,
-    firstAvailable,
+    nextActionId,
     needsFocusChoice,
     mode,
     textLevel: settings.textLevel,
