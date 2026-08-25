@@ -18,9 +18,8 @@ import {
   BuildAudioSection,
   BuildDisplaySection,
   GuidanceSection,
-  InteractionDevSection,
+  InteractionSection,
   ProfileSection,
-  RestartRow,
 } from "@/src/game/ui/settings/sections";
 import { FONT, SPACE, TYPE, useFixedStyles } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
@@ -94,13 +93,16 @@ export default function SettingsScreen() {
           </View>
         ) : (
           <View style={styles.list}>
+            {/* Display before Interaction: the look is what a player comes here to change, and the
+                handling settings under it are the rarer, more considered choice. Restart is NOT in
+                this list — it lives only in the in-build gear panel (SettingsControls). There is no
+                assembly in progress on this screen, so the row could only ever be the disabled state
+                of itself: it reads `completed.length`, which is 0 outside a build. */}
             <ProfileSection />
-            <InteractionDevSection />
             <BuildDisplaySection />
+            <InteractionSection />
             <GuidanceSection />
             <BuildAudioSection />
-            {/* Last here too, matching the gear panel — see the note in SettingsControls. */}
-            <RestartRow />
           </View>
         )}
       </ScrollView>

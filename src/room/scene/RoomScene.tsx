@@ -1188,6 +1188,8 @@ export function RoomScene({
   const [loaded, setLoaded] = useState(false);
   // The player's chosen hour. Every preset is authored to enter through walls the resting camera can see — see src/room/core/timeOfDay.ts for why that constraint exists and what breaks without it.
   const hour = useGameStore((s) => s.roomTimeOfDay);
+  // Read HERE rather than passed down from RoomExperience, so it reaches every route that mounts this scene — the hub and a friend's room alike. It is the player's own display preference, not a fact about whose room is being drawn, so a visited room honours it too.
+  const avatarVisible = useGameStore((s) => s.roomAvatarVisible);
   const sun = sunPreset(hour);
   const handleReady = useCallback(() => setLoaded(true), []);
   const win = useWindowDimensions();
@@ -1709,7 +1711,8 @@ export function RoomScene({
           <RoomPostProcess />
           <ScenePauseControl paused={paused} />
           <RoomModel onReady={handleReady} orbit={orbit} gridMode={gridMode} />
-          <RoomAvatar />
+          {/* UNMOUNTED when the player turns it off, never hidden. RoomAvatar has a HIDDEN_SCENE_Y for the transient case where it has nowhere legal to stand, and parking it under the floor is exactly the wrong tool here: it would keep the GLB and its three textures resident, keep the Filament animator driving a skinned mesh every frame, and keep the rAF loop — including choosePath's A*, the most expensive thing this scene can do in one frame. Taking the element out is what actually gives those back. */}
+          {avatarVisible ? <RoomAvatar /> : null}
           {/* Committed pieces AND the ghost render from ONE array, and that is load-bearing: React keys only match within the same children array, so a ghost in its own sibling slot is a different element even with the same key — pick-up and confirm then unmount/remount the piece, and useModel reloads the whole GLB each time (useBuffer has no cache). That remount is what made a dragged piece invisible until seconds after settling, and where the old "Pointer FilamentAssetWrapper has already been manually released" race lived. In one array the key genuinely matches, the component morphs, and the model loads exactly once per piece.
               An id the catalog doesn't know (yet) has no model or dimensions — skip it. */}
           {scenePlacements.map((placement) => (
