@@ -103,7 +103,7 @@ export const BEATS = {
     simpleText: "Place the base.",
   },
   combine_seat: {
-    text: "Set the seat's pole into the base and screw it clockwise until it sits tight.",
+    text: "Set the seat's pole into the base and screw it.",
     simpleText: "Screw the seat onto the base.",
   },
 } as InstructionSet;
