@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { asFurnitureId } from "@/src/game/core/ids";
 import { createInMemoryRepos } from "./inMemory";
 import { DEMO_FRIEND_A, DEMO_ME } from "./seed";
+import { STARTER_ROOM_ITEM_IDS, createStarterRoomPlacements } from "../room/initialLayout";
 
 test("findByUsername returns the matching profile", async () => {
   const repos = createInMemoryRepos();
@@ -27,6 +28,15 @@ test("findByUsername is case-sensitive, matching the DB's unique constraint", as
 test("findByUsername returns null for a name nobody has", async () => {
   const repos = createInMemoryRepos();
   assert.equal(await repos.profiles.findByUsername("Nobody At All"), null);
+});
+
+test("the demo player starts with the starter room and owns its furniture", async () => {
+  const repos = createInMemoryRepos();
+  assert.deepEqual((await repos.rooms.get(DEMO_ME)).placements, createStarterRoomPlacements());
+  const owned = await repos.store.listOwned(DEMO_ME);
+  for (const itemId of STARTER_ROOM_ITEM_IDS) {
+    assert.equal(owned.includes(itemId), true, `${itemId} should be owned`);
+  }
 });
 
 // An id that is in no fixture. The request repos key on ids alone, so a test brings its own participant and sets up its own scenario rather than depending on seeded demo data — which keeps these tests readable on their own and keeps seed.ts free of rows that exist only to be tested against.
