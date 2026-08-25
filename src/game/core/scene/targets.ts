@@ -1,5 +1,6 @@
 import {
   ActionId,
+  ActionType,
   AssemblyAction,
   GroupId,
   PartBox,
@@ -23,12 +24,16 @@ export function groupParts(parts: Parts, group: GroupId): PartDef[] {
 }
 
 export interface PartActionIds {
+  /** Take-out beat of a staged carrier (stagePart) — the gesture that lifts the sub-assembly out to its rest pose. */
+  stage?: ActionId;
   snap?: ActionId;
+  /** A 3-phase fastener's DROP beat (placeFastener), which lands at the stage pose; its press is `insert`. */
+  drop?: ActionId;
   insert?: ActionId;
   tighten?: ActionId;
 }
 
-/** Map each part to the action ids that touch it. */
+/** Map each part to the action ids that touch it. Every PICKUP type gets its own slot: the scene resolves a ghost's socket by the type of the action in hand, and while `stagePart`/`placeFastener` were missing here the rod's take-out and the dowels' drop both fell through to the part's `placePart`/`insertFastener` id — an id the drag's matchedActionId can never equal, so those two gestures ghosted nothing (rod) or ghosted the wrong pose (dowel). */
 export function buildPartActions(
   actions: readonly AssemblyAction[],
 ): Record<PartId, PartActionIds> {
@@ -37,10 +42,31 @@ export function buildPartActions(
     if (!a.partId) continue;
     const e = (out[a.partId] ??= {});
     if (a.type === "placePart" || a.type === "combineClusters") e.snap = a.actionId;
+    else if (a.type === "stagePart") e.stage = a.actionId;
+    else if (a.type === "placeFastener") e.drop = a.actionId;
     else if (a.type === "insertFastener") e.insert = a.actionId;
     else if (a.type === "tightenFastener") e.tighten = a.actionId;
   }
   return out;
+}
+
+/** Which of a part's action slots the ghost/hint layer should follow for the action currently IN HAND. One place, because the socket-hint gate (useSceneState) and the ghost itself (PartModel) have to pick the same id or the ghost renders for a socket the drag never matches. Nothing held ⇒ the part's own seat (`snap`), falling back to its insert — that is Spot's "?" cue, which always marks the seat. */
+export function hintSlotFor(
+  acts: PartActionIds,
+  heldType?: ActionType,
+): ActionId | undefined {
+  switch (heldType) {
+    case "stagePart":
+      return acts.stage;
+    case "placeFastener":
+      return acts.drop;
+    case "insertFastener":
+      return acts.insert;
+    case "placePart":
+      return acts.snap;
+    default:
+      return acts.snap ?? acts.insert;
+  }
 }
 
 /** Earliest stage each part appears in (its snap/insert stage). */
@@ -118,12 +144,13 @@ export function seatOffsetFor(
   anchors?: Record<PartId, Vec3>,
   done?: ReadonlySet<ActionId>,
   receivers: readonly BoxLike[] = [],
+  travel?: Vec3 | null,
 ): Vec3 {
   const anchored = part && anchors?.[part.partId];
   if (anchored) {
-    // A structural part's joint anchor is the CENTRE of its contact slab — for a slider or press that is a point inside the receiver (DALFRED's support pin: 10.5mm into the 21mm plate, the middle of the hole), which no camera can see except straight down the bore. The hole the player sees is where the approach axis leaves the receiver, so the anchor is pushed back along −placeDir until it exits every placed box that contains it. Parts with no placeDir (drops) keep the slab centre; their burial is the slab's own thin half-width.
+    // A structural part's joint anchor is the CENTRE of its contact slab — for a slider or press that is a point inside the receiver (DALFRED's support pin: 10.5mm into the 21mm plate, the middle of the hole), which no camera can see except straight down the bore. The hole the player sees is where the approach axis leaves the receiver, so the anchor is pushed back along −travel until it exits every placed box that contains it. `travel` is the ORDER-ADAPTED direction when the caller has one (engagement.adaptedTravelDir — EKET's back panel enters from opposite sides in the two legal orders, and the visible hole is on whichever side is open), else the authored placeDir. Parts with neither (drops) keep the slab centre; their burial is the slab's own thin half-width.
     const seat: Vec3 = [part.pose.position[0] + anchored[0], part.pose.position[1] + anchored[1], part.pose.position[2] + anchored[2]];
-    const pd = part.placeDir;
+    const pd = travel ?? part.placeDir;
     const pl = pd ? Math.hypot(pd[0], pd[1], pd[2]) : 0;
     if (pd && pl > 0) {
       const back: Vec3 = [-pd[0] / pl, -pd[1] / pl, -pd[2] / pl];

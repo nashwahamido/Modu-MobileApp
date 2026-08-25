@@ -276,7 +276,7 @@ export function AssemblyScene({
             stageOffset={stageOffsets[id]}
             tightening={activeTighten?.partId === id}
             inserting={activeInsertPress?.partId === id}
-            ghostAtLoosePose={heldAction?.type === "insertFastener"}
+            heldActionType={heldAction?.type}
           />
         ))}
       </ShaderAssetsProvider>

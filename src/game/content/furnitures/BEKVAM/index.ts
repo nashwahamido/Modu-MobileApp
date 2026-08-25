@@ -8,6 +8,7 @@ import { toolsUsed } from "@/src/game/content/tools";
 import { BEATS, CLUSTERS, LABELS, STRUCTURE } from "./authored";
 import { ACTIONS, BEKVAM_META } from "./meta";
 import { PARTS } from "./parts.gen";
+import { SWEEP } from "./sweep.gen";
 import { thumbs } from "./thumbs.gen";
 
 const P = PARTS as Record<string, PartDef>;
@@ -34,6 +35,7 @@ export const BEKVAM: Furniture = {
     cartoon: MODEL_CARTOON,
   },
   parts: PARTS_WITH_STRUCTURE,
+  sweep: SWEEP,
   actions: ACTIONS,
   liaisons: LIAISONS,
   clusters: CLUSTERS,

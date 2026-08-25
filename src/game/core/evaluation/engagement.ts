@@ -16,6 +16,7 @@ import {
   isSlider,
   liaisonOther,
 } from "../model/liaisons";
+import { adaptSignedDir, entryDirViable, pickEntryDir } from "../model/sweep";
 import { clusterCombineEngagement, clusterParkInfo, SLIDE_BACKOFF_M } from "./clusterCombine";
 
 const gammaOf = (f: Furniture): LiaisonMap => f.liaisons ?? buildLiaisons(f.parts);
@@ -140,9 +141,57 @@ const unit = (v: Vec3): Vec3 | null => {
   return l < 1e-6 ? null : [v[0] / l, v[1] / l, v[2] / l];
 };
 
-/** Unit direction `part` TRAVELS as it seats. Authored `placeDir` wins (the only reliable source — a groove's axis isn't in the poses). Else a coarse heuristic: the part backs out AWAY from the joint targets, so it travels TOWARD their centroid. Falls back to world-down when that is degenerate. */
-function travelAxis(part: PartDef, targets: PartDef[]): Vec3 {
-  if (part.placeDir) return unit(part.placeDir) ?? [0, -1, 0];
+/** Unit direction `part` TRAVELS as it seats. Authored `placeDir` wins (the only reliable source — a groove's axis isn't in the poses). Else the centroid heuristic (toward the joint targets' centre), CHECKED against the generated sweep data when the furniture carries it: a heuristic direction whose corridor holds an already-placed third-party blocker is swapped for the nearest order-viable cardinal — sweep data only VETOES, it never re-derives a direction the state permits, so furniture without data (and every part whose heuristic answer is viable) behaves byte-identically to before. This is the order-aware half of the placeDir story: the authored value bakes one assembly order, the sweep check adapts the derived one to whichever order the player actually chose. */
+/** The part's authored placeDir ORDER-ADAPTED, unit length; null when the part authors none. Exported because the DRAG layer must back its aim anchor and match segment off along the SAME direction the park uses — with only the park flipped, a legally reversed build order parks correctly but aims at a corridor the player cannot see (EKET's back panel bottom-first: the anchor pushed down into the closed bottom, the visibility gate never armed, the snap never went green).
+ *
+ * Two adaptation regimes, split on what physically constrains the motion:
+ * - SLIDERS: the groove fixes the AXIS (not derivable — the device-proven lesson), so only the SIGN adapts, by the sweep's corridor veto.
+ * - PRESS/KEYHOLE parts: the placed MATES fix the approach. Toward-their-centroid gives the axis and sign — one standing side pulls the horizontal sideways toward it (either side, so the authored sign flips for the mirrored order), both standing sides cancel laterally and the approach collapses to the closing axis (EKET's bottom panel authors exactly that vertical for its close-over-both; the top panel closing LAST needs its mirror, straight down, where its authored sideways vector would drag the edge dowels across the far side's face). When the mates agree with the authored axis the AUTHORED vector is returned (sign toward the mates) — byte-identical in every device-verified order; a cross-axis candidate must additionally pass the sweep's corridor veto (EKET's suspension bracket points down-toward-its-side's-centre, but the closed top vetoes a vertical approach and the authored sideways tap stands). No placed mates, or a degenerate centroid, falls back to sign-only adaptation. */
+export function adaptedTravelDir(f: Furniture, part: PartDef, done: ReadonlySet<ActionId>): Vec3 | null {
+  if (!part.placeDir) return null;
+  const authored = unit(part.placeDir) ?? [0, -1, 0];
+  const dirs = f.sweep?.[part.partId];
+  const placed = (id: PartId) => done.has(placeId(id));
+  const partners = partnersIn(f, part.partId);
+  const signOnly = () => (dirs ? adaptSignedDir(dirs, placed, partners, authored) : authored);
+  if (isSlider(gammaOf(f), part.partId)) return signOnly();
+  const mates = [...partners].filter((id) => placed(id) && f.parts[id]);
+  if (!mates.length) return signOnly();
+  const c = mates.reduce<Vec3>(
+    (s, id) => {
+      const m = centreOf(f.parts[id]!);
+      return [s[0] + m[0] / mates.length, s[1] + m[1] / mates.length, s[2] + m[2] / mates.length];
+    },
+    [0, 0, 0],
+  );
+  const pc = centreOf(part);
+  const toward = unit([c[0] - pc[0], c[1] - pc[1], c[2] - pc[2]]);
+  if (!toward) return signOnly();
+  const authoredDom = [0, 1, 2].reduce((a, b) => (Math.abs(authored[a]) >= Math.abs(authored[b]) ? a : b)) as 0 | 1 | 2;
+  // ONE mate never overrides the authored AXIS — the authored value IS the tuned approach to a single mate, and a big mate's centre can sit far from the local attachment (the corner-hugging suspension bracket vs its whole side panel — the same trap directScrewAxis documents). A single mate decides only the SIGN along the authored axis: toward it, so the mirrored one-side order flips.
+  const signAlongAuthored = Math.sign(toward[authoredDom]);
+  if (mates.length < 2) {
+    if (!signAlongAuthored || signAlongAuthored === Math.sign(authored[authoredDom])) return authored;
+    return [-authored[0] || 0, -authored[1] || 0, -authored[2] || 0];
+  }
+  const dom = [0, 1, 2].reduce((a, b) => (Math.abs(toward[a]) >= Math.abs(toward[b]) ? a : b)) as 0 | 1 | 2;
+  const sign = Math.sign(toward[dom]) || 1;
+  if (dom === authoredDom) {
+    // same axis: keep the authored vector's cleanliness, with the sign facing the mates
+    return Math.sign(authored[dom]) === sign ? authored : [-authored[0] || 0, -authored[1] || 0, -authored[2] || 0];
+  }
+  const candidate: Vec3 = [0, 0, 0].map((_, i) => (i === dom ? sign : 0)) as unknown as Vec3;
+  if (entryDirViable(dirs, candidate, placed, partners)) return candidate;
+  return signOnly();
+}
+
+function travelAxis(part: PartDef, targets: PartDef[], f?: Furniture, done?: ReadonlySet<ActionId>): Vec3 {
+  if (part.placeDir) {
+    // The authored value is the AXIS + preferred sign; the sweep may flip the SIGN to fit the build order the player actually chose (EKET's back panel slides up through the open bottom in the authored order, DOWN through the open top after a bottom-first close — a static vector can only say one of those).
+    if (f && done) return adaptedTravelDir(f, part, done)!;
+    return unit(part.placeDir) ?? [0, -1, 0];
+  }
+  let heuristic: Vec3 = [0, -1, 0];
   if (targets.length) {
     const c: Vec3 = [
       targets.reduce((s, t) => s + centreOf(t)[0], 0) / targets.length,
@@ -151,9 +200,22 @@ function travelAxis(part: PartDef, targets: PartDef[]): Vec3 {
     ];
     const pc = centreOf(part);
     const toward = unit([c[0] - pc[0], c[1] - pc[1], c[2] - pc[2]]);
-    if (toward) return toward;
+    if (toward) heuristic = toward;
   }
-  return [0, -1, 0];
+  if (!f?.sweep?.[part.partId] || !done) return heuristic;
+  return pickEntryDir(f.sweep[part.partId], (id) => done.has(placeId(id)), partnersIn(f, part.partId), heuristic);
+}
+
+/** The parts `partId` MATES with — authored structural joins in either direction. Deliberately NOT every Γ neighbour: a fastener-created edge (EKET's cams give the back panel edges to ALL four box panels) is a securing relation, not a mate engagement, and treating it as a partner would swallow the ordering veto exactly where it matters. */
+function partnersIn(f: Furniture, partId: PartId): Set<PartId> {
+  const partners = new Set<PartId>();
+  for (const q of Object.values(f.parts)) {
+    for (const field of ["directJoins", "slideJoins", "screwJoins"] as const) {
+      if (q.partId === partId) for (const t of q[field] ?? []) partners.add(t);
+      else if (q[field]?.includes(partId)) partners.add(q.partId);
+    }
+  }
+  return partners;
 }
 
 /** The placed structural parts joined to `partId` by an edge of `kind`. */
@@ -230,7 +292,7 @@ export function slideParkInfo(
   if (!isSlider(gammaOf(f), action.partId)) return null;
   const part = f.parts[action.partId]!;
   const owners = joinedByKind(f, action.partId, "slide", done);
-  return parkInfo(travelAxis(part, owners), part.parkBackoff ?? SLIDE_BACKOFF_M);
+  return parkInfo(travelAxis(part, owners, f, done), part.parkBackoff ?? SLIDE_BACKOFF_M);
 }
 
 /** Staging for a PRESS placement: the push axis and the backed-off park offset.  Null when `action` isn't a push-fit against a placed partner — either an  authored press edge (directJoins) or the placed endpoint of a preloaded pin. */
@@ -260,9 +322,9 @@ export function pressParkInfo(
         part.parkBackoff ?? PRESS_BACKOFF_M,
       ));
     }
-    return withLock(part, parkInfo(travelAxis(part, [other]), part.parkBackoff ?? PRESS_BACKOFF_M));
+    return withLock(part, parkInfo(travelAxis(part, [other], f, done), part.parkBackoff ?? PRESS_BACKOFF_M));
   }
-  return withLock(part, parkInfo(travelAxis(part, partners), part.parkBackoff ?? PRESS_BACKOFF_M));
+  return withLock(part, parkInfo(travelAxis(part, partners, f, done), part.parkBackoff ?? PRESS_BACKOFF_M));
 }
 
 /** SIGNED engage axis for a fastener — points from its seat toward the side it backs out of (= toward the MISSING endpoint). The baked `engageDir` assumes the fastener drives into `attached[0]`; when the OTHER endpoint is the one placed (the reverse path: bolt into the LEG instead of the table), the fastener enters from the opposite side, so the axis flips. */

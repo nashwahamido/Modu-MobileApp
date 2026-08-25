@@ -9,7 +9,7 @@ import { availableInMode, currentStage } from "@/src/game/core/evaluation/availa
 import { hasTrayCard } from "@/src/game/core/evaluation/trayCard";
 import { isStaged, stagedCarriers, stagedMembers } from "@/src/game/core/model/staging";
 import { isPickupType } from "@/src/game/core/ids";
-import { buildPartActions } from "@/src/game/core/scene/targets";
+import { buildPartActions, hintSlotFor } from "@/src/game/core/scene/targets";
 import { labelFor } from "@/src/game/core/presentation/labels";
 import {
   ActionId,
@@ -90,9 +90,16 @@ export function deriveSceneState(
       ? (actionCluster(furniture, available[0]) ?? activeCluster)
       : activeCluster;
   const availableIds = new Set(available.map((a) => a.actionId));
-  const stage = focusRequired
-    ? currentStageForClusterFocus(furniture, done, effectiveCluster)
-    : currentStage(furniture.actions, done);
+  // The tray's stage FOLLOWS THE OFFERING when there is one: availableInMode's guide gate offers each cluster's lowest stage with legally available work, which can sit ABOVE the incomplete-work stage (bottom-first EKET: topPanel s1 gate-waits for backPanel s2 — the objective named the back panel while this tray, on its own stage source, showed no card for it). Min over the offered actions of the effective cluster = exactly that floor; the incomplete-work stage stays as the fallback so an all-blocked state still shows the current stage's locked cards instead of an empty column.
+  const offeredStage = available.reduce<number | null>((m, a) => {
+    if (focusRequired && effectiveCluster && actionCluster(furniture, a) !== effectiveCluster) return m;
+    return m === null || a.stage < m ? a.stage : m;
+  }, null);
+  const stage =
+    offeredStage ??
+    (focusRequired
+      ? currentStageForClusterFocus(furniture, done, effectiveCluster)
+      : currentStage(furniture.actions, done));
 
   // An untouched cluster (none of its parts picked up yet) shows only its LEGAL cards as grabbable — free mode's grab-anything is suspended so each cluster's opening move (its seed, or a staged carrier) is unmistakable; from that cluster's first pickup on, normal per-mode rules resume.
   const startedClusters = new Set<ClusterId>();
@@ -208,7 +215,6 @@ export function deriveSceneState(
     heldAction?.partId && isPickupType(heldAction.type)
       ? furniture.parts[heldAction.partId].group
       : null;
-  const heldIsInsert = heldAction?.type === "insertFastener";
   // Socket ghosts, by what is in hand — this used to be the `ghostStyle` dev setting, and it is now decided by the part. A fastener group is a field of near-identical holes and the player is choosing WHICH one, so every open socket of the group is ghosted at once. A structural part is big, its sockets are few and far apart, and a scene full of translucent panels reads as clutter — so only the proximity-matched one shows. The ghost component colors matched vs unmatched.
   const showAllGroupSockets =
     !!heldAction?.partId && furniture.parts[heldAction.partId].type === "fastener";
@@ -255,7 +261,8 @@ export function deriveSceneState(
     else if (stagedOut.has(id)) modes[id] = "staged";
     else if (outsideFocus) modes[id] = "hidden";
     else if (!placed) {
-      const hintActionId = heldIsInsert ? acts.insert : acts.snap;
+      // The slot that matches WHAT IS IN HAND — hintSlotFor, shared with the ghost so the gate and the ghost agree on which socket is being offered. A held 3-phase dowel is a `placeFastener`, not an insert, and while this read `snap` for it the sibling dowel sockets never lit up at all.
+      const hintActionId = hintSlotFor(acts, heldAction?.type);
       // Spot, with nothing held. The path below needs a heldGroup, which is exactly what a player standing still and asking for help does not have.
       //
       // Snap OR insert: a screw is the part whose motion the player can least guess, so it is the one that most needs the demo. Inserts were excluded while the ghost rendered at its park pose — a glowing copy off the side of the assembly read as the model jumping — but the demo now drives the pose itself, from demoApproach down to the seat, so that reason is spent.

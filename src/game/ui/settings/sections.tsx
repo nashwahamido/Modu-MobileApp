@@ -28,6 +28,8 @@ import type {
   TextLevel,
 } from "@/src/game/core/type";
 import type { ProfileId } from "@/src/game/core/profile";
+import { useRef, useState } from "react";
+import { saveSelectedAvatarMode } from "@/src/services/onboarding";
 import { ROOM_BACKGROUND_IDS, type RoomBackgroundId } from "@/src/room/ui/roomBackdrops";
 
 // ── option tables ────────────────────────────────────────────────────────────
@@ -149,6 +151,24 @@ export function RestartRow({ onRestarted }: { onRestarted?: () => void } = {}) {
 export function ProfileSection() {
   const profile = useGameStore((s) => s.profile);
   const applyProfile = useGameStore((s) => s.applyProfile);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+
+  const selectProfile = async (next: ProfileId) => {
+    if (savingRef.current || next === profile) return;
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      const result = await saveSelectedAvatarMode(next);
+      if (result.skipped) throw new Error("Sign in again to save your avatar choice.");
+      applyProfile(next);
+    } catch (error) {
+      console.warn("[profile] could not save avatar mode", error);
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
   return (
     <>
       <SectionHeader>Profile</SectionHeader>
@@ -157,7 +177,8 @@ export function ProfileSection() {
         desc="Preset that sets all the defaults below"
         value={profile}
         options={PROFILES}
-        onChange={applyProfile}
+        onChange={selectProfile}
+        disabled={saving}
       />
     </>
   );

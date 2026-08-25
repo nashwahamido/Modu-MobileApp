@@ -11,6 +11,7 @@ import { FitState } from "@/src/game/core/geometry/fit";
 import { looseDelta, stageDelta } from "@/src/game/core/geometry/staging";
 import { stageShiftFor } from "@/src/game/core/model/staging";
 import {
+  adaptedTravelDir,
   engageAxis,
   pressParkInfo,
   SCREW_SPIN_DEG,
@@ -20,14 +21,14 @@ import {
   slideParkInfo,
 } from "@/src/game/core/evaluation/engagement";
 import { quatFromAxisAngle, quatMultiply } from "@/src/game/core/geometry/math";
-import { ActionId, MaterialParams, PartDef, Quat, Vec3 } from "@/src/game/core/type";
+import { ActionId, ActionType, Furniture, MaterialParams, PartDef, PartId, Quat, Vec3 } from "@/src/game/core/type";
 import {
   ORIENTATION_TOTAL_DEG,
   selectFirstDrop,
   useGameStore,
 } from "@/src/game/core/store";
 import { styleFor } from "@/src/game/core/presentation/labels";
-import { buildPartActions } from "@/src/game/core/scene/targets";
+import { buildPartActions, hintSlotFor, type PartActionIds } from "@/src/game/core/scene/targets";
 import type { ClusterDriver, OffsetDriver } from "./offsetDriver";
 import { useShaderOverride, useShaderStyle } from "./shaders";
 import type { PartMode } from "./useSceneState";
@@ -62,16 +63,17 @@ function visualCentre(p: PartDef): Vec3 {
  * Where the Spot demo starts the ghost from.*/
 function demoApproach(
   def: PartDef,
-  parts: Record<string, PartDef>,
+  furniture: Furniture | null,
   done: Set<ActionId>,
   placedIds: ReadonlySet<string>,
 ): Vec3 {
+  const parts = furniture?.parts ?? {};
   // 1. Fasteners bake their own insertion axis (engageDir), so looseDelta already gives the right back-off and the screw retreats exactly the way it drives in.
   const baked = looseDelta(def, engageAxis(def, done));
   if (baked[0] || baked[1] || baked[2]) return baked;
-  // 2. An AUTHORED placeDir is the direction the part travels to its seat, so the ghost starts the same distance back along its reverse. 
+  // 2. An authored placeDir is the direction the part travels to its seat — ORDER-ADAPTED, never raw: the demo must fly the path the drag will actually take, and the raw value is wrong in every legally reversed order (bottom-first EKET: the back panel's demo would dive INTO the closed bottom while the real gesture comes down through the open top). Same single source as the park and the aim (engagement.adaptedTravelDir); any travel-direction consumer reading part.placeDir raw is a shadow-consumer bug.
   if (def.placeDir) {
-    const d = def.placeDir;
+    const d = (furniture ? adaptedTravelDir(furniture, def, done) : null) ?? def.placeDir;
     const back = def.parkBackoff ?? DEMO_BACKOFF_M;
     return [-d[0] * back, -d[1] * back, -d[2] * back];
   }
@@ -210,8 +212,8 @@ interface Props {
   tightening?: boolean;
   /** True when this 3-phase fastener's insert PRESS gesture is active (stage → loose). */
   inserting?: boolean;
-  /** Ghost drop target is the loose pose (inserts) instead of the baked pose. */
-  ghostAtLoosePose?: boolean;
+  /** Type of the action currently in hand. The ghost layer resolves both the matchable socket id and the previewed pose from it — see SocketHintGhost. */
+  heldActionType?: ActionType;
 }
 
 /** Resolves a part's entity inside a specific instance of the shared model by node name. */
@@ -277,11 +279,28 @@ function useMarkerGlow(
   }, [entity, renderableManager, color, pulse, restore]);
 }
 
-/** Glowing ghost of a part at its baked (or loose) pose, rendered from the second model instance so it can coexist with the primary copy. */
+/** Which pose a ghost previews — one per gesture that can be in hand, because each lands somewhere different:
+ *  - `target`  the seat (or the park pose the release will hold, for a part that is driven home after it parks)
+ *  - `loose`   an insert's converged pose, proud of the hole or retracted into its carrier
+ *  - `drop`    a 3-phase fastener's STAGE pose: fully out of the hole, at its carrier's staging offset
+ *  - `stageOut` a staged carrier lifted out of the furniture to its sub-assembly rest pose */
+export type GhostPose = "target" | "loose" | "drop" | "stageOut";
+
+/** The pose the action IN HAND is aiming at. Mirrors targets.targetPositionForAction, whose result is the drop target for the same gesture — the two must agree or the ghost marks a spot the release does not use. */
+export const ghostPoseFor = (heldType?: ActionType): GhostPose =>
+  heldType === "insertFastener"
+    ? "loose"
+    : heldType === "placeFastener"
+      ? "drop"
+      : heldType === "stagePart"
+        ? "stageOut"
+        : "target";
+
+/** Glowing ghost of a part at the pose the current gesture will produce, rendered from the second model instance so it can coexist with the primary copy. */
 function Ghost({
   model,
   def,
-  atLoosePose,
+  at,
   fixedFitState,
   glowOverride,
   pulse = false,
@@ -290,7 +309,7 @@ function Ghost({
 }: {
   model: FilamentModel;
   def: PartDef;
-  atLoosePose: boolean;
+  at: GhostPose;
   fixedFitState?: FitState;
   /** Fixed marker color instead of the fitState-driven glow (static-socket ghosts). Also tints the albedo so markers read on light-colored parts. */
   glowOverride?: [number, number, number];
@@ -361,11 +380,17 @@ function Ghost({
     if (!entity) return;
     const done = new Set(completed);
     let offset: readonly number[] = [0, 0, 0];
-    if (atLoosePose) {
-      const base = looseDelta(def, engageAxis(def, done));
-      // A fastener fitted into a sub-assembly that is currently OUT of the furniture must preview where the part will really go — in the rod's end, out on the canvas — not at the socket the rod will eventually occupy. Same shift the drop target uses (core/scene/targets.ts), from the same function, so the ghost and the target cannot disagree.
-      const parts = useGameStore.getState().furniture?.parts;
-      const shift = parts ? stageShiftFor(def, parts) : undefined;
+    // A part whose sub-assembly is currently OUT of the furniture must preview where it will really go — the dowel in the rod's end, out on the canvas — not the socket the rod will eventually occupy. Same shift the drop target uses (core/scene/targets.ts), from the same function, so the ghost and the target cannot disagree. `stageOut` is the carrier's OWN take-out: the shift IS the whole target there, since the sub-assembly is lifted straight off its seat.
+    const parts = useGameStore.getState().furniture?.parts;
+    const shift = parts ? stageShiftFor(def, parts) : undefined;
+    if (at === "loose" || at === "drop" || at === "stageOut") {
+      // loose: the insert's converged pose. drop: the 3-phase STAGE pose, fully out of the hole. stageOut: no delta of its own — the carrier just moves to its rest pose.
+      const base =
+        at === "loose"
+          ? looseDelta(def, engageAxis(def, done))
+          : at === "drop"
+            ? stageDelta(def)
+            : ([0, 0, 0] as Vec3);
       offset = shift ? [base[0] + shift[0], base[1] + shift[1], base[2] + shift[2]] : base;
     } else {
       const f = useGameStore.getState().furniture;
@@ -385,13 +410,12 @@ function Ghost({
     // The demo overrides whatever pose the normal ghost would take: back off along the SAME axis the loose pose uses, scaled by travelT, so the path it flies is the path the player must drag.
     if (travel) {
       const f = useGameStore.getState().furniture;
-      const parts = f?.parts ?? {};
       // What is already standing, so the ghost can come in from the side that is clear.
       const placedIds = new Set<string>();
       for (const a of f?.actions ?? []) {
         if (a.type === "placePart" && a.partId && done.has(a.actionId)) placedIds.add(a.partId);
       }
-      const base = demoApproach(def, parts, done, placedIds);
+      const base = demoApproach(def, f ?? null, done, placedIds);
       offset = [base[0] * travelT, base[1] * travelT, base[2] * travelT];
     }
     // A screw does not glide in — it TURNS as it goes, and that turn is the part of the gesture a player cannot guess from a straight-line preview. Structural parts get no spin, because they genuinely do not rotate on the way in and a spinning leg would be a lie about the move.
@@ -414,7 +438,7 @@ function Ghost({
       ],
       rotation,
     );
-  }, [entity, transformManager, def, atLoosePose, completed, driving, travel, travelT]);
+  }, [entity, transformManager, def, at, completed, driving, travel, travelT]);
 
   useEffect(() => {
     if (!entity) return;
@@ -470,15 +494,13 @@ function SocketHintGhost({
   model,
   def,
   partActions,
-  atLoosePose = false,
+  heldType,
 }: {
   model: FilamentModel;
   def: PartDef;
-  partActions: Record<
-    string,
-    { snap?: string; insert?: string; tighten?: string }
-  >;
-  atLoosePose?: boolean;
+  partActions: Record<PartId, PartActionIds>;
+  /** Type of the action in hand. Decides BOTH which of this part's action ids the drag can match and which pose the ghost takes — a staged rod's take-out and a 3-phase dowel's drop each have their own id and their own target. */
+  heldType?: ActionType;
 }) {
   const matchedActionId = useGameStore((s) => s.matchedActionId);
   const hintPartId = useGameStore((s) => s.hintPartId);
@@ -486,14 +508,15 @@ function SocketHintGhost({
   // Parked at its seat: the part is physically AT the socket and only the finishing gesture (screw / orientation twist / slide / press) is left. A ghost at the target pose now sits exactly where the real part already is and reads as a doubled, clashing leg — same reasoning as the tighten phase, which dropped its goal ghost for this exact reason.
   const driveActionId = useGameStore((s) => s.driveActionId);
   const orientationActionId = useGameStore((s) => s.orientationActionId);
-  const actionId =
-    partActions[def.partId]?.snap ?? partActions[def.partId]?.insert;
+  // The id the DRAG can match, chosen by what is in hand (hintSlotFor) — matchedActionId names the action being dragged, so resolving this to the part's `placePart`/`insertFastener` id regardless of the gesture left a staged rod's take-out and a 3-phase dowel's drop permanently unmatched.
+  const actionId = hintSlotFor(partActions[def.partId] ?? {}, heldType);
+  const pose = ghostPoseFor(heldType);
   const isMatched = !!actionId && matchedActionId === actionId;
   const parked =
     !!actionId && (driveActionId === actionId || orientationActionId === actionId);
-  // The ? spotlight, in GLOW_MARK orange — deliberately the dimmer of the two marker colours, so if the player then picks a part up the proximity-matched socket still reads as the brighter of the two. Ahead of the firstDrop guard: the first step is when a hint is most likely to be asked for, and that guard exists to keep ghosts off an empty plane, not to suppress an explicit ask. Spot's ghost. atLoosePose FALSE unconditionally — the cue marks the SEAT, never a park or rest pose, and passing the caller's flag through is what previously put a glowing copy of the part off to the side of the assembly. GLOW_MARK rather than FIT_GLOW.idle so that if the player then picks a part up, the proximity-matched socket still reads as the brighter of the two. Ahead of the firstDrop guard: the first step is when a hint is most likely to be asked for.
+  // The ? spotlight, in GLOW_MARK orange — deliberately the dimmer of the two marker colours, so if the player then picks a part up the proximity-matched socket still reads as the brighter of the two. Ahead of the firstDrop guard: the first step is when a hint is most likely to be asked for, and that guard exists to keep ghosts off an empty plane, not to suppress an explicit ask. Spot's ghost. Pose `target` unconditionally — the cue marks the SEAT, never a park or rest pose, and passing the caller's pose through is what previously put a glowing copy of the part off to the side of the assembly. GLOW_MARK rather than FIT_GLOW.idle so that if the player then picks a part up, the proximity-matched socket still reads as the brighter of the two. Ahead of the firstDrop guard: the first step is when a hint is most likely to be asked for.
   if (hintPartId === def.partId && actionId && !parked) {
-    return <Ghost model={model} def={def} atLoosePose={false} glowOverride={GLOW_MARK} travel />;
+    return <Ghost model={model} def={def} at="target" glowOverride={GLOW_MARK} travel />;
   }
   if (firstDrop || !actionId || parked) return null;
   // Fasteners: every open socket of the held group shows a dim pulsing marker, and the proximity-matched one switches to the steady fitState-driven colour (blue approaching → green seated) — a field of near-identical holes is a CHOICE, so the player needs to see the whole field. Structural parts: only the matched socket is ghosted, because a translucent copy of every open panel buries the assembly. `def` is same-group as the held part (see deriveSceneState), so its own type is the held part's type in both the held and socket_hint cases.
@@ -503,13 +526,13 @@ function SocketHintGhost({
       <Ghost
         model={model}
         def={def}
-        atLoosePose={atLoosePose}
+        at={pose}
         glowOverride={GLOW_MARK}
         pulse
       />
     );
   }
-  return <Ghost model={model} def={def} atLoosePose={atLoosePose} pulse />;
+  return <Ghost model={model} def={def} at={pose} pulse />;
 }
 
 /** A part whose offset is animated imperatively via an OffsetDriver, using the primary (instance 0) entity. */
@@ -706,7 +729,7 @@ function PartModelImpl({
   stageOffset,
   tightening,
   inserting,
-  ghostAtLoosePose,
+  heldActionType,
 }: Props) {
   const partActions = useMemo(() => {
     const store = useGameStore.getState();
@@ -798,7 +821,7 @@ function PartModelImpl({
             initial={[carrier[0] + s[0], carrier[1] + s[1], carrier[2] + s[2]]}
           />
           {/* Goal ghost at the LOOSE pose the press converges into. */}
-          <Ghost model={model} def={def} atLoosePose dim />
+          <Ghost model={model} def={def} at="loose" dim />
         </>
       ) : (
         <StaticEntity
@@ -860,12 +883,12 @@ function PartModelImpl({
             model={model}
             def={def}
             partActions={partActions}
-            atLoosePose={ghostAtLoosePose ?? false}
+            heldType={heldActionType}
           />
         </>
       );
-    case "socket_hint": {
-      const isInsert = !!partActions[def.partId]?.insert;
+    case "socket_hint":
+      // Same held type as the held part's own ghost: a socket hint is only ever raised for a part in the HELD part's group (deriveSceneState), so it is aiming at the same kind of target by the same gesture.
       return (
         <>
           <HiddenEntity
@@ -877,11 +900,10 @@ function PartModelImpl({
             model={model}
             def={def}
             partActions={partActions}
-            atLoosePose={isInsert}
+            heldType={heldActionType}
           />
         </>
       );
-    }
   }
 }
 
@@ -905,5 +927,5 @@ export const PartModel = memo(
     p.slideDriver === n.slideDriver &&
     p.tightening === n.tightening &&
     p.inserting === n.inserting &&
-    p.ghostAtLoosePose === n.ghostAtLoosePose,
+    p.heldActionType === n.heldActionType,
 );

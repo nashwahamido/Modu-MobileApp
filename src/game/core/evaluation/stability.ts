@@ -115,11 +115,6 @@ function readyStabilizingActionIds(
     }
   }
 
-  // A securing screw-PLACE is allowed directly — its own placement IS the stabilizing act, so the placePart exclusion above (which keeps fastener-securing chains to their insert/tighten steps) does not apply to it.
-  for (const place of securingScrewPlaceActions(f, partId)) {
-    if (!done.has(place.actionId)) allowed.add(place.actionId);
-  }
-
   return allowed;
 }
 
@@ -161,10 +156,12 @@ function preloadConnectorLocks(
 
     const inserted = done.has(insertId(part.partId));
     const tightened = done.has(tightenId(part.partId));
+    const kind = fastenerKindOf(part);
     if (!inserted) {
       group.ownSteps.add(insertId(part.partId));
       group.allReady = false;
-    } else if (fastenerKindOf(part) === "threaded") {
+    } else if (kind === "threaded" || kind === "cam") {
+      // Both are the completesOn-TIGHTEN kinds (fastener-model-v2 preload: a bolt frees the cluster only when driven home; "cam" is the {tighten, press} cell a Minifix bolt lowers to). "cam" had zero users when added here 2026-08-24 — the seam could SAY the cell but this lock released on insert, contradicting the declared preload.
       if (!tightened) {
         group.ownSteps.add(tightenId(part.partId));
         group.allReady = false;
@@ -183,29 +180,14 @@ function preloadConnectorLocks(
   });
 }
 
-/** placePart actions that SECURE `partId` by screwing onto it — a STRUCTURAL securer, recognized by the mover authoring `screwJoins` naming the unstable part (EKET's cover cap screws over the suspension cover; there is no separate fastener part to tighten). */
-function securingScrewPlaceActions(
-  f: Furniture,
-  partId: PartId,
-): AssemblyAction[] {
-  return f.actions.filter(
-    (a) =>
-      a.type === "placePart" &&
-      a.partId &&
-      f.parts[a.partId]?.screwJoins?.includes(partId),
-  );
-}
-
+// The securing screw-PLACE special case (a structural mover whose `screwJoins` named the unstable part) was DELETED 2026-08-24: its one user, EKET's suspCap, re-typed to an ordinary fastener securer on the cover↔bracket liaison, so covers are secured by the cap's tighten through the ordinary rule above.
 export function unstablePartSecured(
   f: Furniture,
   partId: PartId,
   done: ReadonlySet<ActionId>,
 ): boolean {
   if (!done.has(placeId(partId))) return false;
-  return (
-    securingTightenActions(f, partId).every((a) => done.has(a.actionId)) &&
-    securingScrewPlaceActions(f, partId).every((a) => done.has(a.actionId))
-  );
+  return securingTightenActions(f, partId).every((a) => done.has(a.actionId));
 }
 
 export function looseUnstableParts(

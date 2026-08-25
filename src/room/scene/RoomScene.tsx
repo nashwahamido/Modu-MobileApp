@@ -66,14 +66,16 @@ import {
   SHELL_ORIGINAL,
   shellGridWallNode,
 } from "./shellMaterials";
-import { useSurfaceTextures } from "./useSurfaceTextures";
+import { useNeutralMaps, useSurfaceTextures } from "./useSurfaceTextures";
+import { RoomAvatar } from "./RoomAvatar";
+import { isScenePaused, setScenePaused } from "./scenePaused";
 import { useCurrentUserId, useRepos } from "../../data";
 import { useShopStore } from "../../data/shop/store";
 import { setCameraAzimuth, usePlacementStore } from "../core/placement";
 import { AIM_DOWN, aimToDirection, aimTuple } from "../core/lightAim";
 import { CEILING_LIGHT_AT, CEILING_LIGHT_RIG, ceilingCone, fillLumens } from "../core/ceilingLight";
 import { useGameStore } from "../../game/core/store";
-import { sunDirection, sunPreset, type CeilingLight } from "../core/timeOfDay";
+import { WALL_FILL_DIRECTIONS, sunDirection, sunPreset, type CeilingLight } from "../core/timeOfDay";
 import {
   dragTopTarget,
   dragWallTarget,
@@ -131,6 +133,8 @@ export type RoomSceneProps = {
   onReady?: () => void;
   /** Fired once when the user finishes dragging the active placement ghost to a new position. */
   onPlacementReposition?: () => void;
+  /** Whether the room is covered by a near-full-screen popup and so not worth drawing — see ./scenePaused for what this switches off and why it is not simply an unmount. The scene keeps every asset it holds; only the per-frame work stops. */
+  paused?: boolean;
 };
 
 type OrbitState = {
@@ -326,6 +330,8 @@ function RoomModel({
     const written = new Map<string, number>();
     let frame = requestAnimationFrame(function tick() {
       frame = requestAnimationFrame(tick);
+      // Under a popup this writes alphas nobody can see, onto a view whose choreographer is stopped anyway. Skipped INSIDE the tick rather than by cancelling the loop, so `written` and shownGrids keep describing what the materials and the scene actually hold — a loop torn down and rebuilt here would start from an empty diff and rewrite every wall on the first frame back.
+      if (isScenePaused()) return;
       const groups = wallMaterials.current;
       if (!groups) return;
       const theta = orbit.value.smoothed.theta;
@@ -448,6 +454,9 @@ function RoomModel({
   // The fallback is always the shipped shell wallpaper, which is a published item by construction — but read its source anyway rather than assert one, so this line cannot be the odd one out if the shell items ever move.
   const fallbackTrim = useSurfaceTextures(needsTrimFallback ? shellWall : null, shellWall?.source ?? "bought", renderableManager);
 
+  // The stand-ins for the normal and roughness slots of any item that ships neither — a flat normal and a white metallic-roughness, decoded once for the life of the scene. Not a fallback in the sense fallbackTrim is: that one substitutes another ITEM's art, which is right for the cornice because the cornice keeps its authored look; these substitute NOTHING, which is what an unpublished map actually means. See useNeutralMaps.
+  const neutralMaps = useNeutralMaps(renderableManager);
+
   // Keyed on the ASSET, so a re-render cannot re-apply through instances belonging to a released load. Surface items apply only AFTER the asset has loaded and the name cache above is populated — the cache is built in an effect on the same `asset`, declared ABOVE this one, and React runs a commit's creates in declaration order, so this one always sees it filled. The emptiness check is the belt to that braces: an empty cache means the walk has not run, and painting through nothing would silently do nothing while marking the slot applied.
   useEffect(() => {
     if (!asset) return;
@@ -457,7 +466,7 @@ function RoomModel({
     // spec is what tells applySurfaceItem how to tile; an item row that arrived without its portal-authored surface block is not applicable yet, and the slot stays as authored until it is.
     // floorItem/wallItem come from a useMemo over the store and floorTextures/wallTextures come from useSurfaceTextures's own setState, two hooks updating on different schedules, so within a single commit the memo can already read a NEW item while the texture hook's state still holds the OLD item's maps — itemId is therefore checked against the resolved item's id before anything is written, or a mismatched commit paints the old textures under the new item's tiling.
     if (floorItem?.surface && floorTextures && floorTextures.itemId === floorItem.id) {
-      applySurfaceItem({ slot: "floor", instances, renderableManager, maps: floorTextures.maps, spec: floorItem.surface });
+      applySurfaceItem({ slot: "floor", instances, renderableManager, maps: floorTextures.maps, spec: floorItem.surface, neutral: neutralMaps });
     }
     if (wallItem?.surface && wallTextures && wallTextures.itemId === wallItem.id) {
       // The fallback cornice is folded in HERE rather than inside applySurfaceItem, so that module keeps knowing nothing about which item is the default one — it is handed a complete set and writes it.
@@ -469,9 +478,11 @@ function RoomModel({
         renderableManager,
         maps: { ...wallTextures.maps, trim },
         spec: { ...wallItem.surface, trimTiling },
+        neutral: neutralMaps,
       });
     }
-  }, [asset, floorItem, wallItem, floorTextures, wallTextures, fallbackTrim, shellWall, renderableManager]);
+    // neutralMaps is in here so the first commit after they decode REPAINTS. They land asynchronously and can easily arrive after a finish has already been applied, and without this the slots that item left unwritten would keep the shell's authored maps until the next finish change.
+  }, [asset, floorItem, wallItem, floorTextures, wallTextures, fallbackTrim, shellWall, renderableManager, neutralMaps]);
 
   return null;
 }
@@ -995,6 +1006,8 @@ const LoadedItem = memo(function LoadedItem({
     };
     let frame = requestAnimationFrame(function tick() {
       frame = requestAnimationFrame(tick);
+      // Skipped inside the tick, never by cancelling: this loop's teardown deliberately hands the entities back and repaints to alpha 1, so restarting it on every popup would pop culled windows back into a room the player cannot even see, then fade them out again on the way back. `drawn` and `written` stay true of the materials across the pause for the same reason.
+      if (isScenePaused()) return;
       const alpha = wallAlpha(wall, orbit.value.smoothed.theta);
       const draw = alpha > WALL_ALPHA_EPSILON;
       if (draw !== drawn) setDrawn(draw);
@@ -1061,6 +1074,26 @@ function RoomPostProcess() {
       // filterWidth is deliberately absent. It is in the TypeScript type, but RNFViewWrapper.cpp never reads that key — every other field is guarded by a find() and this one simply is not among them — so setting it does nothing at all, silently.
     });
   }, [view]);
+  return null;
+}
+
+// Stops the render loop itself while a popup covers the room. The choreographer is what drives every frame — the render callbacks (camera rig, avatar animator), the shadow pass, and the whole post-processing chain this scene leans on (TAA at eight jitter positions, six levels of bloom, SSAO) — so stopping it is the single largest saving available here, and it is exactly what FilamentView.pause() does. Reached through useFilamentContext rather than a ref because the package's public `FilamentView` export is a function wrapper that forwards no ref; the choreographer on the context is the same object that wrapper's pause() would have called.
+//
+// The JS-side rAF loops are NOT stopped by this — rAF is React Native's frame loop, not Filament's — which is why each of them checks ./scenePaused for itself. Both halves are needed and both are switched from here: this one saves the GPU and the render thread, the flag saves the JS thread.
+//
+// Deliberately no AppState handling. A backgrounded app already loses its surface (Android destroys it outright, and FilamentView tears the swap chain down with it), so there is nothing here for a foreground check to switch off that the platform has not switched off already. The one seam this leaves is a surface RECREATED while paused: FilamentView calls choreographer.start() when it re-attaches its render callback, which resumes a room still under a popup. That is the behaviour this scene already had, so the worst case is no worse than before, and it heals on the next open or close.
+function ScenePauseControl({ paused }: { paused: boolean }) {
+  const { choreographer } = useFilamentContext();
+  useEffect(() => {
+    if (!paused) return;
+    // Set together and cleared together, so the render loop and the rAF loops can never disagree about whether the room is being drawn. The flag is cleared on UNMOUNT as well as on resume — it outlives this component, and a scene torn down while a popup was up would otherwise leave the next one paused with nothing left to un-pause it.
+    setScenePaused(true);
+    choreographer.stop();
+    return () => {
+      setScenePaused(false);
+      choreographer.start();
+    };
+  }, [choreographer, paused]);
   return null;
 }
 
@@ -1150,10 +1183,13 @@ export function RoomScene({
   ceilingLight,
   onReady,
   onPlacementReposition,
+  paused = false,
 }: RoomSceneProps) {
   const [loaded, setLoaded] = useState(false);
   // The player's chosen hour. Every preset is authored to enter through walls the resting camera can see — see src/room/core/timeOfDay.ts for why that constraint exists and what breaks without it.
   const hour = useGameStore((s) => s.roomTimeOfDay);
+  // Read HERE rather than passed down from RoomExperience, so it reaches every route that mounts this scene — the hub and a friend's room alike. It is the player's own display preference, not a fact about whose room is being drawn, so a visited room honours it too.
+  const avatarVisible = useGameStore((s) => s.roomAvatarVisible);
   const sun = sunPreset(hour);
   const handleReady = useCallback(() => setLoaded(true), []);
   const win = useWindowDimensions();
@@ -1208,7 +1244,8 @@ export function RoomScene({
   viewportRef.current = { width, height };
 
   // The player's own room in the hub, a friend's while visiting. Placement is refused at the store while viewing, so activeEdit below is always null on that path and every ghost, overlay and drag branch is inert without needing its own check.
-  const layout = usePlacementStore((s) => s.viewing?.layout ?? s.layout);
+  const baseLayout = usePlacementStore((s) => s.viewing?.layout ?? s.layout);
+  const viewing = usePlacementStore((s) => s.viewing !== null);
   // Is the layout above the REAL one, or the empty placeholder a hydrate that hasn't answered yet leaves behind? Nothing may be called ready against the placeholder: an empty room parses instantly and would fire onReady before the saved furniture had even been asked for. A visit is settled by construction — its layout arrives with startViewing, in one commit.
   const layoutSettled = usePlacementStore(
     (s) => s.viewing !== null || s.hydrated,
@@ -1216,6 +1253,17 @@ export function RoomScene({
   const activeEdit = usePlacementStore((s) => s.activeEdit);
   // Subscribed (not getState) so pieces whose item rows arrive with the catalog sync appear then.
   const roomItems = useRoomCatalogStore((s) => s.items);
+  const reservedFixtureCount = usePlacementStore((s) => s.reserved.length);
+  const editingReservedFixture = usePlacementStore((s) => s.activeEdit?.reserved === true);
+  const setReserved = usePlacementStore((s) => s.setReserved);
+  const cancelPlacement = usePlacementStore((s) => s.cancel);
+  useEffect(() => {
+    // Clear stale non-persisted fixtures left by a Fast Refresh from the former
+    // Pebble-bed implementation. New avatars never reserve furniture cells.
+    if (editingReservedFixture) cancelPlacement();
+    if (reservedFixtureCount > 0) setReserved([]);
+  }, [cancelPlacement, editingReservedFixture, reservedFixtureCount, setReserved]);
+  const layout = baseLayout;
   // The ghost re-renders through the store on every cell change; committed pieces only when the layout itself changes.
   const editing = activeEdit !== null;
 
@@ -1275,7 +1323,8 @@ export function RoomScene({
   const showGrid =
     activeEdit !== null && activeEdit.placement.surface.kind !== "wall";
   // The GHOST's own cells still follow the camera frame by frame, so they stay welded to the floor through a drag, a pinch and the glide after both. The grid lines themselves no longer need this — they are scene geometry now, drawn by the same camera as the room (see RoomModel) — so what this mirror feeds is a handful of quads rather than 38 lines clipped against every piece in the room.
-  const gridAngles = useSmoothedOrbit(orbit, showGrid);
+  // Gated on `paused` too, and this one CAN be a dependency rather than an in-tick check: the mirror owns no scene state and its teardown is a bare cancelAnimationFrame, so stopping and restarting it costs nothing and leaves nothing behind. The pose is read fresh during render, so the overlay is correct on the first frame back regardless of how long the loop was down.
+  const gridAngles = useSmoothedOrbit(orbit, showGrid && !paused);
 
   // While a ghost is active, the finger owns the ghost, not the camera: the same drag that orbited a moment ago now slides the piece cell to cell under the fingertip. A wall ghost slides on ITS wall and hops at the corner; which wall it lands on — and the hysteresis that keeps a finger near a corner from teleporting it — is dragWallTarget's job.
   const dragGhost = useCallback(
@@ -1453,11 +1502,14 @@ export function RoomScene({
   const pickUpAt = useCallback(
     (px: number, py: number) => {
       const state = usePlacementStore.getState();
-      // `viewing` too: this searches state.layout — the player's OWN room — so in a friend's room it would raycast against pieces that are not on screen and buzz for a piece nobody can see. editPlacement refuses as well; this is the cheap pre-check that keeps the work and the haptic from happening at all.
+      // `viewing` too: the editable list belongs to the player's OWN room, so
+      // in a friend's room it would raycast against pieces that are not on
+      // screen and buzz for a piece nobody can see. editPlacement refuses too.
       if (state.activeEdit || state.viewing) return;
+      const editableLayout = [...state.layout, ...state.reserved];
       // Every piece a real pickable VOLUME, on every surface alike, in ONE pass — so pickBoxAt's nearest-wins rule reaches across surface kinds and a chair standing in front of a wall painting wins on distance rather than on a precedence rule. Why volume and never the plane under the finger — and what plane-picking does to a deep wall item like the eket cabinet — is in placementPickBoxes, along with why that function is tested rather than this callback.
       const boxes = placementPickBoxes(
-        state.layout,
+        editableLayout,
         (itemId) => {
           const item = getRoomItem(itemId);
           if (!item) return null;
@@ -1642,10 +1694,25 @@ export function RoomScene({
             intensity={sun.counterFill.intensity}
             direction={[0.6, -0.45, 0.5]}
           />
+          {/* The wall-readability layer: two opposed, near-horizontal directionals so that every wall inner face is lit by exactly one of them and the floor takes only about a third of what they give. Both the pairing and the shallow angle are load-bearing — the derivation is on WALL_FILL_DIRECTIONS, and collapsing this to a single light or tilting it down turns it into a second ambient that washes out the sun's pool. No castShadows: a fill that casts is a key, and a second set of wall-length shadows crossing the sun's is exactly the mess the old flat 64k fill made. */}
+          {sun.wallFill.intensity > 0
+            ? WALL_FILL_DIRECTIONS.map((direction) => (
+                <Light
+                  key={direction.join()}
+                  type="directional"
+                  colorKelvin={sun.wallFill.kelvin}
+                  intensity={sun.wallFill.intensity}
+                  direction={direction}
+                />
+              ))
+            : null}
           {/* The room's own ceiling light. Off at the three daylight hours by default and on after dark, with the player's switch overriding either way — see ceilingLightOn. */}
           {ceilingLight ? <RoomCeilingLight light={sun.interiorLight} /> : null}
           <RoomPostProcess />
+          <ScenePauseControl paused={paused} />
           <RoomModel onReady={handleReady} orbit={orbit} gridMode={gridMode} />
+          {/* UNMOUNTED when the player turns it off, never hidden. RoomAvatar has a HIDDEN_SCENE_Y for the transient case where it has nowhere legal to stand, and parking it under the floor is exactly the wrong tool here: it would keep the GLB and its three textures resident, keep the Filament animator driving a skinned mesh every frame, and keep the rAF loop — including choosePath's A*, the most expensive thing this scene can do in one frame. Taking the element out is what actually gives those back. */}
+          {avatarVisible ? <RoomAvatar /> : null}
           {/* Committed pieces AND the ghost render from ONE array, and that is load-bearing: React keys only match within the same children array, so a ghost in its own sibling slot is a different element even with the same key — pick-up and confirm then unmount/remount the piece, and useModel reloads the whole GLB each time (useBuffer has no cache). That remount is what made a dragged piece invisible until seconds after settling, and where the old "Pointer FilamentAssetWrapper has already been manually released" race lived. In one array the key genuinely matches, the component morphs, and the model loads exactly once per piece.
               An id the catalog doesn't know (yet) has no model or dimensions — skip it. */}
           {scenePlacements.map((placement) => (

@@ -126,6 +126,8 @@ interface GameState {
   roomTimeOfDay: TimeOfDayId;
   /** Which photo hangs outside the room's window — Settings > General > "Room Background". Independent of roomTimeOfDay: that picks the HOUR shown in whichever background this names. Defaults to "bg7". */
   roomBackground: RoomBackgroundId;
+  /** Whether the wandering companion is in the room — Settings > General > "Show avatar", beside Room Background. WHICH avatar it is stays the profile's business (roomAvatarKindForProfile); this only says whether it is there at all. Off UNMOUNTS it rather than hiding it, and that is the point: the component owns a GLB with three textures (~12 MB of VRAM after scripts/compress-avatar-glb.mjs), a Filament animator over a skinned mesh, and a per-frame rAF loop whose pathfinder is the most expensive thing the room can do in a single frame. Parking it out of sight would keep every one of those. Session state, exactly like roomBackground and roomTimeOfDay beside it — see the note on the setter. */
+  roomAvatarVisible: boolean;
   /** Display theme (backdrop + thumbnails): light | dark | high_contrast. */
   theme: ThemeId;
   /** Which hand drives the build — it MIRRORS the HUD, so the joystick, the trays, the button column and every task control move to the other side. Answered in onboarding's first question and read back at the loading gate (src/app/(onboarding)/loading.tsx). Deliberately out of `settings`: applyProfile replaces that object wholesale, so it would reset on every avatar change. */
@@ -149,6 +151,7 @@ interface GameState {
   setBackdrop: (backdrop: BackdropId) => void;
   setRoomTimeOfDay: (time: TimeOfDayId) => void;
   setRoomBackground: (background: RoomBackgroundId) => void;
+  setRoomAvatarVisible: (visible: boolean) => void;
   setTheme: (theme: ThemeId) => void;
   setHandedness: (handedness: Handedness) => void;
   setAssembleDark: (on: boolean) => void;
@@ -282,6 +285,9 @@ const TOUCHED_KEY = "modu.settings.touched.v1";
 
 const touched = new Set<string>();
 
+/** Settings that no longer have a toggle. A saved choice here would be un-editable, so it is dropped on load and the current default wins. `dragPlane`: the Drag mechanism row is gone and every build is "adaptive"; the "level" engine survives in usePartDrag as the comparison path, but nothing reaches it any more. `lightingPreset`: the Lighting row left the last surface that showed it on 2026-08-25, and the field is still read by AssemblyScene through getLightRig — so without this entry a player who once picked "warm" would keep it on every build forever, with no control left to undo it. */
+const RETIRED_SETTINGS = new Set<string>(["dragPlane", "lightingPreset"]);
+
 async function persistSettings(settings: AccessibilitySettings): Promise<void> {
   try {
     await AsyncStorage.multiSet([
@@ -306,7 +312,9 @@ export async function hydrateSettings(): Promise<void> {
       TOUCHED_KEY,
     ]);
     if (rawTouched) {
-      for (const key of JSON.parse(rawTouched) as string[]) touched.add(key);
+      for (const key of JSON.parse(rawTouched) as string[]) {
+        if (!RETIRED_SETTINGS.has(key)) touched.add(key);
+      }
     }
     if (!rawSettings) return;
     const saved = JSON.parse(rawSettings) as Partial<AccessibilitySettings>;
@@ -361,6 +369,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
   // Afternoon: the longest warm pool of the day, and the look the room was tuned against.
   roomTimeOfDay: "afternoon",
   roomBackground: "bg7",
+  // ON by default: the companion is a large part of what makes the room read as lived-in rather than as a showroom, so a player has to choose to be without it.
+  roomAvatarVisible: true,
   // Light by default. The palette (ui/theme.ts) was designed against the dark reference, but light is the safer default for a study: it survives a bright room, a projector, and a participant's own phone brightness, none of which we control. Dark and high-contrast are the SAME product in different light — same three accent hues, same meanings — so switching costs nothing but the setting.
   theme: "light",
   // RIGHT by default, because the HUD was authored right-handed and that is what every screenshot, spotlight offset and tuned margin in the build assumes. A left-hander gets the mirror from their own answer to onboarding's first question; nobody gets it by accident.
@@ -438,6 +448,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
   setBackdrop: (backdrop) => set({ backdrop }),
   setRoomTimeOfDay: (roomTimeOfDay) => set({ roomTimeOfDay }),
   setRoomBackground: (roomBackground) => set({ roomBackground }),
+  // NOT persisted, which matches roomBackground and roomTimeOfDay beside it rather than being an oversight — every room display preference in this store is session state today. It is the weakest fit of the three though: a background is a look a player re-picks for fun, while "I don't want the companion" is a decision they expect to stick, so this is the one that will read as a bug when it comes back on at launch. Persisting it means the AsyncStorage pair below (never `settings`, which applyProfile replaces wholesale on every avatar change — the exact event most likely to accompany this choice).
+  setRoomAvatarVisible: (roomAvatarVisible) => set({ roomAvatarVisible }),
   setTheme: (theme) => set({ theme }),
   setAssembleDark: (assembleDark) => set({ assembleDark }),
 

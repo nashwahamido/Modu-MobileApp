@@ -7,6 +7,7 @@ import { Pressable } from "@/src/components/Pressable";
 import { SETTINGS_ICON } from '../../components/iconAssets';
 import { Button } from '../../game/ui/system/Button';
 import { OverlaySheet } from '../../game/ui/system/OverlaySheet';
+import { SLIDE_UP } from '../../game/ui/system/slideUp';
 import { SceneBackdrop } from '../../game/ui/backdrop/SceneBackdrop';
 import { roomBackgroundView } from './roomBackdrops';
 import { ceilingLightOn, timeOfDayPhase, type CeilingLightOverride } from '../core/timeOfDay';
@@ -68,7 +69,7 @@ export function RoomExperience() {
   const k = useLeftColumnScale();
   // The room has TWO layouts, not one layout at two sizes. See the branch further down.
   const tablet = useIsTablet();
- 
+
   const { welcome, open, firstPlacement } = useLocalSearchParams<{
     welcome?: string;
     open?: string;
@@ -93,6 +94,7 @@ export function RoomExperience() {
   const [lightOverride, setLightOverride] = useState<CeilingLightOverride>(null);
   const ceilingLight = ceilingLightOn(hour, lightOverride);
   const roomGuideMascot = avatarForProfile(useGameStore((s) => s.profile));
+  // Placement is shared state (src/room/core/placement) so any route can start it and the scene can render the layout. This screen owns only the HUD: the ghost's drag lives in the scene's gesture layer, where the finger is converted to grid cells by ray picking.
   const me = useCurrentUserId();
   const hydrate = usePlacementStore((p) => p.hydrate);
   const hydrated = usePlacementStore((p) => p.hydrated);
@@ -108,6 +110,25 @@ export function RoomExperience() {
   const [shopOpen, setShopOpen] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(open === 'inventory');
   const [visitPickerOpen, setVisitPickerOpen] = useState(false);
+
+  // The three near-full-screen popups, and ONLY those. The dialogs below them (coming-soon, the two
+  // guides) are small centred cards over a scrim that leaves most of the room in view, so freezing it
+  // behind one would read as the app having hung — see RoomScene's `paused` prop for what stops.
+  const panelOpen = shopOpen || inventoryOpen || visitPickerOpen;
+  const [scenePaused, setScenePaused] = useState(false);
+  // HELD OFF UNTIL THE PANEL HAS FINISHED ARRIVING. A panel slides up over a fully visible room
+  // (SLIDE_UP.enterMs), so pausing the instant the flag flips would freeze the room mid-transition,
+  // in the one moment the player is still looking straight at it — the entrance would read as a
+  // stutter rather than a slide. Resuming is the mirror and needs no delay: the exit reveals the room
+  // progressively, so it has to be live again from the first frame of the dismissal.
+  useEffect(() => {
+    if (!panelOpen) {
+      setScenePaused(false);
+      return;
+    }
+    const timer = setTimeout(() => setScenePaused(true), SLIDE_UP.enterMs);
+    return () => clearTimeout(timer);
+  }, [panelOpen]);
   // Which navigation item is marked as active, for whichever of the two layouts is on screen. Derived
   // rather than a third piece of state: the popups' own flags already say which one is up, and a
   // separate "current tab" would be one more thing that can disagree with them.
@@ -197,7 +218,7 @@ export function RoomExperience() {
       console.warn('[room] welcome guide state save failed', err),
     );
   };
-  
+
   const applyRoomControls = (nextRotation: number, nextZoom: number) => {
     const clampedZoom = Math.max(ORBIT.zoom.min, Math.min(ORBIT.zoom.max, nextZoom));
     roomRotationRef.current = nextRotation;
@@ -229,6 +250,7 @@ export function RoomExperience() {
             onPlacementReposition={() =>
               handlePlacementGuideAction('reposition')
             }
+            paused={scenePaused}
           />
         ) : null}
       </SceneBackdrop>
@@ -438,7 +460,7 @@ const makeStyles = (t: Theme) => StyleSheet.create({
     overflow: 'hidden',
   },
   stage: StyleSheet.absoluteFillObject,
-  
+
   // Hangs from the top-left corner; its height is its contents. LIGHT_COLUMN_GAP is the ONE spacing:
   // the light controls repeat it internally, so all three discs sit the same distance apart.
   leftColumn: {

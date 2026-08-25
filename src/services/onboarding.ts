@@ -1,6 +1,7 @@
 import type { Handedness, ModeId } from "../onboarding/questionnaire";
 import { supabase } from "../config/supabase";
 import { createProfileIfMissing, getProfile, updateProfile } from "./profile";
+import { idForMode } from "../data/player/avatars";
 
 export type OnboardingSaveInput = {
   handedness: Handedness | null;
@@ -34,10 +35,6 @@ export async function saveOnboardingResults(input: OnboardingSaveInput) {
 
   if (error) throw error;
 
-  await updateProfile(user.id, {
-    onboarding_completed: true,
-  });
-
   return { skipped: false as const };
 }
 
@@ -63,21 +60,28 @@ export async function saveSelectedAvatarMode(modeId: ModeId) {
     .maybeSingle();
 
   if (selectError) throw selectError;
-  if (latestResult?.primary_mode === modeId) {
-    return { skipped: false as const };
+  if (latestResult?.primary_mode !== modeId) {
+    const { error: insertError } = await supabase
+      .from("questionnaire")
+      .insert({
+        user_id: user.id,
+        username: profile?.username ?? null,
+        answers: latestResult?.answers ?? {},
+        primary_mode: modeId,
+        secondary_mode: latestResult?.secondary_mode ?? modeId,
+      });
+
+    if (insertError) throw insertError;
   }
 
-  const { error: insertError } = await supabase
-    .from("questionnaire")
-    .insert({
-      user_id: user.id,
-      username: profile?.username ?? null,
-      answers: latestResult?.answers ?? {},
-      primary_mode: modeId,
-      secondary_mode: latestResult?.secondary_mode ?? modeId,
-    });
-
-  if (insertError) throw insertError;
+  // user_profile.avatar_id is the authoritative CURRENT choice. The
+  // questionnaire above remains append-only recommendation/override history.
+  // Write current state last, so a failed history insert cannot report failure
+  // after silently changing what the next launch will load.
+  await updateProfile(user.id, {
+    avatar_id: idForMode(modeId),
+    onboarding_completed: true,
+  });
   return { skipped: false as const };
 }
 
