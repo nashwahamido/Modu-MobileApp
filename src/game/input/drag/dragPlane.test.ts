@@ -163,8 +163,8 @@ test("a vertically-parking cluster gets a camera-plane anchor at its park pose; 
   assert.ok(clusterCarryAnchor([0, 0.5, 0], [0.05, 0.15, 0]));
   // EKET's drawers park OUT the front, in-plane: the horizontal glide already tracks the finger there.
   assert.equal(clusterCarryAnchor([0, 0.3, 0], [0.16, 0, 0]), null);
-  // The seed cluster has no park offset at all.
-  assert.equal(clusterCarryAnchor([0, 0.3, 0], [0, 0, 0]), null);
+  // The seed cluster has no park offset at all: it anchors on its own seat, because its glide plane holds the target and a level orbit grazes it there.
+  assert.deepEqual(clusterCarryAnchor([0, 0.3, 0], [0, 0, 0]), [0, 0.3, 0]);
 });
 
 test("a leashed point still projects under the finger (the on-ray invariant)", () => {
