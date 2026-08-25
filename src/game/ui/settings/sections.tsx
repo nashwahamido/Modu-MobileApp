@@ -16,11 +16,7 @@ import {
   SectionHeader,
   makeSettingsStyles,
 } from "@/src/game/ui/settings/SettingsPrimitives";
-import type {
-  DragPlane,
-  LightingPreset,
-  ReleaseBehavior,
-} from "@/src/game/core/accessibility";
+import type { ReleaseBehavior } from "@/src/game/core/accessibility";
 import type {
   AssemblyMode,
   BackdropId,
@@ -43,10 +39,12 @@ const RELEASE: { value: ReleaseBehavior; label: string }[] = [
   { value: "autoReturn", label: "Auto-return" },
   { value: "float", label: "Float" },
 ];
-const DRAG_PLANE: { value: DragPlane; label: string }[] = [
-  { value: "adaptive", label: "Adaptive" },
-  { value: "level", label: "Level" },
-];
+// DRAG_PLANE_RETIRED. The "Drag mechanism" row is gone and every build is "adaptive" — the drag plane
+// matches sockets on screen and follows their height, full stop. settings.dragPlane still EXISTS and
+// usePartDrag still branches on it, but only into the "level" comparison engine, which nothing can now
+// select: the profiles all default to "adaptive" and RETIRED_SETTINGS (src/game/core/store.ts) drops any
+// value a player saved back when the row was offered. Those branches are dead rather than wrong, and
+// they are left in place as the comparison path they were written to be.
 // "strict" is a live AssemblyMode the engine still honours, but no profile pins it (see PROFILE_MODE) and nothing ships in it, so it is not offered here. Add the row back the day a profile wants it.
 const MODES: { value: AssemblyMode; label: string }[] = [
   { value: "free", label: "Free" },
@@ -70,13 +68,13 @@ const BACKDROPS: { value: BackdropId; label: string }[] = [
   { value: "craft", label: "Craft" },
   { value: "garden", label: "Garden" },
 ];
-const LIGHTING: { value: LightingPreset; label: string }[] = [
-  { value: "auto", label: "Auto" },
-  { value: "studio", label: "Studio" },
-  { value: "warm", label: "Warm" },
-  { value: "soft", label: "Soft" },
-  { value: "golden", label: "Golden" },
-];
+// LIGHTING_RETIRED. The "Lighting" row is gone from every surface — the gear panel had already
+// dropped it (a rig is a pre-build mood, not something to reach for with a part in hand), and it
+// left the /settings Assembly tab on 2026-08-25, which was its last home. settings.lightingPreset is
+// STILL LIVE: AssemblyScene reads it through getLightRig, so every build now runs the "auto" rig each
+// model look was authored with. It is listed in RETIRED_SETTINGS (src/game/core/store.ts) so a player
+// who once chose "warm" is not stuck with it forever with no control left to change it back.
+// Restoring the row means putting a Choice over that same field back into BuildDisplaySection.
 const LEVELS: { value: TextLevel; label: string }[] = [
   { value: "standard", label: "Standard" },
   { value: "simple", label: "Simple" },
@@ -184,13 +182,13 @@ export function ProfileSection() {
   );
 }
 
-/** The interaction experiments still being settled (see the TODO at the top of core/accessibility.ts). Main settings only. */
-export function InteractionDevSection() {
+/** How a part behaves in the hand — what happens when you let go, and whether you pick the tool yourself. Main settings only, and that is the whole reason "Choose tools" lives here rather than under Guidance: swapping the tool policy mid-build changes the next step under the player's finger, so it is a before-you-start choice like the release behaviour beside it, not a dial to reach for with a part in hand. */
+export function InteractionSection() {
   const settings = useGameStore((s) => s.settings);
   const setSettings = useGameStore((s) => s.setSettings);
   return (
     <>
-      <SectionHeader>Interaction (dev)</SectionHeader>
+      <SectionHeader>Interaction</SectionHeader>
       <Choice
         label="Released part"
         desc="Auto-return to tray, or float where you set it down (float includes canvas re-grab)"
@@ -198,22 +196,21 @@ export function InteractionDevSection() {
         options={RELEASE}
         onChange={(v) => setSettings({ releaseBehavior: v })}
       />
-      <Choice
-        label="Drag mechanism"
-        desc="Adaptive matches sockets on screen and follows their height; Level fixes the plane at one height (comparison mode — struggles on multi-height sockets)"
-        value={settings.dragPlane}
-        options={DRAG_PLANE}
-        onChange={(v) => setSettings({ dragPlane: v })}
+      <Row
+        label="Choose tools"
+        desc="Pick the tool yourself before tightening"
+        value={settings.manualTools}
+        onValueChange={(v) => setSettings({ manualTools: v })}
       />
     </>
   );
 }
 
-/** How the BUILD looks. `showLighting` is off in the gear panel: the rig is a pre-build mood, not something to reach for with a part in hand. */
+/** How the BUILD looks. `showFocusMode` is off in the gear panel: Focus mode already has a HUD chip (ToggleChips) that is faster to reach than opening a panel, so a second home behind it is noise rather than a missing control. That flag moved here with the row itself when Focus left Guidance — it belongs to whichever section renders the row, or the gear panel silently regains a control it deliberately dropped. There is no `showLighting` twin any more: the Lighting row is gone from every surface, see LIGHTING_RETIRED above. */
 export function BuildDisplaySection({
-  showLighting = true,
+  showFocusMode = true,
   ...focus
-}: FocusProps & { showLighting?: boolean }) {
+}: FocusProps & { showFocusMode?: boolean }) {
   const settings = useGameStore((s) => s.settings);
   const renderStyle = useGameStore((s) => s.renderStyle);
   const backdrop = useGameStore((s) => s.backdrop);
@@ -253,15 +250,6 @@ export function BuildDisplaySection({
           }}
         />
       </View>
-      {showLighting ? (
-        <Choice
-          label="Lighting"
-          desc="Auto = each model look's natural rig"
-          value={settings.lightingPreset}
-          options={LIGHTING}
-          onChange={(v) => setSettings({ lightingPreset: v })}
-        />
-      ) : null}
       <View onLayout={targetLayout("instructions")}>
         <Choice
           label="Instructions"
@@ -274,16 +262,21 @@ export function BuildDisplaySection({
           }}
         />
       </View>
+      {/* Display rather than Guidance, because what it changes is what you can SEE: everything but the current part and action is taken off the scene. Guidance is about how much the game TELLS you; this is about how much of the model is drawn. Error hints under Guidance still reads this same flag to explain itself — moving the switch does not move that dependency, and the two sections are free to sit apart. */}
+      {showFocusMode ? (
+        <Row
+          label="Focus mode"
+          desc="Show only the current part + action"
+          value={settings.focusMode}
+          onValueChange={(v) => setSettings({ focusMode: v })}
+        />
+      ) : null}
     </>
   );
 }
 
-/** How much the game guides you. Both flags are off in the gear panel: swapping the tool policy mid-build changes the next step under the player's finger, and Focus already has a HUD chip (ToggleChips) that is faster to reach than opening this panel. */
-export function GuidanceSection({
-  showManualTools = true,
-  showFocusMode = true,
-  ...focus
-}: FocusProps & { showManualTools?: boolean; showFocusMode?: boolean }) {
+/** How much the game TELLS you: the mode, and the two kinds of prompt it produces. Carries no gear-panel flags of its own any more — every row here is safe to change with a part in hand, and the two that were not (Focus mode, Choose tools) left for Display and Interaction along with the props that hid them. */
+export function GuidanceSection({ ...focus }: FocusProps) {
   const settings = useGameStore((s) => s.settings);
   const mode = useGameStore((s) => s.mode);
   const setSettings = useGameStore((s) => s.setSettings);
@@ -300,14 +293,6 @@ export function GuidanceSection({
         options={MODES}
         onChange={setMode}
       />
-      {showFocusMode ? (
-        <Row
-          label="Focus mode"
-          desc="Show only the current part + action"
-          value={settings.focusMode}
-          onValueChange={(v) => setSettings({ focusMode: v })}
-        />
-      ) : null}
       {/* Free mode has no instructions to show — objectiveText returns null there — so the toggle would be a switch for an empty bar. Written !== "free" rather than === "guide" so strict, live in the engine but unreachable from this panel, groups with guide. */}
       {mode !== "free" ? (
         <Row
@@ -329,14 +314,6 @@ export function GuidanceSection({
           value={settings.softHints}
           onValueChange={(v) => setSettings({ softHints: v })}
           disabled={settings.focusMode}
-        />
-      ) : null}
-      {showManualTools ? (
-        <Row
-          label="Choose tools"
-          desc="Pick the tool yourself before tightening"
-          value={settings.manualTools}
-          onValueChange={(v) => setSettings({ manualTools: v })}
         />
       ) : null}
     </>
@@ -460,39 +437,23 @@ export function BuildAudioSection() {
 }
 
 export function AppDisplaySection() {
-  const styles = useFixedStyles(makeSettingsStyles);
-  const settings = useGameStore((s) => s.settings);
-  const setSettings = useGameStore((s) => s.setSettings);
   const handedness = useGameStore((s) => s.handedness);
   const setHandedness = useGameStore((s) => s.setHandedness);
   const roomBackground = useGameStore((s) => s.roomBackground);
   const setRoomBackground = useGameStore((s) => s.setRoomBackground);
-  const changeFont = (delta: number) =>
-    setSettings({
-      fontScale: Math.min(1.5, Math.max(0.9, +(settings.fontScale + delta).toFixed(2))),
-    });
+  const roomAvatarVisible = useGameStore((s) => s.roomAvatarVisible);
+  const setRoomAvatarVisible = useGameStore((s) => s.setRoomAvatarVisible);
   return (
     <>
       <SectionHeader>Display</SectionHeader>
       {/* The app-wide dark switch is gone: dark is a BUILD preference now ("Assemble in Dark Mode",
           in the build's own Display section). One switch, in the place it applies. */}
-      <View style={styles.switchRow}>
-        <View style={styles.rowText}>
-          <Text style={styles.rowLabel}>Text size</Text>
-          <Text style={styles.rowDesc}>Objective and hint text size</Text>
-        </View>
-        <View style={styles.fontStepper}>
-          <Pressable style={styles.fontBtn} onPress={() => changeFont(-0.1)} hitSlop={6}>
-            <Text style={styles.arrowText}>A-</Text>
-          </Pressable>
-          <Text style={styles.stepperValue}>{settings.fontScale.toFixed(1)}x</Text>
-          <Pressable style={styles.fontBtn} onPress={() => changeFont(0.1)} hitSlop={6}>
-            <Text style={styles.arrowText}>A+</Text>
-          </Pressable>
-        </View>
-      </View>
-      {/* The "Reading font" row was removed 2026-08-19 with OpenDyslexic itself. Every reading
-          surface uses Lexend now, and Text size above is what remains for legibility here. */}
+      {/* The "Reading font" row went on 2026-08-19 with OpenDyslexic itself, and "Text size" followed
+          it out. settings.fontScale is STILL LIVE and still read by the objective bar, the hint toast
+          and the loading screen — it simply has no player-facing control any more, so it sits at
+          whatever the active profile sets (1.0 on control, 1.1 on the larger-type profile). Restoring
+          the row means a stepper over that same field; nothing downstream has to change. The dev
+          EngineTestScreen keeps its own stepper and is unaffected. */}
       {/* Handedness is answered in onboarding's first question and never asked again — so until now
           a mis-tap there was permanent short of redoing onboarding. It sits in the GENERAL settings
           rather than the build's own, because it is a fact about the player rather than a
@@ -514,6 +475,16 @@ export function AppDisplaySection() {
         value={roomBackground}
         options={ROOM_BACKGROUNDS}
         onChange={setRoomBackground}
+      />
+      {/* Beside Room Background because the two are the same kind of choice — what the room LOOKS like
+          — and unlike Left-handed layout above, which is a fact about the player. Which companion
+          appears is not asked here: that follows the onboarding profile (roomAvatarKindForProfile),
+          and this only says whether one is there at all. */}
+      <Row
+        label="Show avatar"
+        desc="Your companion wanders the room. Turning it off also frees the memory and per-frame work it costs."
+        value={roomAvatarVisible}
+        onValueChange={setRoomAvatarVisible}
       />
     </>
   );
