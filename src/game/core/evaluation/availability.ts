@@ -11,9 +11,9 @@ import {
   actionCluster,
   actionsForClusterFocus,
   clusterComplete,
-  clusterCurrentStage,
   clusterPrereqsMet,
   combineReady,
+  requiresClusterFocus,
 } from "./clusters";
 import {
   andFrontierTargets,
@@ -166,6 +166,19 @@ function computeAvailableActions(
  *   - strict — exactly one action: the lowest-`order` legal step. Predetermined,
  *              so it ignores cluster focus and drives the sequence itself.
  */
+/** The section a RESUMED build should focus, derived from progress rather than persisted: the autosave never carried `activeCluster`, so every relaunch of a mid-build multi-cluster furniture dropped the player back into the section chooser ("switch focus") no matter where they stopped — EKET, cabinet 24% done, asked as though nothing were underway. The answer is where the work is: the cluster of the first legally available action in composed order. Null for a FRESH build (the chooser is the intended first question), for the combine stage (unfocused is correct there — mustChoose already yields to combineReady), and for single-cluster furniture. */
+export function resumeFocusCluster(
+  f: Furniture,
+  done: ReadonlySet<ActionId>,
+): ClusterId | null {
+  if (!requiresClusterFocus(f) || done.size === 0 || combineReady(f, done)) return null;
+  for (const a of availableActions(f, done)) {
+    const cluster = actionCluster(f, a);
+    if (cluster) return cluster;
+  }
+  return null;
+}
+
 export function availableInMode(
   f: Furniture,
   done: ReadonlySet<ActionId>,
@@ -185,8 +198,16 @@ export function availableInMode(
   const focused = actionsForClusterFocus(f, legal, activeCluster);
   if (mode === "free") return focused;
 
+  // Guide's stage gate is PACING, not legality — legality lives in requires/gates/stability. The offering is therefore each cluster's lowest stage with legally AVAILABLE work, not clusterCurrentStage (lowest with INCOMPLETE work): the two differ exactly when the current stage's remainder is blocked by a later-stage prerequisite, and pinning to the incomplete stage then offers NOTHING forever. Measured deadlock (2026-08-25): EKET built bottom-first in free mode, resumed in guide — topPanel (stage 1) gate-waits for backPanel (stage 2), clusterCurrentStage stayed 1, guide went permanently empty ("Switch focus", bare tray). With the floor on available work, that state offers backPanel; every normally-paced build is untouched, because a stage with available work IS the current stage.
+  const stageFloor = new Map<ClusterId, number>();
+  for (const a of focused) {
+    const cluster = actionCluster(f, a);
+    if (cluster == null) continue;
+    const floor = stageFloor.get(cluster);
+    if (floor === undefined || a.stage < floor) stageFloor.set(cluster, a.stage);
+  }
   return focused.filter((a) => {
     const cluster = actionCluster(f, a);
-    return cluster == null || a.stage === clusterCurrentStage(f, cluster, done);
+    return cluster == null || a.stage === stageFloor.get(cluster);
   });
 }

@@ -1,5 +1,6 @@
 // The bridge between the live game store and a persistable BuildSave. snapshotBuild reads the resumable fields out; applyBuild writes a save back in. Keep this the ONLY place that maps between the two, so the persisted shape and the store can't drift.
 import type { BuildSave, UserId } from "@/src/data/core/types";
+import { resumeFocusCluster } from "@/src/game/core/evaluation/availability";
 import { useGameStore } from "@/src/game/core/store";
 
 type GameState = ReturnType<typeof useGameStore.getState>;
@@ -30,4 +31,8 @@ export function applyBuild(save: BuildSave): void {
     driveProgress: save.driveProgress,
     mode: save.mode,
   });
+  // The section focus is DERIVED, not persisted (the save schema has no column for it, and it never needs one): a resumed mid-build lands in the cluster where its next available action lives, instead of the section chooser asking a question the save already answers. loadFurniture reset activeCluster to null just before this, so a fresh or combine-stage build keeps the chooser exactly as before.
+  const f = useGameStore.getState().furniture;
+  const focus = f ? resumeFocusCluster(f, new Set(save.completed)) : null;
+  if (focus) useGameStore.setState({ activeCluster: focus });
 }

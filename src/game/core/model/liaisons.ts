@@ -34,12 +34,14 @@ export function isConnector(p: PartDef): boolean {
   );
 }
 
-/** Overlay authored structural data (directJoins / slideJoins / seed / unstable) onto the generated parts. Most joints come from the fasteners' `attached` (mesh names), so `directJoins`/`slideJoins` are only needed for fastener-free contacts; the rest is build intent. */
+/** Overlay authored structural data (directJoins / slideJoins / seed / unstable) onto the generated parts. Most joints come from the fasteners' `attached` (mesh names), so `directJoins`/`slideJoins` are only needed for fastener-free contacts; the rest is build intent. `type`/`attached` are the RE-TYPING escape hatch: a part whose mesh name lied about its category (EKET's suspCap ships as a bare structural node) is re-typed here with its bindings, instead of renaming meshes in the GLB (see never-modify-models) or hand-editing parts.gen. */
 export type StructureOverlay = Record<
   PartId,
   Partial<
     Pick<
       PartDef,
+      | "type"
+      | "attached"
       | "directJoins"
       | "slideJoins"
       | "screwJoins"

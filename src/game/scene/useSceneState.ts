@@ -90,9 +90,16 @@ export function deriveSceneState(
       ? (actionCluster(furniture, available[0]) ?? activeCluster)
       : activeCluster;
   const availableIds = new Set(available.map((a) => a.actionId));
-  const stage = focusRequired
-    ? currentStageForClusterFocus(furniture, done, effectiveCluster)
-    : currentStage(furniture.actions, done);
+  // The tray's stage FOLLOWS THE OFFERING when there is one: availableInMode's guide gate offers each cluster's lowest stage with legally available work, which can sit ABOVE the incomplete-work stage (bottom-first EKET: topPanel s1 gate-waits for backPanel s2 — the objective named the back panel while this tray, on its own stage source, showed no card for it). Min over the offered actions of the effective cluster = exactly that floor; the incomplete-work stage stays as the fallback so an all-blocked state still shows the current stage's locked cards instead of an empty column.
+  const offeredStage = available.reduce<number | null>((m, a) => {
+    if (focusRequired && effectiveCluster && actionCluster(furniture, a) !== effectiveCluster) return m;
+    return m === null || a.stage < m ? a.stage : m;
+  }, null);
+  const stage =
+    offeredStage ??
+    (focusRequired
+      ? currentStageForClusterFocus(furniture, done, effectiveCluster)
+      : currentStage(furniture.actions, done));
 
   // An untouched cluster (none of its parts picked up yet) shows only its LEGAL cards as grabbable — free mode's grab-anything is suspended so each cluster's opening move (its seed, or a staged carrier) is unmistakable; from that cluster's first pickup on, normal per-mode rules resume.
   const startedClusters = new Set<ClusterId>();

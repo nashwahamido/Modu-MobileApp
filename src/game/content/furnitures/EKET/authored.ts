@@ -2,9 +2,11 @@ import {
   action,
   FastenerRule,
 } from "@/src/game/core/composition/composeActions";
-import { StructureOverlay } from "@/src/game/core/model/liaisons";
-import { asComponentId, asGroupId, asPartId, placeId, tightenId } from "@/src/game/core/ids";
+import { applyStructure, StructureOverlay } from "@/src/game/core/model/liaisons";
+import { lowerFasteners, type FastenerEntry, type FastenerMap } from "@/src/game/core/model/fasteners";
+import { asComponentId, asPartId } from "@/src/game/core/ids";
 import {
+  AssemblyMode,
   ClusterDef,
   ClusterId,
   ComponentDef,
@@ -18,6 +20,9 @@ import {
   PushOpenSpec,
 } from "@/src/game/core/type";
 import { PARTS } from "./parts.gen";
+
+// Lives here, not in meta.ts, because it is an AUTHORED input to composition like everything else in this file — the recipe serializer reads the authored module only (never meta.ts, whose thumbnail requires are asset handles), so a mode pinned in meta.ts alone is silently dropped from a recipe-composed build.
+export const MODE: AssemblyMode = "guide";
 
 export const LABELS = {
   topPanel: { standard: "Top panel" },
@@ -134,22 +139,22 @@ const cabinetRunners = (s: string): StructureOverlay => ({
   },
 } as StructureOverlay);
 
-export const STRUCTURE: StructureOverlay = {
+const STRUCTURE_BASE: StructureOverlay = {
   // ── cabinet (manual AA-2345060 steps 1-9), linear build: LEFT side is screwed onto its rails FIRST (steps 2-3, enforced by requires on topPanel), then TOP hooks onto the left side (keyhole two-phase, lockDir below), then RIGHT side + its rails hook on the same way, then the BACK SLIDES into both sides' grooves (step 6 — slide frontier needs both sides; requiresAny needs one horizontal, already satisfied by topPanel), then BOTTOM closes last over the back (gate, step 7); cams + pins only after the back is seated (step 9 — cams overridden to "secured" so they never preload-lock the box like a LACK bolt would). WORLD FRAME, measured from parts.gen.ts — trust these numbers, not intuition: +X = FRONT   (drawerFront x=+0.176, backPanel x=-0.149; depth spans X ±0.17) +Y = UP      (topPanel y=+0.167, bottomPanel y=-0.167) +Z = LEFT, −Z = RIGHT  (sidePanelL z=+0.342, sidePanelR z=-0.342) matching the real 70(w)×35(h)×35(d)cm EKET. An earlier revision of this comment said front = −X; every placeDir, stageOffset and pushOpen axis authored against that belief was sign-flipped along X and has been corrected. If you are adding a part, measure it rather than copying a neighbour's sign. placeDir is the direction the part TRAVELS as it seats (engagement.ts travelAxis/parkInfo — the park offset is its negation), NOT where the part parks. placeDir on every parked mover: authored travel axes — the centroid heuristic guessed wrong on-device for nearly every EKET part. side↔horizontal joints are KEYHOLES, not simple presses: the slots in the SIDE panels' faces run along the DEPTH axis (X), so the mover presses in ALREADY AT TARGET HEIGHT with a small depth overshoot (dowels through the big slot ends), then shoves along X so the dowels land in the narrow ends. lockDir opts a part into the two-phase hook press. The shove sign follows what the MOVER carries — horizontals carry the DOWELS (they move the way the dowels travel, big→narrow: forward), sides carry the KEYHOLES over fixed dowels (same relative travel = panel moves the other way: back; both sides' slots are Z-mirrors, so their X orientation matches) — which is ORDER-INDEPENDENT, so every panel authors its own lockDir and whoever places second in a pair uses the right motion automatically; a seed that starts the build just drops (engagement is order-derived). VERIFY ON DEVICE: the 1.5cm default lock travel, and the shove signs — if the slots run the other way, flip ALL lockDir X signs together.
   sidePanelL: { seed: true, directJoins: [pid("topPanel"), pid("bottomPanel")], placeDir: [0, 0, -1] as const, lockDir: [-1, 0, 0] as const }, // lockDir engages only when a horizontal seeded first and this side becomes the mover — as the strict-order seed it just drops
-  sidePanelR: { directJoins: [pid("topPanel"), pid("bottomPanel")], placeDir: [0, 0, 1] as const, lockDir: [-1, 0, 0] as const }, // not a seed — reachable via the topPanel edge once topPanel is down; arrives from the right, travelling inward — its keyholes ride over the top's edge dowels a bit FORWARD of seat, then it shoves BACK to lock
+  sidePanelR: { seed: true, directJoins: [pid("topPanel"), pid("bottomPanel")], placeDir: [0, 0, 1] as const, lockDir: [-1, 0, 0] as const }, // ALSO a seed (2026-08-25, user call): free mode may start from EITHER side, mirroring the drawer box where front + both sides seed — the strict order still walks left-first by list position. As a mid-build mover it arrives from the right, travelling inward — its keyholes ride over the top's edge dowels a bit FORWARD of seat, then it shoves BACK to lock; as the opening seed it just drops (engagement is order-derived, the BEKVÄM two-leg precedent)
   topPanel: { seed: true, placeDir: [0, 0, 1] as const, lockDir: [1, 0, 0] as const }, // ALSO a seed: free mode may start from either horizontal (the manual itself builds off a flat panel) and the sides then hook onto IT with their opposite lockDir. As the strict-order mover it presses sideways (toward +Z) onto the standing LEFT side at target height, its edge dowels entering the big slot ends a bit BEHIND their final spots, then shoves FORWARD to lock
   bottomPanel: { seed: true, placeDir: [0, 1, 0] as const, lockDir: [1, 0, 0] as const }, // also a seed (see topPanel); same dowel-carrier lock as the top — as the closing mover it presses UP onto the sides' bottom slots at a small depth overshoot, then shoves FORWARD to lock (the cams+pins then secure it, they don't replace the hook); as a seed it just drops and the sides carry the keyhole motion
-  backPanel: { slideJoins: [pid("sidePanelL"), pid("sidePanelR")], placeDir: [0, 1, 0] as const }, // glides UP the side grooves from the still-open bottom — the top closes in stage 1 BEFORE the back, so coming down from above collides with it; if the build order ever flips (bottom first), this sign flips too — a static placeDir can only bake one order (same limitation engagement.ts notes for presses)
-  // back-panel cam locks secure the slide joint AFTER the back is in — not a preloaded connector joint (kind override: cam → secured; motion stays "turn" from hardware.ts) engageDir OVERRIDDEN per part (2026-07-23, from derive-fasteners DUMP head/tip positions — the GLB bakes a blanket +X for all 16, violating shaft-on-local-Y): a cam/pin engages big-end→small-end like a screw, and the two groups run on DIFFERENT axes. Each CAM sits inside its frame panel with its big face toward the cabinet interior and presses INTO that panel — down into the bottom (head y −0.151, tip −0.169), up into the top, sideways into its side — so its head→outward engageDir points at the interior, one clean cardinal per panel (the derived vectors also carry a ~6° bore lean; ignored). No insertProud override (reverses the earlier insertProud-0 pass): the default 2cm proud loose pose + one-shot press seat give the dowel interaction feel; with zero proud the press had no travel and the part looked home the moment it was dropped.
-  cam139434_1: { fastenerKind: "secured", engageDir: [0, 0, -1] as const }, // presses +Z into sidePanelL
-  cam139434_2: { fastenerKind: "secured", engageDir: [0, 1, 0] as const }, // presses down into bottomPanel
-  cam139434_3: { fastenerKind: "secured", engageDir: [0, 1, 0] as const },
-  cam139434_4: { fastenerKind: "secured", engageDir: [0, 1, 0] as const },
-  cam139434_5: { fastenerKind: "secured", engageDir: [0, 0, 1] as const }, // presses -Z into sidePanelR
-  cam139434_6: { fastenerKind: "secured", engageDir: [0, -1, 0] as const }, // presses up into topPanel
-  cam139434_7: { fastenerKind: "secured", engageDir: [0, -1, 0] as const },
-  cam139434_8: { fastenerKind: "secured", engageDir: [0, -1, 0] as const },
+  backPanel: { slideJoins: [pid("sidePanelL"), pid("sidePanelR")], placeDir: [0, 1, 0] as const }, // glides UP the side grooves from the still-open bottom in the authored top-first order. SIGN-ADAPTIVE since 2026-08-25: this value is the groove AXIS + preferred sign, and travelAxis flips the sign per build order via the sweep data — after a bottom-first close (legal in free mode through the symmetric gates below) the panel enters DOWN through the open top, the branch the static value used to ship as a collision
+  // back-panel cam locks secure the slide joint AFTER the back is in — not a preloaded connector joint (the FASTENERS def below says securer, and lowering emits the cam→secured kind overrides that used to be hand-written here; motion stays "turn" from hardware.ts) engageDir OVERRIDDEN per part (2026-07-23, from derive-fasteners DUMP head/tip positions — the GLB bakes a blanket +X for all 16, violating shaft-on-local-Y): a cam/pin engages big-end→small-end like a screw, and the two groups run on DIFFERENT axes. Each CAM sits inside its frame panel with its big face toward the cabinet interior and presses INTO that panel — down into the bottom (head y −0.151, tip −0.169), up into the top, sideways into its side — so its head→outward engageDir points at the interior, one clean cardinal per panel (the derived vectors also carry a ~6° bore lean; ignored). No insertProud override (reverses the earlier insertProud-0 pass): the default 2cm proud loose pose + one-shot press seat give the dowel interaction feel; with zero proud the press had no travel and the part looked home the moment it was dropped.
+  cam139434_1: { engageDir: [0, 0, -1] as const }, // presses +Z into sidePanelL
+  cam139434_2: { engageDir: [0, 1, 0] as const }, // presses down into bottomPanel
+  cam139434_3: { engageDir: [0, 1, 0] as const },
+  cam139434_4: { engageDir: [0, 1, 0] as const },
+  cam139434_5: { engageDir: [0, 0, 1] as const }, // presses -Z into sidePanelR
+  cam139434_6: { engageDir: [0, -1, 0] as const }, // presses up into topPanel
+  cam139434_7: { engageDir: [0, -1, 0] as const },
+  cam139434_8: { engageDir: [0, -1, 0] as const },
   // the step-9 PINS go in exactly like their neighbouring cams (user-corrected): big end toward the interior, pressed into the host panel along its normal — NOT along X (that was the old blanket [-1,0,0]; the derive script's X-axis read is a red herring, the pin mesh is a near-uniform ~11mm disc whose PCA short axis is unreliable). Same per-panel cardinal as the cam beside each one.
   dowel139435_1: { engageDir: [0, 1, 0] as const }, // presses down into bottomPanel
   dowel139435_2: { engageDir: [0, 1, 0] as const },
@@ -164,14 +169,14 @@ export const STRUCTURE: StructureOverlay = {
   dowel145572_2: { insertStage: 0.03, insertRetract: 0.04 },
   dowel145572_3: { insertStage: 0.03, insertRetract: 0.04 },
   dowel145572_4: { insertStage: 0.03, insertRetract: 0.04 },
-  // suspension fittings (top-rear corners), fully USER-VERIFIED against manual steps 10-13 (2026-07-22, corrected on device): each BRACKET is TWO beats — tap it in SIDEWAYS BY HAND toward its own side panel (left to left, right to right, the plate pins entering the side's rear-edge holes), then a separate stationary TIGHTEN with the screwdriver on the screw whose hole faces the BACK (step 11's drill; the screw is not a GLB part, so the tighten beat rides the bracket itself — engageDir-less, zero loose offset, no positional movement). The KNOB then SCREWS in from the rear BY HAND (dial, no tool). The COVER just CLICKS home at drop (dropOn — no tap, no dial), and is UNSTABLE until its CAP screws over it perpendicular to the back panel (the securing screw-place stability rule). Corner stack rear-to-front for the record: knob (-0.170) -> bracket (-0.160) -> back panel (-0.149) -> cover (-0.146) -> cap (-0.144). bracket engageDir/insertProud/toolAnchor serve the TIGHTEN VISUAL only (user-verified): the screwdriver stands perpendicular to the back panel (engageDir [-1,0,0] — TightenControl never sinks/spins a structural part) with zero proud travel (insertProud 0), rotating at the CIRCULAR BOSS centre — the node origin sits on the plate ~1cm from it, toolAnchor bridges the gap (boss z ±0.308 vs origin z ±0.317873)
+  // suspension fittings (top-rear corners), fully USER-VERIFIED against manual steps 10-13 (2026-07-22, corrected on device): each BRACKET is TWO beats — tap it in SIDEWAYS BY HAND toward its own side panel (left to left, right to right, the plate pins entering the side's rear-edge holes), then a separate stationary TIGHTEN with the screwdriver on the screw whose hole faces the BACK (step 11's drill; the screw is not a GLB part, so the tighten beat rides the bracket itself — engageDir-less, zero loose offset, no positional movement). The KNOB then SCREWS in from the rear BY HAND (dial, no tool). The COVER just CLICKS home at drop (dropOn — no tap, no dial), and is UNSTABLE until its CAP is driven over it (the cap re-typed structural→fastener 2026-08-24 per fastener-model-v2: a SECURER on the cover↔bracket liaison, so the ordinary fastener-securing stability rule holds the cover and the screw-place special case is gone). Corner stack rear-to-front for the record: knob (-0.170) -> bracket (-0.160) -> back panel (-0.149) -> cover (-0.146) -> cap (-0.144). bracket engageDir/insertProud/toolAnchor serve the TIGHTEN VISUAL only (user-verified): the screwdriver stands perpendicular to the back panel (engageDir [-1,0,0] — TightenControl never sinks/spins a structural part) with zero proud travel (insertProud 0), rotating at the CIRCULAR BOSS centre — the node origin sits on the plate ~1cm from it, toolAnchor bridges the gap (boss z ±0.308 vs origin z ±0.317873)
   suspBracket_1: { directJoins: [pid("sidePanelR")], placeDir: [0, 0, -1] as const, engageDir: [-1, 0, 0] as const, insertProud: 0, toolAnchor: [0, 0, 0.009873] as const }, // sits at z=-0.318: taps outward toward the RIGHT side's rear-edge holes, bare-handed
   suspBracket_2: { directJoins: [pid("sidePanelL")], placeDir: [0, 0, 1] as const, engageDir: [-1, 0, 0] as const, insertProud: 0, toolAnchor: [0, 0, -0.009873] as const }, // sits at z=+0.318: taps outward toward the LEFT side's rear-edge holes, bare-handed
-  // cover: dropOn — the press liaison keeps it Γ-reachable through its bracket, but the placement is a plain snap (user-verified: "it's placed", no tap and no dial). cap: placeDir doubles as the SCREW AXIS (engagement.directScrewAxis honors it; derived would be the same clean [1,0,0], authored for the record)
+  // cover: dropOn — the press liaison keeps it Γ-reachable through its bracket, but the placement is a plain snap (user-verified: "it's placed", no tap and no dial). cap: RE-TYPED to a fastener here (the GLB ships it as a bare structural node with no `__a&b` binding, so the overlay's re-typing escape hatch supplies type + attached — cover first, bracket second, the insert-requires order). It seats travelling −X onto the cover, so its head/outward engageDir is +X; hand-spun (HARDWARE suspCap: tool "hand"), securer sequencing (both attached placed) comes from the FASTENERS def below.
   suspCover_1: { directJoins: [pid("suspBracket_1")], dropOn: true, unstable: true },
   suspCover_2: { directJoins: [pid("suspBracket_2")], dropOn: true, unstable: true },
-  suspCap_1: { screwJoins: [pid("suspCover_1")], placeDir: [-1, 0, 0] as const },
-  suspCap_2: { screwJoins: [pid("suspCover_2")], placeDir: [-1, 0, 0] as const },
+  suspCap_1: { type: "fastener", attached: [pid("suspCover_1"), pid("suspBracket_1")], engageDir: [1, 0, 0] as const },
+  suspCap_2: { type: "fastener", attached: [pid("suspCover_2"), pid("suspBracket_2")], engageDir: [1, 0, 0] as const },
   // the knob indices are CROSSED relative to every other suspension part: suspKnob_1 sits at z=+0.308 (LEFT, alongside suspBracket_2) and suspKnob_2 at z=-0.308 (RIGHT, alongside suspBracket_1), whereas cover_n/cap_n share their bracket_n's side. The joins follow the GEOMETRY, not the index — that pairing is measured. SCREWED in BY HAND (user-verified: not tapped) — screwJoins + authored placeDir [1,0,0]: it parks 4.5cm behind the rear and DIALS forward onto its bracket about the back-panel normal; the old diagonal-centre objection died when directScrewAxis learned to honor the authored placeDir. NO tool.
   suspKnob_1: { screwJoins: [pid("suspBracket_2")], placeDir: [1, 0, 0] as const },
   suspKnob_2: { screwJoins: [pid("suspBracket_1")], placeDir: [1, 0, 0] as const },
@@ -181,44 +186,33 @@ export const STRUCTURE: StructureOverlay = {
   ...drawer("2"),
 } as StructureOverlay;
 
-export const FASTENER_RULES: FastenerRule[] = [
+// Fastener defs (fastener-model-v2 seam, model/fasteners.ts) — the def declares each hardware GROUP's form; per-instance bindings stay in the mesh names (plus the suspCap re-typing above). Entry order is the old rule order: it drives the composed action order.
+export const FASTENERS: FastenerMap = {
   // drawer sub-assemblies (stage 1)
-  // bolt128918 (front keyhole bolts) rule removed 2026-07-20: the bolts are pre-attached to the sides in the GLB, so they are no longer parts — the front's press-down placement still locks the keyholes over the pre-installed heads
-  { group: asGroupId("screw110519"), stage: 1 }, // back screws (back → sides)
-  { group: asGroupId("screw109041"), stage: 1 },
-  // cabinet: rails onto flat sides first (stage 1); back cams + pins only
-  // after the back panel is seated in its groove (stage 3, manual step 9);
-  // stabiliser-rod pins couple the rod to the rails after the rod clicks on
-  { group: asGroupId("screw100349"), stage: 1 },
-  // rod↔frame coupling dowels: no overrides needed — staging derives "press into the rod once it is out, rotate home once it is seated"
-  { group: asGroupId("dowel145572"), stage: 3 },
-  { group: asGroupId("cam139434"), stage: 3 },
-  {
-    group: asGroupId("dowel139435"),
-    stage: 3,
-    // each pin also needs its co-located cam SEATED first (paired by shared bore position): the pin crosses the cam's slots inside the panel, so a still-loose cam physically blocks it — "tighten" here is the cam's one-shot press home, not a tool beat
-    requires: (p) => {
-      const cam = PIN_TO_CAM[p.partId as string];
-      return [
-        ...(p.attached ?? []).map(placeId),
-        placeId(asPartId("backPanel")),
-        ...(cam ? [tightenId(asPartId(cam))] : []),
-      ];
-    },
-  },
-];
+  // bolt128918 (front keyhole bolts) def removed 2026-07-20: the bolts are pre-attached to the sides in the GLB, so they are no longer parts — the front's press-down placement still locks the keyholes over the pre-installed heads
+  screw110519: { home: "liaison", role: "securer", stage: 1 }, // back screws (back → sides)
+  screw109041: { home: "liaison", role: "securer", stage: 1 },
+  // cover cap — re-typed structural→fastener (see STRUCTURE): a securer on the cover↔bracket liaison; its insert waits for both and its tighten secures the unstable cover. Listed BEFORE screw100349 so its actions lead the moved cabinet fastener block: the voiceover script then keeps the cap's line at clip 22, where the RECORDED files have it (stepVoice pins).
+  suspCap: { home: "liaison", role: "securer", stage: 3 },
+  // cabinet: rails onto flat sides first (stage 1); back cams + pins only after the back panel is seated in its groove (stage 3, manual step 9); stabiliser-rod pins couple the rod to the rails after the rod clicks on
+  screw100349: { home: "liaison", role: "securer", stage: 1 },
+  // rod↔frame coupling dowels: preloaded connectors (the rod mounts by press once they are in); staging derives "press into the rod once it is out, rotate home once it is seated", the drop step is the 3-phase insertStage above
+  dowel145572: { home: "liaison", role: "connector", preload: { completesOn: "insert", counterpartMountsBy: "press" }, lifecycle: ["drop", "insert", "tighten"], stage: 3 },
+  cam139434: { home: "liaison", role: "securer", stage: 3 },
+  // each pin rides its co-located cam (extraOf; instance pairing = same liaison + nearest, reproducing the old hand-written PIN_TO_CAM table): the pin crosses the cam's slots inside the panel, so a still-loose cam physically blocks it — lowering emits "own host place, remaining endpoint place (backPanel), then the cam's tighten" per instance
+  dowel139435: { home: { extraOf: "cam139434" }, stage: 3 },
+} as unknown as FastenerMap;
 
-/** Pin → the cam sharing its bore (matched on baked positions: same host panel, same z/y slot). */
-const PIN_TO_CAM: Record<string, string> = {
-  dowel139435_1: "cam139434_2", // bottom, z +0.224
-  dowel139435_2: "cam139434_4", // bottom, z −0.224
-  dowel139435_8: "cam139434_3", // bottom, z 0
-  dowel139435_7: "cam139434_1", // side L
-  dowel139435_3: "cam139434_5", // side R
-  dowel139435_4: "cam139434_6", // top, z −0.224
-  dowel139435_6: "cam139434_7", // top, z 0
-  dowel139435_5: "cam139434_8", // top, z +0.224
-};
+// Lower against the RE-TYPED parts — suspCap's fastener binding lives in the overlay, not the GLB.
+const LOWERED = lowerFasteners(FASTENERS, applyStructure(PARTS, STRUCTURE_BASE));
+
+// The lowered kind overrides land back on the overlay (cam→secured ×8), replacing the fields this file used to hand-write.
+export const STRUCTURE: StructureOverlay = Object.entries(LOWERED.kindOverrides).reduce(
+  (s, [id, kind]) => ({ ...s, [id]: { ...s[id as PartId], fastenerKind: kind } }),
+  STRUCTURE_BASE,
+);
+
+export const FASTENER_RULES: FastenerRule[] = LOWERED.rules;
 
 /** Gate: whichever horizontal closes SECOND over the back panel's groove must wait for the back (manual steps 6-7) — under the linear build order topPanel always goes first (gated trivially true) and bottomPanel always goes second (gated on the back), but both gates stay symmetric in case the order ever changes. */
 export const GATES = {
@@ -297,11 +291,9 @@ export const AUTHORED_ACTIONS: DraftAction[] = [
   action({ type: "tightenFastener", stage: 3, partId: "suspBracket_2", tool: "screwdriver", requires: ["place_suspBracket_2"] }),
   place("suspKnob_1", 3),
   place("suspKnob_2", 3),
-  // each cap directly follows its cover: a placed cover is unstable and its stability lock admits only the securing cap until it's on
+  // the caps are FASTENERS now (securers, expanded from FASTENERS): a placed cover is unstable and its stability lock admits only its cap's insert+tighten until it's secured, so the play order stays cover → cap → cover → cap even though the cap actions sit in the fastener block
   place("suspCover_1", 3),
-  place("suspCap_1", 3),
   place("suspCover_2", 3),
-  place("suspCap_2", 3),
   // (cluster reorient beats cut 2026-07-23 — combine_cabinet is the standing-up moment; the part-less test/finishing beats below keep the reorient TYPE for their gestures)
 
   // ── drawer sub-assemblies ──
@@ -322,6 +314,11 @@ export const AUTHORED_ACTIONS: DraftAction[] = [
 ];
 
 export const BEATS = {
+  // The cap's re-typing (structural→fastener, 2026-08-24) split its one place beat into insert+tighten — but the VOICEOVER was recorded against the old one-line script, so all four actions say the old place line verbatim: dedupe folds them onto ONE clip (the recorded eket-standard-398-era "Cover cap" line stays at its position) and no recording regenerates. Re-word these only together with a re-recording session — the stepVoice pins will say so if forgotten.
+  insert_suspCap_1: { text: "Place the Cover cap into position.", simpleText: "Add the Cap." },
+  tighten_suspCap_1: { text: "Place the Cover cap into position.", simpleText: "Add the Cap." },
+  insert_suspCap_2: { text: "Place the Cover cap into position.", simpleText: "Add the Cap." },
+  tighten_suspCap_2: { text: "Place the Cover cap into position.", simpleText: "Add the Cap." },
   combine_cabinet: {
     text: "Stand the cabinet where it will live and settle it into place.",
     simpleText: "Put the cabinet in place.",
