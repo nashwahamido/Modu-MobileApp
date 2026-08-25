@@ -324,7 +324,9 @@ export const BEATS = {
     simpleText: "Put the cabinet in place.",
   },
   combine_drawerA: {
-    text: "Line the top drawer up with the upper runners and slide it in until it clicks.",
+    // SHORTENED for the objective bar — see instructions.ts. "until it clicks" is the outcome, not
+    // an instruction, and the click is audible anyway.
+    text: "Line the top drawer up with the upper runners and slide it in.",
     simpleText: "Slide the top drawer in.",
   },
   combine_drawerB: {
@@ -332,7 +334,9 @@ export const BEATS = {
     simpleText: "Slide the bottom drawer in.",
   },
   test_drawerA: {
-    text: "Press the front of the top drawer so it springs open, pull it all the way out, then push it home until it clicks.",
+    // SHORTENED for the objective bar — this was the longest line in the app at 113 characters and
+    // wrapped to FOUR. "the front of" and "all the way" are both implied by the action.
+    text: "Press the top drawer so it springs open",
     simpleText: "Press the top drawer, pull it out, push it back in.",
   },
   test_drawerB: {

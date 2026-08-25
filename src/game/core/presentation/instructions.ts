@@ -72,7 +72,12 @@ export function buildInstructions(
     switch (a.type) {
       case "stagePart":
         return {
-          text: `Take out the ${std} and set it down in front of you — you will fit its hardware before it goes in.`,
+          // SHORTENED to fit the objective bar in two lines at the player's own font size. The
+          // long form ("…set it down in front of you — you will fit its hardware before it goes
+          // in.") ran to three, which is what pushed it onto the shrink path and set the app's most
+          // detailed instruction in its smallest type. Same meaning, and the em dash still carries
+          // the "before it goes in" beat.
+          text: `Take out the ${std} and set it down — its hardware goes on first.`,
           simpleText: `Take out the ${sim}.`,
         };
       case "placePart": {
@@ -205,4 +210,3 @@ export function instructionText(
   if (level === "simple") return c.simpleText ?? c.text ?? "";
   return c.text ?? "";
 }
-

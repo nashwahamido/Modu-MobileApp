@@ -30,6 +30,9 @@ export function ObjectiveBar({ line, fontSize, value, total, xp, header }: Props
   const expanded = line !== null || header != null;
   // Derived, not a constant: fontSize is already scaled by the caller's accessibility setting, so a fixed box height would clip the text at the larger scales.
   const lineHeight = Math.round(fontSize * 1.18);
+  // How tall the pill is when the instruction fits on one line — the height it had at every step
+  // before, and still has at most of them. Anything longer grows DOWNWARD from here; see the pill.
+  const oneLine = lineHeight + 6;
   // Each new instruction drops in from above. Keyed on the line itself, so it fires on a real change of copy and not on every re-render the progress row causes.
   const enter = useSharedValue(1);
   useEffect(() => {
@@ -50,9 +53,24 @@ export function ObjectiveBar({ line, fontSize, value, total, xp, header }: Props
       pointerEvents="none"
     >
       {header ?? (line !== null ? (
-        // ONE line, fixed. The instruction changes on every step and its length changes with it, so a box that sizes to its content made the bar breathe in and out under the player's eyes. overflow:hidden is load-bearing — it is what the new line drops in from behind.
+        // ONE LINE, OR TWO WHEN ONE WILL NOT DO. `minHeight` rather than `height`, so the pill keeps
+        // its old size at every step that fits and grows by exactly one line at the few that do not.
+        //
+        // It was a fixed one-line box with `adjustsFontSizeToFit`, which meant a long instruction was
+        // not truncated — it was SHRUNK, down to 72% of the player's chosen size. EKET is where that
+        // bites: thirteen of its steps are two-clause sentences ("Press the Top panel onto its pins,
+        // then push it forward to lock."), and on a 360pt bar they all fell to the floor scale. The
+        // one screen whose whole job is to be read was setting its most detailed instructions in its
+        // smallest type, and for a player who had turned the font size UP.
+        //
+        // The original comment here argued against sizing to content, and it was right about the
+        // failure it named: a box free to be any height makes the bar breathe under the player's
+        // eyes as the copy changes. Two fixed steps is not that. There are exactly two heights, most
+        // steps sit at the first, and the second is a single line taller.
+        //
+        // overflow:hidden stays load-bearing — it is what the new line drops in from behind.
         <View
-          style={[styles.objectivePill, { height: lineHeight + 6 }]}
+          style={[styles.objectivePill, { minHeight: oneLine }]}
         >
           <Animated.View style={[styles.objectiveLineRow, lineAnim]}>
             {/* A bullet, not a bare line: it marks the instruction as the ONE thing being asked for
@@ -60,10 +78,24 @@ export function ObjectiveBar({ line, fontSize, value, total, xp, header }: Props
             <View style={styles.objectiveBullet} />
             <Text
               style={[styles.objectiveText, { fontFamily: FONT, fontSize, lineHeight }]}
-              numberOfLines={1}
-              // Shrink rather than wrap: a second line would take the height back, and truncating an instruction is the one outcome this screen cannot afford.
-              adjustsFontSizeToFit
-              minimumFontScale={0.72}
+              // A CEILING AT THREE, and nothing shrinks to reach it.
+              //
+              // `adjustsFontSizeToFit` used to sit here with a 0.72 floor, and that is what made the
+              // long steps unreadable: RN does not grow the box to fit the words, it shrinks the
+              // words to fit the box. So EKET's two-clause steps were set at 72% of the size the
+              // player had chosen — the one screen whose whole job is to be read, setting its most
+              // detailed instructions in its smallest type, for someone who had turned the size UP.
+              //
+              // Without it the text simply WRAPS at the player's own size and the pill grows by a
+              // line to hold it, which is what `minHeight` above is for. Every step in the app now
+              // fits two lines at the default scale: EKET's longest three were rewritten to reach
+              // that, and the rest were already inside it.
+              //
+              // Three rather than two, because the ceiling has to leave room for the accessibility
+              // scales. At 17pt or 20pt the two-line steps take a third line on their own, and a
+              // hard two would TRUNCATE them — cutting an instruction in half is the one outcome
+              // this screen cannot afford, and it is strictly worse than a taller bar.
+              numberOfLines={3}
             >
               {line}
             </Text>
@@ -125,6 +157,10 @@ const makeStyles = (t: Theme) =>
       borderRadius: RADIUS.pill,
       backgroundColor: OBJECTIVE_WASH,
       paddingHorizontal: SPACE.md,
+      // The 6pt that `oneLine` accounts for, as real padding now that the height can grow: at one
+      // line it reproduces the old box exactly, and at two it keeps the same air above and below
+      // rather than letting the second line sit against the rim.
+      paddingVertical: 3,
     },
     objectiveLineRow: { flexDirection: "row", alignItems: "center", gap: SPACE.sm },
     objectiveBullet: {
