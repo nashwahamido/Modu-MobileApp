@@ -42,6 +42,7 @@ import {
   APPROACH_RADIUS_M,
   CARRY_CAP_EASE,
   CARRY_CAP_EPS_M,
+  CARRY_SURFACE_MARGIN_M,
   DEPTH_BLEND_EASE,
   DEPTH_BLEND_ENABLED,
   DEPTH_BLEND_EPS,
@@ -443,8 +444,13 @@ export function usePartDrag({
           // Exact per-frame projection onto the (dynamic) horizontal drag plane — absolute mapping, so the part cannot drift from the finger. The camera-plane delta math is no longer the horizon's fallback (fingerOnPlane takes that limit itself); what is left for it is the upright path's own miss, an anchor gone behind the lens.
           // EXPERIMENT (drag-no-plane): adaptive rides the ray at cap depth every frame — no plane, no grazing pathologies; the socket blend below still owns delivery depth. Level keeps the plane.
           // Occlusion cap on the carry depth, updated BEFORE the carry point that consumes it. Read against last tick's occluder list (refreshed on its own throttle further down) — the boxes move only on the rare mid-drag events that throttle covers, and the ray they are tested against is this frame's.
+          // Whether the cap is BITING: a placed part stands nearer to the eye than the depth the held part is heading for, so the part is drawn in front of that part instead of at its socket. Hoisted out of the block because the "turn the camera" chip is decided after the matcher, below.
+          let carryCapBiting = false;
           {
             const rawCap = carryCapAt(e.absoluteX, e.absoluteY, s.placedBoxes);
+            // Read the RAW cap, before the matched-socket override below: once a socket is locked on that override deliberately carries THROUGH the box that reported nearer, and calling that blocked would coach a camera turn at the moment the aim finally worked.
+            carryCapBiting =
+              Number.isFinite(rawCap) && s.socketDepth != null && rawCap < s.socketDepth;
             // A socket the player is LOCKED ONTO overrules the cap. Boxes are fatter than the meshes inside them, so the box of the very panel a socket sits on can report a surface a centimetre or two nearer than the socket itself — and letting that win would break the one property the socket-referenced carry exists for, that part and socket share a depth and therefore a scale. Safe to overrule because a matched socket has already passed the visibility gate: its own sightline is clear, and the finger is inside the approach band, so the ray to the finger is the ray to the socket give or take a few degrees.
             const want =
               s.matchedActionId != null && s.socketDepth != null
@@ -658,8 +664,13 @@ export function usePartDrag({
               target = nearest;
             }
             s.matchedActionId = target?.action.actionId ?? null;
-            // The chip's "turn the camera" case: nothing matched, and the closest thing to the finger was a blocked socket within chip-worthy aim range. Debounced asymmetrically — ON immediately, OFF only after 300ms clear of every trigger — because the raw condition rides three sharp edges (the 160px rim, match acquisition, grazing sightlines) and read as flicker on device. A real match still silences it the same frame: fit language outranks coaching.
-            const rawBlocked = !target && blockedPx <= AIM_BAND_MAX_PX;
+            // The chip's "turn the camera" case: nothing matched, and either the closest thing to the finger was a blocked socket within chip-worthy aim range, the carry cap is biting, or the part itself is behind a placed part. Debounced asymmetrically — ON immediately, OFF only after 300ms clear of every trigger — because the raw condition rides three sharp edges (the 160px rim, match acquisition, grazing sightlines) and read as flicker on device. A real match still silences it the same frame: fit language outranks coaching.
+            // blockedPx alone stopped covering this. It is written only for candidates that survived `if (!d.inFrame) continue`, and scores them by distance to the FINGER, so a part carried in front of a panel with its socket behind that panel produced no blockedPx at all. It also narrowed: the sampling gate that used to feed it (VIS_FRACTION_MIN, ≥30% of seated samples in clear sight) was replaced in "Drag Fix 5" by the one-ray sightline rule plus pickConfirm's renderer second opinion, which is better at matching but calls far less blocked.
+            // partBehind is the case the cap misses: it eases in over several frames rather than at once, the upright and level carries never consult it, the near-plane floors overrule it, and CARRY_CAP_ENABLED can retire it. Threshold is the cap's own clearance, not VIS_GAP_SLACK_M — the question is whether the part sits deeper than the gap the cap would have held it at. Measured on `p` because the visual centre needs probeAnchor, which is not resolved until the pose is written below; with nothing matched the two differ only by the grab offset.
+            const partBehind =
+              !!laF && !!p && sightlineGapM(laF[0], p, s.placedBoxes).gap > CARRY_SURFACE_MARGIN_M;
+            const rawBlocked =
+              !target && (blockedPx <= AIM_BAND_MAX_PX || carryCapBiting || partBehind);
             if (rawBlocked) s.blockedStamp = Date.now();
             aimBlockedNow = !target && (rawBlocked || Date.now() - s.blockedStamp < 300);
             // The SEGMENT distance owns matching only. The VISIBLE pulls (magnet position, rotation ease, fit) measure to the park point itself: on-device, letting the magnet feed on the segment turned the whole hole→park corridor into a capture zone — the screw leapt to the socket the moment the finger crossed the corridor and stayed there while the finger travelled ("it does not ride my finger", phone screenshot with Drop it! stuck on). Screen-invisible consumers (depth blend) keep the segment aim.
@@ -1051,7 +1062,7 @@ export function usePartDrag({
             c[2] += p.pose.position[2] / members.length;
           }
           const planeY = c[1];
-          // A vertically-parking cluster rides the camera-facing plane through its park pose instead of the horizontal glide: its glide plane hangs at the TOP of the assembly where a level orbit sees it edge-on and the finger's ray lands metres out, so the in-plane snap was unreachable from most of the screen (DALFRED's seat, measured at every zoom).
+          // A vertically-parking cluster — and the SEED, whose target is its own baked pose — rides the camera-facing plane through that target instead of the horizontal glide: the glide plane sits where a level orbit sees it edge-on and the finger's ray lands metres out, so the in-plane snap was unreachable from most of the screen (DALFRED's seat, measured at every zoom; DALFRED's base, unplaceable outright).
           const anchor = clusterCarryAnchor(c, target);
           const p = anchor
             ? (fingerOnCameraPlaneAt(e.absoluteX, e.absoluteY, anchor) ??

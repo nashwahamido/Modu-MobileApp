@@ -72,7 +72,7 @@ export interface ClusterSession {
   ref: Float3;
   planeY: number;
   lastO: Float3;
-  /** Camera-plane anchor for a vertically-parking cluster (see clusterCarryAnchor); null keeps the horizontal glide. */
+  /** Camera-plane anchor for a vertically-parking cluster or a seed (see clusterCarryAnchor); null keeps the horizontal glide. */
   anchor: Float3 | null;
 }
 

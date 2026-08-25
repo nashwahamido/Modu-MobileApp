@@ -386,7 +386,9 @@ export function clusterCarryAnchor(
   parkOffset: Float3,
 ): Float3 | null {
   const l = Math.hypot(parkOffset[0], parkOffset[1], parkOffset[2]);
-  if (!l || Math.abs(parkOffset[1]) / l <= 0.7) return null;
+  // The SEED has no park offset: it drops straight onto its own baked pose, so its glide plane is the horizontal plane THROUGH THAT POSE — the assembly's own middle, which is where the orbit pivot sits. That is the edge-on geometry above, in its worst form: the plane holds the target, so a level camera grazes it exactly at the ring the player is aiming for and the offset never comes within snap distance (DALFRED's base, the first combine card, unplaceable at every zoom). Anchor it on the camera-facing plane through its seat, same escape as the vertical park: finger over the ring ⇒ offset zero ⇒ home.
+  if (!l) return [centroid[0], centroid[1], centroid[2]];
+  if (Math.abs(parkOffset[1]) / l <= 0.7) return null;
   return [
     centroid[0] + parkOffset[0],
     centroid[1] + parkOffset[1],
