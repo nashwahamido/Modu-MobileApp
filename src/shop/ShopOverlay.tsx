@@ -119,6 +119,12 @@ export function ShopOverlay({ onClose }: { onClose: () => void }) {
   // Leaves the shop and starts placing. startPlacing refuses an item with no room model, in which case the piece simply stays in the inventory and the player is told so.
   const placeInRoom = (item: ShopItem) => {
     setPurchased(null);
+    // A wallpaper or a floor has no model to place: it repaints the room instead, exactly as tapping it in the inventory does. Without this it fell to startPlacing, which refuses it for having no room model, and the player was told it was "in your inventory" after asking for it in the room.
+    if (isSurfaceCategory(item.category)) {
+      usePlacementStore.getState().setFinish(item.category === "floor" ? "floor" : "wall", item.id);
+      requestClose();
+      return;
+    }
     if (usePlacementStore.getState().startPlacing(item.id)) {
       requestClose();
       return;
