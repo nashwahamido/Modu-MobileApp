@@ -97,7 +97,14 @@ export default function AuthScreen() {
           styles.back,
           {
             top: 22 + Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
-            left: 42 + Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
+            // HARD AGAINST THE SCREEN'S OWN GUTTER. It used to carry an extra 42pt inboard, which
+            // put it level with the content column and reading as part of it rather than as chrome.
+            // A back control belongs in the corner.
+            //
+            // No extra inset beyond the safe-area floor: the 54pt box centres a 26pt arrow, so there
+            // is already 14pt of slack inside it — the glyph lands about 28pt from the edge while
+            // the tap target itself stays clear of a landscape cutout.
+            left: Math.max(safe.raw.left, SCREEN_SIDE_MARGIN),
           },
           pressed && styles.backPressed,
         ]}
