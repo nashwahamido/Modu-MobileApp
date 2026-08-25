@@ -24,6 +24,11 @@ const ALL = [...SHELL_GROUPS.slab, ...SHELL_GROUPS.cornice, ...SHELL_GROUPS.wall
 const TEX = { base: { width: 1, height: 1 } as never };
 // setTextureParameter takes the renderable manager as its FIRST argument — it is what holds the texture alive past the material instance wrapper's own life (see the Task 6 patch). Never called on directly here, so a bare stand-in is enough.
 const RM = {} as never;
+// The stand-ins for slots the item does not fill. Distinct objects from TEX.base so an assertion can tell "the item's own map" apart from "the neutral that replaced a missing one" — the whole bug was the two being confused with the PREVIOUS item's map.
+const NEUTRAL = {
+  normal: { width: 1, height: 1 } as never,
+  rough: { width: 1, height: 1 } as never,
+};
 
 test("a wall item writes all four wall materials and nothing else", () => {
   const { instances, calls } = fakeInstances(ALL);
@@ -31,6 +36,7 @@ test("a wall item writes all four wall materials and nothing else", () => {
     slot: "wall",
     instances: instances as never,
     renderableManager: RM,
+    neutral: null,
     maps: TEX,
     spec: { tiling: { scale: [1, 1], offset: [0, 0] }, maps: ["texture"] },
   });
@@ -44,6 +50,7 @@ test("Ceiling is never touched", () => {
     slot: "floor",
     instances: instances as never,
     renderableManager: RM,
+    neutral: null,
     maps: TEX,
     spec: { tiling: { scale: [1, 1], offset: [0, 0] }, edgeColor: [0.5, 0.5, 0.5], maps: ["texture"] },
   });
@@ -56,6 +63,7 @@ test("FloorEdge takes a tint and no texture", () => {
     slot: "floor",
     instances: instances as never,
     renderableManager: RM,
+    neutral: null,
     maps: TEX,
     spec: { tiling: { scale: [1, 1], offset: [0, 0] }, edgeColor: [0.2, 0.3, 0.4], maps: ["texture"] },
   });
@@ -70,6 +78,7 @@ test("the cornice is left alone when the item ships no trim maps", () => {
     slot: "wall",
     instances: instances as never,
     renderableManager: RM,
+    neutral: null,
     maps: TEX,
     spec: { tiling: { scale: [1, 1], offset: [0, 0] }, maps: ["texture"] },
   });
@@ -83,6 +92,7 @@ test("the cornice paints only on the wall path, never the floor path, regardless
     slot: "floor",
     instances: instances as never,
     renderableManager: RM,
+    neutral: null,
     maps: { base: TEX.base, trim: TEX.base } as never,
     spec: {
       tiling: { scale: [1, 1], offset: [0, 0] },
@@ -100,6 +110,7 @@ test("baseColorUvMatrix is column-major: scale on the diagonal, offset in the la
     slot: "floor",
     instances: instances as never,
     renderableManager: RM,
+    neutral: null,
     maps: TEX,
     spec: { tiling: { scale: [5.1, 5], offset: [0, -4] }, maps: ["texture"] },
   });
@@ -121,6 +132,7 @@ test("the uv matrices are written even for a map the item did not ship, so a sta
     slot: "wall",
     instances: instances as never,
     renderableManager: RM,
+    neutral: null,
     // Base colour only — no normal, no roughness.
     maps: TEX,
     spec: { tiling: { scale: [2, 2], offset: [0, 0] }, maps: ["texture"] },
@@ -135,6 +147,7 @@ test("occlusionUvMatrix is never written — the baked AO has its own UV set and
     slot: "floor",
     instances: instances as never,
     renderableManager: RM,
+    neutral: null,
     maps: TEX,
     spec: { tiling: { scale: [3, 3], offset: [0, 0] }, maps: ["texture"] },
   });
@@ -147,6 +160,7 @@ test("all three maps are requested when supplied, and only baseColorMap when the
     slot: "wall",
     instances: withAll.instances as never,
     renderableManager: RM,
+    neutral: null,
     maps: { base: TEX.base, normal: TEX.base, rough: TEX.base },
     spec: { tiling: { scale: [1, 1], offset: [0, 0] }, maps: ["texture"] },
   });
@@ -161,6 +175,7 @@ test("all three maps are requested when supplied, and only baseColorMap when the
     slot: "wall",
     instances: baseOnly.instances as never,
     renderableManager: RM,
+    neutral: null,
     maps: TEX,
     spec: { tiling: { scale: [1, 1], offset: [0, 0] }, maps: ["texture"] },
   });
@@ -175,6 +190,7 @@ test("the cornice falls back to the wall's tiling when the item ships trim maps 
     slot: "wall",
     instances: instances as never,
     renderableManager: RM,
+    neutral: null,
     maps: { base: TEX.base, trim: TEX.base } as never,
     spec: { tiling: { scale: [3, 4], offset: [1, 2] }, maps: ["texture", "trim_texture"] },
   });
@@ -188,6 +204,7 @@ test("no surface item ever writes occlusionMap or a Trim_ baseColorFactor", () =
     slot: "wall",
     instances: instances as never,
     renderableManager: RM,
+    neutral: null,
     maps: { base: TEX.base, trim: TEX.base } as never,
     spec: {
       tiling: { scale: [1, 1], offset: [0, 0] },
