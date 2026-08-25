@@ -28,6 +28,7 @@ import {
 import { getRoomItemDef } from "../core/placeableItems";
 import { usePlacementStore } from "../core/placement";
 import { FLOOR_CELLS, ROOM_SHELL, SCENE_SCALE, roomToScene } from "../core/roomShell";
+import { isScenePaused } from "./scenePaused";
 import { useGameStore } from "../../game/core/store";
 
 const CAT_FOOTPRINT = { w: 1, d: 1 } as const;
@@ -338,8 +339,24 @@ function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
       return false;
     };
 
+    // The pose the transform manager was last given. Filament RETAINS a transform once set, so a frame that would rewrite the same numbers can simply not write them — and while the avatar is standing (POST_PATH_STANDING_MS between routes) or playing a one-shot action (up to 17.6 s for the long clips) the pose does not move at all, which is most of any given minute. Seeded to NaN so the first paint of every effect run always lands, whatever the previous run left behind.
+    //
+    // WHAT THIS SAVES IS ALLOCATION, not arithmetic. Mat4's scaling/rotate/translate each RETURN A NEW MATRIX rather than mutating the receiver — that is what makes composing off a cached base safe (see the note on baseTransform) and it is also what made this the scene's steadiest source of garbage: three JSI HybridObjects per frame, each holding a native C++ object released only when the JS collector finalises it, sixty times a second for as long as the room is open. The animation itself is unaffected; the animator drives the skeleton through the render callback and never reads this transform.
+    const painted = { x: NaN, z: NaN, yaw: NaN, visible: true };
+
     const paint = (visible = true) => {
       const state = motion.current;
+      if (
+        state.position.x === painted.x &&
+        state.position.z === painted.z &&
+        state.yaw === painted.yaw &&
+        visible === painted.visible
+      )
+        return;
+      painted.x = state.position.x;
+      painted.z = state.position.z;
+      painted.yaw = state.yaw;
+      painted.visible = visible;
       const centre = roomToScene({ x: state.position.x, y: ROOM_SHELL.floor.y, z: state.position.z });
       const transform = baseTransform.current!
         .scaling([SCENE_SCALE / unitScale, SCENE_SCALE / unitScale, SCENE_SCALE / unitScale])
@@ -357,6 +374,11 @@ function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
     const tick = (now: number) => {
       if (stopped) return;
       frame = requestAnimationFrame(tick);
+      // Nothing here is worth doing under a popup: the walk would not be drawn, and choosePath's A* is the most expensive thing this component can do in a frame. `previous` is still advanced so the first frame back resumes with a real delta rather than a pause-long one — dt is clamped anyway, but a clamped 50 ms jump is still a visible lurch on the step the avatar happens to be mid-way through.
+      if (isScenePaused()) {
+        previous = now;
+        return;
+      }
       const dt = Math.min(0.05, Math.max(0, (now - previous) / 1_000));
       previous = now;
       const state = motion.current;
