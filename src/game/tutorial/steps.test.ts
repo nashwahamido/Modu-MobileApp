@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  GRIP_STEP_ID,
   SECONDARY_TARGET_BY_STEP,
   SHARED_HUD_TUTORIAL_STEPS,
   settingsTutorialStepsFor,
@@ -20,6 +21,30 @@ function context(
     softHints: true,
   };
 }
+
+test("the grip step is dropped on a tablet and kept on a phone", () => {
+  for (const profile of ["control", "visual", "momentum", "clearPath"] as const) {
+    const phone = context(profile, profile === "control");
+    assert.equal(
+      tutorialStepsFor(phone).some((step) => step.id === GRIP_STEP_ID),
+      true,
+      `${profile} should open with the grip step on a phone`,
+    );
+    const tablet = tutorialStepsFor({ ...phone, tablet: true });
+    assert.equal(
+      tablet.some((step) => step.id === GRIP_STEP_ID),
+      false,
+      `${profile} should not teach a two-handed grip on a tablet`,
+    );
+    // Nothing else moves: only that one step goes.
+    assert.deepEqual(
+      tablet.map((step) => step.id),
+      tutorialStepsFor(phone)
+        .map((step) => step.id)
+        .filter((id) => id !== GRIP_STEP_ID),
+    );
+  }
+});
 
 test("no profile teaches a tool step", () => {
   // LACK's bolt is hand-tightened, so there is no toolbox step to teach. This asserts the ABSENCE

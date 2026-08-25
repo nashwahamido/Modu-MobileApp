@@ -56,6 +56,10 @@ export interface TutorialContext {
   mode: "free" | "guide" | "strict";
   manualTools: boolean;
   softHints: boolean;
+  /** A tablet is not held like a controller — it is propped, or held at the frame with the thumbs
+   *  nowhere near the joystick — so the grip step is dropped there rather than teaching a grip the
+   *  player cannot take. See GRIP_STEP_ID below. */
+  tablet?: boolean;
 }
 
 export interface TutorialStep {
@@ -816,7 +820,17 @@ export const TUTORIAL_CONTENT_DECISIONS = {
     "Keep the opening to the core loop; teach preferences in a separate post-core walkthrough.",
 } as const;
 
+/** The step that teaches the two-handed grip — dropped on a tablet, kept everywhere else. */
+export const GRIP_STEP_ID = "hold-like-controller";
+
 export const tutorialStepsFor = (context: TutorialContext): TutorialStep[] => {
+  const steps = composeTutorialSteps(context);
+  // Filtered here rather than in each profile's list, because all five lists open with the grip step
+  // and a `when` on each would be the same predicate written five times.
+  return context.tablet ? steps.filter((s) => s.id !== GRIP_STEP_ID) : steps;
+};
+
+const composeTutorialSteps = (context: TutorialContext): TutorialStep[] => {
   // Lumi runs its own hand-written sequence — see VISUAL_TUTORIAL_STEPS. Returned whole rather than
   // composed, because its merged steps do not survive the slicing below.
   if (context.profile === "visual") return VISUAL_TUTORIAL_STEPS;
