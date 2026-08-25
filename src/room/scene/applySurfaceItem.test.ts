@@ -154,7 +154,68 @@ test("occlusionUvMatrix is never written — the baked AO has its own UV set and
   assert.equal(calls.some((c) => c.args.includes("occlusionUvMatrix")), false);
 });
 
-test("all three maps are requested when supplied, and only baseColorMap when the others are absent", () => {
+// THE REGRESSION THIS PINS. Filament keeps a texture HANDLE on the material and has no API to unset one, so a slot the incoming item does not write keeps sampling the OUTGOING item's map: apply a wallpaper with real weave in its normal, then a flat paint that ships none, and the paint wears the weave. The portal SKIPS publishing a map whose variance is below threshold, so an item with no normal is the ordinary case rather than a corner one. Every slot is therefore written on every apply, exactly as the UV matrices already were.
+test("an absent normal or roughness is written with the neutral stand-in, so the previous item's map cannot persist", () => {
+  const { instances, calls } = fakeInstances(ALL);
+  applySurfaceItem({
+    slot: "wall",
+    instances: instances as never,
+    renderableManager: RM,
+    neutral: NEUTRAL,
+    // Base colour only — exactly the item that used to leave its predecessor's bump and gloss behind.
+    maps: TEX,
+    spec: { tiling: { scale: [1, 1], offset: [0, 0] }, maps: ["texture"] },
+  });
+  const written = calls.filter((c) => c.method === "Wall_xmin.setTextureParameter");
+  assert.deepEqual(
+    written.map((c) => [c.args[1], c.args[2]]),
+    [
+      ["baseColorMap", TEX.base],
+      ["normalMap", NEUTRAL.normal],
+      ["metallicRoughnessMap", NEUTRAL.rough],
+    ],
+  );
+});
+
+test("an item's own maps always win over the neutral stand-ins", () => {
+  const { instances, calls } = fakeInstances(ALL);
+  const own = { normal: { width: 2, height: 2 } as never, rough: { width: 2, height: 2 } as never };
+  applySurfaceItem({
+    slot: "wall",
+    instances: instances as never,
+    renderableManager: RM,
+    neutral: NEUTRAL,
+    maps: { base: TEX.base, normal: own.normal, rough: own.rough },
+    spec: { tiling: { scale: [1, 1], offset: [0, 0] }, maps: ["texture"] },
+  });
+  const written = calls.filter((c) => c.method === "Wall_xmin.setTextureParameter");
+  assert.deepEqual(written.map((c) => c.args[2]), [TEX.base, own.normal, own.rough]);
+});
+
+// The cornice is painted through the same `paint` as the walls and the slab, so it inherits the fix rather than needing its own. A trim map set with no normal of its own must not pick up the last wallpaper's.
+test("the cornice fills its absent slots from the neutrals too", () => {
+  const { instances, calls } = fakeInstances(ALL);
+  applySurfaceItem({
+    slot: "wall",
+    instances: instances as never,
+    renderableManager: RM,
+    neutral: NEUTRAL,
+    maps: { base: TEX.base, trim: { base: TEX.base } } as never,
+    spec: { tiling: { scale: [1, 1], offset: [0, 0] }, maps: ["texture", "trim_texture"] },
+  });
+  const written = calls.filter((c) => c.method === "Trim_xmin.setTextureParameter");
+  assert.deepEqual(
+    written.map((c) => [c.args[1], c.args[2]]),
+    [
+      ["baseColorMap", TEX.base],
+      ["normalMap", NEUTRAL.normal],
+      ["metallicRoughnessMap", NEUTRAL.rough],
+    ],
+  );
+});
+
+// The degraded path, and it is deliberately still the OLD behaviour: the stand-ins are decoded asynchronously, so for the first frames of a scene — or on a dev client where FilamentProxy never installs — there is nothing to write. Leaving the slot alone is wrong in the old way; writing null would be a crash. This test exists so that trade-off stays a decision rather than an accident.
+test("with no neutrals available a missing map leaves its slot untouched, exactly as before", () => {
   const withAll = fakeInstances(ALL);
   applySurfaceItem({
     slot: "wall",

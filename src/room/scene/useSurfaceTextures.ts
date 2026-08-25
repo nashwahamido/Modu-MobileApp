@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Image } from "react-native";
 import { FilamentProxy, useFilamentContext, type RenderableManager, type Texture, type TextureFlags } from "react-native-filament";
 
 import { surfaceMapUrl } from "../../data/catalog/urls";
@@ -24,6 +25,71 @@ const FLAGS: Record<SurfaceMap, TextureFlags> = {
   trim_normal: "none",
   trim_rough: "none",
 };
+
+// What an ABSENT map has to be replaced with, rather than left alone. Filament keeps a texture HANDLE on the material and there is no API to unset one, so a slot the incoming item does not write keeps sampling the OUTGOING item's map — apply a fabric wallpaper with real weave in its normal, then a flat paint that ships none, and the paint wears the fabric's bump and gloss. Not a rare case either: the portal SKIPS publishing a map whose variance is below threshold (see MapSet), so "this item has no normal" is the normal state of any smooth surface. This is the same failure applySurfaceItem already defends against for the cornice (a slot nobody writes keeps the last item's trim) and for the UV matrices, which are written even when their map is absent for exactly this reason; the normal and roughness slots were the one place that reasoning had not been carried through.
+//
+// 1x1 PNGs, and their VALUES are the whole point rather than a placeholder colour. (128, 128, 255) is the flat tangent-space normal — it perturbs nothing, which is precisely what "no normal map" means. White is the neutral metallicRoughness: glTF multiplies G (roughness) and B (metallic) by roughnessFactor and metallicFactor, so 1.0 lets the material's own scalars through untouched, and anything darker would silently gloss or metallicise every surface that omits the map.
+//
+// ".tex" IS LOAD-BEARING — see the note in metro.config.js. These are PNG bytes, and a real .png extension makes Metro file them as an aapt drawable in an Android release build, where react-native-filament's loadAsset never looks. Decoding is unaffected: createTextureFromBuffer sniffs the CONTENT (KTX2 magic, else stb) and ignores both the filename and the mimeType.
+const NEUTRAL_SOURCES = {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  normal: require("../../assets/textures/neutral_normal.tex"),
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  rough: require("../../assets/textures/neutral_rough.tex"),
+} as const;
+
+export type NeutralMaps = { normal: Texture; rough: Texture };
+
+/**
+ * The stand-in maps for slots a surface item does not fill. Created ONCE for the life of the scene and shared by every group the shell has — they carry no item identity, so the floor slab, all four walls and the cornice sample the same two textures.
+ *
+ * Null until they land, and applySurfaceItem treats null as "leave the slot alone", which is exactly the behaviour this replaced. So the worst a failed decode can do is put back the bug, never break the room.
+ */
+export function useNeutralMaps(renderableManager: RenderableManager | null): NeutralMaps | null {
+  const { workletContext } = useFilamentContext();
+  const [neutral, setNeutral] = useState<NeutralMaps | null>(null);
+
+  useEffect(() => {
+    if (!renderableManager) return;
+    let alive = true;
+
+    void (async () => {
+      // Same guard, and the same reason, as the per-map fetch below: FilamentProxy is undefined until the native side installs it, and on a dev client older than the current react-native-filament it never appears at all. Returning leaves `neutral` null, which is the supported "leave the slot alone" path.
+      if (!FilamentProxy?.loadAsset) return;
+      const uri = (source: number): string | null =>
+        Image.resolveAssetSource(source)?.uri ?? null;
+      const normalUri = uri(NEUTRAL_SOURCES.normal);
+      const roughUri = uri(NEUTRAL_SOURCES.rough);
+      if (!normalUri || !roughUri) return;
+
+      const [normalBuffer, roughBuffer] = await Promise.all([
+        FilamentProxy.loadAsset(normalUri),
+        FilamentProxy.loadAsset(roughUri),
+      ]);
+      if (!alive) return;
+
+      // On the FILAMENT WORKLET THREAD, for the reason stage 2 below spells out at length: createTexture spawns JobSystem work, and Filament aborts the process when that is entered from a thread it has not adopted. Both maps are LINEAR ("none"), never sRGB — a normal and a metallic-roughness carry data, not colour, and decoding them as sRGB would bend the very values chosen above to be exactly neutral.
+      const normal = await workletContext.runAsync(() => {
+        "worklet";
+        return renderableManager.createTexture(normalBuffer, "none");
+      });
+      if (!alive) return;
+      const rough = await workletContext.runAsync(() => {
+        "worklet";
+        return renderableManager.createTexture(roughBuffer, "none");
+      });
+      if (!alive) return;
+
+      setNeutral({ normal, rough });
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [renderableManager, workletContext]);
+
+  return neutral;
+}
 
 export type SurfaceTextures = MapSet & { trim?: MapSet };
 // itemId is the id this hook actually resolved maps FOR, set atomically with maps in the same setTextures call — the caller compares it against the item id it currently holds (itself from a separate useMemo, on its own schedule) before writing anything, because "maps is non-null" alone does not prove maps belongs to the item the caller thinks it does.
