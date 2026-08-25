@@ -152,23 +152,23 @@ export function createClusterDriver(): ClusterDriver {
     m.tm.setEntityPosition(m.entity, pos, true);
   };
 
-  // COALESCED: a 120Hz pan spits touch samples faster than frames render, and applying ~60 members × 2 native transform calls on every sample is what made the cluster carry crawl. set() just records the offset; one rAF applies the latest value per frame, so extra samples cost nothing.
-  let pending = false;
-  const flush = () => {
-    pending = false;
+  // IMMEDIATE, exactly like OffsetDriver: the caller's frame is the frame the entities move on.
+  //
+  // This used to hop through a requestAnimationFrame to coalesce a 120 Hz pan down to one apply per
+  // frame, because ~60 members × 2 native calls per touch sample made the cluster CARRY crawl. The
+  // carry does not come through here any more — it writes one shared value and Filament's own render
+  // callback moves the entities (scene/CombineCarry) — so the coalescer was left protecting nothing
+  // and charging a frame of latency to the gestures that DO still use this: the combine drives
+  // (SlideControl / ScrewControl) and the push-open groups, all under ~10 members. That latency is
+  // the whole difference between this and a fastener tighten, which drives its one entity straight
+  // from the touch handler and reads as glued to the finger. If a genuinely big group ever needs
+  // driving from JS again, the answer is the render-thread pattern the carry already uses, not a
+  // deferral that makes every small drive feel dragged.
+  const apply = () => {
+    if (members.size === 0) return;
     const q = spin && Math.abs(spin.angleRad) > 1e-6 ? quatFromAxisAngle(spin.axis, spin.angleRad) : null;
     const pivot = q ? centroid() : null;
     for (const m of members) applyOne(m, q, pivot);
-  };
-
-  const schedule = () => {
-    if (pending || members.size === 0) return;
-    if (typeof requestAnimationFrame === "function") {
-      pending = true;
-      requestAnimationFrame(flush);
-    } else {
-      flush();
-    }
   };
 
   return {
@@ -181,12 +181,12 @@ export function createClusterDriver(): ClusterDriver {
     set(next) {
       offset = [...next];
       spin = null;
-      schedule();
+      apply();
     },
     setSpin(next, axis, angleRad) {
       offset = [...next];
       spin = { axis, angleRad };
-      schedule();
+      apply();
     },
     get value() {
       return offset;
