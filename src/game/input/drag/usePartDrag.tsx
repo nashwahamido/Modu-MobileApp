@@ -513,6 +513,8 @@ export function usePartDrag({
           let probeAnchor: Vec3 | null = null;
           // Whether the aim is parked on a facing-blocked socket with nothing matchable — drives the "Try turning the camera" chip.
           let aimBlockedNow = false;
+          // WHICH of the chip's triggers fired — probe-only. `blk=1` alone could not tell a hidden socket from a part merely passing over the furniture, which is the whole of the report this exists to answer next time.
+          let blockedWhy = "-";
           // Which placed part's box blocked the nearest skipped candidate — probe-only, names the occluder in one log line.
           let blockedBy: PartId | null = null;
           // Visible/total sample count of the winning candidate — probe-only, so an "arms while hidden" report carries its own numbers.
@@ -690,10 +692,17 @@ export function usePartDrag({
             // partBehind is the case the cap misses: it eases in over several frames rather than at once, the upright and level carries never consult it, the near-plane floors overrule it, and CARRY_CAP_ENABLED can retire it. Threshold is the cap's own clearance, not VIS_GAP_SLACK_M — the question is whether the part sits deeper than the gap the cap would have held it at. Measured on `p` because the visual centre needs probeAnchor, which is not resolved until the pose is written below; with nothing matched the two differ only by the grab offset.
             const partBehind =
               !!laF && !!p && sightlineGapM(laF[0], p, s.placedBoxes).gap > CARRY_SURFACE_MARGIN_M;
+            // ...and the guard all three answer to: a camera turn is only ever the advice when there is NOTHING on this screen to snap to. nearestPx is written for a candidate only after it has passed both the in-frame test and the visibility gate, so a finite value IS "a socket you could take right now" — and the candidates are one interchangeable group, so any one of them finishes the pickup. Without this, the two carry-side triggers coached a turn for a part merely PASSING OVER the furniture on its way to a socket in plain sight: the cap bites over any placed box whatever the socket is doing, and partBehind rides the cap's own ease-in, so a drag across the assembly lit the chip the whole way (reported from device — "it tells me to turn the camera when I just need to move the part"). What is left for them is the case they were added for, where every socket is off-frame or hidden and blockedPx never gets written at all.
+            const nothingAimable = !Number.isFinite(nearestPx);
             const rawBlocked =
-              !target && (blockedPx <= AIM_BAND_MAX_PX || carryCapBiting || partBehind);
-            if (rawBlocked) s.blockedStamp = Date.now();
+              !target && nothingAimable && (blockedPx <= AIM_BAND_MAX_PX || carryCapBiting || partBehind);
+            if (rawBlocked) {
+              s.blockedStamp = Date.now();
+              blockedWhy = blockedPx <= AIM_BAND_MAX_PX ? "socket" : carryCapBiting ? "cap" : "behind";
+            }
             aimBlockedNow = !target && (rawBlocked || Date.now() - s.blockedStamp < 300);
+            // The 300ms tail, named apart from the triggers: on those frames nothing is firing and the chip is only being HELD, which a bare reason string would misreport as a live cause.
+            if (aimBlockedNow && !rawBlocked) blockedWhy = "hold";
             // The SEGMENT distance owns matching only. The VISIBLE pulls (magnet position, rotation ease, fit) measure to the park point itself: on-device, letting the magnet feed on the segment turned the whole hole→park corridor into a capture zone — the screw leapt to the socket the moment the finger crossed the corridor and stayed there while the finger travelled ("it does not ride my finger", phone screenshot with Drop it! stuck on). Screen-invisible consumers (depth blend) keep the segment aim.
             if (target) {
               const spT = worldToScreen(target.matchVisual);
@@ -884,7 +893,7 @@ export function usePartDrag({
             const nSeat = nearest?.seatVisual ? worldToScreen(nearest.seatVisual) : null;
             const nPark = nearest?.matchVisual ? worldToScreen(nearest.matchVisual) : null;
             console.log(
-              `[drag] f=(${e.absoluteX.toFixed(0)},${e.absoluteY.toFixed(0)}) part=(${hp ? `${hp.x.toFixed(0)},${hp.y.toFixed(0)}` : "?"}) gapPx=${gapPx} p=${p ? p.map((v) => v.toFixed(2)).join(",") : "null"} plane=${s.planeY.toFixed(2)} upright=${!!s.uprightAnchor} aim=${Number.isFinite(bestD) ? bestD.toFixed(3) : "inf"} pull=${Number.isFinite(pullD) ? pullD.toFixed(3) : "inf"} band=${band.toFixed(2)} cam=${camDist.toFixed(3)} reach=${s.holdReach.toFixed(3)} carry=${carryDepth} cap=${Number.isFinite(s.carryCap) ? s.carryCap.toFixed(3) : "-"} sock=${s.socketDepth?.toFixed(3) ?? "-"} blend=${s.depthBlend.toFixed(2)} tgt=${s.matchedActionId ?? "-"} blk=${aimBlockedNow ? 1 : 0} occ=${blockedBy ?? "-"} vis=${nearestVis} near=${nearest?.action.actionId ?? "-"} seat=(${nSeat ? `${nSeat.x.toFixed(0)},${nSeat.y.toFixed(0)}` : "?"}) park=(${nPark ? `${nPark.x.toFixed(0)},${nPark.y.toFixed(0)}` : "?"}) fit=${fs} pk=${hasPickProber() ? s.pickCache.lastDiag || "none" : "OFF"} BUILD=noplane19`,
+              `[drag] f=(${e.absoluteX.toFixed(0)},${e.absoluteY.toFixed(0)}) part=(${hp ? `${hp.x.toFixed(0)},${hp.y.toFixed(0)}` : "?"}) gapPx=${gapPx} p=${p ? p.map((v) => v.toFixed(2)).join(",") : "null"} plane=${s.planeY.toFixed(2)} upright=${!!s.uprightAnchor} aim=${Number.isFinite(bestD) ? bestD.toFixed(3) : "inf"} pull=${Number.isFinite(pullD) ? pullD.toFixed(3) : "inf"} band=${band.toFixed(2)} cam=${camDist.toFixed(3)} reach=${s.holdReach.toFixed(3)} carry=${carryDepth} cap=${Number.isFinite(s.carryCap) ? s.carryCap.toFixed(3) : "-"} sock=${s.socketDepth?.toFixed(3) ?? "-"} blend=${s.depthBlend.toFixed(2)} tgt=${s.matchedActionId ?? "-"} blk=${aimBlockedNow ? blockedWhy : 0} occ=${blockedBy ?? "-"} vis=${nearestVis} near=${nearest?.action.actionId ?? "-"} seat=(${nSeat ? `${nSeat.x.toFixed(0)},${nSeat.y.toFixed(0)}` : "?"}) park=(${nPark ? `${nPark.x.toFixed(0)},${nPark.y.toFixed(0)}` : "?"}) fit=${fs} pk=${hasPickProber() ? s.pickCache.lastDiag || "none" : "OFF"} BUILD=noplane19`,
             );
           }
         })

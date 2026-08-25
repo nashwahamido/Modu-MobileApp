@@ -1,4 +1,5 @@
-import type { PartBox, PartId } from "@/src/game/core/type";
+import { quatRotateVec3 } from "@/src/game/core/geometry/math";
+import type { PartBox, PartId, Quat, Vec3 } from "@/src/game/core/type";
 
 /** Sweep a renderable's OBJECT-space AABB through a world transform. Filament hands the box back in object space and every mesh node in these GLBs carries a translation with most carrying a rotation, so the box means nothing to world-space geometry until it is pushed through. All EIGHT corners are swept and re-bounded — transforming only the centre would keep a rotated part's extent wrong, and the extent is what decides whether two parts overlap at all. `m` is filament's mat4f::asArray() — COLUMN-major, so the basis columns are m[0..2]/m[4..6]/m[8..10] and the translation is m[12..14]. */
 export function worldBoxFromObjectBox(
@@ -39,6 +40,18 @@ export function worldBoxFromObjectBox(
     m[2] * center[0] + m[6] * center[1] + m[10] * center[2] + m[14],
   ];
   return { min, max, obb: { center: obbCenter, axes, half } };
+}
+
+/**
+ * The world matrix of a part's BAKED pose (column-major, filament's layout), composed from parts.gen alone — no node in the corpus carries scale (verified across all four GLBs; the extractor does not record one, so a scaled node would need parts.gen to bake it before this could stay pose-only).
+ *
+ * This exists because the load-time harvest must NOT read the transform manager: React runs child effects before parent effects, so PartModel's initial writes — a resumed build's loose fastener at its backed-off pose, a parked cluster, a staged carrier — land before AssemblyScene's harvest effect reads. Read live, those poses put a box centre >2mm from pose+visualCenterOffset, and the harvest's gate then rightly published NO boxes — for the whole session (measured: `boxes=0 reach=0.000` on a resumed DALFRED, seats falling back to mid-shaft visual centres, the ghost rule inert). The harvest's contract is baked-pose geometry by definition, so it composes the baked transform instead of asking the renderer what it happens to be drawing; the 2mm gate keeps its real job, catching mesh↔parts.gen drift after a re-export.
+ */
+export function bakedWorldMatrix(position: Vec3, rotation: Quat): number[] {
+  const bx = quatRotateVec3(rotation, [1, 0, 0]);
+  const by = quatRotateVec3(rotation, [0, 1, 0]);
+  const bz = quatRotateVec3(rotation, [0, 0, 1]);
+  return [bx[0], bx[1], bx[2], 0, by[0], by[1], by[2], 0, bz[0], bz[1], bz[2], 0, position[0], position[1], position[2], 1];
 }
 
 /** Answers, for each part asked about, where it is being DRAWN — and omits any part that is not on screen at all. Both halves matter: a part off at a staging offset has a box nowhere near its baked one, and a part the scene has hidden (another cluster's work while this one has focus) has a perfectly good baked transform behind an entity nobody is rendering. */

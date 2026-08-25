@@ -1,9 +1,9 @@
 // The centred objective pill: instruction line + [★ star | progress track | XP label] row. SHARED by the play screen and the tutorial fork — edit here and both stay in sync.
 import { useEffect, type ReactNode } from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { ProgressBar } from "@/src/game/ui/system/Button";
-import { ELEVATION, FONT, RADIUS, SPACE, TYPE, Theme, useFixedStyles } from "@/src/game/ui/system/theme";
+import { ELEVATION, FONT, RADIUS, SPACE, TYPE, Theme, useFixedStyles, useUiScale } from "@/src/game/ui/system/theme";
 
 interface Props {
   /** The objective sentence; null hides the text row and collapses the bar to the slim fixed pill (instructions off). */
@@ -24,8 +24,29 @@ interface Props {
  *  ramp the pill stops looking like an inset and starts looking like a gap. */
 const OBJECTIVE_WASH = "#C3D3E6";
 
+/** The authored widths, on the phone canvas these sheets were laid out against. The sheet keeps them
+ *  too — these are the numbers the tablet growth below multiplies. */
+const BAR_W = 420;
+const SLIM_W = 260;
+const STRUCTURED_W = 360;
+/** What the bar has to leave free on EACH side. It is centred, so the tighter flank governs both:
+ *  the cluster switcher at right:14 reserves 190 (ClusterFocusControl.switcher), which is wider than
+ *  the left column's gear + spoken-steps pair. */
+const TOP_ROW_RESERVE = 210;
+
 export function ObjectiveBar({ line, fontSize, value, total, xp, header }: Props) {
   const styles = useFixedStyles(makeStyles);
+  // WIDTH ONLY. The bar is a fixed-width pill in a fixed-height row, so on a tablet it read as a
+  // short phone bar adrift in the middle of a wide screen — but growing its type and paddings with
+  // useStyles is what useFixedStyles is here to refuse (a 13pt label inside a 36pt chip). So the
+  // tablet scale is applied to the pill's width and nothing else: a longer track, same chrome.
+  //
+  // Clamped by the room actually on screen, not just by k: a fixed width is never safe on its own
+  // (see useUiScale), and at k = 1.75 the authored 420 would reach 735 and collide with the cluster
+  // switcher on a narrower tablet. On a phone k is exactly 1 and every width is the authored one.
+  const k = useUiScale();
+  const { width: winW } = useWindowDimensions();
+  const grow = Math.max(1, Math.min(k, (winW - TOP_ROW_RESERVE * 2) / BAR_W));
   // The instruction IS the reading surface of the assembly screen.
   const expanded = line !== null || header != null;
   // Derived, not a constant: fontSize is already scaled by the caller's accessibility setting, so a fixed box height would clip the text at the larger scales.
@@ -49,6 +70,9 @@ export function ObjectiveBar({ line, fontSize, value, total, xp, header }: Props
         styles.objectiveBar,
         header != null && styles.objectiveBarStructured,
         !expanded && styles.objectiveBarSlim,
+        // Last, so it overrides whichever of the three widths above applies. All three grow by the
+        // same factor, so the slim and structured pills keep their proportion to the full one.
+        { width: Math.round((header != null ? STRUCTURED_W : !expanded ? SLIM_W : BAR_W) * grow) },
       ]}
       pointerEvents="none"
     >
@@ -135,7 +159,8 @@ const makeStyles = (t: Theme) =>
     objectiveBar: {
       justifyContent: "center",
       // FIXED, not capped. A max width still lets the bar shrink to a short instruction and grow back on the next one, which is the jitter itself. 360 + the pause button keeps the group clear of the cluster chips at right:14.
-      width: 420,
+      // On a tablet the component overrides this with BAR_W * grow; on a phone grow is 1 and this is it.
+      width: BAR_W,
       backgroundColor: t.surface,
       borderColor: t.border,
       borderWidth: StyleSheet.hairlineWidth * 2,
@@ -145,9 +170,9 @@ const makeStyles = (t: Theme) =>
       ...ELEVATION.card,
     },
     // Instructions hidden — just the XP row. FIXED to the cluster panel's height (its paddingTop 6 + chip 32 + paddingBottom 8 = 46); both sit at top:10, so their bottom edges line up at y=56. No vertical padding: the 46 is the whole height.
-    objectiveBarSlim: { width: 260, height: 46, paddingVertical: 0 },
+    objectiveBarSlim: { width: SLIM_W, height: 46, paddingVertical: 0 },
     objectiveBarStructured: {
-      width: 360,
+      width: STRUCTURED_W,
       paddingVertical: 4,
     },
     // The instruction gets its own inset pill inside the bar: a light wash of the interactive lavender, so the line reads as the live task rather than as a caption on a panel.

@@ -279,7 +279,9 @@ export function withStaging(
 /**
  * Pull every cluster's OWN fasteners ahead of the first combine. The fastener appendix lands after every authored action, combines included, so a sub-assembly's hardware was asked for AFTER the sub-assembly had been joined into the furniture — and once anything is combined, the next focused cluster renders at its baked pose inside it. EKET asked for the drawer-back screws with the drawer already inside the finished cabinet (box-blocked from 72/72 sweep cameras, topPanel alone hiding 46; measured 6mm and passing with the drawer still loose); DALFRED asked for the pole's end cap after the pole was threaded down over the support pin (50mm behind it). The authored stage said otherwise in both cases and never got a say against array position.
  *
- * A fastener is a cluster's own when every part it attaches to sits in ONE cluster; one that bridges clusters realizes the combine joint and stays where it is, as does anything that explicitly requires a combine. Only actions sequenced after the first combine move, so hardware withStaging already placed inside a take-out → fit → carry-in window keeps that story. Each moved action lands right after its cluster's LAST pre-combine action — build the cabinet, screw the cabinet, build the drawer, screw the drawer — rather than in one hardware block before the combines; relative order among them is preserved, so each insert still precedes its tighten.
+ * A fastener is a cluster's own when every part it attaches to sits in ONE cluster; one that bridges clusters realizes the combine joint and stays where it is, as does anything that explicitly requires a combine. Only actions sequenced after the first combine move, so hardware withStaging already placed inside a take-out → fit → carry-in window keeps that story.
+ *
+ * Each moved action lands at its EARLIEST legal point — right after the last action it requires — not after its cluster's last pre-combine placement. The cluster-block anchor repeated the array-position failure this pass exists to fix, one level down: EKET's runner screws are authored stage 1 ("rails onto flat sides first", manual steps 2-3) but were asked for with all 29 cabinet parts standing, and the rear pair (nearest the back panel) measured ZERO clear viewpoints in that state, against 180-379 of 576 at the earliest legal moment — no camera angle could ever snap them. Requires-anchoring is the manual's own story: screw each joint as it closes. A require that is itself a moved action resolves to that action's anchor; original relative order breaks the tie, so insert still precedes tighten and an extra still follows its primary.
  */
 export function withFastenersBeforeCombines(
   drafts: readonly DraftAction[],
@@ -298,26 +300,38 @@ export function withFastenersBeforeCombines(
     if (new Set(owners).size !== 1) return null;
     return d.requires?.some((r) => combineIds.has(r)) ? null : owners[0]!;
   };
-  const moved: { d: DraftAction; cluster: ClusterId }[] = [];
+  const moved: DraftAction[] = [];
   for (let i = out.length - 1; i > firstCombine; i--) {
-    const cluster = ownCluster(out[i]);
-    if (!cluster) continue;
-    moved.unshift({ d: out[i], cluster });
+    if (!ownCluster(out[i])) continue;
+    moved.unshift(out[i]);
     out.splice(i, 1);
   }
-  // Group by cluster, then splice each group after the last pre-combine action touching a part of that cluster (falling back to just before the first combine). Later groups splice first so earlier indices stay valid.
-  const byCluster = new Map<ClusterId, DraftAction[]>();
-  for (const m of moved) (byCluster.get(m.cluster) ?? byCluster.set(m.cluster, []).get(m.cluster)!).push(m.d);
-  const anchorFor = (cluster: ClusterId): number => {
-    for (let i = firstCombine - 1; i >= 0; i--) {
-      const pid = out[i].partId;
-      if (pid && parts[pid]?.cluster === cluster) return i + 1;
+  // Anchor each moved action after the LAST action it requires. All anchors are computed against the cleaned list, then spliced highest-first, so every index stays valid; a require that is itself a moved action contributes ITS anchor (already computed — an insert precedes its tighten in appendix order, a primary's tighten precedes its extra), and original order within a shared anchor keeps those chains sequenced. requiresAny is an OR, so its earliest-legal contribution is the FIRST resolved alternative. An action whose requires resolve to nothing keeps the old fallback, just before the first combine.
+  const cleanedIndex = new Map<ActionId, number>();
+  out.forEach((d, i) => cleanedIndex.set(d.actionId, i));
+  const firstCombineIdx = out.findIndex((d) => d.type === "combineClusters");
+  const anchors = new Map<ActionId, number>();
+  for (const d of moved) {
+    let at = 0;
+    const resolve = (r: ActionId): number | undefined => {
+      const i = cleanedIndex.get(r);
+      if (i !== undefined) return i + 1;
+      return anchors.get(r);
+    };
+    for (const r of d.requires ?? []) {
+      const a = resolve(r);
+      if (a !== undefined) at = Math.max(at, a);
     }
-    return firstCombine;
-  };
-  const groups = [...byCluster.entries()].map(([cluster, list]) => ({ at: anchorFor(cluster), list }));
-  groups.sort((a, b) => b.at - a.at);
-  for (const g of groups) out.splice(g.at, 0, ...g.list);
+    const anyAts = (d.requiresAny ?? []).map(resolve).filter((a): a is number => a !== undefined);
+    if (anyAts.length) at = Math.max(at, Math.min(...anyAts));
+    anchors.set(d.actionId, at > 0 ? Math.min(at, firstCombineIdx) : firstCombineIdx);
+  }
+  const byAnchor = new Map<number, DraftAction[]>();
+  for (const d of moved) {
+    const at = anchors.get(d.actionId)!;
+    (byAnchor.get(at) ?? byAnchor.set(at, []).get(at)!).push(d);
+  }
+  for (const [at, list] of [...byAnchor.entries()].sort((a, b) => b[0] - a[0])) out.splice(at, 0, ...list);
   return out;
 }
 

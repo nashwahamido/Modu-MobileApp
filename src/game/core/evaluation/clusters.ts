@@ -47,19 +47,22 @@ export function actionCluster(
 }
 
 export function actionsForClusterFocus<
-  T extends { partId?: PartId; cluster?: ClusterId },
+  T extends { partId?: PartId; cluster?: ClusterId; type?: string },
 >(
   f: Furniture,
   actions: readonly T[],
   activeCluster: ClusterId | null,
 ): T[] {
-  if (!requiresClusterFocus(f)) return [...actions];
-  // No focus is a real state, not an error: the combine stage runs unfocused, and cluster-LESS actions (combines, the finishing/test beats) must surface there — returning [] swallowed every post-combine beat.
-  if (!activeCluster) return actions.filter((action) => actionCluster(f, action) == null);
-  return actions.filter((action) => {
+  // A COMBINE surfaces in every focus state. The combine stage runs unfocused, and the cluster-less filter below used to be how combines reached it — but the cluster overlay gave every combine an explicit `cluster` (the id it joins), so the filter silently dropped them: at DALFRED's combine the offered list went empty, nextAction named nothing, and the objective bar fell back to "Switch focus" while the tray was asking for the real gesture and the authored beat text sat unused. The combine tray itself shows regardless of focus; the offered list has to agree with it.
+  const passes = (action: T): boolean => {
+    if (action.type === "combineClusters") return true;
     const cluster = actionCluster(f, action);
+    if (!activeCluster) return cluster == null;
     return cluster == null || cluster === activeCluster;
-  });
+  };
+  if (!requiresClusterFocus(f)) return [...actions];
+  // No focus is a real state, not an error: the combine stage runs unfocused, and its actions (combines above, plus cluster-less finishing/test beats) must surface there — returning [] swallowed every post-combine beat.
+  return actions.filter(passes);
 }
 
 export function currentStageForClusterFocus(

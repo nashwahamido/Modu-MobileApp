@@ -19,7 +19,7 @@ import { stageOffsetMap } from "@/src/game/core/model/staging";
 import { FOCAL_LENGTH_MM } from "./cameraConfig";
 import { CEL_IBL_INTENSITY, getLightRig, IBL_INTENSITY } from "./lighting";
 import type { ClusterDriver, DriverRegistry, OffsetDriver } from "./offsetDriver";
-import { registerLiveBoxReader, worldBoxFromObjectBox } from "./partBoxes";
+import { bakedWorldMatrix, registerLiveBoxReader, worldBoxFromObjectBox } from "./partBoxes";
 import { registerPickProber } from "./pickProbe";
 import { PartModel } from "./PartModel";
 import { buildPushDriverMap } from "./pushOpen";
@@ -117,7 +117,7 @@ export function AssemblyScene({
   // Deliberately NOT keyed on onModelReady: the parent passes a fresh inline closure every render, so including it would re-run this whole per-part native-bridge loop on any unrelated parent re-render — the harvest must happen once per model load. model.asset is read from the closure inside, since useModel returns a fresh object identity every render and depending on it would have the same effect.
   useEffect(() => {
     if (model.state !== "loaded" || !furniture) return;
-    // Harvest each part's world bounds ONCE — the joint derivation's only input from the renderer. Filament hands back the renderable's OBJECT-space box, so each is pushed through the node's world transform below; the tolerance check that follows is what proves the result really is in the space the derivation assumes, because a box left in the wrong space would shift every anchor by the node's translation and the drag would just feel subtly wrong instead of failing.
+    // Harvest each part's world bounds ONCE — the joint derivation's only input from the renderer. Filament hands back the renderable's OBJECT-space box, and each is pushed through the part's BAKED pose (partBoxes.bakedWorldMatrix), NOT the transform manager's current matrix: child effects run before parent effects, so on a resumed build PartModel has already written drive parks and staging offsets by the time this reads, and reading those live poses tripped the 2mm gate below — one loose fastener disabled every box for the session (`boxes=0 reach=0.000`, seats falling back to mid-shaft visual centres). The harvest is a snapshot of the ASSEMBLED furniture by contract, so the assembled pose is the right transform even when the renderer is drawing something else; the tolerance check that follows keeps its real job, proving the OBJECT-space box and parts.gen still agree after a re-export.
     const boxes: Record<PartId, PartBox> = {};
     let mismatches = 0;
     let worst = { partId: "", mm: 0 };
@@ -128,7 +128,7 @@ export function AssemblyScene({
       const { min, max } = worldBoxFromObjectBox(
         b.center,
         b.halfExtent,
-        transformManager.getWorldTransform(entity).data,
+        bakedWorldMatrix(p.pose.position, p.pose.rotation),
       );
       boxes[p.partId] = { min, max };
       const vco = p.visualCenterOffset ?? [0, 0, 0];
@@ -150,7 +150,7 @@ export function AssemblyScene({
     useGameStore.getState().setPartBoxes(boxes);
     // model is a fresh object identity every render (useModel returns a new literal once loaded — see PartModel.tsx's modelEqual/useInstanceEntity for the same caveat), so depending on the whole object would re-run this harvest on every render instead of once per load; model.state is the stable signal that actually changes on load/unload.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [model.state, furniture, renderableManager, transformManager]);
+  }, [model.state, furniture, renderableManager]);
 
   // Modes decide what is on SCREEN and they change with every store tick, so the reader below reads them through a ref — re-registering the closure on each mode change would churn a native-bridge callback for a value only read at pickup.
   const modesRef = useRef(modes);

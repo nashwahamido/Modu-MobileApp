@@ -72,3 +72,20 @@ test("EKET reaches the same state 21 times over one build, and the pick is right
   }
   assert.ok(mismatched > 0, "the walk never reached the state this rule is for — the walk, not the rule, is what needs looking at");
 });
+
+// THE COMBINE-STAGE BUG. Combines carry the cluster they join (the CLUSTERS overlay), and the combine stage runs UNFOCUSED — so the cluster-less focus filter dropped both combines, the offered list went empty, and the objective bar fell back to "Switch focus" while the combine tray was asking for the real gesture (reported on DALFRED, 2026-08-25). The offered list at the combine stage must name the combine itself.
+test("at the combine stage, unfocused focus filtering still offers the combine beat", async () => {
+  const { fixture } = await import("@/src/game/content/furnitures/fixtures.testutil");
+  const DALFRED = await import("@/src/game/content/furnitures/DALFRED/authored");
+  const { PARTS } = await import("@/src/game/content/furnitures/DALFRED/parts.gen");
+  const f = fixture("dalfred-stool", DALFRED as never, PARTS);
+  const { actionsForClusterFocus } = await import("./clusters");
+  // Everything except the combines is complete.
+  const done = new Set(f.actions.filter((a) => a.type !== "combineClusters").map((a) => a.actionId));
+  const legal = availableActions(f, done);
+  assert.ok(legal.some((a) => a.type === "combineClusters"), "guard: the combine must be legal once both clusters are built");
+  const offered = actionsForClusterFocus(f, legal, null);
+  const next = nextAction(f, offered, done);
+  assert.equal(next?.type, "combineClusters", "the combine stage must name the combine, not fall back to Switch focus");
+  assert.equal(next?.actionId as string, "combine_base");
+});
