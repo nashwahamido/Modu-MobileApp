@@ -167,6 +167,10 @@ export interface Liaison {
 }
 export type LiaisonMap = Record<LiaisonId, Liaison>;
 
+/** Exit-sweep blockers per structural part, per cardinal direction — GENERATED per furniture (helper-scripts/derive-sweep.mts) from final-pose geometry: the parts whose bodies obstruct this part's exit corridor along the key direction within its bounded park travel (cluster-scoped; the mover is eroded 4mm for fit clearance; fasteners excluded — their sequencing is the home lane). A missing key means the corridor is clear. Consumed by engagement.travelAxis for parts with NO authored placeDir: an entry travel `t` is order-viable when every already-placed blocker of the reverse corridor `-t` is one of the part's own joint partners. */
+export type SweepDirKey = "+x" | "-x" | "+y" | "-y" | "+z" | "-z";
+export type SweepMap = Record<PartId, Partial<Record<SweepDirKey, readonly PartId[]>>>;
+
 export interface ClusterDef {
   id: ClusterId;
   label: string;
@@ -320,6 +324,8 @@ export interface Furniture {
   labels: LabelMap;
   /** Telescoping drawer beat (EKET); absent = the finishing beat stays symbolic. */
   pushOpen?: PushOpenSpec;
+  /** Generated exit-sweep blocker data (see SweepMap); absent = travelAxis keeps its centroid heuristic unchecked. */
+  sweep?: SweepMap;
   /** Derived body→component lookups (see model/components.ts); absent = no multi-body components. */
   components?: ComponentIndex;
   xpPerStep: number;

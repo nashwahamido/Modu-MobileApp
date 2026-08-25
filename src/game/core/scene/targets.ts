@@ -118,12 +118,13 @@ export function seatOffsetFor(
   anchors?: Record<PartId, Vec3>,
   done?: ReadonlySet<ActionId>,
   receivers: readonly BoxLike[] = [],
+  travel?: Vec3 | null,
 ): Vec3 {
   const anchored = part && anchors?.[part.partId];
   if (anchored) {
-    // A structural part's joint anchor is the CENTRE of its contact slab — for a slider or press that is a point inside the receiver (DALFRED's support pin: 10.5mm into the 21mm plate, the middle of the hole), which no camera can see except straight down the bore. The hole the player sees is where the approach axis leaves the receiver, so the anchor is pushed back along −placeDir until it exits every placed box that contains it. Parts with no placeDir (drops) keep the slab centre; their burial is the slab's own thin half-width.
+    // A structural part's joint anchor is the CENTRE of its contact slab — for a slider or press that is a point inside the receiver (DALFRED's support pin: 10.5mm into the 21mm plate, the middle of the hole), which no camera can see except straight down the bore. The hole the player sees is where the approach axis leaves the receiver, so the anchor is pushed back along −travel until it exits every placed box that contains it. `travel` is the ORDER-ADAPTED direction when the caller has one (engagement.adaptedTravelDir — EKET's back panel enters from opposite sides in the two legal orders, and the visible hole is on whichever side is open), else the authored placeDir. Parts with neither (drops) keep the slab centre; their burial is the slab's own thin half-width.
     const seat: Vec3 = [part.pose.position[0] + anchored[0], part.pose.position[1] + anchored[1], part.pose.position[2] + anchored[2]];
-    const pd = part.placeDir;
+    const pd = travel ?? part.placeDir;
     const pl = pd ? Math.hypot(pd[0], pd[1], pd[2]) : 0;
     if (pd && pl > 0) {
       const back: Vec3 = [-pd[0] / pl, -pd[1] / pl, -pd[2] / pl];
