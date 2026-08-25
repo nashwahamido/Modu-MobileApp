@@ -6,9 +6,7 @@ import type { BuildProgressRepo, BuildRewardRow, CatalogRepo, FriendRequestsRepo
 import { toBuildRewardAmount, toPlaceableRoomRow, workshopDraftsToItemVariants, workshopModelDraftsToPlaceableRoomRows } from "../core/repos";
 import type { BuildSave, FriendRequest, Profile, ProfilePatch, RoomLayout } from "../core/types";
 import { ROOM_LAYOUT_VERSION } from "../core/types";
-import type { ShopCategory, ShopItem, WorkshopDraftShopRow } from "../shop/items";
-import { isSurfaceCategory, toShopItem, workshopDraftsToShopItems, type ShopItemRow } from "../shop/items";
-import { parseSurfaceSpec } from "../shop/surfaceSpec";
+import { toShopItem, workshopDraftsToShopItems, type ShopCategory, type ShopItem, type ShopItemRow, type WorkshopDraftShopRow } from "../shop/items";
 import { workshopDraftsDevGateOpen } from "../catalog/workshopDraftsGate";
 import type { AvatarRef } from "../player/avatars";
 import { idForMode, modeForId } from "../player/avatars";
@@ -495,7 +493,7 @@ const storeRepo: StoreRepo = {
   listItems() {
     return getShopItems();
   },
-  // Owned = purchased UNION granted UNION testing workshop drafts. `granted` marks items every player has without a user_buy row (migration 018: the two default surfaces, which are what "revert the room to how it was designed" applies); the workshop half (dev builds only) marks a testing draft owned regardless of its own `granted` column, so it reaches the inventory and can be applied without needing a real purchase — the whole point of trying it before publish. Unioning here rather than materialising a row per player per item keeps ownership a property of the ITEM — N x M rows to express a constant would go stale the first time a signup path forgot to write them, and would need a backfill for everyone who already exists.
+  // Owned = user_buy rows UNION granted UNION testing workshop drafts. user_buy includes paid purchases and server-side grants (build rewards, plus the starter furniture in migration 028). `granted` marks items every player has without a user_buy row (migration 018: the two default surfaces, which are what "revert the room to how it was designed" applies); the workshop half (dev builds only) marks a testing draft owned regardless of its own `granted` column, so it reaches the inventory and can be applied without needing a real purchase — the whole point of trying it before publish. Unioning granted/draft here rather than materialising a row per player per item keeps ownership a property of the ITEM — N x M rows to express a constant would go stale the first time a signup path forgot to write them, and would need a backfill for everyone who already exists.
   // The granted and draft lists both come off already-cached fetches, so this costs no extra request.
   async listOwned(userId) {
     const { data, error } = await supabase.from("user_buy").select("item_id").eq("owner_id", userId);
