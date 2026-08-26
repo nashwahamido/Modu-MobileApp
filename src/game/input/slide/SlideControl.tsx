@@ -8,8 +8,8 @@ import { AssemblyAction, Vec3 } from "@/src/game/core/type";
 import type { ParkInfo } from "@/src/game/core/evaluation/engagement";
 import type { OffsetSink } from "../../scene/combineDriver";
 import { useMirror } from "@/src/game/ui/system/handedness";
-
-const TRACK = 220;
+import { useTrackLength } from "./trackFit";
+import { TASK_CONTROL_BOTTOM } from "@/src/game/ui/hud/hudChrome";
 
 interface Props {
   action: AssemblyAction;
@@ -23,6 +23,8 @@ interface Props {
 export function SlideControl({ action, driver, park }: Props) {
   const m = useMirror();
   const t = useTheme();
+  // The length the track is DRAWN at and the length the drag is divided by — one number, so the part travels with the thumb whatever the screen allows.
+  const track = useTrackLength();
   const progress = useGameStore((s) => s.driveProgress[action.actionId] ?? 0);
   const parked = useRef<Vec3 | null>(null);
   const lastY = useRef<number | null>(null);
@@ -53,7 +55,7 @@ export function SlideControl({ action, driver, park }: Props) {
     .onUpdate((e) => {
       if (lastY.current !== null) {
         const dy = e.y - lastY.current;
-        const delta = dy / TRACK;
+        const delta = dy / track;
         if (delta !== 0) {
           const store = useGameStore.getState();
           const before = store.driveProgress[action.actionId] ?? 0;
@@ -93,10 +95,10 @@ export function SlideControl({ action, driver, park }: Props) {
         Slide it in · {Math.round(progress * 100)}%
       </Text>
       <GestureDetector gesture={pan}>
-        <View style={styles.track}>
+        <View style={[styles.track, { height: track }]}>
           {/* The fill IS the indicator now — it grows from the top as you drag down, no
               separate knob. The arrow rides the fill's leading (bottom) edge. */}
-          <View style={[styles.fill, { height: TRACK * progress }]}>
+          <View style={[styles.fill, { height: track * progress }]}>
             <Text style={styles.arrow}>↓</Text>
           </View>
           {/* Untouched, the fill has zero height and its arrow is invisible — so the control shows
@@ -110,7 +112,8 @@ export function SlideControl({ action, driver, park }: Props) {
                 {
                   opacity: cue.interpolate({ inputRange: [0, 0.15, 0.8, 1], outputRange: [0, 1, 1, 0] }),
                   transform: [
-                    { translateY: cue.interpolate({ inputRange: [0, 1], outputRange: [0, TRACK - 86] }) },
+                    // Stops short of the bottom by the arrow's own height plus the cue's inset, so it runs the track rather than off the end of it — on a short track that headroom is most of the travel, hence the max().
+                    { translateY: cue.interpolate({ inputRange: [0, 1], outputRange: [0, Math.max(0, track - 86)] }) },
                   ],
                 },
               ]}
@@ -135,13 +138,14 @@ const styles = StyleSheet.create({
   wrap: {
     position: "absolute",
     right: 160,
-    bottom: 36,
+    // The shared clearance over the toggles row — see TASK_CONTROL_BOTTOM. At 36 the track's bottom sat inside the auto / Focus / Spot chips, and the same finger that dragged it could hit one on the way past.
+    bottom: TASK_CONTROL_BOTTOM,
     alignItems: "center",
     gap: 8,
   },
+  // Height comes from the call site (useTrackLength) — it depends on the screen, and this sheet is static.
   track: {
     width: 64,
-    height: TRACK,
     borderRadius: 32,
     borderWidth: 4,
     borderColor: CONTROL.fill,

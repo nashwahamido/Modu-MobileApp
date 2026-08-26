@@ -59,6 +59,19 @@ test("alignSelf and textAlign flip; centre is left alone", () => {
   assert.equal(mirror<TextStyle>({ textAlign: "left" }, "left").textAlign, "right");
 });
 
+test("alignItems flips on a column, where it means which SIDE the children sit on", () => {
+  // No flexDirection at all is a column in React Native, unlike the web.
+  assert.equal(mirror<ViewStyle>({ alignItems: "flex-end", paddingRight: 56 }, "left").alignItems, "flex-start");
+  assert.equal(mirror<ViewStyle>({ flexDirection: "column", alignItems: "flex-start" }, "left").alignItems, "flex-end");
+});
+
+test("alignItems is LEFT ALONE on a row, where it means top vs bottom", () => {
+  const out = mirror<ViewStyle>({ flexDirection: "row", alignItems: "flex-end" }, "left");
+  assert.equal(out.alignItems, "flex-end");
+  // The row itself still reverses — only the vertical alignment is out of scope for a horizontal mirror.
+  assert.equal(out.flexDirection, "row-reverse");
+});
+
 test("a style with nothing horizontal in it comes back unchanged in content", () => {
   const out = as(mirror<ViewStyle>({ top: 8, width: 36, height: 36 }, "left"));
   assert.deepEqual(out, { top: 8, width: 36, height: 36 });

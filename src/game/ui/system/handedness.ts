@@ -35,7 +35,7 @@ const ROW: Record<string, string> = {
   "row-reverse": "row",
 };
 
-/** Self-alignment, for the few elements that sit in a flow rather than on an edge. */
+/** Self-alignment, for the few elements that sit in a flow rather than on an edge. Also serves `alignItems` — see the guard at its use, which is what keeps a ROW's vertical alignment out of a horizontal mirror. */
 const ALIGN: Record<string, string> = {
   "flex-start": "flex-end",
   "flex-end": "flex-start",
@@ -73,6 +73,11 @@ export function mirror<T extends Mirrorable>(style: T, handedness: Handedness): 
   }
   if (typeof style.alignSelf === "string" && ALIGN[style.alignSelf]) {
     out.alignSelf = ALIGN[style.alignSelf];
+  }
+  // alignItems ONLY on a column, which is where it means "which side of the box the children sit on" — the axis a horizontal mirror is about. On a ROW it means top-vs-bottom, and flipping that would move a control vertically for a left-handed player, which is not what this module promises. A container with no flexDirection is a column: that is React Native's default, unlike the web's.
+  const isColumn = style.flexDirection === undefined || String(style.flexDirection).startsWith("column");
+  if (isColumn && typeof style.alignItems === "string" && ALIGN[style.alignItems]) {
+    out.alignItems = ALIGN[style.alignItems];
   }
   // A plain view simply has no textAlign to find, so this reads as undefined and falls through.
   const textAlign = (style as TextStyle).textAlign;

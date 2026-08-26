@@ -16,6 +16,15 @@ import { GrainOverlay } from "@/src/game/ui/system/Button";
 import { SCENE_BACKGROUND } from "@/src/game/scene/lighting";
 import { playSfx } from "@/src/game/audio/sfx";
 
+/**
+ * The bottom offset EVERY task control sits at — the sliders in `input/slide`, the pads in `input/pad`, and anything else that lands in that corner while a step is live.
+ *
+ * The toggles row (auto / Focus / Spot) sits at bottom:16 and stands 44 tall, so its top edge is at 60; 72 clears it by 12. Below that the control shares a band with three buttons, and the same finger that drags it can hit one on the way past — which is what it did at 36.
+ *
+ * It lives HERE, with the other canonical HUD placements, rather than in one of the control folders: `pad/` and `slide/` both need it, and neither may import the other for a reason that is only layout (see input/README).
+ */
+export const TASK_CONTROL_BOTTOM = 72;
+
 /** One shared size for every bare HUD icon so they line up on the grid. */
 // 24 inside the 36 chip: the art was nearly filling its container, which read as heavy against the scene. The chip size is unchanged, so the grid and the tap targets hold.
 export const HUD_ICON = 24;

@@ -8,6 +8,7 @@ import { AssemblyAction } from "@/src/game/core/type";
 import { TIGHTEN_TOTAL_DEG, useGameStore } from "@/src/game/core/store";
 import { CONTROL, useTheme } from "@/src/game/ui/system/theme";
 import { Dial, useDialTurn } from "@/src/game/input/dial/DialGauge";
+import { useMirror } from "@/src/game/ui/system/handedness";
 import type { OffsetDriver } from "../../scene/offsetDriver";
 
 const DRAW_TRACK = 220; // horizontal slider length
@@ -20,6 +21,7 @@ interface Props {
 
 /** Two-STEP tighten for `drawTurn` fasteners (EKET stabiliser-rod dowels): (1) DRAW OUT — a HORIZONTAL SLIDER (matching the dowel's travel) translates it from its loose (retracted-in-rod) pose out to flush in the slider; then (2) ROTATE LOCK — turn the dial to lock it home. The dial is prompt-only: the dowel stays baked at its final rotation throughout (a knurled cylinder's spin is unreadable anyway), the dial just accrues degrees. Commits the tightenFastener when the rotation completes. */
 export function DrawTurnControl({ action, sinkDriver }: Props) {
+  const m = useMirror();
   const t = useTheme();
   const [phase, setPhase] = useState<"draw" | "turn">("draw");
   const [drawP, setDrawP] = useState(0);
@@ -80,7 +82,7 @@ export function DrawTurnControl({ action, sinkDriver }: Props) {
 
   if (phase === "draw") {
     return (
-      <View style={styles.wrap} pointerEvents="box-none">
+      <View style={m(styles.wrap)} pointerEvents="box-none">
         {/* ABOVE the track, not under it — the same fix SlideControl and SeatSlideControl already
             carry, for the same reason. Below, this landed on the bottom HUD row and ran under the
             auto button and the Focus chip: grey text on a busy background, most of it unreadable.
@@ -107,7 +109,7 @@ export function DrawTurnControl({ action, sinkDriver }: Props) {
   }
 
   return (
-    <View style={styles.dialWrap} pointerEvents="box-none">
+    <View style={m(styles.dialWrap)} pointerEvents="box-none">
       <Dial progress={Math.min(1, deg / TIGHTEN_TOTAL_DEG)} gesture={pan} />
       <Text style={styles.hint}>Turn to lock</Text>
     </View>
@@ -120,9 +122,10 @@ const styles = StyleSheet.create({
   // the same finger that drags it could hit one of them on the way past.
   //
   // 96 clears the row's top edge (60) with a comfortable margin, and the prompt above the track
-  // rises with it since the wrap is bottom-anchored. Right stays 60: the horizontal position was
-  // never the problem.
-  wrap: { position: "absolute", right: 60, bottom: 96, alignItems: "center", gap: 8 },
+  // rises with it since the wrap is bottom-anchored.
+  //
+  // 160 is the side offset the whole task-control family uses, and this one had stayed at 60: with a 220pt track that put its far end 60pt from the edge, inside the PartsTray column (right:14, 86 wide) — and MIRRORED for a left-handed player it landed on the joystick (left:14, 124 across). 160 clears both, on either hand.
+  wrap: { position: "absolute", right: 160, bottom: 96, alignItems: "center", gap: 8 },
   dialWrap: { position: "absolute", right: 220, bottom: 120, alignItems: "center" },
   htrack: {
     width: DRAW_TRACK,

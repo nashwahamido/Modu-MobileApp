@@ -6,8 +6,9 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useGameStore } from "@/src/game/core/store";
 import { AssemblyAction, Vec3 } from "@/src/game/core/type";
 import type { ClusterDriver, OffsetDriver } from "../../scene/offsetDriver";
-
-const TRACK = 220;
+import { useMirror } from "@/src/game/ui/system/handedness";
+import { useTrackLength } from "./trackFit";
+import { TASK_CONTROL_BOTTOM } from "@/src/game/ui/hud/hudChrome";
 
 interface Props {
   action: AssemblyAction;
@@ -21,7 +22,10 @@ interface Props {
 
 /** Slide-in seat for a staged sub-assembly (EKET stabiliser rod): the finished rod+dowels rests directly above its seat, so a vertical slider drives it straight DOWN into place — no re-fetching it from the tray. First drag grabs the on-screen part (beginPickup) so the tray card stays a fallback until this is touched; each drag eases the carrier (heldDriver) and its riding dowels (slideDriver mirror) from the stage offset to flush; at the bottom the placement commits. */
 export function SeatSlideControl({ action, offset, heldDriver, slideDriver }: Props) {
+  const m = useMirror();
   const t = useTheme();
+  // Drawn length and drag scale in one — see trackFit.
+  const track = useTrackLength();
   const [prog, setProg] = useState(0);
   const progRef = useRef(0); // authoritative (setState is async; the pan reads this)
   const lastY = useRef<number | null>(null);
@@ -66,7 +70,7 @@ export function SeatSlideControl({ action, offset, heldDriver, slideDriver }: Pr
     })
     .onUpdate((e) => {
       if (lastY.current !== null) {
-        const delta = (e.y - lastY.current) / TRACK;
+        const delta = (e.y - lastY.current) / track;
         if (delta !== 0) {
           const prev = progRef.current;
           const nd = Math.min(1, Math.max(0, prev + delta));
@@ -88,7 +92,7 @@ export function SeatSlideControl({ action, offset, heldDriver, slideDriver }: Pr
     });
 
   return (
-    <View style={styles.wrap} pointerEvents="box-none">
+    <View style={m(styles.wrap)} pointerEvents="box-none">
       {/* ABOVE the track, not under it — see SlideControl, which had the same problem: below, this
           sat on top of the HUD row and overlapped the auto button, grey on a busy background.
           Styled as ToolBar's "Pick a Tool" prompt: the app's one "here is what to do" label. */}
@@ -99,9 +103,9 @@ export function SeatSlideControl({ action, offset, heldDriver, slideDriver }: Pr
         Slide it in · {Math.round(prog * 100)}%
       </Text>
       <GestureDetector gesture={pan}>
-        <View style={styles.track}>
-          <View style={[styles.fill, { height: TRACK * prog }]} />
-          <View style={[styles.thumb, { top: (TRACK - 44) * prog }]}>
+        <View style={[styles.track, { height: track }]}>
+          <View style={[styles.fill, { height: track * prog }]} />
+          <View style={[styles.thumb, { top: (track - 44) * prog }]}>
             <Text style={styles.thumbText}>⇣</Text>
           </View>
           {/* Only while untouched: once the player has started, the thumb's own position is the
@@ -114,7 +118,8 @@ export function SeatSlideControl({ action, offset, heldDriver, slideDriver }: Pr
                 {
                   opacity: cue.interpolate({ inputRange: [0, 0.15, 0.8, 1], outputRange: [0, 1, 1, 0] }),
                   transform: [
-                    { translateY: cue.interpolate({ inputRange: [0, 1], outputRange: [0, TRACK - 86] }) },
+                    // max(): on a short track the arrow's own headroom is most of the travel, and a negative range would run it upward.
+                    { translateY: cue.interpolate({ inputRange: [0, 1], outputRange: [0, Math.max(0, track - 86)] }) },
                   ],
                 },
               ]}
@@ -133,10 +138,10 @@ export function SeatSlideControl({ action, offset, heldDriver, slideDriver }: Pr
 }
 
 const styles = StyleSheet.create({
-  wrap: { position: "absolute", right: 160, bottom: 36, alignItems: "center", gap: 8 },
+  // bottom: the shared clearance over the toggles row (hudChrome.TASK_CONTROL_BOTTOM) — at 36 the track ran into the auto / Focus / Spot chips. The track's height comes from the call site, since it depends on the screen.
+  wrap: { position: "absolute", right: 160, bottom: TASK_CONTROL_BOTTOM, alignItems: "center", gap: 8 },
   track: {
     width: 64,
-    height: TRACK,
     borderRadius: 32,
     borderWidth: 4,
     borderColor: CONTROL.fill,

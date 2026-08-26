@@ -9,6 +9,7 @@ import { Animated, Easing, Image, StyleSheet, Text, type ImageSourcePropType } f
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 
 import { CONTROL, FONT } from "@/src/game/ui/system/theme";
+import { TASK_CONTROL_BOTTOM } from "@/src/game/ui/hud/hudChrome";
 
 /** The pad's diameter. Exported because the slider tracks some of these controls switch to are sized against it. */
 export const PRESS_PAD_SIZE = 120;
@@ -117,13 +118,10 @@ export const pressPadStyles = StyleSheet.create({
   wrap: {
     position: "absolute",
     right: 160,
-    // 72, was 36. The toggles row (auto / Focus / Spot) sits at bottom:16 and stands 44 tall, so its
-    // top edge is at 60 — and at 36 the pad's own bottom was 24 points INSIDE it, in the same
-    // horizontal band. 72 clears that top edge by 12.
+    // Was 36, which put the pad's own bottom 24 points inside the toggles row. The shared offset that fixed it is TASK_CONTROL_BOTTOM in ui/hud/hudChrome, where the sliders read it too — the pads and the tracks occupy the same corner and must clear the same row, so the number cannot live in either folder.
     //
-    // The caption moved above the pad for the same reason and is not enough on its own: the pill
-    // came clear, the circle it belongs to did not.
-    bottom: 72,
+    // The caption moved above the pad for the same reason and is not enough on its own: the pill came clear, the circle it belongs to did not.
+    bottom: TASK_CONTROL_BOTTOM,
     alignItems: "center",
     gap: 8,
     // The caption is FIRST in the column, so it sits above the pad. It used to hang below, where the

@@ -8,9 +8,9 @@ import type { DriverRegistry } from "@/src/game/scene/offsetDriver";
 import type { AssemblyAction, PushOpenSpec } from "@/src/game/core/type";
 import { CONTROL } from "@/src/game/ui/system/theme";
 import { PressPad, pressPadStyles, HAND_ICON } from "@/src/game/input/pad/PressPad";
+import { useMirror } from "@/src/game/ui/system/handedness";
+import { useTrackLength } from "./trackFit";
 
-/** Track height in px — also the drag distance for a drawer's full travel, so the thumb follows the finger 1:1. */
-const TRACK = 220;
 /** Fallback push-latch ejection when the spec doesn't author popDistance. */
 const DEFAULT_POP_M = 0.03;
 
@@ -26,6 +26,9 @@ export function PushTestControl({
   level: string;
   pushDrivers: DriverRegistry;
 }) {
+  const m = useMirror();
+  /** Track height in px — also the drag distance for a drawer's full travel, so the thumb follows the finger 1:1. Fitted to the screen: see trackFit. */
+  const track = useTrackLength();
   const [phase, setPhase] = useState<"latched" | "popped" | "pulled">("latched");
   const [travelUi, setTravelUi] = useState(0);
   const popping = useRef(false);
@@ -57,7 +60,7 @@ export function PushTestControl({
     })
     .onUpdate((e) => {
       if (phase === "latched" || popping.current) return;
-      const d = Math.min(spec.distance, Math.max(0, strokeBase.current + (e.translationY / TRACK) * spec.distance));
+      const d = Math.min(spec.distance, Math.max(0, strokeBase.current + (e.translationY / track) * spec.distance));
       travel.current = d;
       setTravelUi(d);
       setTravel(spec, pushDrivers, level, d);
@@ -76,7 +79,7 @@ export function PushTestControl({
 
   if (phase === "latched") {
     return (
-      <View style={pressPadStyles.wrap} pointerEvents="box-none">
+      <View style={m(pressPadStyles.wrap)} pointerEvents="box-none">
         {/* pulse={false}: this pad never showed the ring, unlike its four siblings — a latch test is not an instruction */}
         <PressPad icon={HAND_ICON} resetKey={action.actionId} onPress={press} pulse={false} />
         <Text style={pressPadStyles.hint}>Press the drawer to pop it open</Text>
@@ -86,11 +89,11 @@ export function PushTestControl({
 
   const k = Math.min(1, travelUi / spec.distance);
   return (
-    <View style={pressPadStyles.wrap} pointerEvents="box-none">
+    <View style={m(pressPadStyles.wrap)} pointerEvents="box-none">
       <GestureDetector gesture={pan}>
-        <View style={styles.track}>
-          <View style={[styles.fill, { height: TRACK * k }]} />
-          <View style={[styles.thumb, { top: (TRACK - 44) * k }]}>
+        <View style={[styles.track, { height: track }]}>
+          <View style={[styles.fill, { height: track * k }]} />
+          <View style={[styles.thumb, { top: (track - 44) * k }]}>
             <Text style={styles.thumbText}>{phase === "popped" ? "⇣" : "⇡"}</Text>
           </View>
         </View>
@@ -103,9 +106,9 @@ export function PushTestControl({
 }
 
 const styles = StyleSheet.create({
+  // Height comes from the call site (useTrackLength) — it depends on the screen, and this sheet is static.
   track: {
     width: 64,
-    height: TRACK,
     borderRadius: 32,
     borderWidth: 4,
     borderColor: CONTROL.fill,

@@ -8,9 +8,12 @@ import type { ParkInfo } from "@/src/game/core/evaluation/engagement";
 import { lockShoveWord } from "@/src/game/core/presentation/instructions";
 import { CONTROL } from "@/src/game/ui/system/theme";
 import { PressPad, pressPadStyles, HAND_ICON } from "@/src/game/input/pad/PressPad";
+import { useMirror } from "@/src/game/ui/system/handedness";
+import { useTrackLength } from "./trackFit";
 import type { OffsetDriver } from "../../scene/offsetDriver";
 
-const TRACK = 140;
+/** The lock shove is a SHORT travel, so this track asks for less than the slider family's full length; on a phone useTrackLength can still trim it. */
+const LOCK_TRACK = 140;
 
 /** Fraction of driveProgress the press leg owns; the lock drag owns the rest. */
 const PRESS_PHASE = 0.5;
@@ -25,6 +28,9 @@ interface Props {
 
 /** Two-phase keyhole placement (part.lockDir — EKET side↔top): PHASE A is PressControl's pad — each tap shoves the panel along its press axis until the dowels sit in the big keyhole ends (the hooked pose: already at target height, overshot along the slot axis) — then the pad becomes a short SlideControl-style track and PHASE B drags the panel the slot length along lockDir to lock; only that commits. The track lies along the slot's dominant screen sense: vertical for a downward lock, horizontal for the EKET depth shove. One placePart action, one progress scalar: 0..PRESS_PHASE is the press leg, the rest is the lock leg, and the offset is the sum of both legs' remainders so undoing nothing and rebuilding mid-way stays consistent. */
 export function HookPressControl({ action, driver, park }: Props) {
+  const m = useMirror();
+  // Drawn length AND drag scale, trimmed to what the screen has room for.
+  const track = useTrackLength(LOCK_TRACK);
   const progress = useGameStore((s) => s.driveProgress[action.actionId] ?? 0);
   const last = useRef<number | null>(null);
 
@@ -78,7 +84,7 @@ export function HookPressControl({ action, driver, park }: Props) {
       const pos = vertical ? e.y : e.x;
       if (last.current !== null) {
         const d = pos - last.current;
-        const raw = ((upward ? -d : d) / TRACK) * (1 - PRESS_PHASE);
+        const raw = ((upward ? -d : d) / track) * (1 - PRESS_PHASE);
         if (raw !== 0) {
           const store = useGameStore.getState();
           const before = store.driveProgress[action.actionId] ?? 0;
@@ -107,24 +113,24 @@ export function HookPressControl({ action, driver, park }: Props) {
   const word = lock ? lockShoveWord(lock.axis) : "over";
 
   return (
-    <View style={pressPadStyles.wrap} pointerEvents="box-none">
+    <View style={m(pressPadStyles.wrap)} pointerEvents="box-none">
       {!hooked ? (
         <PressPad icon={HAND_ICON} resetKey={action.actionId} onPress={press} />
       ) : (
         <GestureDetector gesture={pan}>
-          <View style={vertical ? styles.trackV : styles.trackH}>
+          <View style={vertical ? [styles.trackV, { height: track }] : [styles.trackH, { width: track }]}>
             <View
               style={
                 vertical
-                  ? [upward ? styles.fillVUp : styles.fillV, { height: TRACK * lockFrac }]
-                  : [styles.fillH, { width: TRACK * lockFrac }]
+                  ? [upward ? styles.fillVUp : styles.fillV, { height: track * lockFrac }]
+                  : [styles.fillH, { width: track * lockFrac }]
               }
             />
             <View
               style={
                 vertical
-                  ? [styles.thumbV, { top: (TRACK - 44) * (upward ? 1 - lockFrac : lockFrac) }]
-                  : [styles.thumbH, { left: (TRACK - 44) * lockFrac }]
+                  ? [styles.thumbV, { top: (track - 44) * (upward ? 1 - lockFrac : lockFrac) }]
+                  : [styles.thumbH, { left: (track - 44) * lockFrac }]
               }
             >
               <Text style={styles.thumbText}>{vertical ? (upward ? "⇡" : "⇣") : "⇢"}</Text>
@@ -142,9 +148,9 @@ export function HookPressControl({ action, driver, park }: Props) {
 }
 
 const styles = StyleSheet.create({
+  // The track's LONG dimension comes from the call site (useTrackLength) — it depends on the screen, and this sheet is static.
   trackV: {
     width: 64,
-    height: TRACK,
     borderRadius: 32,
     borderWidth: 4,
     borderColor: CONTROL.fill,
@@ -152,7 +158,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   trackH: {
-    width: TRACK,
     height: 64,
     borderRadius: 32,
     borderWidth: 4,
