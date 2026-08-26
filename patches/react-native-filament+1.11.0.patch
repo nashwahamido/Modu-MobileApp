@@ -350,10 +350,10 @@ index c981aa4..ecfd70b 100644
    void setReceiveShadow(std::shared_ptr<EntityWrapper> entityWrapper, bool receiveShadow);
 diff --git a/node_modules/react-native-filament/cpp/core/RNFTextureWrapper.h b/node_modules/react-native-filament/cpp/core/RNFTextureWrapper.h
 new file mode 100644
-index 0000000..d165f19
+index 0000000..37fe262
 --- /dev/null
 +++ b/node_modules/react-native-filament/cpp/core/RNFTextureWrapper.h
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,77 @@
 +#pragma once
 +
 +#include <filament/Engine.h>
@@ -361,6 +361,13 @@ index 0000000..d165f19
 +
 +#include "jsi/RNFHybridObject.h"
 +#include "threading/RNFDispatcher.h"
++
++#ifdef __ANDROID__
++#include <android/log.h>
++#include <fbjni/fbjni.h>
++#endif
++
++#include <functional>
 +
 +namespace margelo {
 +
@@ -375,9 +382,28 @@ index 0000000..d165f19
 +  // Deferred, exactly as MaterialInstance destruction already is in RNFRenderableManagerImpl: engine calls belong on the renderer thread, and a JS GC can land on any thread.
 +  // INHERITED HAZARD, not introduced here: if this destructor ever ran from inside a job that JDispatcher::trigger is already executing, runAsync would block on the very JDispatcher::_mutex that trigger is holding, self-deadlocking on that non-recursive mutex — RNFRenderableManagerImpl.cpp's existing MaterialInstance deleter has the identical shape, so this is a pre-existing upstream hazard being inherited here, not a new one, and is not being fixed by this patch.
 +  ~TextureWrapper() {
-+    auto engine = _engine;
-+    auto texture = _texture;
-+    _dispatcher->runAsync([engine, texture]() { engine->destroy(texture); });
++    // RELEASES THE MEMBERS ITSELF rather than leaving them to the closing brace, and that is the whole reason this is a lambda. Member destruction runs AFTER the destructor body, which is after the ThreadScope below has already detached — and dropping _engine can be the drop that takes the Engine's refcount to zero, whose deleter (References<Engine>::adoptRef in RNFFilamentProxy.cpp) posts to the render thread through the same JNI-backed runAsync. Dropping _dispatcher can likewise be the last JDispatcher reference, and ~global_ref calls DeleteGlobalRef. Both threw from outside the try and terminated on hades exactly as the original bug did, one build later.
++    std::function<void()> release = [this]() {
++      auto engine = _engine;
++      auto texture = _texture;
++      _dispatcher->runAsync([engine, texture]() { engine->destroy(texture); });
++      _engine.reset();
++      _dispatcher.reset();
++    };
++#ifdef __ANDROID__
++    // CAUGHT, not propagated, and the catch is the point rather than a formality: everything below can still throw for reasons this destructor cannot do anything about (fbjni never initialized, the VM already shutting down under a teardown), and a throw from here is std::terminate. Leaking one texture on a dying process is the strictly better outcome.
++    try {
++      // THE DEFERRAL ITSELF NEEDS A JVM. This is the only wrapper in the library whose lifetime belongs to JS rather than to C++, so it is the only one whose destructor can run on Hermes' concurrent GC thread ("hades") — a thread Hermes created and never attached to the JVM. JDispatcher::runAsync ends in a JNI call (scheduleTrigger), fbjni throws std::runtime_error("Unable to retrieve jni environment") when it cannot reach an env, and a throw out of a destructor is std::terminate, not an exception: SIGABRT on hades, no JS stack, nothing in the RN error handler.
++      // WithClassLoader rather than a bare ThreadScope: scheduleTrigger resolves its jmethodID through javaClassLocal() into a function-local static, and if the GC thread is the first ever to reach that line, a plain attached thread has no application class loader to find com/margelo/filament/Dispatcher with.
++      jni::ThreadScope::WithClassLoader(std::move(release));
++    } catch (const std::exception& e) {
++      __android_log_print(ANDROID_LOG_ERROR, "TextureWrapper", "Failed to schedule texture destruction: %s", e.what());
++    } catch (...) {
++      __android_log_print(ANDROID_LOG_ERROR, "TextureWrapper", "Failed to schedule texture destruction");
++    }
++#else
++    release();
++#endif
 +  }
 +
 +  void loadHybridMethods() override {
@@ -560,7 +586,7 @@ index 0000000..609e37c
 +    readonly height: number;
 +}
 diff --git a/node_modules/react-native-filament/lib/typescript/types/View.d.ts b/node_modules/react-native-filament/lib/typescript/types/View.d.ts
-index 5dc2280..61a6273 100644
+index 5dc2280..90f0e46 100644
 --- a/node_modules/react-native-filament/lib/typescript/types/View.d.ts
 +++ b/node_modules/react-native-filament/lib/typescript/types/View.d.ts
 @@ -106,6 +106,19 @@ export interface View extends PointerHolder {
@@ -691,7 +717,7 @@ index 0000000..708da5a
 +  readonly height: number
 +}
 diff --git a/node_modules/react-native-filament/src/types/View.ts b/node_modules/react-native-filament/src/types/View.ts
-index 305ab4b..535ee27 100644
+index 305ab4b..9d7ba2e 100644
 --- a/node_modules/react-native-filament/src/types/View.ts
 +++ b/node_modules/react-native-filament/src/types/View.ts
 @@ -119,6 +119,14 @@ export interface View extends PointerHolder {
