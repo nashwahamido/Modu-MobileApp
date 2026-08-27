@@ -2,6 +2,7 @@
 import { isStaged } from "@/src/game/core/model/staging";
 import type { GroupCandidate } from "@/src/game/core/scene/targets";
 import type { ActionId, Furniture, PartDef, PartId, Quat, Vec3 } from "@/src/game/core/type";
+import type { AimBlock } from "@/src/game/core/store";
 import type { PickConfirmCache } from "./pickConfirm";
 
 export type Float3 = [number, number, number];
@@ -40,6 +41,8 @@ export interface DragSession {
   startY: number;
   /** Last time the aim sat on a blocked socket — the chip's debounce clock: showing is instant, clearing waits, so grazing sightlines and the 160px rim don't strobe the label. */
   blockedStamp: number;
+  /** Which move the chip is coaching, held alongside the stamp so the debounce tail keeps saying what the trigger frame said rather than re-deciding on a frame where nothing is firing. */
+  blockedKind: AimBlock;
   /** EXPERIMENT (drag-no-plane): assembly bounding radius around the pivot at pickup — sets the ray-carry depth "just in front of the model". */
   modelR: number;
   /** Every part placed at pickup time. Fixed for the drag (actions cannot complete mid-gesture) — kept so the occluder refresh below can re-read the same parts' boxes without re-deriving the set. */

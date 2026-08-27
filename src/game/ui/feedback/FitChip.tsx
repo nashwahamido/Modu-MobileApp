@@ -66,9 +66,17 @@ export function FitChip() {
   // of the truth: they read encouragement, kept pushing, and the part would not seat. Orange is the
   // same "still hunting" the chip already uses for a part with nowhere to go yet, which is what this
   // is — there is a socket, but not one that can be reached from here.
+  //
+  // Two moves, two labels: a socket hidden behind the model is a TURN, a socket that has fallen off
+  // the viewport edge is a ZOOM OUT. The advice has to name the right one — "turn the camera" while
+  // every socket sits outside the frame sends the player sweeping the model past an edge they cannot
+  // see over, and the gesture they need is the one they were not told to make.
   let aimCue = false;
   if (fitState === "held" && aimBlocked) {
-    look = { color: FIT_HUNT, label: "Try turning the camera" };
+    look = {
+      color: FIT_HUNT,
+      label: aimBlocked === "zoom" ? "Try zooming out" : "Try turning the camera",
+    };
     aimCue = true;
   }
   // The branches below are STATES, not verdicts on a drag — a slide, a press, a screw. Each replaces

@@ -31,7 +31,7 @@ import { stagedMembers } from "@/src/game/core/model/staging";
 import { quatConjugate, quatMultiply, quatRotateVec3, quatSlerp, screenRay } from "@/src/game/core/geometry/math";
 import { AIM_BAND_MAX_PX, aimBandScale, clusterCarryAnchor, holdReachFrom, burialDepthM, ghostSamplePoints, pointToSegmentPx, sightlineGapM, VIS_GAP_SLACK_M, rayPointNearest, segmentInFrame } from "./dragPlane";
 import { ActionId, AssemblyAction, PartId, Vec3 } from "@/src/game/core/type";
-import { selectFirstDrop, useGameStore } from "@/src/game/core/store";
+import { selectFirstDrop, useGameStore, type AimBlock } from "@/src/game/core/store";
 import type { OrbitManipulator } from "../../scene/AssemblyScene";
 import { occluderBoxes, readLiveBoxes } from "../../scene/partBoxes";
 import { hasPickProber, probePick } from "../../scene/pickProbe";
@@ -52,6 +52,7 @@ import {
   POS_PULL_START_M,
   SNAP_DIST_MAX,
   SNAP_DIST_MIN,
+  SOCKET_VISIBILITY_GATE_ENABLED,
   SWITCH_MARGIN_PX,
 } from "./dragConfig";
 import { ClusterTargetRing, PickupRing } from "./dragRings";
@@ -441,6 +442,7 @@ export function usePartDrag({
             startX: e.absoluteX,
             startY: e.absoluteY,
             blockedStamp: 0,
+            blockedKind: "camera",
             modelR,
             holdReach,
             placedIds,
@@ -511,8 +513,8 @@ export function usePartDrag({
           let band = 1;
           // The slerp-rotated grab anchor of this frame, for the probe: with hold-point pinning the visual center rides at grabOffset only while unrotated.
           let probeAnchor: Vec3 | null = null;
-          // Whether the aim is parked on a facing-blocked socket with nothing matchable — drives the "Try turning the camera" chip.
-          let aimBlockedNow = false;
+          // Which camera move the aim needs, when it has nothing matchable — drives the coaching chip. Null = nothing to coach.
+          let aimBlockedNow: AimBlock | null = null;
           // WHICH of the chip's triggers fired — probe-only. `blk=1` alone could not tell a hidden socket from a part merely passing over the furniture, which is the whole of the report this exists to answer next time.
           let blockedWhy = "-";
           // Which placed part's box blocked the nearest skipped candidate — probe-only, names the occluder in one log line.
@@ -588,15 +590,23 @@ export function usePartDrag({
               for (const c of s.candidates) c.burial = burialDepthM(c.seatVisual, s.placedBoxes);
             }
             let blockedPx = Infinity;
+            // Whether any candidate was skipped for being off-frame, and which kind (see the split at the skip).
+            let offFrameOutside = false;
+            let offFrameBehind = false;
             // The nearest box-blocked candidate this frame — the one socket the player might actually be aiming at through box fat, and so the only one worth a renderer pick.
             let probeCand: { id: ActionId; sx: number; sy: number; axial: number; euclid: number } | null = null;
             for (const c of s.candidates) {
               const d = distPx(c);
+              // Off-frame, split by WHY: a candidate that still projects to a point (finite px) is outside the viewport edges, and pulling the camera back brings it in; one that projects to nothing at all is behind the camera, where zooming out changes nothing and only a turn helps. Recorded before the skip below, for the chip.
+              if (!d.inFrame) {
+                if (Number.isFinite(d.px)) offFrameOutside = true;
+                else offFrameBehind = true;
+              }
               // A socket the player cannot SEE cannot be aimed at — off-frame candidates are skipped for acquisition (a snap must never be earned against an invisible hole; measured: a seat at y=-88 was still inside the capture band near the top edge). The CURRENT match is not acquired here either — it is held through the more generous nearFrame test below, so a mid-drag orbit that nudges the socket just past the edge does not pop the magnet.
               if (!d.inFrame) continue;
               // Visibility gate, one rule for every part type: the first surface the sightline meets must be within (the anchor's own burial + slack) of the anchor. Looking AT the socket passes; looking at anything in front of it — another part, or the SAME part's far side — fails. Replaces box/halo sampling (neighbourhood visibility) and the exemption-based line-of-sight test (transparent receivers), both of which armed hidden sockets in play tests.
               let visStat: string | null = null;
-              if (laF) {
+              if (laF && SOCKET_VISIBILITY_GATE_ENABLED) {
                 const g = sightlineGapM(laF[0], c.seatVisual, s.placedBoxes);
                 visStat = `${(g.gap * 1000).toFixed(0)}/${((c.burial + VIS_GAP_SLACK_M) * 1000).toFixed(0)}mm`;
                 // Second chance (clearPoints): a structural part's whole GHOST BODY at the delivered pose, a fastener's park point. Either passes a seat that is merely grazed — the side view of DALFRED's pin hole, where the plate's rim stands 60mm before the centre of its own top face; a LACK leg hanging in plain sight under the tabletop it bolts into. No burial slack on these: they are points on the PART, not mouths inside a receiver, so a sample that reports itself buried is a sample standing inside something and is exactly what should not count.
@@ -687,20 +697,25 @@ export function usePartDrag({
               target = nearest;
             }
             s.matchedActionId = target?.action.actionId ?? null;
-            // The chip's "turn the camera" case: nothing matched, and either the closest thing to the finger was a blocked socket within chip-worthy aim range, the carry cap is biting, or the part itself is behind a placed part. Debounced asymmetrically — ON immediately, OFF only after 300ms clear of every trigger — because the raw condition rides three sharp edges (the 160px rim, match acquisition, grazing sightlines) and read as flicker on device. A real match still silences it the same frame: fit language outranks coaching.
+            // The chip's coaching case: nothing matched, and either every socket is off-frame (the zoom trigger below), the closest thing to the finger was a blocked socket within chip-worthy aim range, the carry cap is biting, or the part itself is behind a placed part. Debounced asymmetrically — ON immediately, OFF only after 300ms clear of every trigger — because the raw condition rides three sharp edges (the 160px rim, match acquisition, grazing sightlines) and read as flicker on device. A real match still silences it the same frame: fit language outranks coaching.
             // blockedPx alone stopped covering this. It is written only for candidates that survived `if (!d.inFrame) continue`, and scores them by distance to the FINGER, so a part carried in front of a panel with its socket behind that panel produced no blockedPx at all. It also narrowed: the sampling gate that used to feed it (VIS_FRACTION_MIN, ≥30% of seated samples in clear sight) was replaced in "Drag Fix 5" by the one-ray sightline rule plus pickConfirm's renderer second opinion, which is better at matching but calls far less blocked.
             // partBehind is the case the cap misses: it eases in over several frames rather than at once, the upright and level carries never consult it, the near-plane floors overrule it, and CARRY_CAP_ENABLED can retire it. Threshold is the cap's own clearance, not VIS_GAP_SLACK_M — the question is whether the part sits deeper than the gap the cap would have held it at. Measured on `p` because the visual centre needs probeAnchor, which is not resolved until the pose is written below; with nothing matched the two differ only by the grab offset.
             const partBehind =
               !!laF && !!p && sightlineGapM(laF[0], p, s.placedBoxes).gap > CARRY_SURFACE_MARGIN_M;
-            // ...and the guard all three answer to: a camera turn is only ever the advice when there is NOTHING on this screen to snap to. nearestPx is written for a candidate only after it has passed both the in-frame test and the visibility gate, so a finite value IS "a socket you could take right now" — and the candidates are one interchangeable group, so any one of them finishes the pickup. Without this, the two carry-side triggers coached a turn for a part merely PASSING OVER the furniture on its way to a socket in plain sight: the cap bites over any placed box whatever the socket is doing, and partBehind rides the cap's own ease-in, so a drag across the assembly lit the chip the whole way (reported from device — "it tells me to turn the camera when I just need to move the part"). What is left for them is the case they were added for, where every socket is off-frame or hidden and blockedPx never gets written at all.
+            // ...and the guard all four answer to: a camera move is only ever the advice when there is NOTHING on this screen to snap to. nearestPx is written for a candidate only after it has passed both the in-frame test and the visibility gate, so a finite value IS "a socket you could take right now" — and the candidates are one interchangeable group, so any one of them finishes the pickup. Without this, the two carry-side triggers coached a turn for a part merely PASSING OVER the furniture on its way to a socket in plain sight: the cap bites over any placed box whatever the socket is doing, and partBehind rides the cap's own ease-in, so a drag across the assembly lit the chip the whole way (reported from device — "it tells me to turn the camera when I just need to move the part"). What is left for them is the case they were added for, where every socket is off-frame or hidden and blockedPx never gets written at all.
             const nothingAimable = !Number.isFinite(nearestPx);
+            // The off-frame trigger, and the one case that asks for a DIFFERENT move: every socket sits outside the viewport, which happens when the player has zoomed in past their own work (the sockets are still in front of them — turning only sweeps them along the edge). It answers to the same nothingAimable guard as the rest: with one socket takeable on screen there is nothing to coach, whatever the others are doing. A candidate behind the camera counts as a turn, not a zoom, so a mixed frame prefers the zoom only when nothing is behind: pulling back is the move that reveals both.
+            const zoomBlocked = !target && nothingAimable && offFrameOutside && !offFrameBehind;
             const rawBlocked =
-              !target && nothingAimable && (blockedPx <= AIM_BAND_MAX_PX || carryCapBiting || partBehind);
+              !target && nothingAimable && (zoomBlocked || blockedPx <= AIM_BAND_MAX_PX || carryCapBiting || partBehind);
             if (rawBlocked) {
               s.blockedStamp = Date.now();
-              blockedWhy = blockedPx <= AIM_BAND_MAX_PX ? "socket" : carryCapBiting ? "cap" : "behind";
+              s.blockedKind = zoomBlocked ? "zoom" : "camera";
+              blockedWhy = zoomBlocked ? "zoom" : blockedPx <= AIM_BAND_MAX_PX ? "socket" : carryCapBiting ? "cap" : "behind";
             }
-            aimBlockedNow = !target && (rawBlocked || Date.now() - s.blockedStamp < 300);
+            // The 300ms tail keeps whichever reason set it: a chip that changed its advice on the way out would be a third message.
+            aimBlockedNow =
+              !target && (rawBlocked || Date.now() - s.blockedStamp < 300) ? s.blockedKind : null;
             // The 300ms tail, named apart from the triggers: on those frames nothing is firing and the chip is only being HELD, which a bare reason string would misreport as a live cause.
             if (aimBlockedNow && !rawBlocked) blockedWhy = "hold";
             // The SEGMENT distance owns matching only. The VISIBLE pulls (magnet position, rotation ease, fit) measure to the park point itself: on-device, letting the magnet feed on the segment turned the whole hole→park corridor into a capture zone — the screw leapt to the socket the moment the finger crossed the corridor and stayed there while the finger travelled ("it does not ride my finger", phone screenshot with Drop it! stuck on). Screen-invisible consumers (depth blend) keep the segment aim.

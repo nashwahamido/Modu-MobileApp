@@ -10,7 +10,7 @@ controls share one pad, and the track controls are next in line for the same tre
 | `drag/` | Move a PART with a finger, plus the hit-testing that decides which part you grabbed. | `usePartDrag`, `stagedHit` |
 | `dial/` | Turn a circular gauge: tighten a fastener, thread a cluster home, correct an orientation, lock a dowel. | `DialGauge` (the shared gauge + turn gesture), `TightenControl`, `ScrewControl`, `RotateControl`, `DrawTurnControl` |
 | `pad/` | Tap a round pad repeatedly to drive something home. | `PressPad` (the shared pad), `PressControl`, `TapControl`, `InsertPressControl` |
-| `slide/` | Drag a thumb along a track. | `SlideControl`, `SeatSlideControl`, `PushTestControl`, `HookPressControl`, `BeatControl` |
+| `slide/` | Drag a thumb along a track. | `trackFit` (how long a track may be here), `SlideControl`, `SeatSlideControl`, `PushTestControl`, `HookPressControl`, `BeatControl` |
 
 ## The rule for two-phase controls
 
@@ -33,6 +33,23 @@ inherent to the control rather than an accident of layout.
 draw order. Each control keeps its own driver maths and its own store writes, because those genuinely
 differ. If you find yourself copying a number or an easing between two controls in the same folder, it
 belongs in that folder's shared file instead.
+
+`slide/trackFit` is the beginning of the same treatment for the track controls, and only the beginning:
+it owns the track's LENGTH, which is the one number all four had copied and the one that has to answer to
+the screen — a phone in landscape cannot fit the 220pt they were authored at. The track's chrome (64 wide,
+radius 32, a 4pt lavender border, the 44pt thumb) is still copied four ways and belongs here next.
+
+Where a control SITS is not in that file: the bottom offset is `TASK_CONTROL_BOTTOM` in `ui/hud/hudChrome`
+with the app's other canonical HUD placements, because the pads share that corner and `pad/` may not import
+from `slide/` for a reason that is only layout.
+
+## Left-hand mode
+
+Every control that positions itself must mirror that placement: `const m = useMirror()` and `m(styles.wrap)`
+on the wrapper — including the wrap it borrows from `PressPad`, which is deliberately NOT mirrored at the
+source (a plain StyleSheet has no hook to hang it on). A control that skips this simply stays on the right
+edge, which is invisible until someone plays left-handed. What mirrors is POSITION ONLY — never a drag axis,
+a turn direction or an arrow that names the way a part travels. See `ui/system/handedness`.
 
 The differences that ARE real are options rather than copies: `bidirectional` (an orientation dial counts
 a turn either way; a screw does not), `tickDeg` (how often it thumps), and `PressPad`'s `onPress` return
