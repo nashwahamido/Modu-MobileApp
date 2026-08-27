@@ -60,7 +60,7 @@ Modu-MobileApp/
 │   │   └── useAuth.ts         # Auth state hook
 │   └── services/
 │       └── auth.ts            # Sign up, sign in, sign out
-├── app.json                   # Expo config
+├── app.config.ts           # Expo config (APP_VARIANT=v2 → side-by-side install)
 ├── package.json
 ├── .env.example               # Template for environment variables
 └── .gitignore

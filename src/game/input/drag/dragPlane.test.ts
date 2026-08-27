@@ -12,7 +12,7 @@ import type { Vec3 } from "@/src/game/core/type";
 import { AIM_BAND_MAX_PX, aimBandScale, CARRY_CLEARANCE_ENABLED, CARRY_NEAR_MARGIN_M, clusterCarryAnchor, holdReachFrom, dragPlanePoint, dragRayPoint, DRIFT_CAP_FACTOR, RAY_CARRY_MIN_FRACTION, RAY_CARRY_MIN_M, burialDepthM, ghostSamplePoints, rayBoxEntryT, rayPointNearest, sightlineGapM, VIS_GAP_SLACK_M, segmentHitsBox, segmentInFrame } from "./dragPlane";
 import { MIN_ORBIT_DISTANCE_M } from "@/src/game/scene/cameraConfig";
 
-// Landscape, the only orientation the game runs in (app.json).
+// Landscape, the only orientation the game runs in (app.config.ts).
 const W = 844;
 const H = 390;
 // The parts tray is a column on the RIGHT edge: right 14, width 86 (ui/hud/PartsTray), so cards sit

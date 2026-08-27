@@ -551,7 +551,7 @@ export const SIZE = {
 } as const;
 
 // ── type ────────────────────────────────────────────────────────────────────
-// ONE family for the whole app. Lexend is installed NATIVELY (app.json -> expo-font plugin), registered on Android as an XML font-family with a real face per weight — so `fontFamily: FONT` plus an ordinary `fontWeight` resolves to the right cut. There is no runtime useFonts() anywhere and no loading gate: the faces exist before the first frame, which is the whole reason this is a build-time install and not a runtime one.
+// ONE family for the whole app. Lexend is installed NATIVELY (app.config.ts -> expo-font plugin), registered on Android as an XML font-family with a real face per weight — so `fontFamily: FONT` plus an ordinary `fontWeight` resolves to the right cut. There is no runtime useFonts() anywhere and no loading gate: the faces exist before the first frame, which is the whole reason this is a build-time install and not a runtime one.
 //
 // React Native has no font inheritance, so FONT has to appear in every text style. A style that sets fontWeight without FONT silently renders in the system font — that mismatch is the failure mode to watch for, not a missing font.
 export const FONT = "Lexend";

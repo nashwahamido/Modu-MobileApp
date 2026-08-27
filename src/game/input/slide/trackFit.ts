@@ -27,7 +27,7 @@ const TOP_ROW_CLEARANCE = 56;
 export function useTrackLength(max: number = TRACK_MAX): number {
   const { width, height } = useWindowDimensions();
   const hud = useHudInsets();
-  // Landscape only (app.json locks it), so the vertical is the window's SHORT side — reading `height` directly would give the long side for the frame or two around a rotation.
+  // Landscape only (app.config.ts locks it), so the vertical is the window's SHORT side — reading `height` directly would give the long side for the frame or two around a rotation.
   const usable = Math.min(width, height) - hud.top - hud.bottom;
   const room = usable - TASK_CONTROL_BOTTOM - CAPTION_BLOCK - TOP_ROW_CLEARANCE;
   return Math.round(Math.max(TRACK_MIN, Math.min(max, room)));

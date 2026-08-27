@@ -1197,7 +1197,7 @@ export function RoomScene({
   //
   // Everything the overlay draws and everything the picker inverts is projected through this
   // viewport, and it has to be the box FILAMENT RENDERS INTO or the two cameras disagree. They are
-  // not the same rectangle: `edgeToEdgeEnabled` is on (app.json), so the scene draws behind the
+  // not the same rectangle: `edgeToEdgeEnabled` is on (app.config.ts), so the scene draws behind the
   // system bars while useWindowDimensions reports the window between them. The SVG overlay made
   // that worse by being absoluteFill — filling the container — while sizing its own coordinate
   // space from the window, so the grid was both offset AND scaled against the room it sits on.
