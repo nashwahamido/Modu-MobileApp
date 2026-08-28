@@ -47,14 +47,10 @@ export function reasonActionable(
           (a.type === "insertFastener" || a.type === "placeFastener") &&
           group(a.partId) === reason.target,
       );
-    // a "tighten X" that must wait on its own insert still counts: the insert IS the doable step toward it
+    // strictly a tighten — the insert a tighten waits on is its own candidate now (see pushStep), so answering "yes" here for a fastener still in the tray only mislabels the step
     case "tighten":
       return avail.some(
-        (a) =>
-          (a.type === "tightenFastener" ||
-            a.type === "insertFastener" ||
-            a.type === "placeFastener") &&
-          group(a.partId) === reason.target,
+        (a) => a.type === "tightenFastener" && group(a.partId) === reason.target,
       );
     // securing a loose part = driving the fasteners attached to it
     case "secure":
@@ -86,24 +82,31 @@ function candidateReasons(
   const pushPart = (kind: BlockReason["kind"], partId?: PartId): void =>
     push(kind, groupOf(f, hintPartId(f, partId)));
 
+  // A tighten sits BEHIND its own insert, so the insert goes in as the earlier candidate: naming "tighten the screw" while that screw is still in the tray points at a step that does not exist yet. Both go in and the actionable-first pick decides which verb the state supports.
+  const pushStep = (a: AssemblyAction): void => {
+    if (!a.partId) return;
+    if (a.type === "tightenFastener") pushPart("insert", a.partId);
+    pushPart(kindForType(a.type), a.partId);
+  };
+
   const byId = new Map(f.actions.map((a) => [a.actionId, a]));
   for (const r of action.requires) {
     if (done.has(r)) continue;
     const req = byId.get(r);
-    if (req?.partId) pushPart(kindForType(req.type), req.partId);
+    if (req) pushStep(req);
   }
 
   if (action.requiresAny?.length && !action.requiresAny.some((r) => done.has(r))) {
     for (const r of action.requiresAny) {
       const req = byId.get(r);
-      if (req?.partId) pushPart(kindForType(req.type), req.partId);
+      if (req) pushStep(req);
     }
   }
 
   // the stability lock's OWN prescription — what it allows is exactly what unfreezes the cluster ("tighten the runner screw"), so it outranks the geometric guesses below
   for (const id of stabilityNextSteps(f, action, done)) {
     const na = byId.get(id);
-    if (na?.partId) pushPart(kindForType(na.type), na.partId);
+    if (na) pushStep(na);
   }
 
   if (action.type === "placePart" && action.partId) {

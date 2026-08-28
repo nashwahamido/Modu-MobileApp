@@ -82,16 +82,38 @@ export const AUTHORED_ACTIONS: DraftAction[] = [
     partId: "ringRail",
     requires: tightenActionIds(P, asGroupId("screw105251")),
   }),
-  // no requires: the slide frontier (slideJoins circleUpp) is the real gate — the pin needs the top plate up to have a hole to drop through. Cluster reorient beats were cut 2026-07-23; the combine beat is the standing-up moment now.
+  // no requires: the slide frontier (slideJoins circleUpp) is the real gate — the pin needs the top plate up to have a hole to drop through.
   action({ type: "placePart", stage: 2, partId: "supportPin", requires: [] }),
 
   action({ type: "placePart", stage: 3, partId: "seat", requires: [] }),
-  action({ type: "placePart", stage: 3, partId: "seatPlate", requires: ["place_seat"] }),
-  action({ type: "placePart", stage: 3, partId: "pole", requires: ["place_seatPlate"] }),
+  action({
+    type: "placePart",
+    stage: 3,
+    partId: "seatPlate",
+    requires: ["place_seat"],
+  }),
+  action({
+    type: "placePart",
+    stage: 3,
+    partId: "pole",
+    requires: ["place_seatPlate"],
+  }),
 
   // ── combine: seat the base (seed drop), then lower the seat onto it; finish. combine_seat's dependence on combine_base is DERIVED from the CLUSTERS slideJoins overlay — do not hand-write it here. ──
-  action({ actionId: "combine_base", type: "combineClusters", stage: 4, cluster: "base", requires: [] }),
-  action({ actionId: "combine_seat", type: "combineClusters", stage: 4, cluster: "seat", requires: [] }),
+  action({
+    actionId: "combine_base",
+    type: "combineClusters",
+    stage: 4,
+    cluster: "base",
+    requires: [],
+  }),
+  action({
+    actionId: "combine_seat",
+    type: "combineClusters",
+    stage: 4,
+    cluster: "seat",
+    requires: [],
+  }),
   // The ceremonial `finishing_checks` beat was REMOVED 2026-08-19 — it moved no part, so it was a
   // swipe card standing between the player and a finished build. The last real assembly step is
   // the last step now.

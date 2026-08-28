@@ -24,7 +24,7 @@ import {
 import { isNonLeadBody } from "../model/components";
 import { buildStabilityLocks, stabilityAllowsFrom } from "./stability";
 
-/** Suggested focus stage: the earliest stage with incomplete work. This is a UI SCAFFOLD only (a gentle "where to look next"), NOT a hard gate — clusters can be built in any order, so availability does not depend on it. */
+/** Suggested focus stage: the earliest stage with incomplete work. */
 export function currentStage(
   actions: readonly AssemblyAction[],
   done: ReadonlySet<ActionId>,
@@ -36,31 +36,12 @@ export function currentStage(
   return stages[stages.length - 1] ?? 1;
 }
 
-/**
- * Actions the player may legally do now:
- *   - not yet done,
- *   - every `requires` complete (the AND side),
- *   - any authored cluster prerequisites are complete,
- *   - the snap FRONTIER passes (the OR side): a structural part can only be
- *     placed once a joint neighbour is built, unless it is a cluster `seed`
- *     starting an otherwise empty cluster —
- *     derived generically from Γ, replacing per-furniture gates like
- *     "anyLegSnapped",
- *   - the slide/thread frontier passes (the AND side, read from Γ): a mover
- *     needs EVERY same-cluster groove owner / receiver placed — you can't
- *     enter a groove or a thread that isn't there.
- *     (The reverse trap — "the back panel closes the groove" — is authored as
- *     a `requires` on the CLOSING part, so it stays explainable by hints.)
- *   - generic stability: an unstable snapped part must be secured before
- *     another unstable part in the same cluster can snap.
- *   - the named `gate` (if any) passes — reserved for future exceptional rules.
- * No stage gate — independent clusters can progress in any order.
- */
+/** Actions the player may legally do now **/
 export function availableActions(
   f: Furniture,
   done: ReadonlySet<ActionId>,
 ): AssemblyAction[] {
-  // Memoized per completion state: the play screen recomputes availability from several independent subscribers on EVERY store update (drag fit-state churn included), and the stability scan is the priciest thing in the engine — EKET's loose-runner phase measured ~2ms/call on desktop, i.e. frame-eating on a phone. The key is the sorted done-set, so every caller's freshly-built Set of the same completed list hits, in any order (undo/redo included). Callers must treat the result as read-only.
+  // Memoized per completion state: the play screen recomputes availability from several independent subscribers on EVERY store update, and the stability scan is the priciest thing in the engine — EKET's loose-runner phase measured ~2ms/call on desktop, i.e. frame-eating on a phone. The key is the sorted done-set, so every caller's freshly-built Set of the same completed list hits, in any order (undo/redo included). Callers must treat the result as read-only.
   const key = [...done].sort().join("\n");
   const hit = availabilityCache.get(f);
   if (hit && hit.key === key) return hit.result;
@@ -74,7 +55,7 @@ const availabilityCache = new WeakMap<
   { key: string; result: AssemblyAction[] }
 >();
 
-/** The distinct MOVES an action list offers, counted by part GROUP rather than by raw action: eight legal tightens of the same cam screw are one move to the player, because the tray cards and the hint copy both speak in groups. Actions with no partId name nothing, so they cannot be a move. */
+/** The MOVES are counted by part GROUP rather than by raw action */
 export function actionableGroups(
   f: Furniture,
   actions: readonly AssemblyAction[],
@@ -91,25 +72,28 @@ export function actionableGroups(
   return out;
 }
 
-/**
- * Of the actions on offer, the ONE that a "what next" surface should name — the objective bar, the spoken step, Spot's demonstration.
- *
- * NOT `offered[0]`, which is what every one of those used to take. The offered list is `f.actions` filtered, so its order is the order the model was AUTHORED in, and that is not a priority: LACK composes its four legs before any of its bolts, so from the moment the first leg unlocks it sits at the head of the list until it is placed. Push a second bolt into its hole and the list reads `[place_leg_1, tighten_bolt_2, …]` — the screw is half-driven, its tighten control is on screen under the player's finger, and every surface says "Install leg 1 of 4".
- *
- * So a part ALREADY IN THE SCENE outranks one still in the box. A tighten becomes legal only once its fastener is in, a staged carrier is seated only once it has been taken out — an action whose part has a completed action behind it is the continuation of a move the player has already started, and finishing it is what they are in the middle of doing. Ties fall back to composed order, which is the authored reading of "first".
- *
- * The LIST is left alone: availability is legality, not ranking, and reordering it there would move the tray, `resumeFocusCluster` and every group-ordered hint with it.
- */
+
 export function nextAction(
   f: Furniture,
   offered: readonly AssemblyAction[],
   done: ReadonlySet<ActionId>,
+  parked?: ActionId | null,
 ): AssemblyAction | undefined {
   const inScene = new Set<PartId>();
   for (const a of f.actions) {
     if (a.partId && done.has(a.actionId)) inScene.add(a.partId);
   }
-  return offered.find((a) => a.partId && inScene.has(a.partId)) ?? offered[0];
+  // Four tiers, each a preference over the one below rather than a re-sort.
+  // `parked` is the action holding a gesture right now (store.driveActionId / orientationActionId) and outranks everything: the player has the part in hand mid-motion, so nothing else can be the next step.
+  // Then a fastener already in its hole — the step under the player's hands, and a half-driven screw left behind is the state this whole rule exists to prevent.
+  return (
+    (parked ? offered.find((a) => a.actionId === parked) : undefined) ??
+    offered.find(
+      (a) => a.partId && inScene.has(a.partId) && f.parts[a.partId]?.type === "fastener",
+    ) ??
+    offered.find((a) => a.partId && inScene.has(a.partId)) ??
+    offered[0]
+  );
 }
 
 /** How many ways the WHOLE build is open right now. Decides whether a blocked-grab hint may name one blocker or has to stay generic: with several moves legal, the ranked "first actionable" candidate is one arbitrary pick among many. */
@@ -122,7 +106,6 @@ function computeAvailableActions(
   done: ReadonlySet<ActionId>,
 ): AssemblyAction[] {
   const liaisons = f.liaisons ?? buildLiaisons(f.parts);
-  // The lock list is action-independent — building it per action (the old stabilityAllows call) made this scan O(actions²) in the loose-unstable phases.
   const stabilityLocks = buildStabilityLocks(f, done);
   const neighbours = neighbourMap(liaisons);
 
