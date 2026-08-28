@@ -56,7 +56,7 @@ export interface SceneState {
   trayItems: TrayItem[];
   /** Uncompressed inventory before Focus mode chooses a single card. Tutorial gates use this so a required card cannot be filtered out twice. */
   allTrayItems: TrayItem[];
-  /** Tighten action currently awaiting the circular gesture. */
+  /** Tighten action currently awaiting the circular gesture. Null while any insert press is pending — the tighten sits behind it. */
   activeTighten: AssemblyAction | null;
   /** 3-phase insertFastener currently awaiting the PRESS gesture (stage → loose). */
   activeInsertPress: AssemblyAction | null;
@@ -188,14 +188,15 @@ export function deriveSceneState(
       ];
     }
   }
-  const firstTighten = available.find((a) => a.type === "tightenFastener") ?? null;
-  const activeTighten = !heldAction ? firstTighten : null;
   // 3-phase insert: the dowel is already out on the canvas at its stage pose, so its "insert" is a PRESS gesture (not a tray pickup) — surface it like a tighten.
   const firstInsertPress =
     available.find(
       (a) => a.type === "insertFastener" && !!(a.partId && furniture.parts[a.partId]?.insertStage),
     ) ?? null;
   const activeInsertPress = !heldAction ? firstInsertPress : null;
+  // A tighten sits BEHIND every pending insert press, and the two are picked here rather than fought over in the screen: a staged fastener is already out on the canvas awaiting the press that is its EARLIER step, and choosing the tighten first hid that pad entirely (play.tsx rendered the insert press only when no tighten was active). Worse, `toolReady` keys off this action, so an unequipped screwdriver for some OTHER fastener's tighten left the bare-hand press with no pad at all.
+  const firstTighten = available.find((a) => a.type === "tightenFastener") ?? null;
+  const activeTighten = !heldAction && !firstInsertPress ? firstTighten : null;
   // A finished staged sub-assembly seats by sliding straight down (stage sits above target). Prompt when its place is available; once the slider grabs it (held), keep pointing at it so the control survives the pickup.
   const isStagedPlace = (a: AssemblyAction | null): boolean =>
     !!a && a.type === "placePart" && !!a.partId && isStaged(furniture.parts[a.partId]);

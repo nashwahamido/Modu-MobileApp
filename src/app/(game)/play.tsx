@@ -567,7 +567,7 @@ function GameScreen() {
             />
           )
         ) : null}
-        {sceneState.activeInsertPress && !sceneState.activeTighten ? (
+        {sceneState.activeInsertPress ? (
           <InsertPressControl
             action={sceneState.activeInsertPress}
             sinkDriver={sinkDriver}
@@ -622,6 +622,7 @@ function GameScreen() {
         {sceneState.activeBeat &&
         sceneState.activeBeat.type !== "combineClusters" &&
         !sceneState.activeTighten &&
+        !sceneState.activeInsertPress &&
         !orientationAction &&
         !driveAction ? (
           furniture.pushOpen && pushTestLevel ? (
