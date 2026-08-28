@@ -6,7 +6,7 @@ import { StatusBar } from "expo-status-bar";
 
 import { Button } from "@/src/game/ui/system/Button";
 import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
-import { useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import { TYPE, SPACE, useFixedStyles } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 import { useCurrentUserId, useRepos } from "@/src/data";
@@ -17,6 +17,7 @@ import { sanitizeLayout } from "@/src/room/core/layoutSanitise";
 import { toGrid, usePlacementStore } from "@/src/room/core/placement";
 import { ORBIT } from "@/src/room/input/orbit";
 import { RoomScene } from "@/src/room/scene/RoomScene";
+import { useSceneSlot } from "@/src/game/scene/sceneSlot";
 import { roomBackgroundView } from "@/src/room/ui/roomBackdrops";
 import {
   LIGHT_COLUMN_GAP,
@@ -35,10 +36,10 @@ export default function VisitScreen() {
   // Immersive mode reports 0 insets, so these floors sit UNDER the design's own offsets — the same treatment VisitHud gives its own header.
   const safe = useScreenInsets();
   // The visitor's own dressing: the backdrop follows the hour AND the Room Background they chose, same as in their own room.
-  const hour = useGameStore((g) => g.roomTimeOfDay);
-  const roomBackground = useGameStore((g) => g.roomBackground);
+  const hour = usePrefsStore((g) => g.roomTimeOfDay);
+  const roomBackground = usePrefsStore((g) => g.roomBackground);
   // A visitor gets the SAME light controls they have at home, and that is safe precisely because neither half of them is the host's: the hour is the visitor's own store setting and the switch is local state, so relighting a friend's room changes nothing the friend owns and needs no write permission. What you are adjusting is your VIEW of their furniture.
-  const setRoomTimeOfDay = useGameStore((g) => g.setRoomTimeOfDay);
+  const setRoomTimeOfDay = usePrefsStore((g) => g.setRoomTimeOfDay);
   const [lightOverride, setLightOverride] = useState<CeilingLightOverride>(null);
   const ceilingLight = ceilingLightOn(hour, lightOverride);
   const startViewing = usePlacementStore((p) => p.startViewing);
@@ -53,6 +54,8 @@ export default function VisitScreen() {
   // The two halves of the wait this screen covers: their room's rows, then their furniture's models. Nobody arrives at a friend's house to watch it being furnished, so the overlay stays up for both.
   const [sceneReady, setSceneReady] = useState(false);
   const [revealed, setRevealed] = useState(false);
+  // The hub's room releases its engine before this one is built — see sceneSlot.
+  const sceneSlot = useSceneSlot("visit");
 
   // Camera state is PER SCREEN: returning from a visit must not leave the hub's camera wherever this one was left. Mirrors applyRoomControls in RoomExperience, clamp included, so both paths share one zoom range.
   const [roomRotation, setRoomRotation] = useState(0);
@@ -157,7 +160,7 @@ export default function VisitScreen() {
       {/* The backdrop sits UNDER a transparent Filament view, so the artwork frames the diorama without touching the 3D scene. */}
       <SceneBackdrop {...roomBackgroundView(roomBackground, timeOfDayPhase(hour))} style={s.stage}>
         {/* Mounted only once the fetch has landed, and that is not merely tidiness: RoomScene reads `viewing ?? layout`, so a scene standing up before startViewing() would load the PLAYER'S OWN furniture into a friend's room and then swap it out piece by piece. */}
-        {loading ? null : (
+        {loading || !sceneSlot ? null : (
           <RoomScene
             rotationY={roomRotation}
             zoom={roomZoom}

@@ -45,7 +45,7 @@ export function worldBoxFromObjectBox(
 /**
  * The world matrix of a part's BAKED pose (column-major, filament's layout), composed from parts.gen alone — no node in the corpus carries scale (verified across all four GLBs; the extractor does not record one, so a scaled node would need parts.gen to bake it before this could stay pose-only).
  *
- * This exists because the load-time harvest must NOT read the transform manager: React runs child effects before parent effects, so PartModel's initial writes — a resumed build's loose fastener at its backed-off pose, a parked cluster, a staged carrier — land before AssemblyScene's harvest effect reads. Read live, those poses put a box centre >2mm from pose+visualCenterOffset, and the harvest's gate then rightly published NO boxes — for the whole session (measured: `boxes=0 reach=0.000` on a resumed DALFRED, seats falling back to mid-shaft visual centres, the ghost rule inert). The harvest's contract is baked-pose geometry by definition, so it composes the baked transform instead of asking the renderer what it happens to be drawing; the 2mm gate keeps its real job, catching mesh↔parts.gen drift after a re-export.
+ * BUILD-TIME only now: core/derive/boxes.ts sweeps each object box through this to generate boxes.gen.ts. It exists because baked-pose geometry must not be read from the transform manager — a resumed build has already written drive parks and staging offsets, so "where it is drawn" is not "where it belongs". The live reader below answers the other question and rightly uses the renderer.
  */
 export function bakedWorldMatrix(position: Vec3, rotation: Quat): number[] {
   const bx = quatRotateVec3(rotation, [1, 0, 0]);

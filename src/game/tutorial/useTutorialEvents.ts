@@ -20,6 +20,7 @@
 import { useEffect } from "react";
 
 import { useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import { useTutorialStore } from "./store";
 
 /**
@@ -109,9 +110,6 @@ export function useTutorialEvents(onPickupDuringPlacement?: () => void): void {
         ) {
           tutorial.completeEvent("focus_mode_toggled");
         }
-        if (!settingsTutorialActive && state.backdrop !== previous.backdrop) {
-          tutorial.completeEvent("backdrop_changed");
-        }
         if (
           !settingsTutorialActive &&
           (state.settings.textLevel !== previous.settings.textLevel ||
@@ -124,5 +122,21 @@ export function useTutorialEvents(onPickupDuringPlacement?: () => void): void {
     // needs re-subscribing — and re-subscribing on every render is how a store subscription starts
     // missing the transition it was written for.
     [onPickupDuringPlacement],
+  );
+
+  // Its own subscription because `backdrop` is a display preference (prefsStore) while every event
+  // above is an assembly transition. The settings guard is repeated rather than shared: it reads the
+  // tutorial's CURRENT step at fire time, so both copies see the same answer, and the alternative —
+  // one callback subscribing to two stores — would have to fire on every game transition to notice a
+  // preference change.
+  useEffect(
+    () =>
+      usePrefsStore.subscribe((state, previous) => {
+        if (state.backdrop === previous.backdrop) return;
+        const tutorial = useTutorialStore.getState();
+        if (tutorial.steps[tutorial.currentIndex]?.targetId === "settings") return;
+        tutorial.completeEvent("backdrop_changed");
+      }),
+    [],
   );
 }

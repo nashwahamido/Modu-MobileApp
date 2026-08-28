@@ -43,6 +43,51 @@ test("the freshly inserted bolt is preferred over an older leg that is also lega
   assert.ok(picked?.startsWith("tighten_"), `expected the pending tighten, got ${picked}`);
 });
 
+// THE FASTENER TIER. Two continuations, both already in the scene: the screw waiting to be turned outranks the structural part, because it is the step under the player's hands.
+test("an in-scene fastener outranks an in-scene structural part", () => {
+  const done = new Set<ActionId>();
+  let checked = 0;
+  for (let step = 0; step < 400; step++) {
+    const offered = availableActions(EKET_FIXTURE, done);
+    if (!offered.length) break;
+    const inScene = new Set(
+      EKET_FIXTURE.actions.filter((a) => a.partId && done.has(a.actionId)).map((a) => a.partId),
+    );
+    const started = offered.filter((a) => a.partId && inScene.has(a.partId));
+    const fastener = started.find((a) => EKET_FIXTURE.parts[a.partId!]?.type === "fastener");
+    const structural = started.find((a) => EKET_FIXTURE.parts[a.partId!]?.type === "structural");
+    // Only states where the structural one is offered FIRST prove the tier; otherwise plain order would agree.
+    if (fastener && structural && offered.indexOf(structural) < offered.indexOf(fastener)) {
+      checked++;
+      assert.equal(nextAction(EKET_FIXTURE, offered, done)?.actionId, fastener.actionId);
+    }
+    done.add((offered.find((a) => a.partId && !inScene.has(a.partId)) ?? offered[0]).actionId);
+  }
+  assert.ok(checked > 0, "the walk never reached a state with both kinds of continuation — the walk needs looking at, not the rule");
+});
+
+// THE PARKED TIER. A part mid-gesture — parked for a slide/press drive or an orientation turn — outranks even a waiting fastener: the player has it in hand and nothing else can be the next step.
+test("a parked action outranks an in-scene fastener", () => {
+  const done = new Set(SECOND_BOLT_IN.map((c) => id(LACK_FIXTURE, c)));
+  const offered = availableActions(LACK_FIXTURE, done);
+  // Guard: without a park this state picks the pending tighten (the fastener tier).
+  assert.equal(nextAction(LACK_FIXTURE, offered, done)?.actionId as string, "tighten_bolt115980_2");
+  const parked = id(LACK_FIXTURE, "place_leg_1");
+  assert.equal(
+    nextAction(LACK_FIXTURE, offered, done, parked)?.actionId as string,
+    "place_leg_1",
+    "the part the player is mid-gesture on must win",
+  );
+});
+
+test("a parked id that is not on offer falls through to the tiers below", () => {
+  const done = new Set(SECOND_BOLT_IN.map((c) => id(LACK_FIXTURE, c)));
+  const offered = availableActions(LACK_FIXTURE, done);
+  // A stale park (already completed, or filtered out by the mode) must not blank the suggestion.
+  const stale = id(LACK_FIXTURE, "insert_bolt115980_1");
+  assert.equal(nextAction(LACK_FIXTURE, offered, done, stale)?.actionId as string, "tighten_bolt115980_2");
+});
+
 test("an empty offering has no next action", () => {
   const all = LACK_FIXTURE.actions.map((a) => a.actionId as string);
   assert.equal(pick(LACK_FIXTURE, all), undefined);
@@ -58,7 +103,11 @@ test("EKET reaches the same state 21 times over one build, and the pick is right
     const inScene = new Set(
       EKET_FIXTURE.actions.filter((a) => a.partId && done.has(a.actionId)).map((a) => a.partId),
     );
-    const continues = offered.find((a) => a.partId && inScene.has(a.partId));
+    // Same two tiers nextAction ranks by: an in-scene FASTENER first, then any other in-scene continuation.
+    const continues =
+      offered.find(
+        (a) => a.partId && inScene.has(a.partId) && EKET_FIXTURE.parts[a.partId]?.type === "fastener",
+      ) ?? offered.find((a) => a.partId && inScene.has(a.partId));
     const starts = offered.find((a) => a.partId && !inScene.has(a.partId));
     if (continues && starts && offered.indexOf(starts) < offered.indexOf(continues)) {
       mismatched++;

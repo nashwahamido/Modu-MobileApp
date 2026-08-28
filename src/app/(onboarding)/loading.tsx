@@ -6,6 +6,7 @@ import { getCurrentSession } from "@/src/services/auth";
 import { createProfileIfMissing } from "@/src/services/profile";
 import { getLatestHandedness, getLatestOnboardingMode } from "@/src/services/onboarding";
 import { hydrateSettings, useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import type { ProfileId } from "@/src/game/core/profile";
 import { LoadingScreen } from "@/src/game/ui/loading/LoadingScreen";
 import { type Milestone } from "@/src/game/ui/loading/loadingProgress";
@@ -53,7 +54,7 @@ export default function LoadingScreenRoute() {
             }
             // AFTER applyProfile, not before — that call replaces the settings object wholesale, and while handedness deliberately lives outside it (see the store), ordering it second means the two can never fight if that ever changes.
             const hand = await getLatestHandedness(user.id);
-            if (hand) useGameStore.getState().setHandedness(hand);
+            if (hand) usePrefsStore.getState().setHandedness(hand);
             targetRoute.current = mainRoute;
           }
         }

@@ -27,6 +27,7 @@ import {
   selectFirstDrop,
   useGameStore,
 } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import { styleFor } from "@/src/game/core/presentation/labels";
 import { buildPartActions, hintSlotFor, type PartActionIds } from "@/src/game/core/scene/targets";
 import type { ClusterDriver, OffsetDriver } from "./offsetDriver";
@@ -116,7 +117,7 @@ const EPSILON = 1e-6;
 /** The material override for a part under the active render style (realistic/cartoon), or undefined → no override (the scene leaves the GLB's own materials = the fallback). Looks up the style's RenderStyle, then the override keyed by meshName, then by group. */
 
 function usePartMaterial(def: PartDef): MaterialParams | undefined {
-  const renderStyle = useGameStore((s) => s.renderStyle);
+  const renderStyle = usePrefsStore((s) => s.renderStyle);
   const styles = useGameStore((s) => s.furniture?.styles);
   return useMemo(() => {
     const style = styleFor(styles, renderStyle);

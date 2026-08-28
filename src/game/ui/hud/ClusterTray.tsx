@@ -14,6 +14,7 @@ import type { ParkInfo } from "@/src/game/core/evaluation/engagement";
 import { clusterThumbSet } from "@/src/game/core/presentation/finish";
 import { pickThumb } from "@/src/game/core/presentation/labels";
 import { useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import { Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 import type { ActionId, AssemblyAction, ClusterId } from "@/src/game/core/type";
 import { clusterSink, type OffsetSink } from "@/src/game/scene/combineDriver";
@@ -36,7 +37,7 @@ export function ClusterTray({ clusterDriver, clusterGestureFor }: Props) {
   const furniture = useGameStore((s) => s.furniture);
   const completed = useGameStore((s) => s.completed);
   const combiningCluster = useGameStore((s) => s.combiningCluster);
-  const renderStyle = useGameStore((s) => s.renderStyle);
+  const renderStyle = usePrefsStore((s) => s.renderStyle);
   const hintClusters = useGameStore((s) => s.hintClusters);
   const hintPulse = useGameStore((s) => s.hintPulse);
   const scheme = useColorScheme();

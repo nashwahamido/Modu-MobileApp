@@ -11,12 +11,17 @@ const config: ExpoConfig = {
   orientation: "landscape",
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
-  icon: "./src/assets/ui/icons/Modu_Icon.png",
+  // v2 wears the inverted mark (dark logo on cream) so the two installs read apart at a glance.
+  icon: isV2
+    ? "./src/assets/ui/icons/Modu_Dark.png"
+    : "./src/assets/ui/icons/Modu_Icon.png",
   android: {
     package: isV2 ? "com.modu.app.v2" : "com.modu.app",
     adaptiveIcon: {
-      foregroundImage: "./src/assets/ui/icons/Modu_Icon_Foreground.png",
-      backgroundColor: "#595551",
+      foregroundImage: isV2
+        ? "./src/assets/ui/icons/Modu_Icon_Foreground_Dark.png"
+        : "./src/assets/ui/icons/Modu_Icon_Foreground.png",
+      backgroundColor: isV2 ? "#F3ECE0" : "#595551",
       monochromeImage: "./src/assets/ui/icons/Modu_Icon_Monochrome.png",
     },
     edgeToEdgeEnabled: true,

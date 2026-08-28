@@ -459,6 +459,43 @@ export function clusterCarryAnchor(
  * partway down the ray, not on the plane), which is the deliberate trade: the finger's pixel is the
  * invariant, the plane is only a policy.
  */
+/**
+ * The finger's point on the plane FACING the camera through `anchor` — the mapping a vertically-entering part needs, where screen-up is world-up.
+ *
+ * Stated as the finger's own ray at the anchor's axial depth, which is all a camera-facing plane IS: screenRay hands back `dir` with dir·fwd = 1, so t is axial depth directly and the point lands on the anchor's plane with the finger's pixel held by construction.
+ *
+ * The version this replaces built the point as `anchor + right·ndcX·tanH·dist + camUp·ndcY·tanV·dist` — the ndc offsets measured from the ANCHOR rather than from the view axis. The anchor is a socket, off-centre by however far the player's aim is, so its own lateral offset was added to every frame: the part tracked the finger exactly and sat 110-160 px away from it in the direction of the target (844×390, measured against projectToScreen), meeting the finger only when the socket happened to project to the centre of the screen.
+ */
+export function cameraPlanePoint(
+  look: LookAt,
+  fovYDeg: number,
+  viewW: number,
+  viewH: number,
+  screenX: number,
+  screenY: number,
+  anchor: Vec3,
+): Float3 | null {
+  const { eye, dir } = screenRay(look, fovYDeg, viewW, viewH, screenX, screenY);
+  const f: Vec3 = [
+    look.center[0] - eye[0],
+    look.center[1] - eye[1],
+    look.center[2] - eye[2],
+  ];
+  const fl = Math.hypot(f[0], f[1], f[2]) || 1;
+  const dist =
+    ((anchor[0] - eye[0]) * f[0] +
+      (anchor[1] - eye[1]) * f[1] +
+      (anchor[2] - eye[2]) * f[2]) /
+    fl;
+  // An anchor behind the lens has no plane to carry on; the caller falls back to its own delta mapping.
+  if (!Number.isFinite(dist) || dist <= 0) return null;
+  return leashAlongRay(eye, look.center, eye as Float3, [
+    eye[0] + dist * dir[0],
+    eye[1] + dist * dir[1],
+    eye[2] + dist * dir[2],
+  ]);
+}
+
 export function dragPlanePoint(
   look: LookAt,
   fovYDeg: number,

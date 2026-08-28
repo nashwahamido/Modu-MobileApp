@@ -13,6 +13,7 @@ import {
 } from "@/src/game/core/evaluation/clusters";
 import { HudSpotTarget } from "@/src/game/ui/hud/hudSpotlight";
 import { useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import { clusterThumbSet, modelThumbSet } from "@/src/game/core/presentation/finish";
 import Svg, { Circle as SvgCircle, Defs, RadialGradient, Stop } from "react-native-svg";
 import { COIN_ICON } from "@/src/components/iconAssets";
@@ -158,7 +159,7 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
   const furniture = useGameStore((s) => s.furniture);
   const completed = useGameStore((s) => s.completed);
   const activeCluster = useGameStore((s) => s.activeCluster);
-  const renderStyle = useGameStore((s) => s.renderStyle);
+  const renderStyle = usePrefsStore((s) => s.renderStyle);
   const mapOpen = useGameStore((s) => s.mapOpen);
   const mapSeen = useGameStore((s) => s.mapSeen);
   const repos = useRepos();

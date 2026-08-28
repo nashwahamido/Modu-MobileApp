@@ -9,6 +9,7 @@ import { useHudInsets } from '@/src/hooks/use-safe-insets';
 import { FilamentScene } from "react-native-filament";
 
 import { AssemblyScene } from "@/src/game/scene/AssemblyScene";
+import { useSceneSlot } from "@/src/game/scene/sceneSlot";
 import { useAssemblyDrivers } from "@/src/game/scene/useAssemblyDrivers";
 import { useSceneState } from "@/src/game/scene/useSceneState";
 
@@ -40,6 +41,7 @@ import {
 } from "@/src/game/core/evaluation/engagement";
 
 import { useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import { useBuildPersistence } from "@/src/hooks/useBuildPersistence";
 import { asFurnitureId } from "@/src/game/core/ids";
 
@@ -192,11 +194,11 @@ function GameScreen() {
 
   // Dev-setting: float mode vs auto return
   const heldActionId = useGameStore((s) => s.heldActionId);
-  const renderStyle = useGameStore((s) => s.renderStyle);
-  const backdrop = useGameStore((s) => s.backdrop);
+  const renderStyle = usePrefsStore((s) => s.renderStyle);
+  const backdrop = usePrefsStore((s) => s.backdrop);
   // The BUILD's theme, not the app's: "Assemble in Dark Mode" darkens this screen only. Everything
   // under ThemeScope below (the HUD, the settings panel, the toasts) resolves through it.
-  const theme: ThemeId = useGameStore((s) => s.assembleDark) ? "dark" : "light";
+  const theme: ThemeId = usePrefsStore((s) => s.assembleDark) ? "dark" : "light";
   const focus = settings.focusMode;
   const dark = theme === "dark";
   const t = useTheme();
@@ -213,6 +215,8 @@ function GameScreen() {
     // styles.root is a dependency now that `styles` comes from useHudChrome rather than a module constant — it changes identity when the player's hand does. `theme` stays because t is derived from it.
     [styles.root, t, backdrop, theme],
   );
+  // The action holding a gesture right now — it outranks every other next-step candidate (see nextAction).
+  const parkedActionId = useGameStore((s) => s.driveActionId ?? s.orientationActionId);
   // nextAction, not [0]: the offered list is in AUTHORED order, so a part still in the box can sit ahead of the half-finished one in the scene — see the note on nextAction.
   const nextActionId = useMemo(
     () =>
@@ -221,9 +225,10 @@ function GameScreen() {
             furniture,
             availableInMode(furniture, completedSet, mode, activeCluster),
             completedSet,
+            parkedActionId,
           )?.actionId
         : undefined,
-    [furniture, completedSet, mode, activeCluster],
+    [furniture, completedSet, mode, activeCluster, parkedActionId],
   );
   const completedCount = useGameStore((s) => s.completed.length);
   const orientationActionId = useGameStore((s) => s.orientationActionId);
@@ -695,6 +700,9 @@ function GameScreen() {
 }
 
 export default function PlayRoute() {
+  // Held for one commit while the room hands the engine slot over — see sceneSlot.
+  const granted = useSceneSlot("play");
+  if (!granted) return null;
   return (
     <FilamentScene>
       <GameScreen />

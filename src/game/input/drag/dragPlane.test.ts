@@ -9,7 +9,7 @@ import { quatConjugate, quatMultiply, quatRotateVec3, quatSlerp, screenRay } fro
 import { FOV_Y_DEG } from "@/src/game/scene/cameraConfig";
 import { projectToScreen } from "@/src/game/scene/projectToScreen";
 import type { Vec3 } from "@/src/game/core/type";
-import { AIM_BAND_MAX_PX, aimBandScale, CARRY_CLEARANCE_ENABLED, CARRY_NEAR_MARGIN_M, clusterCarryAnchor, holdReachFrom, dragPlanePoint, dragRayPoint, DRIFT_CAP_FACTOR, RAY_CARRY_MIN_FRACTION, RAY_CARRY_MIN_M, burialDepthM, ghostSamplePoints, rayBoxEntryT, rayPointNearest, sightlineGapM, VIS_GAP_SLACK_M, segmentHitsBox, segmentInFrame } from "./dragPlane";
+import { AIM_BAND_MAX_PX, aimBandScale, cameraPlanePoint, CARRY_CLEARANCE_ENABLED, CARRY_NEAR_MARGIN_M, clusterCarryAnchor, holdReachFrom, dragPlanePoint, dragRayPoint, DRIFT_CAP_FACTOR, RAY_CARRY_MIN_FRACTION, RAY_CARRY_MIN_M, burialDepthM, ghostSamplePoints, rayBoxEntryT, rayPointNearest, sightlineGapM, VIS_GAP_SLACK_M, segmentHitsBox, segmentInFrame } from "./dragPlane";
 import { MIN_ORBIT_DISTANCE_M } from "@/src/game/scene/cameraConfig";
 
 // Landscape, the only orientation the game runs in (app.config.ts).
@@ -236,6 +236,27 @@ test("segmentInFrame: on-screen and margin cases", () => {
   assert.equal(segmentInFrame(-40, 200, 60, 210, W, H, 0), true);
   // Long segment crossing the screen with both endpoints off: midpoint saves it.
   assert.equal(segmentInFrame(-200, 195, 1100, 195, W, H, 0), true);
+});
+
+test("the camera-facing plane holds the finger's pixel whatever the anchor's own screen position", () => {
+  // The upright carry (DALFRED's support pin, EKET's panels) anchors on the SOCKET, which sits wherever the player's aim has put it. Building the plane point on the anchor instead of on the view axis added the socket's own offset from screen centre to every frame: measured 110-160 px of standing gap, zero only when the socket happened to project dead centre.
+  const look = camera();
+  const lookAt = [look.eye, look.center, look.up] as const;
+  for (const anchor of [[0, 0.1, 0], [0.25, 0.45, -0.2], [-0.3, 0.6, 0.25]] as Vec3[]) {
+    const sp = projectToScreen(lookAt, anchor, W, H);
+    assert.ok(sp, "precondition: the anchor projects on screen");
+    for (const [x, y] of [[W / 2, H / 2], [TRAY_X, 74], [250, 300], [140, 330]]) {
+      const p = cameraPlanePoint(look, FOV_Y_DEG, W, H, x, y, anchor);
+      assert.ok(p, `anchor (${anchor}) finger (${x},${y}): no point`);
+      const back = projectToScreen(lookAt, p, W, H);
+      assert.ok(back, `anchor (${anchor}) finger (${x},${y}): point fell behind the camera`);
+      const miss = Math.hypot(back.x - x, back.y - y);
+      assert.ok(miss < 1, `anchor at screen (${sp.x.toFixed(0)},${sp.y.toFixed(0)}), finger (${x},${y}): part drawn ${miss.toFixed(0)} px off the finger`);
+      // ...and on the anchor's own plane, which is what the upright carry wants the mapping FOR: depth comes from the socket so a vertically-entering part hovers over its hole rather than at the finger's own distance.
+      const depth = axialDepth(look, p);
+      assert.ok(Math.abs(depth - sp.depth) < 1e-6, `depth ${depth.toFixed(3)} should be the anchor's ${sp.depth.toFixed(3)}`);
+    }
+  }
 });
 
 test("drag-no-plane: the ray point rides under the finger, just in front of the model", () => {

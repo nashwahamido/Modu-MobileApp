@@ -11,6 +11,7 @@ import {
 } from "react-native-filament";
 import type { ISharedValue } from "react-native-worklets-core";
 import { useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import type { PartBox, PartId } from "@/src/game/core/type";
 import { useThemeId } from "@/src/game/ui/system/theme";
 import { CombineCarry, type CarryOffset } from "./CombineCarry";
@@ -19,7 +20,7 @@ import { stageOffsetMap } from "@/src/game/core/model/staging";
 import { FOCAL_LENGTH_MM } from "./cameraConfig";
 import { CEL_IBL_INTENSITY, getLightRig, IBL_INTENSITY } from "./lighting";
 import type { ClusterDriver, DriverRegistry, OffsetDriver } from "./offsetDriver";
-import { bakedWorldMatrix, registerLiveBoxReader, worldBoxFromObjectBox } from "./partBoxes";
+import { registerLiveBoxReader, worldBoxFromObjectBox } from "./partBoxes";
 import { registerPickProber } from "./pickProbe";
 import { PartModel } from "./PartModel";
 import { buildPushDriverMap } from "./pushOpen";
@@ -68,20 +69,19 @@ export function AssemblyScene({
   onModelReady,
 }: Props) {
   const furniture = useGameStore((s) => s.furniture);
-  const renderStyle = useGameStore((s) => s.renderStyle);
+  const renderStyle = usePrefsStore((s) => s.renderStyle);
   const model = useModel(
     furniture?.styleModels?.[renderStyle] ?? furniture?.model ?? 0,
     { instanceCount: 2, addToScene: false },
   );
   const { renderableManager, transformManager, view } = useFilamentContext();
   const manualTools = useGameStore((s) => s.settings.manualTools);
-  const lightingPreset = useGameStore((s) => s.settings.lightingPreset);
   // The SCOPED theme, not the app's: this scene renders under the assembly's ThemeScope, so
   // "Assemble in Dark Mode" reaches the light rig the same way it reaches the chrome. Read from
   // s.theme it would never darken at all, now that dark is a build setting rather than an app one —
   // the HUD would go dark around a scene that stayed lit.
   const dark = useThemeId() === "dark";
-  const rig = getLightRig(renderStyle, dark, lightingPreset);
+  const rig = getLightRig(renderStyle, dark);
 
   /**
    * A cel look must be lit by ONE light.
@@ -114,43 +114,10 @@ export function AssemblyScene({
     if (model.state === "loaded") onModelReady?.();
   }, [model.state, onModelReady]);
 
-  // Deliberately NOT keyed on onModelReady: the parent passes a fresh inline closure every render, so including it would re-run this whole per-part native-bridge loop on any unrelated parent re-render — the harvest must happen once per model load. model.asset is read from the closure inside, since useModel returns a fresh object identity every render and depending on it would have the same effect.
-  useEffect(() => {
-    if (model.state !== "loaded" || !furniture) return;
-    // Harvest each part's world bounds ONCE — the joint derivation's only input from the renderer. Filament hands back the renderable's OBJECT-space box, and each is pushed through the part's BAKED pose (partBoxes.bakedWorldMatrix), NOT the transform manager's current matrix: child effects run before parent effects, so on a resumed build PartModel has already written drive parks and staging offsets by the time this reads, and reading those live poses tripped the 2mm gate below — one loose fastener disabled every box for the session (`boxes=0 reach=0.000`, seats falling back to mid-shaft visual centres). The harvest is a snapshot of the ASSEMBLED furniture by contract, so the assembled pose is the right transform even when the renderer is drawing something else; the tolerance check that follows keeps its real job, proving the OBJECT-space box and parts.gen still agree after a re-export.
-    const boxes: Record<PartId, PartBox> = {};
-    let mismatches = 0;
-    let worst = { partId: "", mm: 0 };
-    for (const p of Object.values(furniture.parts)) {
-      const entity = model.asset.getFirstEntityByName(p.meshName);
-      if (!entity) continue;
-      const b = renderableManager.getAxisAlignedBoundingBox(entity);
-      const { min, max } = worldBoxFromObjectBox(
-        b.center,
-        b.halfExtent,
-        bakedWorldMatrix(p.pose.position, p.pose.rotation),
-      );
-      boxes[p.partId] = { min, max };
-      const vco = p.visualCenterOffset ?? [0, 0, 0];
-      const dx = (min[0] + max[0]) / 2 - (p.pose.position[0] + vco[0]);
-      const dy = (min[1] + max[1]) / 2 - (p.pose.position[1] + vco[1]);
-      const dz = (min[2] + max[2]) / 2 - (p.pose.position[2] + vco[2]);
-      const mm = Math.hypot(dx, dy, dz) * 1000;
-      if (mm > 2) {
-        mismatches++;
-        if (mm > worst.mm) worst = { partId: p.partId, mm };
-      }
-    }
-    // Publishing UNVALIDATED boxes is strictly worse than publishing none: an empty map makes every consumer fall back to the previous visual-centre clamp, which is merely approximate, whereas a box in the wrong space yields a confidently wrong hold point that the drag trusts completely — so the tolerance check is a GATE, not a diagnostic, and one bad part disables the whole feature for the session.
-    if (mismatches > 0) {
-      if (__DEV__) console.warn(`[jointFrames] ${mismatches}/${Object.keys(boxes).length} part boxes are >2mm from pose+visualCenterOffset (worst: ${worst.partId} at ${worst.mm.toFixed(1)}mm). Publishing NO boxes — the drag falls back to the visual-centre clamp.`);
-      useGameStore.getState().setPartBoxes({});
-      return;
-    }
-    useGameStore.getState().setPartBoxes(boxes);
-    // model is a fresh object identity every render (useModel returns a new literal once loaded — see PartModel.tsx's modelEqual/useInstanceEntity for the same caveat), so depending on the whole object would re-run this harvest on every render instead of once per load; model.state is the stable signal that actually changes on load/unload.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [model.state, furniture, renderableManager]);
+  // Baked-pose boxes used to be harvested here, one native-bridge call per part per load. They are generated from the GLB now
+  // (content/furnitures/*/boxes.gen.ts) and land in the store with the furniture; the >2mm mesh↔parts.gen check moved to
+  // derive-boxes.mts and its pin test, so a bad re-export fails the build instead of degrading the drag for a session.
+  // The LIVE reader below is unaffected — it answers where parts are being DRAWN, which no generated file can know.
 
   // Modes decide what is on SCREEN and they change with every store tick, so the reader below reads them through a ref — re-registering the closure on each mode change would churn a native-bridge callback for a value only read at pickup.
   const modesRef = useRef(modes);

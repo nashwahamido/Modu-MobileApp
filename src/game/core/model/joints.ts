@@ -1,10 +1,13 @@
+// joint type between two STRUCTURAL parts ---expandable
+
 // Joint entities — the v2 authoring shape from docs/superpowers/specs/2026-08-08-joint-model-v2.md, landed as a LOWERING SEAM only: a furniture may author JOINTS instead of the three flat arrays, and this module rewrites them into exactly the per-part fields the engine already reads. Evaluation, input and presentation are untouched, so the flat form stays the single runtime truth and nothing on device changes.
 // Why the seam exists before any furniture needs it: a joint is a PAIR fact stored per-part today (the both-sides lockDir workaround), and every new kind widens the flat sprawl. The union makes each kind carry exactly its own payload, so adding one is a variant plus its touchpoints rather than another optional field on every part.
+
 // ROTATION: `hinge` is deliberately representable here and deliberately NOT playable. The engine's whole motion primitive is linear — ParkInfo is {axis, offset} eased to zero, and even `screw` is a linear travel with a cosmetic whole-turn spin — so a pivot sweep cannot be faked by a lowering. Authoring one is therefore a clean, named error instead of a part that silently drops flush. To enable it later: add "hinge" to PLAYABLE_JOINT_KINDS and JoinKind, give ParkInfo a rotational variant (pivot + axis + sweep), teach placeEngagement to return it, and add the control that drives it — the authoring shape, the wire format and the validator message all already exist.
 import type { PartId, Vec3 } from "@/src/game/core/type";
 import type { StructureOverlay } from "./liaisons";
 
-/** How a part comes at its seat: the travel direction and how far off the seat it parks before the drive gesture (the FEEL distance above the derived collision floor, per the v2 note's rule 4). */
+// How a part snap: the travel direction and how far off the seat it parks before the drive gesture
 export interface Approach {
   dir?: Vec3;
   back?: number;
@@ -17,20 +20,34 @@ interface JointBase {
   anchor?: { a?: Vec3; b?: Vec3 };
 }
 
-/** One joint between two STRUCTURAL parts, discriminated by kind so each carries exactly the data it needs and illegal combinations are unrepresentable rather than validator checks. Fasteners are deliberately NOT a variant: hardware is a physical part with its own lifecycle whose joint is a consequence of `attached`, so declaring it here too would store the same fact twice. */
+// joint type between two STRUCTURAL parts
 export type JointDef =
-  | (JointBase & { kind: "press"; mover?: PartId; approach?: Approach })
-  | (JointBase & { kind: "slide"; mover: PartId; dir: Vec3; back?: number })
-  | (JointBase & { kind: "screw"; mover: PartId })
-  /** The two-phase keyhole (project name: hook-and-slot): press in along the approach, then a short shove seats the bolts in their slots. `lock.dir` is the shove when `mover` moves; `lock.dirOther` is the shove when the OTHER endpoint moves — the pair-level fact v1 could only express by authoring lockDir on both parts and hoping they stayed in sync. */
-  | (JointBase & { kind: "hookAndSlot"; mover: PartId; approach: Approach; lock: { dir: Vec3; travel?: number; dirOther?: Vec3 } })
-  /** Rotational joint (hinge, folding leg, drop leaf, flip lid) — representable so recipes and the wizard can carry one, NOT yet playable (see the module header for the enable path). */
-  | (JointBase & { kind: "hinge"; mover: PartId; pivot: Vec3; axis: Vec3; sweepDeg: number });
+  | (JointBase & { kind: "press"; mover?: PartId; approach?: Approach }) //pressJoin
+  | (JointBase & { kind: "slide"; mover: PartId; dir: Vec3; back?: number }) //slideJoin
+  | (JointBase & { kind: "screw"; mover: PartId }) //screwJoin
+  | (JointBase & {
+      kind: "hookAndSlot";
+      mover: PartId;
+      approach: Approach;
+      lock: { dir: Vec3; travel?: number; dirOther?: Vec3 };
+    }) // hook-and-slot: press in along the approach, then a short shove seats the bolts in their slots.
+  | (JointBase & {
+      kind: "hinge";
+      mover: PartId;
+      pivot: Vec3;
+      axis: Vec3;
+      sweepDeg: number;
+    }); // Rotational joint (hinge, folding leg, etc.) — NOT yet developed
 
 export type JointKind = JointDef["kind"];
 
 /** The kinds the engine can actually drive today. A kind outside this set is a valid AUTHORING statement the runtime cannot honour yet, and lowering refuses it by name rather than degrading it into something that looks placeable. */
-export const PLAYABLE_JOINT_KINDS: ReadonlySet<JointKind> = new Set<JointKind>(["press", "slide", "screw", "hookAndSlot"]);
+export const PLAYABLE_JOINT_KINDS: ReadonlySet<JointKind> = new Set<JointKind>([
+  "press",
+  "slide",
+  "screw",
+  "hookAndSlot",
+]);
 
 type Mutable = {
   directJoins?: PartId[];
@@ -47,7 +64,8 @@ const endpoints = (j: JointDef): [PartId, PartId] => [j.a, j.b];
 
 const other = (j: JointDef, from: PartId): PartId => (j.a === from ? j.b : j.a);
 
-const isZero = (v: Vec3 | undefined): boolean => !v || Math.hypot(v[0], v[1], v[2]) < 1e-6;
+const isZero = (v: Vec3 | undefined): boolean =>
+  !v || Math.hypot(v[0], v[1], v[2]) < 1e-6;
 
 const pairKey = (j: JointDef): string => [j.a, j.b].sort().join("__");
 
@@ -65,25 +83,50 @@ export function jointIssues(
       for (const id of endpoints(j)) {
         const p = parts[id];
         if (!p) out.push(`${where}: references missing part "${id}"`);
-        else if (p.type !== "structural") out.push(`${where}: endpoint "${id}" is a ${p.type} — joints connect STRUCTURAL parts; hardware makes its joint through \`attached\``);
+        else if (p.type !== "structural")
+          out.push(
+            `${where}: endpoint "${id}" is a ${p.type} — joints connect STRUCTURAL parts; hardware makes its joint through \`attached\``,
+          );
       }
     }
-    if ("mover" in j && j.mover !== undefined && j.mover !== j.a && j.mover !== j.b) {
+    if (
+      "mover" in j &&
+      j.mover !== undefined &&
+      j.mover !== j.a &&
+      j.mover !== j.b
+    ) {
       out.push(`${where}: mover "${j.mover}" is not one of its endpoints`);
     }
     const prev = seen.get(pairKey(j));
-    if (prev) out.push(`${where}: this pair is already joined as "${prev}" — one joint has one kind`);
+    if (prev)
+      out.push(
+        `${where}: this pair is already joined as "${prev}" — one joint has one kind`,
+      );
     else seen.set(pairKey(j), j.kind);
 
     if (!PLAYABLE_JOINT_KINDS.has(j.kind)) {
-      out.push(`${where}: the "${j.kind}" kind is not playable yet — the engine's placement motion is linear (park offset eased to zero), so a pivot sweep has no runtime yet; see model/joints.ts for the enable path`);
+      out.push(
+        `${where}: the "${j.kind}" kind is not playable yet — the engine's placement motion is linear (park offset eased to zero), so a pivot sweep has no runtime yet; see model/joints.ts for the enable path`,
+      );
       continue;
     }
-    if (j.kind === "slide" && isZero(j.dir)) out.push(`${where}: a slide needs a non-zero dir — its travel axis is not derivable from poses`);
-    if (j.kind === "press" && j.approach && !j.mover) out.push(`${where}: an approach describes how the MOVER travels, so the joint must name one`);
+    if (j.kind === "slide" && isZero(j.dir))
+      out.push(
+        `${where}: a slide needs a non-zero dir — its travel axis is not derivable from poses`,
+      );
+    if (j.kind === "press" && j.approach && !j.mover)
+      out.push(
+        `${where}: an approach describes how the MOVER travels, so the joint must name one`,
+      );
     if (j.kind === "hookAndSlot") {
-      if (isZero(j.approach.dir)) out.push(`${where}: a hook-and-slot needs a non-zero approach.dir — the press leg has no direction`);
-      if (isZero(j.lock.dir)) out.push(`${where}: a hook-and-slot needs a non-zero lock.dir — the lock leg has no direction`);
+      if (isZero(j.approach.dir))
+        out.push(
+          `${where}: a hook-and-slot needs a non-zero approach.dir — the press leg has no direction`,
+        );
+      if (isZero(j.lock.dir))
+        out.push(
+          `${where}: a hook-and-slot needs a non-zero lock.dir — the lock leg has no direction`,
+        );
     }
   }
   return out;
@@ -95,11 +138,18 @@ export function lowerJoints(
   parts?: Record<PartId, { type: string }>,
 ): StructureOverlay {
   const issues = jointIssues(joints, parts);
-  if (issues.length) throw new Error(`invalid JOINTS:\n` + issues.map((m) => "  - " + m).join("\n"));
+  if (issues.length)
+    throw new Error(
+      `invalid JOINTS:\n` + issues.map((m) => "  - " + m).join("\n"),
+    );
 
   const out: Record<PartId, Mutable> = {};
   const at = (id: PartId): Mutable => (out[id] ??= {});
-  const join = (id: PartId, field: "directJoins" | "slideJoins" | "screwJoins", target: PartId): void => {
+  const join = (
+    id: PartId,
+    field: "directJoins" | "slideJoins" | "screwJoins",
+    target: PartId,
+  ): void => {
     const list = (at(id)[field] ??= []);
     if (!list.includes(target)) list.push(target);
   };
@@ -112,7 +162,9 @@ export function lowerJoints(
       const id = j[side];
       const prev = at(id).jointAnchor;
       if (prev && prev.some((v, i) => v !== value[i])) {
-        throw new Error(`invalid JOINTS:\n  - part "${id}" is given two different anchors by two joints — the per-part jointAnchor can hold one; drop one, or let jointFrames derive it`);
+        throw new Error(
+          `invalid JOINTS:\n  - part "${id}" is given two different anchors by two joints — the per-part jointAnchor can hold one; drop one, or let jointFrames derive it`,
+        );
       }
       at(id).jointAnchor = value;
     }
@@ -123,7 +175,8 @@ export function lowerJoints(
         const carrier = j.mover ?? j.a;
         join(carrier, "directJoins", other(j, carrier));
         if (j.approach?.dir) at(carrier).placeDir = j.approach.dir;
-        if (j.approach?.back !== undefined) at(carrier).parkBackoff = j.approach.back;
+        if (j.approach?.back !== undefined)
+          at(carrier).parkBackoff = j.approach.back;
         break;
       }
       case "slide": {
@@ -140,13 +193,15 @@ export function lowerJoints(
         // The press leg is a directJoins edge exactly like a plain press; the lock leg is the per-part lockDir the two-phase control reads. Authoring `lock.dirOther` writes the mirrored shove onto the other endpoint too, so a free-mode role swap keeps working — the same both-sides data v1 hand-maintained, now derived from ONE declaration.
         join(j.mover, "directJoins", other(j, j.mover));
         if (j.approach.dir) at(j.mover).placeDir = j.approach.dir;
-        if (j.approach.back !== undefined) at(j.mover).parkBackoff = j.approach.back;
+        if (j.approach.back !== undefined)
+          at(j.mover).parkBackoff = j.approach.back;
         at(j.mover).lockDir = j.lock.dir;
         if (j.lock.travel !== undefined) at(j.mover).lockTravel = j.lock.travel;
         if (j.lock.dirOther) {
           const partner = other(j, j.mover);
           at(partner).lockDir = j.lock.dirOther;
-          if (j.lock.travel !== undefined) at(partner).lockTravel = j.lock.travel;
+          if (j.lock.travel !== undefined)
+            at(partner).lockTravel = j.lock.travel;
         }
         break;
       }
@@ -159,15 +214,24 @@ export function lowerJoints(
 }
 
 /** Merge a lowered joint overlay UNDER an authored flat overlay: the three join arrays union (a part may be joined by both routes during a migration), and any scalar the flat overlay states wins, so a file part-way through migration keeps behaving exactly as it reads. */
-export function mergeOverlays(base: StructureOverlay, over: StructureOverlay): StructureOverlay {
+export function mergeOverlays(
+  base: StructureOverlay,
+  over: StructureOverlay,
+): StructureOverlay {
   const out: Record<string, Record<string, unknown>> = {};
-  for (const [id, entry] of Object.entries(base)) out[id] = { ...(entry as object) } as Record<string, unknown>;
+  for (const [id, entry] of Object.entries(base))
+    out[id] = { ...(entry as object) } as Record<string, unknown>;
   for (const [id, entry] of Object.entries(over)) {
     const target = (out[id] ??= {});
     for (const [key, value] of Object.entries(entry as object)) {
-      if (key === "directJoins" || key === "slideJoins" || key === "screwJoins") {
+      if (
+        key === "directJoins" ||
+        key === "slideJoins" ||
+        key === "screwJoins"
+      ) {
         const merged = [...((target[key] as PartId[] | undefined) ?? [])];
-        for (const t of (value as PartId[] | undefined) ?? []) if (!merged.includes(t)) merged.push(t);
+        for (const t of (value as PartId[] | undefined) ?? [])
+          if (!merged.includes(t)) merged.push(t);
         target[key] = merged;
       } else {
         target[key] = value;

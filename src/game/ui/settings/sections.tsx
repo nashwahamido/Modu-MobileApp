@@ -5,6 +5,7 @@ import { Alert, Text, View, type LayoutChangeEvent } from "react-native";
 import { Pressable } from "@/src/components/Pressable";
 import { router } from "expo-router";
 import { useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import { setMusicEnabled, setMusicVolume } from "@/src/game/audio/music";
 import { signOut } from "@/src/services/auth";
 import { SIGN_IN_ROUTE } from "@/src/hooks/useSessionGate";
@@ -38,12 +39,7 @@ const RELEASE: { value: ReleaseBehavior; label: string }[] = [
   { value: "autoReturn", label: "Auto-return" },
   { value: "float", label: "Float" },
 ];
-// DRAG_PLANE_RETIRED. The "Drag mechanism" row is gone and every build is "adaptive" — the drag plane
-// matches sockets on screen and follows their height, full stop. settings.dragPlane still EXISTS and
-// usePartDrag still branches on it, but only into the "level" comparison engine, which nothing can now
-// select: the profiles all default to "adaptive" and RETIRED_SETTINGS (src/game/core/store.ts) drops any
-// value a player saved back when the row was offered. Those branches are dead rather than wrong, and
-// they are left in place as the comparison path they were written to be.
+// DRAG_PLANE_RETIRED. The "Drag mechanism" row is gone and every build is "adaptive" — the drag plane matches sockets on screen and follows their height, full stop. The setting and the "level" comparison engine it selected were deleted on 2026-08-28; RETIRED_SETTINGS (src/game/core/store.ts) still drops the saved key.
 // "strict" is a live AssemblyMode the engine still honours, but no profile pins it (see PROFILE_MODE) and nothing ships in it, so it is not offered here. Add the row back the day a profile wants it.
 const MODES: { value: AssemblyMode; label: string }[] = [
   { value: "free", label: "Free" },
@@ -67,13 +63,7 @@ const BACKDROPS: { value: BackdropId; label: string }[] = [
   { value: "craft", label: "Craft" },
   { value: "garden", label: "Garden" },
 ];
-// LIGHTING_RETIRED. The "Lighting" row is gone from every surface — the gear panel had already
-// dropped it (a rig is a pre-build mood, not something to reach for with a part in hand), and it
-// left the /settings Assembly tab on 2026-08-25, which was its last home. settings.lightingPreset is
-// STILL LIVE: AssemblyScene reads it through getLightRig, so every build now runs the "auto" rig each
-// model look was authored with. It is listed in RETIRED_SETTINGS (src/game/core/store.ts) so a player
-// who once chose "warm" is not stuck with it forever with no control left to change it back.
-// Restoring the row means putting a Choice over that same field back into BuildDisplaySection.
+// LIGHTING_RETIRED. The "Lighting" row is gone from every surface — the gear panel had already dropped it (a rig is a pre-build mood, not something to reach for with a part in hand), and it left the /settings Assembly tab on 2026-08-25, its last home. The setting was deleted on 2026-08-28: getLightRig now always uses the rig each model look was authored with. RETIRED_SETTINGS (src/game/core/store.ts) still drops the saved key.
 const LEVELS: { value: TextLevel; label: string }[] = [
   { value: "standard", label: "Standard" },
   { value: "simple", label: "Simple" },
@@ -211,13 +201,13 @@ export function BuildDisplaySection({
   ...focus
 }: FocusProps & { showFocusMode?: boolean }) {
   const settings = useGameStore((s) => s.settings);
-  const renderStyle = useGameStore((s) => s.renderStyle);
-  const backdrop = useGameStore((s) => s.backdrop);
+  const renderStyle = usePrefsStore((s) => s.renderStyle);
+  const backdrop = usePrefsStore((s) => s.backdrop);
   const setSettings = useGameStore((s) => s.setSettings);
-  const setRenderStyle = useGameStore((s) => s.setRenderStyle);
-  const setBackdrop = useGameStore((s) => s.setBackdrop);
-  const assembleDark = useGameStore((s) => s.assembleDark);
-  const setAssembleDark = useGameStore((s) => s.setAssembleDark);
+  const setRenderStyle = usePrefsStore((s) => s.setRenderStyle);
+  const setBackdrop = usePrefsStore((s) => s.setBackdrop);
+  const assembleDark = usePrefsStore((s) => s.assembleDark);
+  const setAssembleDark = usePrefsStore((s) => s.setAssembleDark);
   const { targetLayout, targetActivated } = useFocusHandlers(focus);
   // A FRAGMENT, not a View: the walkthrough scrolls to a row by the `y` its onLayout reports, and that y is relative to the immediate parent. Wrapping a section in its own container would measure the target against the section instead of against the scrolled list, and the panel would scroll to the wrong row.
   return (
@@ -436,12 +426,12 @@ export function BuildAudioSection() {
 }
 
 export function AppDisplaySection() {
-  const handedness = useGameStore((s) => s.handedness);
-  const setHandedness = useGameStore((s) => s.setHandedness);
-  const roomBackground = useGameStore((s) => s.roomBackground);
-  const setRoomBackground = useGameStore((s) => s.setRoomBackground);
-  const roomAvatarVisible = useGameStore((s) => s.roomAvatarVisible);
-  const setRoomAvatarVisible = useGameStore((s) => s.setRoomAvatarVisible);
+  const handedness = usePrefsStore((s) => s.handedness);
+  const setHandedness = usePrefsStore((s) => s.setHandedness);
+  const roomBackground = usePrefsStore((s) => s.roomBackground);
+  const setRoomBackground = usePrefsStore((s) => s.setRoomBackground);
+  const roomAvatarVisible = usePrefsStore((s) => s.roomAvatarVisible);
+  const setRoomAvatarVisible = usePrefsStore((s) => s.setRoomAvatarVisible);
   return (
     <>
       <SectionHeader>Display</SectionHeader>

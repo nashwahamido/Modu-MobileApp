@@ -127,10 +127,9 @@ export function usePartDrag({
   // Read at HOOK level, not inside the gesture callback. The callback that sets the drag plane runs
   // from gesture-handler's event path, and reaching into the store from there was throwing on a
   // snapshot that had not resolved — a subscription here is resolved before any gesture can fire.
-  const dragPlaneSetting = useGameStore((s) => s.settings.dragPlane);
   const partBoxes = useGameStore((s) => s.partBoxes);
   const furnitureForAnchors = useGameStore((s) => s.furniture);
-  // Derived once per (furniture, boxes) rather than per drag frame: anchors are baked-pose geometry and cannot change while a furniture is loaded. Empty until the scene's harvest lands, and every consumer falls back to the visual-center clamp until it does. Frames ride along for the pickup-time facing derivation, which additionally depends on what is PLACED and so cannot be memoized here.
+  // The FRAMES, derived once per (furniture, boxes) rather than per drag frame: contacts are baked-pose geometry and cannot change while a furniture is loaded. Which of a part's joints is its hold point does change — it depends on what is already on the bench — so the anchors themselves are resolved per pickup (pickAnchors, in onStart); `anchors` here is only the bench-blind fallback for a pickup that starts before the frames exist. Empty until boxes land, and every consumer falls back to the visual-center clamp until they do.
   const jointGeom = useMemo(() => {
     if (!furnitureForAnchors || !Object.keys(partBoxes).length)
       return { anchors: {} as Record<PartId, Vec3>, frames: null, liaisons: null };
@@ -138,7 +137,6 @@ export function usePartDrag({
     const frames = deriveJointFrames(furnitureForAnchors.parts, liaisons, partBoxes);
     return { anchors: partAnchorOffsets(furnitureForAnchors.parts, liaisons, frames), frames, liaisons };
   }, [furnitureForAnchors, partBoxes]);
-  const jointAnchors = jointGeom.anchors;
 
   /** A part is "floating": float releaseBehavior is ON (the canvas re-grab has no separate toggle — it comes with float mode), the part is held with no live drag session, and it isn't in a post-release park/snap phase that owns the driver (this also keeps re-grab out of auto-return's recover animation window). */
   const isFloating = useCallback(() => {
@@ -221,9 +219,25 @@ export function usePartDrag({
           // Drag plane at the action's OWN target height (her model): on-screen overlap with a socket then means genuine 3D proximity — a finger on a 2D screen cannot steer depth.
           const doneSet0 = new Set(store.completed);
           const ownTarget = targetPositionForAction(action, furniture.parts, doneSet0);
+          // Parts already on the bench, read here rather than at the occluder list below (which used to own this) because the anchors are derived from it, and everything the pickup measures hangs off those. Safe this early: beginPickup sets heldActionId and clears drag state, never `completed`.
+          const placedIds = [
+            ...new Set<PartId>(
+              furniture.actions
+                .filter((a) => a.type === "placePart" && a.partId && doneSet0.has(a.actionId))
+                .map((a) => a.partId!),
+            ),
+          ];
+          const placedSet = new Set<PartId>(placedIds);
+          // Anchors resolved against THIS pickup's bench, which is why they cannot come from the memo above: a part with several joints has several sockets, and the one the finger should hold is the one it is going into. Averaging them all instead put a DALFRED leg's hold point at y=0.407, connected to nothing, 7cm of thin air from the joint it was about to make (partAnchorOffsets' own docstring). With nothing of its partners placed yet the average is still the answer — that fallback is what lets a leg-first LACK build hold a leg at all.
+          const pickAnchors =
+            jointGeom.frames && jointGeom.liaisons
+              ? partAnchorOffsets(furniture.parts, jointGeom.liaisons, jointGeom.frames, (id) =>
+                  placedSet.has(id),
+                )
+              : jointGeom.anchors;
           // The finger owns the part's HOLD POINT — the visual center for compact parts, clamped near the snap origin for lengthy ones (a DALFRED leg is steered by its foot, not mid-shaft; see holdOffsetFor).
-          const grabOffset = holdOffsetFor(part, jointAnchors);
-          // The plane pins the hold point (what the finger holds), so anchor it at the socket's hold-point height — a plane whose height disagrees with the pinned point left tall parts (DALFRED legs: +0.27m center offset) vertically unreachable in level mode.
+          const grabOffset = holdOffsetFor(part, pickAnchors);
+          // The plane pins the hold point (what the finger holds), so anchor it at the socket's hold-point height.
           // The plane sits at the PARK height for a part that enters along an axis, so the pin can
           // actually hover over its hole instead of being held at the depth it ends up at.
           const ownPark = parkShiftFor(part);
@@ -240,7 +254,6 @@ export function usePartDrag({
           // support pin and pole, EKET's panels — where the gesture is impossible otherwise.
           // Everything else keeps the horizontal plane, which tracks the finger.
           const uprightAnchor: Vec3 | null =
-            dragPlaneSetting !== "level" &&
             part.placeDir &&
             Math.abs(part.placeDir[1]) > 0.7
               ? [
@@ -269,15 +282,8 @@ export function usePartDrag({
           ]);
           // Seed the socket-referenced carry from this action's own target BEFORE the first carry point is computed — the spawn frame is exactly the one the "it is huge the moment I grab it" report is about, so a depth that only arrives once the matcher has run would miss it. projectToScreen's `depth` IS the axial depth dragRayPoint wants (its ray has dir·fwd = 1).
           const socketDepth0 = worldToScreen(ownTarget)?.depth ?? null;
-          // The obstacle list is read HERE, before the spawn point, because the carry cap below needs it on frame zero — the spawn is the frame the "it appears way off my finger" reports are about, and a cap that only arrived with the first move would let the part materialise inside the cabinet and then step out of it. `doneSet0` is safe to read this early: beginPickup (called below) sets heldActionId and clears drag state, never `completed`, so the placed set cannot change between here and there.
+          // The obstacle list is built HERE, before the spawn point, because the carry cap below needs it on frame zero — the spawn is the frame the "it appears way off my finger" reports are about, and a cap that only arrived with the first move would let the part materialise inside the cabinet and then step out of it.
           // Live geometry, read off the renderer — never the load-time harvest, which describes the FINISHED furniture and so gives a placed-but-stashed part a box across an assembly it is standing nowhere near (EKET: a phantom drawerFront over the visibly open cabinet face). The rule that used to paper over that phantom asked whether a part's CLUSTER was seeded or combined, which is authoring metadata standing in for render state: BEKVAM and LACK name their single cluster purely for the UI label and never set `seed`, so every part of those furnitures was disqualified as an obstacle and the gate ran inert for the whole build — measured, gap 0mm from all 72 sweep cameras, every hidden socket snappable. Live boxes answer the question directly and retire the proxy, the staged-carrier gap it admitted to, and the seed overload with it.
-          const placedIds = [
-            ...new Set<PartId>(
-              furniture.actions
-                .filter((a) => a.type === "placePart" && a.partId && doneSet0.has(a.actionId))
-                .map((a) => a.partId!),
-            ),
-          ];
           // Kept as its own binding rather than inlined into the call: null (no scene reader registered) and {} (reader present, nothing on screen) drive the same empty obstacle list but mean opposite things, and only the probe below can tell them apart.
           const liveBoxes0 = readLiveBoxes(placedIds);
           const placedBoxList = occluderBoxes(placedIds, liveBoxes0, partBoxes);
@@ -285,9 +291,7 @@ export function usePartDrag({
           const carryCap0 = carryCapAt(e.absoluteX, e.absoluteY, placedBoxList);
           const visualStart = uprightAnchor
             ? (fingerOnCameraPlaneAt(e.absoluteX, e.absoluteY, uprightAnchor) ?? socketStart)
-            : dragPlaneSetting === "level"
-              ? (fingerOnPlane(e.absoluteX, e.absoluteY, planeY) ?? socketStart)
-              : (fingerOnRay(e.absoluteX, e.absoluteY, modelR, holdReach, socketDepth0, carryCap0) ?? socketStart);
+            : (fingerOnRay(e.absoluteX, e.absoluteY, modelR, holdReach, socketDepth0, carryCap0) ?? socketStart);
           const base: Float3 = [
             visualStart[0] - grabOffset[0] - part.pose.position[0],
             visualStart[1] - grabOffset[1] - part.pose.position[1],
@@ -320,7 +324,8 @@ export function usePartDrag({
             action,
             furniture.parts,
             doneSet,
-            jointAnchors,
+            // The SAME anchors the grab offset came from: a candidate's holdPosition is where the finger must put the hold point, so an aim point derived from a different anchor would ask the player to seat a point the part is not being held by.
+            pickAnchors,
           );
           const rawCandidates = selectFirstDrop(nextStore)
             ? allCandidates.filter((c) => c.action.actionId === action.actionId)
@@ -338,7 +343,7 @@ export function usePartDrag({
             const back = cPart?.parkBackoff ?? 0;
             // seatVisual is the candidate's FLUSH pose — the hole the player can actually see. For inserts, position/holdPosition are already the loose pose proud of the hole, so without this the whole match segment floats out along the screw axis and zoomed in it projects off-screen while the hole sits centered (measured: aim stuck at 0.167 with the finger dead on the hole).
             // Which point of the flush pose is the hole is targets.seatOffsetFor's call: a structural part's joint anchor, a fastener's shaft MOUTH — not its visual centre, which for a screw is mid-shaft and buried (the drawer-back screws were unassemblable from any angle because of it).
-            const off = seatOffsetFor(cPart, cPart ? partBoxes[cPart.partId] : undefined, jointAnchors, doneSet, placedBoxList, dir);
+            const off = seatOffsetFor(cPart, cPart ? partBoxes[cPart.partId] : undefined, pickAnchors, doneSet, placedBoxList, dir);
             // The seat rides the SAME staging displacement as the delivery target (targets.stagingShiftFor, exemptions included) — built from the raw baked pose alone, the gate judged visibility of a spot 5cm from a staged group's real socket (EKET stabiliser rod).
             const sShift = stagingShiftFor(c.action, furniture.parts) ?? [0, 0, 0];
             const seatVisual: Vec3 = cPart
@@ -399,10 +404,10 @@ export function usePartDrag({
           });
           // DEV pickup probe: one line per pickup with the first candidate's WORLD anchors, to catch an anchor landing in the wrong space (a seat that projects fine can still sit centimetres from the LENS — band collapse, unmatched drags).
           //
-          // The four counts after it characterise the OCCLUDER PIPELINE end to end, because every stage of it can fail silently to PERMISSIVE — an empty obstacle list is indistinguishable from a clear line of sight at the point the verdict is taken, so the gate simply passes everything and says nothing. Read them together: `boxes` 0 means the harvest tripped its own 2mm gate and published none (AssemblyScene); `live=none` means no scene reader is registered at all, so occluders fell back to those baked boxes; `live=0` with a non-zero `placed` means the reader IS registered and reported nothing on screen, which is a different fault with the same symptom. `occN` is what the gate actually received. `pk` is whether layer 2 exists on this build — it needs the native patch, so it can differ between two platforms built from one tree, which is exactly the kind of divergence this line exists to catch.
+          // The four counts after it characterise the OCCLUDER PIPELINE end to end, because every stage of it can fail silently to PERMISSIVE — an empty obstacle list is indistinguishable from a clear line of sight at the point the verdict is taken, so the gate simply passes everything and says nothing. Read them together: `boxes` 0 means the furniture shipped no boxes.gen, or loadFurniture never got them (they are generated now — derive-boxes.mts — not harvested at load); `live=none` means no scene reader is registered at all, so occluders fell back to those baked boxes; `live=0` with a non-zero `placed` means the reader IS registered and reported nothing on screen, which is a different fault with the same symptom. `occN` is what the gate actually received. `pk` is whether layer 2 exists on this build — it needs the native patch, so it can differ between two platforms built from one tree, which is exactly the kind of divergence this line exists to catch.
           if (__DEV__) {
             const c0 = candidates[0];
-            const j = c0 ? jointAnchors[c0.action.partId!] : undefined;
+            const j = c0 ? pickAnchors[c0.action.partId!] : undefined;
             const cand = c0
               ? `${c0.action.actionId} pos=${c0.position.map((v) => v.toFixed(3)).join(",")} hold=${c0.holdPosition.map((v) => v.toFixed(3)).join(",")} seat=${c0.seatVisual.map((v) => v.toFixed(3)).join(",")} match=${c0.matchVisual.map((v) => v.toFixed(3)).join(",")} anchor=${j ? j.map((v) => v.toFixed(3)).join(",") : "none"}`
               : `${action.actionId} NO-CANDIDATES`;
@@ -496,10 +501,7 @@ export function usePartDrag({
           let p = s.uprightAnchor
             ? (fingerOnCameraPlaneAt(e.absoluteX, e.absoluteY, s.uprightAnchor) ??
               fingerOnCameraPlane(e.absoluteX, e.absoluteY, s))
-            : store.settings.dragPlane === "level"
-              ? (fingerOnPlane(e.absoluteX, e.absoluteY, s.planeY) ??
-                fingerOnCameraPlane(e.absoluteX, e.absoluteY, s))
-              : (fingerOnRay(e.absoluteX, e.absoluteY, s.modelR, s.holdReach, s.socketDepth, s.carryCap) ??
+            : (fingerOnRay(e.absoluteX, e.absoluteY, s.modelR, s.holdReach, s.socketDepth, s.carryCap) ??
                 fingerOnCameraPlane(e.absoluteX, e.absoluteY, s));
           let nearest = s.candidates[0];
           let bestD = Infinity;
@@ -509,7 +511,7 @@ export function usePartDrag({
           let depthAim: { d: number } | null = null;
           // The finger's ray this frame, kept so the depth blend can recompute its socket point on the CURRENT ray even on frames where nothing is matched and the blend is easing back out.
           let frameRay: { eye: Vec3; dir: Vec3 } | null = null;
-          // Pixel cap on the whole aim-band family (see aimBandScale): 1 at bench range, shrinking zoomed-in so match/magnet/snap never span a third of the screen. Level mode keeps 1 — its bands are true 3D distances, part of the demo contract.
+          // Pixel cap on the whole aim-band family (see aimBandScale): 1 at bench range, shrinking zoomed-in so match/magnet/snap never span a third of the screen.
           let band = 1;
           // The slerp-rotated grab anchor of this frame, for the probe: with hold-point pinning the visual center rides at grabOffset only while unrotated.
           let probeAnchor: Vec3 | null = null;
@@ -526,243 +528,221 @@ export function usePartDrag({
             SNAP_DIST_MAX,
             Math.max(SNAP_DIST_MIN, store.settings.snapDistance),
           );
-          // Aim distance to the matched socket's PARK POINT — what the visible magnet ramps ride on. Defaults to bestD (level mode measures true 3D distance and keeps it).
+          // Aim distance to the matched socket's PARK POINT — what the visible magnet ramps ride on. Defaults to bestD.
           let pullD = Infinity;
-          if (store.settings.dragPlane === "level") {
-            // "level" — the on-release engine's mechanism, kept for comparison/demo: plane FIXED at the session target's height, candidates matched by TRUE 3D distance, no hysteresis. Depth can hide a socket here — the multi-height blind spot (wool stool two-height legs, DALFRED screw105251) is intentional to demonstrate.
-            s.planeY = s.basePlaneY;
-            const offB = heldDriver.value;
-            const dragX = p?.[0] ?? s.bakedPos[0] + offB[0] + s.grabOffset[0];
-            const dragY = p?.[1] ?? s.bakedPos[1] + offB[1] + s.grabOffset[1];
-            const dragZ = p?.[2] ?? s.bakedPos[2] + offB[2] + s.grabOffset[2];
-            for (const c of s.candidates) {
-              const d = Math.hypot(
-                dragX - c.matchVisual[0],
-                dragY - c.matchVisual[1],
-                dragZ - c.matchVisual[2],
-              );
-              if (d < bestD) {
-                bestD = d;
-                nearest = c;
-              }
-            }
-            if (nearest && bestD <= APPROACH_RADIUS_M) target = nearest;
-            s.matchedActionId = target?.action.actionId ?? null;
-          } else {
-            // "adaptive" — candidate matching in SCREEN space: the finger's aim is 2D, so depth must never hide a socket. Distances are converted back to world meters at the candidate's depth so the approach/snap radii keep their meaning.
-            const fingerPx = { x: e.absoluteX, y: e.absoluteY - FINGER_LIFT_DP };
-            // Aim is measured to the SEGMENT hole→park, not the park point alone: zoomed in, the park hover pose can project off-screen while the hole is visibly centered — the player aims at what they can see, so any point on the approach line counts (pointToSegmentPx's rationale).
-            const distPx = (c: GroupCandidate & { matchVisual: Vec3; seatVisual?: Vec3 }) => {
-              const spA = worldToScreen(c.seatVisual ?? c.holdPosition);
-              const spB = worldToScreen(c.matchVisual);
-              const one = spA ?? spB;
-              if (!one) return { px: Infinity, mPerPx: 1, inFrame: false, nearFrame: false };
-              const a = spA ?? one;
-              const b = spB ?? one;
-              const inFrame = segmentInFrame(a.x, a.y, b.x, b.y, winW, winH, 0);
-              const nearFrame = inFrame || segmentInFrame(a.x, a.y, b.x, b.y, winW, winH, HOLD_OFFSCREEN_MARGIN_PX);
-              if (!spA || !spB) {
-                return {
-                  px: Math.hypot(fingerPx.x - one.x, fingerPx.y - one.y),
-                  mPerPx: (2 * one.depth * Math.tan((FOV_Y_DEG * Math.PI) / 360)) / winH,
-                  inFrame,
-                  nearFrame,
-                };
-              }
-              const seg = pointToSegmentPx(fingerPx.x, fingerPx.y, spA.x, spA.y, spB.x, spB.y);
-              const depth = spA.depth + (spB.depth - spA.depth) * seg.u;
+          // "adaptive" — candidate matching in SCREEN space: the finger's aim is 2D, so depth must never hide a socket. Distances are converted back to world meters at the candidate's depth so the approach/snap radii keep their meaning.
+          const fingerPx = { x: e.absoluteX, y: e.absoluteY - FINGER_LIFT_DP };
+          // Aim is measured to the SEGMENT hole→park, not the park point alone: zoomed in, the park hover pose can project off-screen while the hole is visibly centered — the player aims at what they can see, so any point on the approach line counts (pointToSegmentPx's rationale).
+          const distPx = (c: GroupCandidate & { matchVisual: Vec3; seatVisual?: Vec3 }) => {
+            const spA = worldToScreen(c.seatVisual ?? c.holdPosition);
+            const spB = worldToScreen(c.matchVisual);
+            const one = spA ?? spB;
+            if (!one) return { px: Infinity, mPerPx: 1, inFrame: false, nearFrame: false };
+            const a = spA ?? one;
+            const b = spB ?? one;
+            const inFrame = segmentInFrame(a.x, a.y, b.x, b.y, winW, winH, 0);
+            const nearFrame = inFrame || segmentInFrame(a.x, a.y, b.x, b.y, winW, winH, HOLD_OFFSCREEN_MARGIN_PX);
+            if (!spA || !spB) {
               return {
-                px: seg.px,
-                mPerPx: (2 * depth * Math.tan((FOV_Y_DEG * Math.PI) / 360)) / winH,
+                px: Math.hypot(fingerPx.x - one.x, fingerPx.y - one.y),
+                mPerPx: (2 * one.depth * Math.tan((FOV_Y_DEG * Math.PI) / 360)) / winH,
                 inFrame,
                 nearFrame,
               };
+            }
+            const seg = pointToSegmentPx(fingerPx.x, fingerPx.y, spA.x, spA.y, spB.x, spB.y);
+            const depth = spA.depth + (spB.depth - spA.depth) * seg.u;
+            return {
+              px: seg.px,
+              mPerPx: (2 * depth * Math.tan((FOV_Y_DEG * Math.PI) / 360)) / winH,
+              inFrame,
+              nearFrame,
             };
-            let nearestPx = Infinity;
-            let nearestMPerPx = 1;
-            // Occlusion gate (layer 1 of socket visibility): a socket whose line of sight from the camera passes through a placed part is hidden — DALFRED's back-leg spots behind the plate from a front view — and is skipped for acquisition exactly like an off-frame one. The nearest skipped-px is remembered so the chip can say WHY nothing matches ("Try turning the camera") instead of hunting silently — the off-frame gate shipped silent and read as a bug. The exemption-based variant that used to live here (receivers and anchor-containing boxes excluded by hand, segmentHitsBox per candidate) was superseded by the sightline-gap rule below and is gone: exemptions made a part transparent to its OWN sockets, so legs snapped through plates from above.
-            const laF = manipulator?.getLookAt();
-            const now = Date.now();
-            // Occluder refresh, throttled: the boxes are world-space so camera motion alone never stales them (the eye above is per-frame), but parts can MOVE mid-drag — a second finger toggling cluster focus hides/shows parts, and the previous part's commit animation can still be easing home when this pickup happened. Burials re-derive with the boxes: each is a measurement against the same list.
-            if (now - s.boxesStamp > OCCLUDER_REFRESH_MS) {
-              s.boxesStamp = now;
-              s.placedBoxes = occluderBoxes(s.placedIds, readLiveBoxes(s.placedIds), partBoxes);
-              for (const c of s.candidates) c.burial = burialDepthM(c.seatVisual, s.placedBoxes);
+          };
+          let nearestPx = Infinity;
+          let nearestMPerPx = 1;
+          // Occlusion gate (layer 1 of socket visibility): a socket whose line of sight from the camera passes through a placed part is hidden — DALFRED's back-leg spots behind the plate from a front view — and is skipped for acquisition exactly like an off-frame one. The nearest skipped-px is remembered so the chip can say WHY nothing matches ("Try turning the camera") instead of hunting silently — the off-frame gate shipped silent and read as a bug. The exemption-based variant that used to live here (receivers and anchor-containing boxes excluded by hand, segmentHitsBox per candidate) was superseded by the sightline-gap rule below and is gone: exemptions made a part transparent to its OWN sockets, so legs snapped through plates from above.
+          const laF = manipulator?.getLookAt();
+          const now = Date.now();
+          // Occluder refresh, throttled: the boxes are world-space so camera motion alone never stales them (the eye above is per-frame), but parts can MOVE mid-drag — a second finger toggling cluster focus hides/shows parts, and the previous part's commit animation can still be easing home when this pickup happened. Burials re-derive with the boxes: each is a measurement against the same list.
+          if (now - s.boxesStamp > OCCLUDER_REFRESH_MS) {
+            s.boxesStamp = now;
+            s.placedBoxes = occluderBoxes(s.placedIds, readLiveBoxes(s.placedIds), partBoxes);
+            for (const c of s.candidates) c.burial = burialDepthM(c.seatVisual, s.placedBoxes);
+          }
+          let blockedPx = Infinity;
+          // Whether any candidate was skipped for being off-frame, and which kind (see the split at the skip).
+          let offFrameOutside = false;
+          let offFrameBehind = false;
+          // The nearest box-blocked candidate this frame — the one socket the player might actually be aiming at through box fat, and so the only one worth a renderer pick.
+          let probeCand: { id: ActionId; sx: number; sy: number; axial: number; euclid: number } | null = null;
+          for (const c of s.candidates) {
+            const d = distPx(c);
+            // Off-frame, split by WHY: a candidate that still projects to a point (finite px) is outside the viewport edges, and pulling the camera back brings it in; one that projects to nothing at all is behind the camera, where zooming out changes nothing and only a turn helps. Recorded before the skip below, for the chip.
+            if (!d.inFrame) {
+              if (Number.isFinite(d.px)) offFrameOutside = true;
+              else offFrameBehind = true;
             }
-            let blockedPx = Infinity;
-            // Whether any candidate was skipped for being off-frame, and which kind (see the split at the skip).
-            let offFrameOutside = false;
-            let offFrameBehind = false;
-            // The nearest box-blocked candidate this frame — the one socket the player might actually be aiming at through box fat, and so the only one worth a renderer pick.
-            let probeCand: { id: ActionId; sx: number; sy: number; axial: number; euclid: number } | null = null;
-            for (const c of s.candidates) {
-              const d = distPx(c);
-              // Off-frame, split by WHY: a candidate that still projects to a point (finite px) is outside the viewport edges, and pulling the camera back brings it in; one that projects to nothing at all is behind the camera, where zooming out changes nothing and only a turn helps. Recorded before the skip below, for the chip.
-              if (!d.inFrame) {
-                if (Number.isFinite(d.px)) offFrameOutside = true;
-                else offFrameBehind = true;
-              }
-              // A socket the player cannot SEE cannot be aimed at — off-frame candidates are skipped for acquisition (a snap must never be earned against an invisible hole; measured: a seat at y=-88 was still inside the capture band near the top edge). The CURRENT match is not acquired here either — it is held through the more generous nearFrame test below, so a mid-drag orbit that nudges the socket just past the edge does not pop the magnet.
-              if (!d.inFrame) continue;
-              // Visibility gate, one rule for every part type: the first surface the sightline meets must be within (the anchor's own burial + slack) of the anchor. Looking AT the socket passes; looking at anything in front of it — another part, or the SAME part's far side — fails. Replaces box/halo sampling (neighbourhood visibility) and the exemption-based line-of-sight test (transparent receivers), both of which armed hidden sockets in play tests.
-              let visStat: string | null = null;
-              if (laF && SOCKET_VISIBILITY_GATE_ENABLED) {
-                const g = sightlineGapM(laF[0], c.seatVisual, s.placedBoxes);
-                visStat = `${(g.gap * 1000).toFixed(0)}/${((c.burial + VIS_GAP_SLACK_M) * 1000).toFixed(0)}mm`;
-                // Second chance (clearPoints): a structural part's whole GHOST BODY at the delivered pose, a fastener's park point. Either passes a seat that is merely grazed — the side view of DALFRED's pin hole, where the plate's rim stands 60mm before the centre of its own top face; a LACK leg hanging in plain sight under the tabletop it bolts into. No burial slack on these: they are points on the PART, not mouths inside a receiver, so a sample that reports itself buried is a sample standing inside something and is exactly what should not count.
-                const seenClear = c.clearPoints.some((p) => sightlineGapM(laF[0], p, s.placedBoxes).gap <= VIS_GAP_SLACK_M);
-                if (seenClear && g.gap > c.burial + VIS_GAP_SLACK_M) visStat += "+ghost";
-                if (g.gap > c.burial + VIS_GAP_SLACK_M && !seenClear) {
-                  // Renderer second opinion (layer 2, pickConfirm.ts): the box can only over-block — AABB ⊇ mesh — so a box-blocked socket earns a pickEntityWithDepth check of what is REALLY frontmost at its pixel. A live confirmed-visible verdict lets the candidate through; anything less keeps the conservative box verdict. The sweep counts 48 sockets reachable only through this path (round plates' corner air, hollow runner channels).
-                  const confirmed = s.pickCache.isConfirmedVisible(c.action.actionId, laF[0], now);
-                  if (!confirmed) {
-                    if (d.px < blockedPx) {
-                      blockedPx = d.px;
-                      blockedBy = (g.by as PartId | null) ?? c.action.partId ?? null;
-                      const sp = worldToScreen(c.seatVisual);
-                      if (sp)
-                        probeCand = {
-                          id: c.action.actionId,
-                          sx: sp.x,
-                          sy: sp.y,
-                          axial: sp.depth,
-                          euclid: Math.hypot(c.seatVisual[0] - laF[0][0], c.seatVisual[1] - laF[0][1], c.seatVisual[2] - laF[0][2]),
-                        };
-                    }
-                    continue;
+            // A socket the player cannot SEE cannot be aimed at — off-frame candidates are skipped for acquisition (a snap must never be earned against an invisible hole; measured: a seat at y=-88 was still inside the capture band near the top edge). The CURRENT match is not acquired here either — it is held through the more generous nearFrame test below, so a mid-drag orbit that nudges the socket just past the edge does not pop the magnet.
+            if (!d.inFrame) continue;
+            // Visibility gate, one rule for every part type: the first surface the sightline meets must be within (the anchor's own burial + slack) of the anchor. Looking AT the socket passes; looking at anything in front of it — another part, or the SAME part's far side — fails. Replaces box/halo sampling (neighbourhood visibility) and the exemption-based line-of-sight test (transparent receivers), both of which armed hidden sockets in play tests.
+            let visStat: string | null = null;
+            if (laF && SOCKET_VISIBILITY_GATE_ENABLED) {
+              const g = sightlineGapM(laF[0], c.seatVisual, s.placedBoxes);
+              visStat = `${(g.gap * 1000).toFixed(0)}/${((c.burial + VIS_GAP_SLACK_M) * 1000).toFixed(0)}mm`;
+              // Second chance (clearPoints): a structural part's whole GHOST BODY at the delivered pose, a fastener's park point. Either passes a seat that is merely grazed — the side view of DALFRED's pin hole, where the plate's rim stands 60mm before the centre of its own top face; a LACK leg hanging in plain sight under the tabletop it bolts into. No burial slack on these: they are points on the PART, not mouths inside a receiver, so a sample that reports itself buried is a sample standing inside something and is exactly what should not count.
+              const seenClear = c.clearPoints.some((p) => sightlineGapM(laF[0], p, s.placedBoxes).gap <= VIS_GAP_SLACK_M);
+              if (seenClear && g.gap > c.burial + VIS_GAP_SLACK_M) visStat += "+ghost";
+              if (g.gap > c.burial + VIS_GAP_SLACK_M && !seenClear) {
+                // Renderer second opinion (layer 2, pickConfirm.ts): the box can only over-block — AABB ⊇ mesh — so a box-blocked socket earns a pickEntityWithDepth check of what is REALLY frontmost at its pixel. A live confirmed-visible verdict lets the candidate through; anything less keeps the conservative box verdict. The sweep counts 48 sockets reachable only through this path (round plates' corner air, hollow runner channels).
+                const confirmed = s.pickCache.isConfirmedVisible(c.action.actionId, laF[0], now);
+                if (!confirmed) {
+                  if (d.px < blockedPx) {
+                    blockedPx = d.px;
+                    blockedBy = (g.by as PartId | null) ?? c.action.partId ?? null;
+                    const sp = worldToScreen(c.seatVisual);
+                    if (sp)
+                      probeCand = {
+                        id: c.action.actionId,
+                        sx: sp.x,
+                        sy: sp.y,
+                        axial: sp.depth,
+                        euclid: Math.hypot(c.seatVisual[0] - laF[0][0], c.seatVisual[1] - laF[0][1], c.seatVisual[2] - laF[0][2]),
+                      };
                   }
-                  visStat += "+pk";
+                  continue;
                 }
-              }
-              if (d.px < nearestPx) {
-                nearestPx = d.px;
-                nearestMPerPx = d.mPerPx;
-                nearest = c;
-                nearestVis = visStat ?? "-";
+                visStat += "+pk";
               }
             }
-            // Fire at most one pick per interval for the socket chosen above. The verdict is judged by the SAME rule as the box gate — first surface within (burial + slack) of the anchor — but measured on rendered geometry via the depth buffer; hits on the held part or a ghost teach nothing (the part in hand hovers over the very pixel it is aiming at) and leave the previous verdict standing. The eye is captured at fire time so the cache's staleness test compares like with like.
-            if (probeCand && laF && s.pickCache.shouldFire(now)) {
-              const firedEye: Vec3 = [laF[0][0], laF[0][1], laF[0][2]];
-              const pending = probePick(probeCand.sx, probeCand.sy);
-              if (pending) {
-                s.pickCache.markFired(now);
-                const pc = probeCand;
-                pending
-                  .then((hit) => {
-                    const inp = { hit, heldSet: s.heldSet, anchorAxialDepthM: pc.axial, anchorEuclidDistM: pc.euclid, nearM: CAMERA_NEAR_M };
-                    const v = judgePick(inp);
-                    s.pickCache.record(pc.id, v, firedEye, Date.now());
-                    if (__DEV__) s.pickCache.lastDiag = `${describePick(inp, v)} st=${s.pickCache.streakOf(pc.id)}`;
-                  })
-                  .catch(() => s.pickCache.record(pc.id, "ignore", firedEye, Date.now()));
-              }
+            if (d.px < nearestPx) {
+              nearestPx = d.px;
+              nearestMPerPx = d.mPerPx;
+              nearest = c;
+              nearestVis = visStat ?? "-";
             }
-            bestD = nearestPx * nearestMPerPx; // world-equivalent aim distance
-            band = aimBandScale(nearestMPerPx, APPROACH_RADIUS_M);
-            // Crowding cap, measured in WORLD metres. Its job: the acceptance radius must never span two sibling sockets, or a near-miss seats into the wrong hole ("I can only snap on the two at the back", measured on DALFRED at the zoom floor). The first cut measured the gap in PIXELS, which is azimuth-dependent: from the home framing two of DALFRED's four leg anchors project nearly on top of each other (depth-aligned pair, ~12 px apart while 15 cm apart in world), so the band was crushed to 0.13 at any zoom and nothing could match or seat at all — the "totally not work" regression. Pixel-coincident-but-depth-separated siblings are exactly what screen-space matching plus hysteresis already tolerate; the seating hazard the cap exists for lives in world space, so the gap is measured there.
-            if (nearest && snapDist > 0) {
-              let gapM = Infinity;
-              for (const c of s.candidates) {
-                if (c.action.actionId === nearest.action.actionId) continue;
-                const g = Math.hypot(
-                  c.matchVisual[0] - nearest.matchVisual[0],
-                  c.matchVisual[1] - nearest.matchVisual[1],
-                  c.matchVisual[2] - nearest.matchVisual[2],
-                );
-                if (g < gapM) gapM = g;
-              }
-              if (Number.isFinite(gapM)) {
-                band = Math.min(band, gapM / (2 * snapDist));
-              }
+          }
+          // Fire at most one pick per interval for the socket chosen above. The verdict is judged by the SAME rule as the box gate — first surface within (burial + slack) of the anchor — but measured on rendered geometry via the depth buffer; hits on the held part or a ghost teach nothing (the part in hand hovers over the very pixel it is aiming at) and leave the previous verdict standing. The eye is captured at fire time so the cache's staleness test compares like with like.
+          if (probeCand && laF && s.pickCache.shouldFire(now)) {
+            const firedEye: Vec3 = [laF[0][0], laF[0][1], laF[0][2]];
+            const pending = probePick(probeCand.sx, probeCand.sy);
+            if (pending) {
+              s.pickCache.markFired(now);
+              const pc = probeCand;
+              pending
+                .then((hit) => {
+                  const inp = { hit, heldSet: s.heldSet, anchorAxialDepthM: pc.axial, anchorEuclidDistM: pc.euclid, nearM: CAMERA_NEAR_M };
+                  const v = judgePick(inp);
+                  s.pickCache.record(pc.id, v, firedEye, Date.now());
+                  if (__DEV__) s.pickCache.lastDiag = `${describePick(inp, v)} st=${s.pickCache.streakOf(pc.id)}`;
+                })
+                .catch(() => s.pickCache.record(pc.id, "ignore", firedEye, Date.now()));
             }
-
-            const current = s.candidates.find(
-              (c) => c.action.actionId === s.matchedActionId,
-            );
-            // The hold test runs on the current match's OWN scale and band: when the only in-approach socket is the held one and every rival is off-frame, the loop above never set nearestMPerPx, and judging the hold by a defaulted scale would drop a perfectly on-screen match.
-            // The current match keeps its own laxer facing threshold: acquisition needs the socket clearly presented, but a match already in hand survives a grazing angle so an orbit through edge-on does not strobe the magnet.
-            const currentD = current ? distPx(current) : null;
-            const currentPx = currentD?.nearFrame ? currentD.px : Infinity;
-            const currentBand = currentD
-              ? aimBandScale(currentD.mPerPx, APPROACH_RADIUS_M)
-              : band;
-            if (
-              current &&
-              currentD &&
-              currentPx * currentD.mPerPx <= APPROACH_RADIUS_M * currentBand
-            ) {
-              target = nearestPx + SWITCH_MARGIN_PX < currentPx ? nearest : current;
-            } else if (nearest && bestD <= APPROACH_RADIUS_M * band) {
-              target = nearest;
+          }
+          bestD = nearestPx * nearestMPerPx; // world-equivalent aim distance
+          band = aimBandScale(nearestMPerPx, APPROACH_RADIUS_M);
+          // Crowding cap, measured in WORLD metres. Its job: the acceptance radius must never span two sibling sockets, or a near-miss seats into the wrong hole ("I can only snap on the two at the back", measured on DALFRED at the zoom floor). The first cut measured the gap in PIXELS, which is azimuth-dependent: from the home framing two of DALFRED's four leg anchors project nearly on top of each other (depth-aligned pair, ~12 px apart while 15 cm apart in world), so the band was crushed to 0.13 at any zoom and nothing could match or seat at all — the "totally not work" regression. Pixel-coincident-but-depth-separated siblings are exactly what screen-space matching plus hysteresis already tolerate; the seating hazard the cap exists for lives in world space, so the gap is measured there.
+          if (nearest && snapDist > 0) {
+            let gapM = Infinity;
+            for (const c of s.candidates) {
+              if (c.action.actionId === nearest.action.actionId) continue;
+              const g = Math.hypot(
+                c.matchVisual[0] - nearest.matchVisual[0],
+                c.matchVisual[1] - nearest.matchVisual[1],
+                c.matchVisual[2] - nearest.matchVisual[2],
+              );
+              if (g < gapM) gapM = g;
             }
-            s.matchedActionId = target?.action.actionId ?? null;
-            // The chip's coaching case: nothing matched, and either every socket is off-frame (the zoom trigger below), the closest thing to the finger was a blocked socket within chip-worthy aim range, the carry cap is biting, or the part itself is behind a placed part. Debounced asymmetrically — ON immediately, OFF only after 300ms clear of every trigger — because the raw condition rides three sharp edges (the 160px rim, match acquisition, grazing sightlines) and read as flicker on device. A real match still silences it the same frame: fit language outranks coaching.
-            // blockedPx alone stopped covering this. It is written only for candidates that survived `if (!d.inFrame) continue`, and scores them by distance to the FINGER, so a part carried in front of a panel with its socket behind that panel produced no blockedPx at all. It also narrowed: the sampling gate that used to feed it (VIS_FRACTION_MIN, ≥30% of seated samples in clear sight) was replaced in "Drag Fix 5" by the one-ray sightline rule plus pickConfirm's renderer second opinion, which is better at matching but calls far less blocked.
-            // partBehind is the case the cap misses: it eases in over several frames rather than at once, the upright and level carries never consult it, the near-plane floors overrule it, and CARRY_CAP_ENABLED can retire it. Threshold is the cap's own clearance, not VIS_GAP_SLACK_M — the question is whether the part sits deeper than the gap the cap would have held it at. Measured on `p` because the visual centre needs probeAnchor, which is not resolved until the pose is written below; with nothing matched the two differ only by the grab offset.
-            const partBehind =
-              !!laF && !!p && sightlineGapM(laF[0], p, s.placedBoxes).gap > CARRY_SURFACE_MARGIN_M;
-            // ...and the guard all four answer to: a camera move is only ever the advice when there is NOTHING on this screen to snap to. nearestPx is written for a candidate only after it has passed both the in-frame test and the visibility gate, so a finite value IS "a socket you could take right now" — and the candidates are one interchangeable group, so any one of them finishes the pickup. Without this, the two carry-side triggers coached a turn for a part merely PASSING OVER the furniture on its way to a socket in plain sight: the cap bites over any placed box whatever the socket is doing, and partBehind rides the cap's own ease-in, so a drag across the assembly lit the chip the whole way (reported from device — "it tells me to turn the camera when I just need to move the part"). What is left for them is the case they were added for, where every socket is off-frame or hidden and blockedPx never gets written at all.
-            const nothingAimable = !Number.isFinite(nearestPx);
-            // The off-frame trigger, and the one case that asks for a DIFFERENT move: every socket sits outside the viewport, which happens when the player has zoomed in past their own work (the sockets are still in front of them — turning only sweeps them along the edge). It answers to the same nothingAimable guard as the rest: with one socket takeable on screen there is nothing to coach, whatever the others are doing. A candidate behind the camera counts as a turn, not a zoom, so a mixed frame prefers the zoom only when nothing is behind: pulling back is the move that reveals both.
-            const zoomBlocked = !target && nothingAimable && offFrameOutside && !offFrameBehind;
-            const rawBlocked =
-              !target && nothingAimable && (zoomBlocked || blockedPx <= AIM_BAND_MAX_PX || carryCapBiting || partBehind);
-            if (rawBlocked) {
-              s.blockedStamp = Date.now();
-              s.blockedKind = zoomBlocked ? "zoom" : "camera";
-              blockedWhy = zoomBlocked ? "zoom" : blockedPx <= AIM_BAND_MAX_PX ? "socket" : carryCapBiting ? "cap" : "behind";
-            }
-            // The 300ms tail keeps whichever reason set it: a chip that changed its advice on the way out would be a third message.
-            aimBlockedNow =
-              !target && (rawBlocked || Date.now() - s.blockedStamp < 300) ? s.blockedKind : null;
-            // The 300ms tail, named apart from the triggers: on those frames nothing is firing and the chip is only being HELD, which a bare reason string would misreport as a live cause.
-            if (aimBlockedNow && !rawBlocked) blockedWhy = "hold";
-            // The SEGMENT distance owns matching only. The VISIBLE pulls (magnet position, rotation ease, fit) measure to the park point itself: on-device, letting the magnet feed on the segment turned the whole hole→park corridor into a capture zone — the screw leapt to the socket the moment the finger crossed the corridor and stayed there while the finger travelled ("it does not ride my finger", phone screenshot with Drop it! stuck on). Screen-invisible consumers (depth blend) keep the segment aim.
-            if (target) {
-              const spT = worldToScreen(target.matchVisual);
-              pullD = spT
-                ? Math.hypot(fingerPx.x - spT.x, fingerPx.y - spT.y) *
-                  ((2 * spT.depth * Math.tan((FOV_Y_DEG * Math.PI) / 360)) / winH)
-                : Infinity;
-            }
-            // Ease the drag plane toward the matched socket's height (multi-height groups); slides the part ALONG the finger's view ray, so it is invisible on screen. Same hold-point anchoring as the session plane.
-            const wantY = target
-              ? target.position[1] +
-                s.grabOffset[1] +
-                parkShiftFor(furniture.parts[target.action.partId!])[1]
-              : s.basePlaneY;
-            // Only the horizontal plane has a height to ease. On the upright plane the finger owns
-            // world-Y directly, and moving the plane under it would fight the drag.
-            if (!s.uprightAnchor) s.planeY += (wantY - s.planeY) * 0.25;
-            // Socket-depth policy — the second half of the on-ray contract: the plane owns depth only while it is trustworthy. Near a matched socket the depth eases to the point on the finger's RAY nearest that socket — screen-invisible (movement along the ray never moves the part on screen), but it swaps a grazing plane's metres-per-pixel runaway for the socket's own depth, so the snap window is pixels of AIM rather than pixels of tremor. The aim distance is recomputed for the CHOSEN target (hysteresis can keep `current` while bestD measured the rival). Upright parts skip it: their anchor already pins depth.
-            if (!s.uprightAnchor) {
-              const la = manipulator?.getLookAt();
-              if (la) {
-                frameRay = screenRay(
-                  { eye: la[0], center: la[1], up: la[2] },
-                  FOV_Y_DEG,
-                  winW,
-                  winH,
-                  e.absoluteX,
-                  e.absoluteY - FINGER_LIFT_DP,
-                );
-              }
-              if (target) {
-                const dT = distPx(target);
-                depthAim = { d: dT.px * dT.mPerPx };
-                s.depthTarget = target.matchVisual;
-              }
-              // Re-reference the carry depth for the NEXT frame (SOCKET_DEPTH_CARRY_ENABLED). The matched socket owns it while there is one, the nearest candidate otherwise — so the part is at socket depth all the way in, not only once it matches. Kept on the session rather than recomputed at the carry site because the carry runs before the matcher; the resulting one-frame lag only shows if the aim crosses between sockets at different depths, and a stale value is still a socket's depth rather than the bounding sphere's.
-              const depthRef = target ?? nearest;
-              if (depthRef) {
-                const spD = worldToScreen(depthRef.seatVisual ?? depthRef.holdPosition);
-                if (spD) s.socketDepth = spD.depth;
-              }
+            if (Number.isFinite(gapM)) {
+              band = Math.min(band, gapM / (2 * snapDist));
             }
           }
 
-          // Level mode (and any path that didn't set a park-point pull) keeps the classic single distance for the ramps.
+          const current = s.candidates.find(
+            (c) => c.action.actionId === s.matchedActionId,
+          );
+          // The hold test runs on the current match's OWN scale and band: when the only in-approach socket is the held one and every rival is off-frame, the loop above never set nearestMPerPx, and judging the hold by a defaulted scale would drop a perfectly on-screen match.
+          // The current match keeps its own laxer facing threshold: acquisition needs the socket clearly presented, but a match already in hand survives a grazing angle so an orbit through edge-on does not strobe the magnet.
+          const currentD = current ? distPx(current) : null;
+          const currentPx = currentD?.nearFrame ? currentD.px : Infinity;
+          const currentBand = currentD
+            ? aimBandScale(currentD.mPerPx, APPROACH_RADIUS_M)
+            : band;
+          if (
+            current &&
+            currentD &&
+            currentPx * currentD.mPerPx <= APPROACH_RADIUS_M * currentBand
+          ) {
+            target = nearestPx + SWITCH_MARGIN_PX < currentPx ? nearest : current;
+          } else if (nearest && bestD <= APPROACH_RADIUS_M * band) {
+            target = nearest;
+          }
+          s.matchedActionId = target?.action.actionId ?? null;
+          // The chip's coaching case: nothing matched, and either every socket is off-frame (the zoom trigger below), the closest thing to the finger was a blocked socket within chip-worthy aim range, the carry cap is biting, or the part itself is behind a placed part. Debounced asymmetrically — ON immediately, OFF only after 300ms clear of every trigger — because the raw condition rides three sharp edges (the 160px rim, match acquisition, grazing sightlines) and read as flicker on device. A real match still silences it the same frame: fit language outranks coaching.
+          // blockedPx alone stopped covering this. It is written only for candidates that survived `if (!d.inFrame) continue`, and scores them by distance to the FINGER, so a part carried in front of a panel with its socket behind that panel produced no blockedPx at all. It also narrowed: the sampling gate that used to feed it (VIS_FRACTION_MIN, ≥30% of seated samples in clear sight) was replaced in "Drag Fix 5" by the one-ray sightline rule plus pickConfirm's renderer second opinion, which is better at matching but calls far less blocked.
+          // partBehind is the case the cap misses: it eases in over several frames rather than at once, the upright and level carries never consult it, the near-plane floors overrule it, and CARRY_CAP_ENABLED can retire it. Threshold is the cap's own clearance, not VIS_GAP_SLACK_M — the question is whether the part sits deeper than the gap the cap would have held it at. Measured on `p` because the visual centre needs probeAnchor, which is not resolved until the pose is written below; with nothing matched the two differ only by the grab offset.
+          const partBehind =
+            !!laF && !!p && sightlineGapM(laF[0], p, s.placedBoxes).gap > CARRY_SURFACE_MARGIN_M;
+          // ...and the guard all four answer to: a camera move is only ever the advice when there is NOTHING on this screen to snap to. nearestPx is written for a candidate only after it has passed both the in-frame test and the visibility gate, so a finite value IS "a socket you could take right now" — and the candidates are one interchangeable group, so any one of them finishes the pickup. Without this, the two carry-side triggers coached a turn for a part merely PASSING OVER the furniture on its way to a socket in plain sight: the cap bites over any placed box whatever the socket is doing, and partBehind rides the cap's own ease-in, so a drag across the assembly lit the chip the whole way (reported from device — "it tells me to turn the camera when I just need to move the part"). What is left for them is the case they were added for, where every socket is off-frame or hidden and blockedPx never gets written at all.
+          const nothingAimable = !Number.isFinite(nearestPx);
+          // The off-frame trigger, and the one case that asks for a DIFFERENT move: every socket sits outside the viewport, which happens when the player has zoomed in past their own work (the sockets are still in front of them — turning only sweeps them along the edge). It answers to the same nothingAimable guard as the rest: with one socket takeable on screen there is nothing to coach, whatever the others are doing. A candidate behind the camera counts as a turn, not a zoom, so a mixed frame prefers the zoom only when nothing is behind: pulling back is the move that reveals both.
+          const zoomBlocked = !target && nothingAimable && offFrameOutside && !offFrameBehind;
+          const rawBlocked =
+            !target && nothingAimable && (zoomBlocked || blockedPx <= AIM_BAND_MAX_PX || carryCapBiting || partBehind);
+          if (rawBlocked) {
+            s.blockedStamp = Date.now();
+            s.blockedKind = zoomBlocked ? "zoom" : "camera";
+            blockedWhy = zoomBlocked ? "zoom" : blockedPx <= AIM_BAND_MAX_PX ? "socket" : carryCapBiting ? "cap" : "behind";
+          }
+          // The 300ms tail keeps whichever reason set it: a chip that changed its advice on the way out would be a third message.
+          aimBlockedNow =
+            !target && (rawBlocked || Date.now() - s.blockedStamp < 300) ? s.blockedKind : null;
+          // The 300ms tail, named apart from the triggers: on those frames nothing is firing and the chip is only being HELD, which a bare reason string would misreport as a live cause.
+          if (aimBlockedNow && !rawBlocked) blockedWhy = "hold";
+          // The SEGMENT distance owns matching only. The VISIBLE pulls (magnet position, rotation ease, fit) measure to the park point itself: on-device, letting the magnet feed on the segment turned the whole hole→park corridor into a capture zone — the screw leapt to the socket the moment the finger crossed the corridor and stayed there while the finger travelled ("it does not ride my finger", phone screenshot with Drop it! stuck on). Screen-invisible consumers (depth blend) keep the segment aim.
+          if (target) {
+            const spT = worldToScreen(target.matchVisual);
+            pullD = spT
+              ? Math.hypot(fingerPx.x - spT.x, fingerPx.y - spT.y) *
+                ((2 * spT.depth * Math.tan((FOV_Y_DEG * Math.PI) / 360)) / winH)
+              : Infinity;
+          }
+          // Ease the drag plane toward the matched socket's height (multi-height groups); slides the part ALONG the finger's view ray, so it is invisible on screen. Same hold-point anchoring as the session plane.
+          const wantY = target
+            ? target.position[1] +
+              s.grabOffset[1] +
+              parkShiftFor(furniture.parts[target.action.partId!])[1]
+            : s.basePlaneY;
+          // Only the horizontal plane has a height to ease. On the upright plane the finger owns
+          // world-Y directly, and moving the plane under it would fight the drag.
+          if (!s.uprightAnchor) s.planeY += (wantY - s.planeY) * 0.25;
+          // Socket-depth policy — the second half of the on-ray contract: the plane owns depth only while it is trustworthy. Near a matched socket the depth eases to the point on the finger's RAY nearest that socket — screen-invisible (movement along the ray never moves the part on screen), but it swaps a grazing plane's metres-per-pixel runaway for the socket's own depth, so the snap window is pixels of AIM rather than pixels of tremor. The aim distance is recomputed for the CHOSEN target (hysteresis can keep `current` while bestD measured the rival). Upright parts skip it: their anchor already pins depth.
+          if (!s.uprightAnchor) {
+            const la = manipulator?.getLookAt();
+            if (la) {
+              frameRay = screenRay(
+                { eye: la[0], center: la[1], up: la[2] },
+                FOV_Y_DEG,
+                winW,
+                winH,
+                e.absoluteX,
+                e.absoluteY - FINGER_LIFT_DP,
+              );
+            }
+            if (target) {
+              const dT = distPx(target);
+              depthAim = { d: dT.px * dT.mPerPx };
+              s.depthTarget = target.matchVisual;
+            }
+            // Re-reference the carry depth for the NEXT frame (SOCKET_DEPTH_CARRY_ENABLED). The matched socket owns it while there is one, the nearest candidate otherwise — so the part is at socket depth all the way in, not only once it matches. Kept on the session rather than recomputed at the carry site because the carry runs before the matcher; the resulting one-frame lag only shows if the aim crosses between sockets at different depths, and a stale value is still a socket's depth rather than the bounding sphere's.
+            const depthRef = target ?? nearest;
+            if (depthRef) {
+              const spD = worldToScreen(depthRef.seatVisual ?? depthRef.holdPosition);
+              if (spD) s.socketDepth = spD.depth;
+            }
+          }
+
+          // Any path that didn't set a park-point pull keeps the classic single distance for the ramps.
           if (!Number.isFinite(pullD)) pullD = bestD;
           if (p) {
             // The depth blend eases over TIME toward the aim-derived weight instead of taking it outright each frame. Taking it outright made depth a direct function of where the finger IS, and near a socket that function is steep and non-monotonic — measured on a zoomed DALFRED leg the depth ran 0.120 -> 0.462 -> 0.120 m as the aim crossed the socket band. Since the part's body hangs off the carry point by a fixed WORLD offset (a leg's whole length, now that the hold point is its real joint) and its screen offset is that over depth, a depth moving that fast moved the body faster than the finger — and backwards on the way out of the band, at a measured gain of -0.30. Easing decouples depth from the aim's moment-to-moment value, so it can no longer race the finger.
@@ -855,7 +835,7 @@ export function usePartDrag({
             s.bakedPos[1] + off[1] - s.hoverLift,
             s.bakedPos[2] + off[2],
           ];
-          // Acceptance under the no-plane carry measures the PLAYER's error — 2D aim to the delivery point — not the transient world distance. The depth glide is SYSTEM-owned and finishes on its own clock; judging fit on the world gap meant a release with the finger dead on the socket bounced back to the tray purely because the glide had frames left (emulator run: 3 px of aim, 0.3 m of unfinished depth, fit stuck at held). Level mode and upright parts keep computeFit: their held depth is real, not a glide in progress.
+          // Acceptance under the no-plane carry measures the PLAYER's error — 2D aim to the delivery point — not the transient world distance. The depth glide is SYSTEM-owned and finishes on its own clock; judging fit on the world gap meant a release with the finger dead on the socket bounced back to the tray purely because the glide had frames left (emulator run: 3 px of aim, 0.3 m of unfinished depth, fit stuck at held). Upright parts keep computeFit: their held depth is real, not a glide in progress.
           const fs =
             target && depthAim
               ? // Acceptance arms on the SEGMENT aim (depthAim.d): the player aims at the HOLE they can see, and the park/stage delivery pose sits a fixed world offset from it along the part's axis — measuring the green to the delivery point (pullD) made that offset the required aim error, negligible zoomed out and 100+px zoomed in ("must aim lower than the target to snap"). The MAGNET stays on pullD: position pull keyed to the segment is the corridor-capture regression; a state flag keyed to it is not, and the release animation carries the part in from wherever it visually hovers.
@@ -1037,8 +1017,7 @@ export function usePartDrag({
       onPanMove,
       onPanEnd,
       // The gesture closure captures this, so a settings change has to rebuild it.
-      dragPlaneSetting,
-      jointAnchors,
+      jointGeom,
     ],
   );
 

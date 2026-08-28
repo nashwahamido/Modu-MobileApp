@@ -1,5 +1,8 @@
+// The vocabulary every other core file is written in: ids, part definitions, actions, and the furniture bundle that carries them. See README for the fields whose presence changes how a step behaves.
+
 import type { ComponentIndex } from "@/src/game/core/model/components";
 
+// --------------- math
 export type Vec3 = readonly [number, number, number];
 export type Quat = readonly [number, number, number, number];
 
@@ -10,6 +13,8 @@ export interface PartPose {
 
 export type AssetSrc = number | { uri: string };
 
+// --------------- ids
+// Branded, so one id can never be passed where another is meant. Cast through ids.ts.
 declare const __idBrand: unique symbol;
 type Brand<K extends string> = { readonly [__idBrand]: K };
 export type PartId = string & Brand<"PartId">;
@@ -23,8 +28,9 @@ export type FurnitureId = string & Brand<"FurnitureId">;
 export type BrandId = "IKEA" | "Others";
 export type ToolId = "allenkey" | "mallet" | "hammer" | "screwdriver" | "hand";
 
+// --------------- look axes (each independent of the others)
 export type ThemeId = "light" | "dark" | "high_contrast";
-/** Which hand drives the build. NOT an accessibility SETTING: applyProfile replaces the settings object wholesale, so a handedness stored there would reset every time the player changed avatar. It sits beside theme and renderStyle as its own axis, for the same reason those do — it is a fact about the player, not a preference the profile has an opinion about. */
+/** Which hand drives the build. NOT an accessibility setting — see README. */
 export type Handedness = "left" | "right";
 /** How the furniture is rendered. Two mechanisms, one axis:
  *    realistic | cozy | cartoon   → the GLB is the look (Furniture.styleModels)
@@ -37,13 +43,16 @@ export type RenderStyleId =
   | "illustrated";
 export type BackdropId = "grid" | "clear" | "calm" | "craft" | "garden";
 
+// --------------- how the task is gated
 export type AssemblyMode = "free" | "guide" | "strict";
 export type TextLevel = "standard" | "simple";
 
+// --------------- catalogue / HUD furniture
 export interface BrandInfo {
   name: string;
   logo: number;
 }
+// One image per theme; only `light` is required, the others fall back to it.
 export interface ThumbSet {
   light: AssetSrc;
   dark?: AssetSrc;
@@ -54,91 +63,84 @@ export type ClusterThumbMap = Record<ClusterId, ThumbSet>;
 export interface ToolInfo {
   label: string;
   icon: ThumbSet;
-  asset?: AssetSrc;
+  asset?: AssetSrc; // the 3D model, for when the tool is shown working
 }
 export type ToolMap = Record<ToolId, ToolInfo>;
 
+// --------------- parts
 export type PartType = "structural" | "fastener";
 
+// How a placement is DRIVEN once the part is parked at its seat.
 export type JoinKind = "slide" | "screw" | "press";
 
 export type FastenerKind = "threaded" | "pin" | "cam" | "secured";
 
+// What every part has, fastener or not.
 export interface PartCore {
   partId: PartId;
-  group: GroupId;
-  meshName: string;
+  group: GroupId; // the tray card parts share — identical legs are one card
+  meshName: string; // the node in the GLB
   type: PartType;
   cluster: ClusterId;
-  pose: PartPose;
-  /** World-space offset from pose.position to the mesh bounds center. */
-  visualCenterOffset?: Vec3;
-  /** World-space offset from pose.position to the TOOL's contact point for this part's tighten (ToolModel) — for when the node origin is not where the tool works (EKET suspension bracket: the origin sits on the plate, the screw hole at the circular boss ~1cm over). */
-  toolAnchor?: Vec3;
+  pose: PartPose; // the assembled (baked) pose; everything else derives from it
+  visualCenterOffset?: Vec3; // pose.position → the mesh bounds centre, world-space
+  toolAnchor?: Vec3; // pose.position → where the TOOL works, when that is not the origin
   tool?: ToolId;
 }
+
 export interface StructuralFields {
-  directJoins?: readonly PartId[];
-  slideJoins?: readonly PartId[];
-  screwJoins?: readonly PartId[];
-  seed?: boolean;
-  unstable?: boolean;
-  placeDir?: Vec3;
-  /** Park distance (m) for this part's slide/press staging, overriding the engagement defaults — small fittings park a few cm off their seat, not the panel-scale backoff. */
-  parkBackoff?: number;
-  /** World-space offset (m) from this part's assembled pose to its SUB-ASSEMBLY rest pose. Presence of this field is what makes a part staged: a `stagePart` beat is generated ahead of its placement, hardware attached to it may be fitted while it rests out there, and a second placement gesture carries the finished sub-assembly home (see model/staging.ts). */
-  stageOffset?: Vec3;
-  /** Unit direction of the keyhole LOCK travel — the short second shove after a press-fit's bolts enter their slots (EKET side↔top: press in along placeDir, then push down). Presence makes the press placement TWO-PHASE: the part parks backed off along BOTH legs, the press taps close the placeDir leg to the hooked pose, then a short drag along lockDir seats it and commits (HookPressControl). */
-  lockDir?: Vec3;
-  /** Meters of the lockDir travel; defaults to engagement.LOCK_TRAVEL_M. */
-  lockTravel?: number;
-  /** Force a plain snap placement even when a press/screw partner is already placed — the part just clicks home at drop with no drive gesture (EKET's suspension cover pushes over its bracket in the same motion that places it). */
-  dropOn?: boolean;
-  /** Authored override for this part's drag hold/aim anchor, world-space at baked pose. Replaces the part's RESOLVED anchor outright (the value the multi-joint centroid would produce), not any individual frame — authoring is per-part while frames are per-liaison. None authored today: all four shipped furnitures derive cleanly. */
-  jointAnchor?: Vec3;
+  directJoins?: readonly PartId[]; // parts this one simply touches
+  slideJoins?: readonly PartId[]; // parts it must glide into
+  screwJoins?: readonly PartId[]; // parts it threads into
+  seed?: boolean; // seats first and joins nothing
+  unstable?: boolean; // cannot stand until a partner holds it
+  placeDir?: Vec3; // authored travel direction, overriding the derived one
+  parkBackoff?: number; // park distance (m), overriding the engagement default
+  stageOffset?: Vec3; // assembled pose → SUB-ASSEMBLY rest pose; presence makes the part staged
+  lockDir?: Vec3; // keyhole LOCK travel; presence makes the press two-phase
+  lockTravel?: number; // meters of that travel; defaults to LOCK_TRAVEL_M
+  dropOn?: boolean; // force a plain snap, no drive gesture
+  jointAnchor?: Vec3; // authored override for the drag hold/aim anchor. None authored today
 }
+
 export interface FastenerFields {
   fastenerKind?: FastenerKind;
-  screwMover?: PartId;
-  attached?: readonly PartId[];
-  engageDir?: Vec3;
-  /** GENERATED world-space offset from pose.position to the centre of the HEAD FACE (the mesh's local −Z bbox face — the loose/head side the extractor derives engageDir from). ToolModel projects it onto the live tool axis so the tool contacts the head instead of hovering TIP_GAP off the part ORIGIN — which only looked right when a screw's half-length happened to equal the old 12mm gap (EKET ~24mm screws) and buried the driver 12–18mm into BEKVÄM's 47.5/60mm shafts. Projection (not the raw point) keeps it harmless where an authored engageDir override redirects the axis away from the mesh frame (EKET cams); an authored `toolAnchor` overrides it outright. */
-  headOffset?: Vec3;
-  /** Meters this fastener sits RETRACTED into its carrier at insert (−engageDir), instead of the default proud loose pose (+engageDir). Its `drawTurn` tighten then DRAWS it back OUT to flush while turning — the EKET stabiliser-rod dowels: pressed into the rod, then drawn into the slider hole and quarter-turned to lock. */
-  insertRetract?: number;
-  /** Opt-in to the 3-phase fastener lifecycle: meters the fastener sits at its STAGE pose (fully outside the hole, +engageDir) when first dropped from the tray. Presence splits the fastener into placeFastener (drag → stage) + insertFastener (PRESS gesture → loose) + tightenFastener (tool → flush). Absent ⇒ the classic 2-phase drag-to-loose insert + tighten. */
-  insertStage?: number;
-  /** Meters the LOOSE pose sits proud of flush (+engageDir); defaults to the global LOOSE_OFFSET_M. 0 = the insert lands FLUSH and the tighten happens in place — a cam lock drops fully into its housing and only TURNS (EKET's rear cams + pins, whose 2cm default proud poked out past the cabinet rear). */
-  insertProud?: number;
+  screwMover?: PartId; // the part that TURNS, if it is not the fastener
+  attached?: readonly PartId[]; // what this fastener holds together
+  engageDir?: Vec3; // unit direction it travels as it goes in
+  headOffset?: Vec3; // GENERATED: pose.position → the centre of the head face
+  insertRetract?: number; // meters it sits RETRACTED into its carrier at insert
+  insertStage?: number; // opt-in to the 3-phase lifecycle: meters it waits outside the hole
+  insertProud?: number; // meters the LOOSE pose sits proud of flush; 0 = insert lands flush
 }
 export interface PartDef extends PartCore, StructuralFields, FastenerFields {}
 
-/** The same box kept in the part's OWN frame: `axes` are the frame's unit directions in world space, `half` the half-extents along them, `center` in world. Tight where the world-aligned min/max is a slab of air — every splay in these GLBs lives in the node rotation, not the vertices (DALFRED leg: a 35mm stick whose AABB is a 192mm slab; BEKVAM leg: a 22mm plank in a 64mm AABB) — so the visibility gate measures sightlines and burial against this when present. AABB ⊇ OBB ⊇ mesh: still conservative, just far less wasteful. */
+// --------------- derived geometry (generated, never authored — all optional, all with a fallback)
+// The same box in the part's OWN frame: `axes` are the frame's unit directions in world space.
 export interface OrientedBox {
   center: Vec3;
   axes: [Vec3, Vec3, Vec3];
   half: Vec3;
 }
 
-/** A part's world-space axis-aligned bounds at its BAKED pose. Harvested from Filament at model load; the unit the joint derivation works in. `obb` is optional so every min/max consumer (joint frames, hold reach) keeps working unchanged. */
+// A part's world AABB at its BAKED pose, from boxes.gen.ts (derive-boxes).
 export interface PartBox {
   min: Vec3;
   max: Vec3;
-  obb?: OrientedBox;
+  obb?: OrientedBox; // optional, so every min/max consumer keeps working
 }
 
-/** Where two parts actually meet, derived per liaison at baked pose. `anchor` is the shared world contact point; the per-endpoint offsets are what the drag uses as hold/aim points, each clamped into its own part's bounds. */
+// Where two parts actually meet, derived per liaison at baked pose.
 export interface JointFrame {
   liaison: LiaisonId;
-  anchor: Vec3;
-  offsetA: Vec3;
+  anchor: Vec3; // the shared world contact point
+  offsetA: Vec3; // the drag's hold/aim point on A, clamped into A's bounds
   offsetB: Vec3;
-  /** How the anchor was found: a direct box overlap, or via a fastener bridging an air gap. */
-  via: "direct" | "bridge";
-  /** Unit direction the contact FACES, from part A's surface toward part B — the thin axis of the direct overlap slab (a contact is a thin sheet, and its normal is the slab's smallest dimension), or the center-to-center line for a bridged joint. Facing is what visibility gating needs: a socket whose facing points away from the camera is on the far side of its own part, invisible no matter what occludes it. */
-  facingA: Vec3;
+  via: "direct" | "bridge"; // a box overlap, or a fastener across an air gap
+  facingA: Vec3; // the direction the contact FACES, from A toward B — what visibility gating needs
 }
 
+// The authored shape, before ids.ts brands the strings.
 export type RawPartDef = Omit<
   PartDef,
   | "partId"
@@ -158,35 +160,33 @@ export type RawPartDef = Omit<
   screwJoins?: readonly string[];
 };
 
+// --------------- liaisons: one connection between two parts
 export interface Liaison {
   id: LiaisonId;
   a: PartId;
   b: PartId;
   kind?: JoinKind;
-  mover?: PartId;
+  mover?: PartId; // which end travels; the other is held
 }
 export type LiaisonMap = Record<LiaisonId, Liaison>;
 
-/** Exit-sweep blockers per structural part, per cardinal direction — GENERATED per furniture (helper-scripts/derive-sweep.mts) from final-pose geometry: the parts whose bodies obstruct this part's exit corridor along the key direction within its bounded park travel (cluster-scoped; the mover is eroded 4mm for fit clearance; fasteners excluded — their sequencing is the home lane). A missing key means the corridor is clear. Consumed by engagement.travelAxis for parts with NO authored placeDir: an entry travel `t` is order-viable when every already-placed blocker of the reverse corridor `-t` is one of the part's own joint partners. */
+// GENERATED exit-sweep blockers: who obstructs a part's exit corridor along each direction. A missing key means clear. Consumed by engagement.travelAxis — see README.
 export type SweepDirKey = "+x" | "-x" | "+y" | "-y" | "+z" | "-z";
 export type SweepMap = Record<PartId, Partial<Record<SweepDirKey, readonly PartId[]>>>;
 
+// --------------- clusters: the sub-assemblies a build is split into
 export interface ClusterDef {
   id: ClusterId;
   label: string;
   requires?: readonly ClusterId[];
-  /** The combine root: seats first and joins nothing. Exactly one cluster per furniture may carry it. A cluster that slideJoins another is never a seed. */
-  seed?: boolean;
-  /** Clusters this one slides onto at combine time — the cluster-level counterpart of a part's slideJoins. */
-  slideJoins?: readonly ClusterId[];
-  /** Unit direction this cluster TRAVELS as it seats (authored; a runner's axis is not derivable from poses). */
-  placeDir?: Vec3;
-  /** How far off its seat this cluster parks before the drive gesture; defaults to SLIDE_BACKOFF_M. */
-  parkBackoff?: number;
-  /** How the drive gesture seats a slide-joined cluster: absent = a straight glide (SlideControl); "screw" = it threads in — the dial spins the whole cluster about placeDir as it sinks (DALFRED's seat screwing onto the base). */
-  driveMotion?: "screw";
+  seed?: boolean; // the combine root: seats first, joins nothing. One per furniture
+  slideJoins?: readonly ClusterId[]; // clusters this one slides onto at combine time
+  placeDir?: Vec3; // the direction it TRAVELS as it seats. Authored: not derivable from poses
+  parkBackoff?: number; // how far off its seat it parks; defaults to SLIDE_BACKOFF_M
+  driveMotion?: "screw"; // absent = a straight glide; "screw" = it threads in, spinning about placeDir
 }
 
+// --------------- actions: one beat of the build each
 export type ActionType =
   | "stagePart"
   | "placePart"
@@ -198,7 +198,7 @@ export type ActionType =
   | "combineClusters"
   | "verify";
 
-/** How a tighten/drive LOOKS. Resolved from HARDWARE.motion ?? the kind default. `press` is a SINGLE bare-hand push that seats the fastener in one go (EKET's rear cam locks + pins — TapControl's one-tap variant). `drawTurn` is a single tighten beat that DRAWS the fastener out along its axis into the receiver then quarter-turns it to lock (EKET stabiliser-rod dowels). */
+/** How a tighten/drive LOOKS, from HARDWARE.motion ?? the kind default. `press` is one bare-hand push that seats the fastener outright; `drawTurn` draws it out along its axis into the receiver, then quarter-turns it to lock. */
 export type DriveMotion = "spin" | "turn" | "strike" | "press" | "drawTurn";
 
 export interface AssemblyAction {
@@ -210,18 +210,20 @@ export interface AssemblyAction {
   cluster?: ClusterId;
   tool?: ToolId;
   motion?: DriveMotion;
-  requires: readonly ActionId[];
-  requiresAny?: readonly ActionId[];
-  gate?: string;
+  requires: readonly ActionId[]; // every one must be done
+  requiresAny?: readonly ActionId[]; // any one will do
+  gate?: string; // a named predicate in Furniture.gates, for what those two cannot say
 }
 
 export type Gate = (done: ReadonlySet<ActionId>) => boolean;
 
+// `order` is assigned when the recipe is built, so authoring never has to count.
 export type DraftAction = Omit<AssemblyAction, "order">;
 
+// --------------- words shown to the player
 export interface InstructionContent {
   text?: string;
-  simpleText?: string;
+  simpleText?: string; // used when settings.textLevel is "simple"
   steps?: readonly string[];
 }
 
@@ -230,41 +232,39 @@ export type InstructionSet = Record<ActionId, InstructionContent>;
 export interface LabelSet {
   standard: string;
   simple?: string;
-  audio?: number;
+  audio?: number; // the spoken clip for this label
 }
 export type LabelMap = Record<GroupId, LabelSet>;
 
-/** One rigid group of a telescoping mechanism and how far it travels, as a fraction of the full pull-out (frame 0 — omitted; middle ½; carriage, clip and the drawer box 1). Levels animate one after another. */
+// --------------- the drawer beat (EKET)
+// One rigid group of the telescope and how far it travels, as a fraction of the full pull-out. Levels animate one after another.
 export interface PushOpenGroup {
   level: string;
   ratio: number;
   parts: readonly PartId[];
 }
-/** The telescoping drawer motion: which parts telescope, along which world axis, how far. `testActionIds` gives each level its own interactive test beat (the player drags the drawer out and home); `beatActionId` instead plays the whole open/close as a passive tween on that one beat's swipe — author one or the other. */
+// Which parts telescope, along which world axis, how far.
 export interface PushOpenSpec {
   axis: Vec3;
-  /** Full open travel of the drawer, in meters. */
-  distance: number;
-  /** How far the push-latch spring ejects the drawer on a press, in meters (the test beat's tap-to-pop). */
-  popDistance?: number;
-  beatActionId?: string;
-  /** level → the actionId of that level's drag-out-to-test beat. */
-  testActionIds?: Readonly<Record<string, string>>;
+  distance: number; // full open travel, in meters
+  popDistance?: number; // how far the push-latch spring ejects it on a press
+  beatActionId?: string; // plays the whole open/close as a passive tween on one beat
+  testActionIds?: Readonly<Record<string, string>>; // level → its own drag-out-to-test beat. Author this or beatActionId, not both
   groups: readonly PushOpenGroup[];
 }
 
-/** A set of bodies the player handles as ONE object: one tray card, one drag, one placement gesture. The bodies keep their own actions, poses and engagements — a component is a PRESENTATION unit, not a physical one. */
+// --------------- components: several bodies the player handles as one
+// One tray card, one drag, one gesture. The bodies keep their own actions and poses — a component is a PRESENTATION unit, not a physical one.
 export interface ComponentDef {
   id: ComponentId;
   label: LabelSet;
-  /** Every body the gesture places, INCLUDING the lead. Must be ≥2. */
-  bodies: readonly PartId[];
-  /** The body whose place action the gesture drives; siblings ride its completion. */
-  lead: PartId;
+  bodies: readonly PartId[]; // every body the gesture places, INCLUDING the lead. Must be ≥2
+  lead: PartId; // the body whose place action the gesture drives; siblings ride its completion
   thumb?: ThumbSet;
 }
 export type ComponentMap = Record<ComponentId, ComponentDef>;
 
+// --------------- materials
 export interface MaterialParams {
   baseColor?: Vec3;
   emissive?: Vec3;
@@ -274,24 +274,18 @@ export interface MaterialParams {
   materialId?: string;
 }
 export interface RenderStyle {
-  /** Custom Filament material this look renders with. The DEFAULT per look lives in
-   *  scene/shaders.ts (STYLE_SHADER); set this only to override for one furniture —
-   *  e.g. a build whose GLB already looks hand-drawn opting out of the ink pass. */
-  shader?: "off" | "toon" | "ink";
+  shader?: "off" | "toon" | "ink"; // per-furniture override; the default per look is STYLE_SHADER in scene/shaders.ts
   material?: Record<string, MaterialParams>;
 }
 export type StyleSet = Partial<Record<RenderStyleId, RenderStyle>>;
 
-// What the BUNDLE knows about a furniture: its id, its artwork, and the counts derived from the recipe. Everything a human authors — name, brand, type, duration, link — lives in item_build and is read through the catalogue store, so it can be edited without shipping a build.
+// --------------- the furniture bundle
+// What the BUNDLE knows: its id, its artwork, and counts derived from the recipe. Everything a human authors — name, brand, type, duration, link — lives in item_build and is read through the catalogue store.
 export interface FurnitureMeta {
   id: FurnitureId;
   thumbnail: ThumbSet;
-  /** Catalogue art per finish, keyed by the item_variants `variation` string. Absent, or a key with
-   *  no art, means the catalogue shows no finish arrow for this furniture — so a variation declared
-   *  in the table before its artwork ships degrades to the plain tile rather than a broken image. */
-  variantThumbnails?: Record<string, ThumbSet>;
-  /** Assembly mode this furniture STARTS in, overriding the player's profile mode (PROFILE_MODE) when the build is loaded. A DEFAULT only: the player can still switch mode in the settings panel, and their switch survives — it is autosaved with the build and restored by applyBuild, which runs after loadFurniture. Absent = the player's own mode, unchanged. */
-  mode?: AssemblyMode;
+  variantThumbnails?: Record<string, ThumbSet>; // catalogue art per finish, keyed by the item_variants `variation`; missing art degrades to the plain tile
+  mode?: AssemblyMode; // the mode this build OPENS in, outranking PROFILE_MODE. A default only — a save beats it (README)
   partCount: number;
   stageCount: number;
   stepCount: number;
@@ -307,23 +301,17 @@ export interface Furniture {
   clusters?: Record<ClusterId, ClusterDef>;
   thumbs: ThumbMap;
   clusterThumbs?: ClusterThumbMap;
-  /** Sub-assembly art per finish, keyed exactly like `meta.variantThumbnails` — finish first, then
-   *  cluster. Hand-authored, so it lives beside the model rather than in the generated thumbs file.
-   *  A missing finish, or a finish missing one cluster, falls back to `clusterThumbs` for that
-   *  cluster alone (see presentation/finish.ts), so art can ship one stage at a time. */
-  clusterVariantThumbs?: Record<string, ClusterThumbMap>;
+  clusterVariantThumbs?: Record<string, ClusterThumbMap>; // sub-assembly art per finish; falls back per cluster, so art can ship one stage at a time
   styles?: StyleSet;
-  styleModels?: Partial<Record<RenderStyleId, AssetSrc>>;
+  styleModels?: Partial<Record<RenderStyleId, AssetSrc>>; // the looks that are a whole other GLB
   shadow?: AssetSrc;
   tools?: Partial<ToolMap>;
   instructions: InstructionSet;
   labels: LabelMap;
-  /** Telescoping drawer beat (EKET); absent = the finishing beat stays symbolic. */
-  pushOpen?: PushOpenSpec;
-  /** Generated exit-sweep blocker data (see SweepMap); absent = travelAxis keeps its centroid heuristic unchecked. */
-  sweep?: SweepMap;
-  /** Derived body→component lookups (see model/components.ts); absent = no multi-body components. */
-  components?: ComponentIndex;
+  pushOpen?: PushOpenSpec; // absent = the finishing beat stays symbolic
+  sweep?: SweepMap; // absent = travelAxis keeps its centroid heuristic unchecked
+  boxes?: Record<PartId, PartBox>; // absent = the drag falls back to the visual-centre clamp
+  components?: ComponentIndex; // absent = no multi-body components
   xpPerStep: number;
   xpBonusOnComplete: number;
 }

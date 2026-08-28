@@ -19,6 +19,7 @@ import { COIN_ICON } from "@/src/components/iconAssets";
 import type { BuildRewardAmount } from "@/src/data/core/repos";
 import { isSurfaceCategory } from "@/src/data/shop/items";
 import { useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import { modelThumbSet } from "@/src/game/core/presentation/finish";
 import { useScaledStyles, FONT } from "@/src/game/ui/system/theme";
 import { useCelebrationScale } from "./celebrationScale";
@@ -195,7 +196,7 @@ export function BuildComplete() {
   const repos = useRepos();
   const furniture = useGameStore((s) => s.furniture);
   // The look the build ran in — the catalogue set it when the player picked a finish, and settings can change it mid-build. It is what tells the art below which finish to wear.
-  const renderStyle = useGameStore((s) => s.renderStyle);
+  const renderStyle = usePrefsStore((s) => s.renderStyle);
   const completed = useGameStore((s) => s.completed);
   const dismissed = useGameStore((s) => s.doneDismissed);
   const confirmed = useGameStore((s) => s.completeConfirmed);

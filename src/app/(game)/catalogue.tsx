@@ -33,7 +33,7 @@ import { type Milestone } from "@/src/game/ui/loading/loadingProgress";
 import { FURNITURE_METAS } from "@/src/game/content/furnitures/furnitures";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import { useCatalogRow, useCatalogStore } from "@/src/data/catalog/buildStore";
-import { useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import { useVariantStore } from "@/src/data/catalog/variantStore";
 import { brandFor } from "@/src/game/content/brands";
 import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
@@ -580,7 +580,7 @@ function FurnitureCard({
     const shown = shownFinish;
     // ALWAYS set it, including for the plain finishes: renderStyle is session state, so a player who
     // built the cozy LACK and then starts the white one would otherwise get cozy again.
-    useGameStore.getState().setRenderStyle(shown ? FINISH_STYLE[shown] ?? "realistic" : "realistic");
+    usePrefsStore.getState().setRenderStyle(shown ? FINISH_STYLE[shown] ?? "realistic" : "realistic");
     // The variation still travels with the route: the build ignores it today, but it is the piece's
     // finish once it reaches the room, and dropping it here would lose the player's choice there.
     onStart(shown && finishes.includes(shown) ? shown : buildFinish);

@@ -1,4 +1,3 @@
-import { LightingPreset } from "@/src/game/core/accessibility";
 import { RenderStyleId } from "@/src/game/core/type";
 
 export const SCENE_BACKGROUND = "#f0e9dd";
@@ -61,7 +60,7 @@ const PRESETS: Record<Preset, LightRig> = {
   },
 };
 
-/** Each render style's natural rig when the lighting choice is "auto". */
+/** Each render style's natural rig. */
 const STYLE_DEFAULT: Record<RenderStyleId, Preset> = {
   realistic: "studio",
   cozy: "warm",
@@ -71,13 +70,9 @@ const STYLE_DEFAULT: Record<RenderStyleId, Preset> = {
   illustrated: "soft",
 };
 
-/** Resolve the active rig from render style + dark theme + the lighting choice. Dark dims key/fill for moody backdrops but keeps the rim relatively strong so the table still separates from the dark background. (Ambient/IBL is fixed.) */
-export function getLightRig(
-  style: RenderStyleId,
-  darkMode: boolean,
-  choice: LightingPreset,
-): LightRig {
-  const preset: Preset = choice === "auto" ? STYLE_DEFAULT[style] ?? "studio" : choice;
+/** Resolve the active rig from render style + dark theme. Dark dims key/fill for moody backdrops but keeps the rim relatively strong so the table still separates from the dark background. (Ambient/IBL is fixed.) */
+export function getLightRig(style: RenderStyleId, darkMode: boolean): LightRig {
+  const preset: Preset = STYLE_DEFAULT[style] ?? "studio";
   const p = PRESETS[preset];
   if (!darkMode) return p;
   const s = 0.6;

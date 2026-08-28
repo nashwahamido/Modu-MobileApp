@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { router, useLocalSearchParams, useRootNavigationState } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import type { Href } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StyleSheet, Image, Text, View } from "react-native";
@@ -12,10 +12,12 @@ import { SceneBackdrop } from '../../game/ui/backdrop/SceneBackdrop';
 import { roomBackgroundView } from './roomBackdrops';
 import { ceilingLightOn, timeOfDayPhase, type CeilingLightOverride } from '../core/timeOfDay';
 import { useGameStore } from '../../game/core/store';
+import { usePrefsStore } from '../../game/core/prefsStore';
 import { avatarForProfile } from '@/src/components/avatarAssets';
 import { CARD_CHROME, CREAM, useFixedStyles, useIsTablet, LEXEND } from "@/src/game/ui/system/theme";
 import { useCurrentUserId } from '../../data';
 import { RoomScene } from '../scene/RoomScene';
+import { useSceneSlot } from '../../game/scene/sceneSlot';
 import { FriendPickerOverlay } from './FriendPickerOverlay';
 import { RoomNavRail } from './RoomNavRail';
 import { ASSEMBLE_COLLAR_SIZE, RoomAssembleButton } from './RoomAssembleButton';
@@ -58,10 +60,6 @@ const SETTINGS_ART_NUDGE_Y = 6.5 / 218;
 const ROOM_EDIT_GUIDE_KEY = 'modu.room-edit-guide-seen.v1';
 const ROOM_WELCOME_GUIDE_KEY = 'modu.room-welcome-guide-seen.v1';
 
-// Routes with their own Filament scene: only one engine may run at a time
-// Modals are deliberately absent, so opening one leaves the room mounted
-const HEAVY_ROUTES = new Set(['play', 'tutorial', 'visit']);
-
 export function RoomExperience() {
   const s = useFixedStyles(makeStyles);
   // This screen's sheet stays FIXED — it carries the scene's own chrome, laid out to the point. Only
@@ -76,10 +74,9 @@ export function RoomExperience() {
     firstPlacement?: string;
   }>();
   const welcomeFromTutorial = welcome === 'tutorial';
-  const rootNav = useRootNavigationState();
-  const heavySceneActive = !!rootNav && HEAVY_ROUTES.has(rootNav.routes[rootNav.index]?.name ?? '');
   const stillViewingFriend = usePlacementStore((p) => p.viewing !== null);
-  const sceneMounted = !(heavySceneActive || stillViewingFriend);
+  // Play, the tutorial and a friend's room each claim the same slot, so mounting one unmounts this.
+  const sceneMounted = useSceneSlot('room', !stillViewingFriend);
   const [sceneReady, setSceneReady] = useState(false);
   const [revealed, setRevealed] = useState(false);
   useEffect(() => {
@@ -87,9 +84,9 @@ export function RoomExperience() {
     setSceneReady(false);
     setRevealed(false);
   }, [sceneMounted]);
-  const hour = useGameStore((s) => s.roomTimeOfDay);
-  const setRoomTimeOfDay = useGameStore((s) => s.setRoomTimeOfDay);
-  const roomBackground = useGameStore((s) => s.roomBackground);
+  const hour = usePrefsStore((s) => s.roomTimeOfDay);
+  const setRoomTimeOfDay = usePrefsStore((s) => s.setRoomTimeOfDay);
+  const roomBackground = usePrefsStore((s) => s.roomBackground);
 
   const [lightOverride, setLightOverride] = useState<CeilingLightOverride>(null);
   const ceilingLight = ceilingLightOn(hour, lightOverride);

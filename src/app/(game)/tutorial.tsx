@@ -8,6 +8,7 @@ import { useHudInsets } from '@/src/hooks/use-safe-insets';
 import { FilamentScene } from "react-native-filament";
 
 import { AssemblyScene } from "@/src/game/scene/AssemblyScene";
+import { useSceneSlot } from "@/src/game/scene/sceneSlot";
 import { useAssemblyDrivers } from "@/src/game/scene/useAssemblyDrivers";
 import { actionableFirst, useSceneState } from "@/src/game/scene/useSceneState";
 
@@ -33,6 +34,7 @@ import { useStepObjective } from "@/src/game/core/presentation/useStepObjective"
 import { useAssemblySfx } from "@/src/game/audio/useAssemblySfx";
 
 import { useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import { asFurnitureId } from "@/src/game/core/ids";
 import {
@@ -363,11 +365,11 @@ function TutorialScreen() {
   }, [spotPartId, hintPulse]);
   const profile = useGameStore((s) => s.profile);
   const heldActionId = useGameStore((s) => s.heldActionId);
-  const renderStyle = useGameStore((s) => s.renderStyle);
-  const backdrop = useGameStore((s) => s.backdrop);
+  const renderStyle = usePrefsStore((s) => s.renderStyle);
+  const backdrop = usePrefsStore((s) => s.backdrop);
   // The BUILD's theme, not the app's: "Assemble in Dark Mode" darkens this screen only. Everything
   // under ThemeScope below (the HUD, the settings panel, the toasts) resolves through it.
-  const theme: ThemeId = useGameStore((s) => s.assembleDark) ? "dark" : "light";
+  const theme: ThemeId = usePrefsStore((s) => s.assembleDark) ? "dark" : "light";
   const focus = settings.focusMode;
   // Recenter means nothing until there IS a build on the canvas — same rule as play.tsx.
   const sceneHasParts = Object.values(sceneState.modes).some(
@@ -385,10 +387,12 @@ function TutorialScreen() {
     () => new Set(offered.map((a) => a.actionId)),
     [offered],
   );
+  // The action holding a gesture right now — it outranks every other next-step candidate (see nextAction).
+  const parkedActionId = useGameStore((s) => s.driveActionId ?? s.orientationActionId);
   // nextAction, not [0]. LACK composes its four legs BEFORE its bolts, so from the first tighten onwards `[0]` is a leg no matter what the player is doing — push the second bolt into its hole and the objective bar still read "Install leg 1 of 4" over a screw waiting to be turned, with its own tighten control on screen. See the note on nextAction.
   const nextActionId = useMemo(
-    () => (furniture ? nextAction(furniture, offered, completedSet)?.actionId : undefined),
-    [furniture, offered, completedSet],
+    () => (furniture ? nextAction(furniture, offered, completedSet, parkedActionId)?.actionId : undefined),
+    [furniture, offered, completedSet, parkedActionId],
   );
   const completedCount = useGameStore((s) => s.completed.length);
   const [skipAsked, setSkipAsked] = useState(false);
@@ -1186,6 +1190,9 @@ function SuppressHintText() {
 }
 
 export default function TutorialRoute() {
+  // Held for one commit while the room hands the engine slot over — see sceneSlot.
+  const granted = useSceneSlot("tutorial");
+  if (!granted) return null;
   return (
     <FilamentScene>
       <TutorialScreen />

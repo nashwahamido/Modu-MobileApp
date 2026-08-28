@@ -7,7 +7,7 @@ import { screenRay } from "@/src/game/core/geometry/math";
 import { cameraBasis, projectToScreen } from "@/src/game/scene/projectToScreen";
 import { FOV_Y_DEG } from "@/src/game/scene/cameraConfig";
 import type { OrbitManipulator } from "@/src/game/scene/AssemblyScene";
-import { dragPlanePoint, dragRayPoint, leashAlongRay, rayBoxEntryT } from "./dragPlane";
+import { cameraPlanePoint, dragPlanePoint, dragRayPoint, leashAlongRay, rayBoxEntryT } from "./dragPlane";
 import { CARRY_CAP_ENABLED, CARRY_SURFACE_MARGIN_M, FINGER_LIFT_DP } from "./dragConfig";
 import type { DragSession, Float3 } from "./dragSession";
 
@@ -17,34 +17,25 @@ export function useDragCamera(
 ) {
   const { width: winW, height: winH } = useWindowDimensions();
 
-  /** The finger's point on a plane FACING the camera through `anchor` — the mapping a vertically-entering part needs, where screen-up is world-up. */
+  /** The finger's point on a plane FACING the camera through `anchor` — the mapping a vertically-entering part needs, where screen-up is world-up (dragPlane.cameraPlanePoint owns the geometry). */
   const fingerOnCameraPlaneAt = useCallback(
     (absX: number, absY: number, anchor: Vec3): Float3 | null => {
       const la = manipulator?.getLookAt();
-      const basis = cameraBasis(la);
-      if (!la || !basis) return null;
-      const { eye, fwd, right, camUp } = basis;
-      const center = la[1];
-      const dist =
-        (anchor[0] - eye[0]) * fwd[0] +
-        (anchor[1] - eye[1]) * fwd[1] +
-        (anchor[2] - eye[2]) * fwd[2];
-      if (!Number.isFinite(dist) || dist <= 0) return null;
-      const tanV = Math.tan((FOV_Y_DEG * Math.PI) / 360);
-      const tanH = tanV * (winW / winH);
-      const ndcX = (2 * absX) / winW - 1;
-      const ndcY = 1 - (2 * (absY - FINGER_LIFT_DP)) / winH;
-      const p: Float3 = [
-        anchor[0] + right[0] * ndcX * tanH * dist + camUp[0] * ndcY * tanV * dist,
-        anchor[1] + right[1] * ndcX * tanH * dist + camUp[1] * ndcY * tanV * dist,
-        anchor[2] + right[2] * ndcX * tanH * dist + camUp[2] * ndcY * tanV * dist,
-      ];
-      return leashAlongRay(eye as Float3, center as Float3, eye as Float3, p);
+      if (!la) return null;
+      return cameraPlanePoint(
+        { eye: la[0], center: la[1], up: la[2] },
+        FOV_Y_DEG,
+        winW,
+        winH,
+        absX,
+        absY - FINGER_LIFT_DP,
+        anchor,
+      );
     },
     [manipulator, winW, winH],
   );
 
-  /** EXPERIMENT (drag-no-plane): the finger's point with no plane — on the ray, just in front of the model's near boundary (see dragRayPoint). The adaptive default; level mode keeps fingerOnPlane. `capM` is the eased occlusion cap the caller maintains (DragSession.carryCap); Infinity leaves the carry uncapped. */
+  /** EXPERIMENT (drag-no-plane): the finger's point with no plane — on the ray, just in front of the model's near boundary (see dragRayPoint). The default carry path. `capM` is the eased occlusion cap the caller maintains (DragSession.carryCap); Infinity leaves the carry uncapped. */
   const fingerOnRay = useCallback(
     (
       absX: number,

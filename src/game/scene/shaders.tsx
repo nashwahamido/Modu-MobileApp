@@ -12,6 +12,7 @@ import type { ReactNode } from "react";
 import { useBuffer, useFilamentContext } from "react-native-filament";
 import type { Entity } from "react-native-filament";
 import { useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import { styleFor } from "@/src/game/core/presentation/labels";
 import { DIR_KEY } from "./lighting";
 import { MaterialParams, PartDef, RenderStyleId, Vec3 } from "@/src/game/core/type";
@@ -492,7 +493,7 @@ function paramsFor(
  * whose GLB already looks hand-drawn can opt out of the ink pass).
  */
 export function useShaderStyle(): ShaderStyleId {
-  const renderStyle = useGameStore((s) => s.renderStyle);
+  const renderStyle = usePrefsStore((s) => s.renderStyle);
   const styles = useGameStore((s) => s.furniture?.styles);
   return styleFor(styles, renderStyle)?.shader ?? STYLE_SHADER[renderStyle];
 }

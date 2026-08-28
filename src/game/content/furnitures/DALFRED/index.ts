@@ -8,6 +8,7 @@ import { toolsUsed } from "@/src/game/content/tools";
 import { BEATS, CLUSTERS, LABELS, STRUCTURE } from "./authored";
 import { ACTIONS, DALFRED_META } from "./meta";
 import { PARTS } from "./parts.gen";
+import { BOXES } from "./boxes.gen";
 import { SWEEP } from "./sweep.gen";
 import { clusterThumbs, thumbs } from "./thumbs.gen";
 import { CLUSTER_VARIANT_THUMBS } from "./clusterVariants";
@@ -36,6 +37,7 @@ export const DALFRED: Furniture = {
     cartoon: MODEL_CARTOON,
   },
   parts: PARTS_WITH_STRUCTURE,
+  boxes: BOXES,
   sweep: SWEEP,
   actions: ACTIONS,
   liaisons: LIAISONS,
