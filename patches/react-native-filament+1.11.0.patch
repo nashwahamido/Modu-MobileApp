@@ -1,3 +1,196 @@
+diff --git a/node_modules/react-native-filament/android/src/main/cpp/java-bindings/RNFJFilamentView.cpp b/node_modules/react-native-filament/android/src/main/cpp/java-bindings/RNFJFilamentView.cpp
+index fbb3c6b..c95d1b0 100644
+--- a/node_modules/react-native-filament/android/src/main/cpp/java-bindings/RNFJFilamentView.cpp
++++ b/node_modules/react-native-filament/android/src/main/cpp/java-bindings/RNFJFilamentView.cpp
+@@ -35,4 +35,10 @@ std::shared_ptr<SurfaceProvider> JFilamentView::getSurfaceProvider() {
+   return _surfaceProvider;
+ }
+ 
++void JFilamentView::onSceneDetached() {
++  // Lets the Java view free the Surface it held back through onSurfaceTextureDestroyed.
++  static const auto method = javaClassLocal()->getMethod<void()>("onSceneDetached");
++  method(_javaPart);
++}
++
+ } // namespace margelo
+diff --git a/node_modules/react-native-filament/android/src/main/cpp/java-bindings/RNFJFilamentView.h b/node_modules/react-native-filament/android/src/main/cpp/java-bindings/RNFJFilamentView.h
+index bd9a926..4c80214 100644
+--- a/node_modules/react-native-filament/android/src/main/cpp/java-bindings/RNFJFilamentView.h
++++ b/node_modules/react-native-filament/android/src/main/cpp/java-bindings/RNFJFilamentView.h
+@@ -21,6 +21,9 @@ public:
+ 
+   std::shared_ptr<SurfaceProvider> getSurfaceProvider() override;
+ 
++protected:
++  void onSceneDetached() override;
++
+ private:
+   friend HybridBase;
+   jni::global_ref<JFilamentView::javaobject> _javaPart;
+diff --git a/node_modules/react-native-filament/android/src/main/java/com/margelo/filament/FilamentProxy.java b/node_modules/react-native-filament/android/src/main/java/com/margelo/filament/FilamentProxy.java
+index cc43513..5fff150 100644
+--- a/node_modules/react-native-filament/android/src/main/java/com/margelo/filament/FilamentProxy.java
++++ b/node_modules/react-native-filament/android/src/main/java/com/margelo/filament/FilamentProxy.java
+@@ -51,6 +51,12 @@ class FilamentProxy {
+     private final Dispatcher renderThreadDispatcher;
+     private static final String NAME = "FilamentProxy";
+     private static final OkHttpClient client = new OkHttpClient();
++    private static volatile Executor renderThreadExecutor = null;
++
++    /** Filament's render queue, or null before the proxy has been constructed. */
++    static Executor getRenderThreadExecutor() {
++        return renderThreadExecutor;
++    }
+ 
+     FilamentProxy(@NonNull ReactApplicationContext context) {
+         JavaScriptContextHolder jsRuntimeHolder = context.getJavaScriptContextHolder();
+@@ -66,6 +72,9 @@ class FilamentProxy {
+         reactContext = context;
+ 
+         Executor renderThread = new LooperExecutor("FilamentRenderer");
++        // Published so a FilamentView can hand its dead Surface back on the SAME queue Filament renders
++        // and destroys swapchains on — see FilamentView.releaseDetachedSurface().
++        renderThreadExecutor = renderThread;
+         renderThreadDispatcher = new Dispatcher(renderThread);
+         uiThreadDispatcher = new Dispatcher(ContextCompat.getMainExecutor(context));
+         backgroundThreadDispatcher = new Dispatcher(Executors.newCachedThreadPool());
+diff --git a/node_modules/react-native-filament/android/src/main/java/com/margelo/filament/FilamentView.java b/node_modules/react-native-filament/android/src/main/java/com/margelo/filament/FilamentView.java
+index f7c15df..bfb3f9c 100644
+--- a/node_modules/react-native-filament/android/src/main/java/com/margelo/filament/FilamentView.java
++++ b/node_modules/react-native-filament/android/src/main/java/com/margelo/filament/FilamentView.java
+@@ -2,12 +2,16 @@ package com.margelo.filament;
+ 
+ import android.content.Context;
+ import android.graphics.SurfaceTexture;
++import android.os.Handler;
++import android.os.Looper;
+ import android.util.AttributeSet;
+ import android.util.Log;
+ import android.view.Surface;
+ import android.view.TextureView;
+ import android.widget.FrameLayout;
+ 
++import java.util.concurrent.Executor;
++
+ import androidx.annotation.Keep;
+ import androidx.annotation.NonNull;
+ import androidx.annotation.Nullable;
+@@ -37,6 +41,14 @@ public class FilamentView extends FrameLayout implements TextureView.SurfaceText
+     private final SurfaceProvider surfaceProvider = new SurfaceProvider();
+     private Surface surface = null;
+     private boolean isMounted = false;
++    // The surface we kept hold of past onSurfaceTextureDestroyed, until Filament is done with it.
++    private final Object detachedLock = new Object();
++    private Surface detachedSurface = null;
++    private SurfaceTexture detachedSurfaceTexture = null;
++    private final Handler backstop = new Handler(Looper.getMainLooper());
++    private final Runnable releaseBackstop = this::releaseDetachedSurface;
++    // Long enough to cover the JS round trip that normally frees it, short enough not to be a leak.
++    private static final long RELEASE_BACKSTOP_MS = 5000;
+ 
+     public FilamentView(Context context) {
+         super(context);
+@@ -99,6 +111,8 @@ public class FilamentView extends FrameLayout implements TextureView.SurfaceText
+ 
+     @Override
+     public void onSurfaceTextureAvailable(@NonNull SurfaceTexture surfaceTexture, int width, int height) {
++        // A replacement surface means the previous one cannot still be in use, whatever native reported.
++        releaseDetachedSurface();
+         surface = new Surface(surfaceTexture);
+         surfaceProvider.onSurfaceCreated(surface);
+     }
+@@ -113,9 +127,61 @@ public class FilamentView extends FrameLayout implements TextureView.SurfaceText
+ 
+     @Override
+     public boolean onSurfaceTextureDestroyed(@NonNull SurfaceTexture surfaceTexture) {
+-        surfaceProvider.onSurfaceDestroyed(surface);
++        Surface destroyed = surface;
+         surface = null;
+-        return true;
++        synchronized (detachedLock) {
++            detachedSurface = destroyed;
++            detachedSurfaceTexture = surfaceTexture;
++        }
++        // Stops the choreographer synchronously, and queues the JS-side teardown.
++        surfaceProvider.onSurfaceDestroyed(destroyed);
++        // A view torn down without a JS cleanup would otherwise hold these until GC finalizes them.
++        backstop.postDelayed(releaseBackstop, RELEASE_BACKSTOP_MS);
++        // FALSE, so the framework leaves the SurfaceTexture to us. Returning true abandons the BufferQueue
++        // here on the UI thread while the render thread may still be mid-frame in it — the dequeue then
++        // fails ("NATIVE_WINDOW_MIN_UNDEQUEUED_BUFFERS ... No such device"), which wedges the renderer and
++        // strands the engine. releaseDetachedSurface() frees it once Filament is done instead.
++        return false;
++    }
++
++    /**
++     * Called from native once the scene has let go of its swapchain (FilamentView::setChoreographer(null),
++     * which JS runs at the end of cleanupResources — after the swapchain release is already queued).
++     *
++     * @noinspection unused
++     */
++    @DoNotStrip
++    @Keep
++    private void onSceneDetached() {
++        releaseDetachedSurface();
++    }
++
++    /**
++     * Hands the dead Surface back on Filament's own render queue, so the release lands AFTER any frame
++     * still in flight and after the destroySwapChain already sitting on that queue. Idempotent, and safe
++     * to call from any thread.
++     */
++    private void releaseDetachedSurface() {
++        final Surface releaseSurface;
++        final SurfaceTexture releaseTexture;
++        synchronized (detachedLock) {
++            releaseSurface = detachedSurface;
++            releaseTexture = detachedSurfaceTexture;
++            detachedSurface = null;
++            detachedSurfaceTexture = null;
++        }
++        if (releaseSurface == null && releaseTexture == null) return;
++        backstop.removeCallbacks(releaseBackstop);
++        Runnable release = () -> {
++            if (releaseSurface != null) releaseSurface.release();
++            if (releaseTexture != null) releaseTexture.release();
++        };
++        Executor renderThread = FilamentProxy.getRenderThreadExecutor();
++        if (renderThread != null) {
++            renderThread.execute(release);
++        } else {
++            release.run();
++        }
+     }
+ 
+     @Override
+diff --git a/node_modules/react-native-filament/cpp/RNFFilamentView.cpp b/node_modules/react-native-filament/cpp/RNFFilamentView.cpp
+index a795171..8b08002 100644
+--- a/node_modules/react-native-filament/cpp/RNFFilamentView.cpp
++++ b/node_modules/react-native-filament/cpp/RNFFilamentView.cpp
+@@ -24,6 +24,8 @@ void FilamentView::setChoreographer(std::optional<std::shared_ptr<ChoreographerW
+     Logger::log(TAG, "Removing reference to choreographer.");
+     _choreographer = nullptr;
+     _onSurfaceDestroyedListener = nullptr;
++    // JS calls this at the end of cleanupResources, after the swapchain release is already queued.
++    onSceneDetached();
+     return;
+   }
+ 
+diff --git a/node_modules/react-native-filament/cpp/RNFFilamentView.h b/node_modules/react-native-filament/cpp/RNFFilamentView.h
+index e0b6e51..b3e593d 100644
+--- a/node_modules/react-native-filament/cpp/RNFFilamentView.h
++++ b/node_modules/react-native-filament/cpp/RNFFilamentView.h
+@@ -26,6 +26,10 @@ public:
+ 
+   void loadHybridMethods() override;
+ 
++protected:
++  // The scene has let go of this view — on Android that is when a held-back Surface can be freed.
++  virtual void onSceneDetached() {}
++
+ private: // Exposed JS API
+   void setChoreographer(std::optional<std::shared_ptr<ChoreographerWrapper>> choreographerWrapperOrNull);
+ 
 diff --git a/node_modules/react-native-filament/cpp/core/RNFMaterialInstanceWrapper.cpp b/node_modules/react-native-filament/cpp/core/RNFMaterialInstanceWrapper.cpp
 index a08977c..27925d1 100644
 --- a/node_modules/react-native-filament/cpp/core/RNFMaterialInstanceWrapper.cpp

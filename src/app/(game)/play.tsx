@@ -9,6 +9,7 @@ import { useHudInsets } from '@/src/hooks/use-safe-insets';
 import { FilamentScene } from "react-native-filament";
 
 import { AssemblyScene } from "@/src/game/scene/AssemblyScene";
+import { useSceneSlot } from "@/src/game/scene/sceneSlot";
 import { useAssemblyDrivers } from "@/src/game/scene/useAssemblyDrivers";
 import { useSceneState } from "@/src/game/scene/useSceneState";
 
@@ -695,6 +696,9 @@ function GameScreen() {
 }
 
 export default function PlayRoute() {
+  // Held for one commit while the room hands the engine slot over — see sceneSlot.
+  const granted = useSceneSlot("play");
+  if (!granted) return null;
   return (
     <FilamentScene>
       <GameScreen />

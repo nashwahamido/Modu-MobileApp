@@ -1,4 +1,4 @@
-// A friend's room, read-only: their furniture under YOUR light (room decor is a local setting, not saved per room — see the spec). Its own route rather than a layer over the hub because it runs a Filament scene, and only one engine may run at a time: the route name `visit` is exactly what RoomExperience's HEAVY_ROUTES matches to drop the hub's scene, which is why this file sits in a group with NO _layout.tsx and the owner id travels as a query param instead of a path segment.
+// A friend's room, read-only: their furniture under YOUR light (room decor is a local setting, not saved per room — see the spec). Its own route rather than a layer over the hub because it runs a Filament scene, and only one engine may run at a time: it claims the shared slot in src/game/scene/sceneSlot, which drops the hub's scene a commit before this one is built. The owner id travels as a query param rather than a path segment so this file can sit in a group with no _layout.tsx.
 import { useEffect, useRef, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
@@ -17,6 +17,7 @@ import { sanitizeLayout } from "@/src/room/core/layoutSanitise";
 import { toGrid, usePlacementStore } from "@/src/room/core/placement";
 import { ORBIT } from "@/src/room/input/orbit";
 import { RoomScene } from "@/src/room/scene/RoomScene";
+import { useSceneSlot } from "@/src/game/scene/sceneSlot";
 import { roomBackgroundView } from "@/src/room/ui/roomBackdrops";
 import {
   LIGHT_COLUMN_GAP,
@@ -53,6 +54,8 @@ export default function VisitScreen() {
   // The two halves of the wait this screen covers: their room's rows, then their furniture's models. Nobody arrives at a friend's house to watch it being furnished, so the overlay stays up for both.
   const [sceneReady, setSceneReady] = useState(false);
   const [revealed, setRevealed] = useState(false);
+  // The hub's room releases its engine before this one is built — see sceneSlot.
+  const sceneSlot = useSceneSlot("visit");
 
   // Camera state is PER SCREEN: returning from a visit must not leave the hub's camera wherever this one was left. Mirrors applyRoomControls in RoomExperience, clamp included, so both paths share one zoom range.
   const [roomRotation, setRoomRotation] = useState(0);
@@ -115,7 +118,7 @@ export default function VisitScreen() {
     };
   }, [me, ownerId, repos, startViewing]);
 
-  // Leaving hands the scene back to the player's own layout. The synchronicity of stopViewing() is real but it is not what makes this safe — this cleanup runs in React's passive-effect phase, AFTER the commit where RoomExperience already recomputed heavySceneActive and re-mounted its RoomScene. What actually protects the hub is that RoomScene gates on `viewing` itself (see the stillViewingFriend selector in RoomExperience.tsx); this effect is what releases that gate, one commit later.
+  // Leaving hands the scene back to the player's own layout. The synchronicity of stopViewing() is real but it is not what makes this safe — this cleanup runs in React's passive-effect phase, AFTER the commit where RoomExperience already reclaimed the scene slot and re-mounted its RoomScene. What actually protects the hub is that RoomScene gates on `viewing` itself (see the stillViewingFriend selector in RoomExperience.tsx); this effect is what releases that gate, one commit later.
   useEffect(
     () => () => {
       stopViewing();
@@ -157,7 +160,7 @@ export default function VisitScreen() {
       {/* The backdrop sits UNDER a transparent Filament view, so the artwork frames the diorama without touching the 3D scene. */}
       <SceneBackdrop {...roomBackgroundView(roomBackground, timeOfDayPhase(hour))} style={s.stage}>
         {/* Mounted only once the fetch has landed, and that is not merely tidiness: RoomScene reads `viewing ?? layout`, so a scene standing up before startViewing() would load the PLAYER'S OWN furniture into a friend's room and then swap it out piece by piece. */}
-        {loading ? null : (
+        {loading || !sceneSlot ? null : (
           <RoomScene
             rotationY={roomRotation}
             zoom={roomZoom}

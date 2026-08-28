@@ -8,6 +8,7 @@ import { useHudInsets } from '@/src/hooks/use-safe-insets';
 import { FilamentScene } from "react-native-filament";
 
 import { AssemblyScene } from "@/src/game/scene/AssemblyScene";
+import { useSceneSlot } from "@/src/game/scene/sceneSlot";
 import { useAssemblyDrivers } from "@/src/game/scene/useAssemblyDrivers";
 import { actionableFirst, useSceneState } from "@/src/game/scene/useSceneState";
 
@@ -1186,6 +1187,9 @@ function SuppressHintText() {
 }
 
 export default function TutorialRoute() {
+  // Held for one commit while the room hands the engine slot over — see sceneSlot.
+  const granted = useSceneSlot("tutorial");
+  if (!granted) return null;
   return (
     <FilamentScene>
       <TutorialScreen />
