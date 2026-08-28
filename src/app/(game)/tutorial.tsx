@@ -35,6 +35,8 @@ import { useAssemblySfx } from "@/src/game/audio/useAssemblySfx";
 
 import { useGameStore } from "@/src/game/core/store";
 import { useCurrentUserId, useRepos } from "@/src/data";
+import { useProfileStore } from "@/src/data/player/profileStore";
+import { useShopStore } from "@/src/data/shop/store";
 import { asFurnitureId } from "@/src/game/core/ids";
 import {
   pressParkInfo,
@@ -87,6 +89,20 @@ import {
   TUTORIAL_STEP_REWARD_TOKENS,
   type ToolTutorialKind,
 } from "@/src/game/tutorial/steps";
+
+/**
+ * Is the run sitting on the card that TEACHES Undo and Recenter?
+ *
+ * Read at press time rather than subscribed to, so it costs nothing on the frames in between and
+ * cannot go stale between a render and a tap.
+ *
+ * Matched on the TARGET, not the step id: all four runs name this step `visual-undo-recenter` today,
+ * but the target is what the spotlight actually rings, so a rename cannot quietly re-arm the buttons.
+ */
+function isUndoRecenterStep(): boolean {
+  const t = useTutorialStore.getState();
+  return t.steps[t.currentIndex]?.targetId === "undoRecenter";
+}
 
 const TUTORIAL_FURNITURE_ID = asFurnitureId("lack-table");
 const TUTORIAL_SPOT_MS = 2800;
@@ -227,11 +243,21 @@ function TutorialScreen() {
   const handleTutorialUndo = useCallback(() => {
     const tutorial = useTutorialStore.getState();
     // A step the player is only READING closes on this press — the undo/recenter card names this
-    // button, so using it is an acknowledgement. The undo itself still happens below: the step is
-    // explaining what the control does, not asking the player to leave it alone.
+    // button, so using it is an acknowledgement.
     if (tutorial.steps[tutorial.currentIndex]?.event === "controls_acknowledged") {
       tutorial.completeEvent("controls_acknowledged");
     }
+    // …AND ON THAT ONE STEP THE PRESS DOES NOTHING ELSE.
+    //
+    // The card is explaining what Undo does; it is not asking for an undo. Doing one here removes
+    // the part the next step asks the player to build on — on Felix's and Sparky's runs this lands
+    // right after the tabletop goes down, so the press the card seems to invite is the press that
+    // deletes their work.
+    //
+    // The button still LOOKS exactly as it always does: no `disabled`, no dimming. Only this step,
+    // only in the tutorial — the same card in every run reaches it, and play.tsx never comes through
+    // this handler at all.
+    if (isUndoRecenterStep()) return;
     if (tutorial.steps[tutorial.currentIndex]?.id !== "hud-undo") {
       useGameStore.getState().undoLastAction();
       return;
@@ -587,11 +613,45 @@ function TutorialScreen() {
   useEffect(() => {
     if (lackBuilt && !lackRecorded.current) {
       lackRecorded.current = true;
-      repos.builds.complete(me, TUTORIAL_FURNITURE_ID).catch((err) => {
-        console.warn("[tutorial] could not record the completed LACK build", err);
-        lackRecorded.current = false;
-        setRecordAttempt((n) => (n < 3 ? n + 1 : n));
-      });
+      // REWARD FIRST, THEN RECORD — the same order and the same reason as useBuildPersistence:
+      // complete() deletes the in-progress save, so running them together means a failed reward
+      // loses both the coins and the progress that would let the player earn them again.
+      //
+      // The reward was missing entirely. This screen passes `settleOnFinish: false`, which tells the
+      // persistence hook to leave a finished build alone — no reward, no completion record — and then
+      // recorded the completion here by hand while never granting anything. So the tutorial's LACK
+      // table counted toward assembly_count and appeared in the room, and paid nothing: the same
+      // table built from the catalogue paid its 178 XP, which is why only the tutorial looked broken.
+      //
+      // reward_build is idempotent on (user, furniture), so a player who does the tutorial and then
+      // rebuilds LACK from the catalogue is paid once, not twice — the ledger's unique index decides
+      // that, not this call.
+      repos.builds
+        .reward(me, TUTORIAL_FURNITURE_ID)
+        .then((granted) => {
+          // The grant put this in user_buy server-side; this is the client catching up, exactly as
+          // the play screen does.
+          if (granted.rewardItemId) useShopStore.getState().markOwned(granted.rewardItemId);
+          return repos.builds.complete(me, TUTORIAL_FURNITURE_ID);
+        })
+        .then(() => {
+          // RE-READ, rather than writing the totals the RPC handed back.
+          //
+          // It does return the new coin and XP totals, so a direct write is tempting. But the room's
+          // pill renders `xpIntoLevel` / `xpForNextLevel` — the position WITHIN the current level —
+          // and those are derived against the levels reference table when a profile is read. This
+          // store cannot recompute them, so writing raw totals would move the number the profile page
+          // shows and leave the pill under the star exactly as it was.
+          //
+          // No race here: this is sequenced after the grant rather than running beside it, so unlike
+          // the room's own focus refetch it cannot read the profile before the reward lands.
+          void useProfileStore.getState().load(repos, me);
+        })
+        .catch((err) => {
+          console.warn("[tutorial] could not reward/record the completed LACK build", err);
+          lackRecorded.current = false;
+          setRecordAttempt((n) => (n < 3 ? n + 1 : n));
+        });
     }
   }, [lackBuilt, me, repos, recordAttempt]);
   const displayedCompletedCount = guideCompleted
@@ -1061,8 +1121,15 @@ function TutorialScreen() {
           <RecenterButton
             enabled={sceneHasParts}
             onPress={() => {
-              resetCamera();
               const t = useTutorialStore.getState();
+              // Same rule as Undo beside it — see handleTutorialUndo. The two buttons are named in
+              // one sentence, so a card where one works and the other does not would teach the wrong
+              // thing about both.
+              if (isUndoRecenterStep()) {
+                t.completeEvent("controls_acknowledged");
+                return;
+              }
+              resetCamera();
               t.completeEvent("camera_recentered");
               // …and closes a step the player is only READING. The undo/recenter card names both
               // buttons; pressing either is at least as good an acknowledgement as tapping the

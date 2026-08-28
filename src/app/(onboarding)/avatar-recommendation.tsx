@@ -40,6 +40,13 @@ import { playSfx } from "@/src/game/audio/sfx";
 /** The entrance, as ONE block. Every value is the moment that element starts, so re-timing the whole
  *  screen means editing this and nothing else. The order is the order a person reads the page:
  *  the avatar arrives, then its name, then what it is like, then what it does, then the choice. */
+/** What the absolute mode chooser occupies at the foot of the screen, plus a little air.
+ *
+ *  28 (its own bottom offset) + 56 (`modeTabs`) + 4 (SPACE.xs) + ~17 (the 13pt label) = 105. Kept as
+ *  one number next to the layout that reserves it, so a taller tab row or a second line of label is
+ *  changed in the one place rather than found later by the overlap it causes. */
+const TAB_ROW_RESERVE = 118;
+
 const STAGE = {
   avatar: 140,
   spark: 260,
@@ -705,8 +712,18 @@ const makeStyles = (t: Theme) =>
       flexDirection: "row",
       alignItems: "center",
       gap: 34,
-      // Clearance for the absolute chooser at the bottom, and no more: the old 82 reserved a chooser's worth of space twice over and centred the avatar visibly high on the page.
-      paddingBottom: 48,
+      // Clearance for the absolute chooser at the bottom — and 48 was not enough of it.
+      //
+      // The chooser is not just the tab row. Measured from the constants it is actually built from:
+      // 28 for its own bottom offset, 56 for `modeTabs`, SPACE.xs between, and ~17 for the 13pt
+      // "Or, you can choose another mode:" label — 105 in all. Reserving 48 meant the row was
+      // centred through space the chooser was already standing in, which is why the Confirm button
+      // and its halo sat right on top of that label.
+      //
+      // 118 is those 105 plus a little air. Because the row centres its contents, the reserve lifts
+      // the avatar, the copy and Confirm by half the difference — about 35pt — which is the gap that
+      // was missing rather than a nudge chosen by eye.
+      paddingBottom: TAB_ROW_RESERVE,
     },
     // Inside the tablet stack the chooser is part of the same centred group, so this row drops the phone-only bottom reserve entirely.
     // What it takes instead is a top pad: the stack centres row + chooser together, and without it the taller row sits hard against the header.

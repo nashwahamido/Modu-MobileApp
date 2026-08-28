@@ -55,7 +55,9 @@ export function bakedWorldMatrix(position: Vec3, rotation: Quat): number[] {
 }
 
 /** Answers, for each part asked about, where it is being DRAWN — and omits any part that is not on screen at all. Both halves matter: a part off at a staging offset has a box nowhere near its baked one, and a part the scene has hidden (another cluster's work while this one has focus) has a perfectly good baked transform behind an entity nobody is rendering. */
-export type LiveBoxReader = (ids: readonly PartId[]) => Record<PartId, PartBox>;
+export type LiveBoxReader = (
+  ids: readonly PartId[],
+) => Record<PartId, PartBox> | null;
 
 let liveBoxReader: LiveBoxReader | null = null;
 
@@ -64,7 +66,11 @@ export function registerLiveBoxReader(reader: LiveBoxReader | null): void {
   liveBoxReader = reader;
 }
 
-/** Where these parts are RIGHT NOW, or null if no scene is mounted to ask. Null and empty mean different things and callers must keep them apart: null is "nobody knows", {} is "the scene knows, and none of them are on screen". */
+/** Where these parts are RIGHT NOW, or null if no scene is mounted to ask. Null and empty mean different things and callers must keep them apart: null is "nobody knows", {} is "the scene knows, and none of them are on screen".
+ *
+ *  A reader may now answer null itself, which means the same thing as having none: it was holding a
+ *  model the renderer has since freed, so it knows nothing rather than knowing there is nothing. See
+ *  the reader in AssemblyScene, which returns null and unregisters the moment its asset goes. */
 export function readLiveBoxes(ids: readonly PartId[]): Record<PartId, PartBox> | null {
   return liveBoxReader ? liveBoxReader(ids) : null;
 }

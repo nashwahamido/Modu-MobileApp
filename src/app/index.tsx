@@ -20,8 +20,19 @@ import { useSafeInsets } from "@/src/hooks/use-safe-insets";
 
 const BG_CREAM = "#F3ECE0";
 
-/** The player's own room — what "Home" means once there is somebody to be home as. */
-const HOME_ROUTE = "/room" as const;
+/**
+ * THE LOADING GATE, not the room itself.
+ *
+ * That screen is the only place the player's saved MODE is restored: it reads `avatar_id` off the
+ * profile row and calls applyProfile, then continues to /room on its own. Sending Home straight to
+ * /room skipped it, so a returning player — and especially one coming back after a crash — arrived
+ * with their build progress intact but their mode reset to the store's declared default, `control`,
+ * whatever they had actually chosen.
+ *
+ * It restores handedness the same way, and it is where hydrateSettings lays the player's own touched
+ * settings back over the profile's defaults. All three were being lost by the shortcut.
+ */
+const HOME_ROUTE = "/loading" as const;
 
 const clayPattern = require("@/src/assets/ui/landing/clay-pattern.png");
 const wordmark = require("@/src/assets/ui/brand/logo-modu.png");

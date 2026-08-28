@@ -161,19 +161,42 @@ export function AssemblyScene({
     const asset = model.asset;
     registerLiveBoxReader((ids) => {
       const out: Record<PartId, PartBox> = {};
-      for (const id of ids) {
-        const p = furniture.parts[id];
-        if (!p) continue;
-        const mode = modesRef.current[id];
-        if (!mode || mode === "hidden") continue;
-        const entity = asset.getFirstEntityByName(p.meshName);
-        if (!entity) continue;
-        const b = renderableManager.getAxisAlignedBoundingBox(entity);
-        out[id] = worldBoxFromObjectBox(
-          b.center,
-          b.halfExtent,
-          transformManager.getWorldTransform(entity).data,
-        );
+      try {
+        for (const id of ids) {
+          const p = furniture.parts[id];
+          if (!p) continue;
+          const mode = modesRef.current[id];
+          if (!mode || mode === "hidden") continue;
+          const entity = asset.getFirstEntityByName(p.meshName);
+          if (!entity) continue;
+          const b = renderableManager.getAxisAlignedBoundingBox(entity);
+          out[id] = worldBoxFromObjectBox(
+            b.center,
+            b.halfExtent,
+            transformManager.getWorldTransform(entity).data,
+          );
+        }
+      } catch {
+        // THE ASSET WENT WHILE WE STILL HELD IT. Every call in the loop crosses into native and
+        // throws "Pointer FilamentAssetWrapper has already been manually released!" once the model
+        // this closure captured has been freed.
+        //
+        // The window is real and this effect cannot close it on its own: the reader is a module
+        // singleton, its deps are `model.state`/`furniture`, and a Fast Refresh can free the asset
+        // and rebuild the scene without either of those changing — so the stale closure is still
+        // registered when the next pick-up asks it a question. Outside dev the same shape exists on
+        // any teardown that frees the model before this cleanup runs.
+        //
+        // NULL, not `{}` — those mean different things to occluderBoxes and getting it wrong here is
+        // worse than the crash. `{}` claims the scene was asked and nothing is on screen, which makes
+        // every placed part a non-obstacle and opens the visibility gate on everything. Null says
+        // nobody knows, and the caller falls back to baked boxes: the pre-live behaviour, which is
+        // conservative rather than wrong.
+        //
+        // Unregistering as well, so the next reader is whichever scene is actually mounted rather
+        // than this dead one answering null forever.
+        registerLiveBoxReader(null);
+        return null;
       }
       return out;
     });
