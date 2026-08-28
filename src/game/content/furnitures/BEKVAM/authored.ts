@@ -38,6 +38,9 @@ export const STRUCTURE = {
   frontTopRail: { placeDir: [1, 0, 0] as const, unstable: true },
   backTopRail: { placeDir: [-1, 0, 0] as const, unstable: true },
   topPlane: { placeDir: [0, -1, 0] as const }, // closes down onto the top rails
+  // The dowel holes are in plain sight on the side panel's inner face, but each panel is a 22mm plank inside a 64mm-fat box, so the gate's occluder maths blocks the seat from every camera. Gate off for these two: they arm from any angle.
+  dowel101350_1: { noVisibilityGate: true },
+  dowel101350_2: { noVisibilityGate: true },
   // NO per-screw toolAnchor here: the head-face contact is a GENERATED model fact now (parts.gen headOffset, emitted by read-parts.mjs from the mesh bounds) — an 11-entry hand copy of it lived here for one session and was deleted when the extractor learned to emit it.
 } as StructureOverlay;
 

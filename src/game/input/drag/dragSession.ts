@@ -11,7 +11,8 @@ export interface DragSession {
   /** Interchangeable sockets the held part may snap to (same part group). */
   /** matchVisual is where the fit is MEASURED — the park pose for a part that enters along an axis, the seated hold point for everything else. GroupCandidate's own position stays what the release path places at. */
   /** `clearPoints` is the visibility gate's second chance: points whose own clear sightline passes the candidate when its seat is box-blocked — a structural part's ghost body at the delivered pose, a fastener's park point. Empty when it has neither. */
-  candidates: (GroupCandidate & { matchVisual: Vec3; seatVisual: Vec3; clearPoints: Vec3[]; burial: number })[];
+  /** `gateOff` is the authored per-part opt-out (PartDef.noVisibilityGate): the sightline gate is skipped outright for this candidate. */
+  candidates: (GroupCandidate & { matchVisual: Vec3; seatVisual: Vec3; clearPoints: Vec3[]; burial: number; gateOff: boolean })[];
   /** Live sockets outside the group, for wrong-target detection. */
   otherSockets: Vec3[];
   bakedPos: Vec3;

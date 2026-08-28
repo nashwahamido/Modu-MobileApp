@@ -149,7 +149,8 @@ for (const F of FURNITURES) {
     const combined = new Set<ClusterId>();
     const failures: string[] = [];
     for (const a of actions) {
-      if (isPickupType(a.type) && a.partId && parts[a.partId]) {
+      // Authored gate opt-out (PartDef.noVisibilityGate) skips the invariant: the runtime does not gate these sockets at all, so "invisible from every camera" is not a defect for them.
+      if (isPickupType(a.type) && a.partId && parts[a.partId] && !parts[a.partId].noVisibilityGate) {
         const part = parts[a.partId];
         // The runtime gate asks the renderer which placed parts are on screen and where (scene/partBoxes). Offline there is no renderer, so this replay reconstructs the same set from build state: a placed part stands at its baked pose exactly when it shares the candidate's cluster (both in focus), belongs to a cluster already combined in, or has no cluster at all. Another cluster's work is hidden or parked off-screen while this one has focus and cannot occlude anything. Note what this is NOT: the runtime used to run this same inference on `cluster.seed`, which is an authoring flag about which cluster STARTS the build — BEKVAM and LACK name their one cluster for the UI label and never set it, so every part of those furnitures was disqualified and the gate ran inert for the whole build. Cluster IDENTITY is the honest question; seed never was.
         const cl = parts[a.partId]?.cluster;

@@ -75,6 +75,8 @@ export interface PartCore {
   visualCenterOffset?: Vec3;
   /** World-space offset from pose.position to the TOOL's contact point for this part's tighten (ToolModel) — for when the node origin is not where the tool works (EKET suspension bracket: the origin sits on the plate, the screw hole at the circular boss ~1cm over). */
   toolAnchor?: Vec3;
+  /** Opt this part's sockets OUT of the drag visibility gate — they arm from any camera. For hardware whose real hole is open to the eye but sits deep inside a conservative occluder box (BEKVÄM's dowels: a 22mm plank inside a 64mm AABB). */
+  noVisibilityGate?: boolean;
   tool?: ToolId;
 }
 export interface StructuralFields {

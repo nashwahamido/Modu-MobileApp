@@ -375,10 +375,13 @@ export function usePartDrag({
             // applies the park offset itself, so shifting the real position here parked the part
             // twice: the pin jumped a further 12cm up on release and had to be slid all the way back
             // down. Matching and placing are two different questions about the same socket.
-            if (!dir || !back) return { ...c, matchVisual: c.holdPosition, seatVisual, clearPoints };
+            // Authored gate opt-out (PartDef.noVisibilityGate), read once per drag with the rest of the candidate's geometry.
+            const gateOff = !!cPart?.noVisibilityGate;
+            if (!dir || !back) return { ...c, matchVisual: c.holdPosition, seatVisual, clearPoints, gateOff };
             const shift: Vec3 = [-dir[0] * back, -dir[1] * back, -dir[2] * back];
             return {
               ...c,
+              gateOff,
               matchVisual: [
                 c.holdPosition[0] + shift[0],
                 c.holdPosition[1] + shift[1],
@@ -596,7 +599,8 @@ export function usePartDrag({
               if (!d.inFrame) continue;
               // Visibility gate, one rule for every part type: the first surface the sightline meets must be within (the anchor's own burial + slack) of the anchor. Looking AT the socket passes; looking at anything in front of it — another part, or the SAME part's far side — fails. Replaces box/halo sampling (neighbourhood visibility) and the exemption-based line-of-sight test (transparent receivers), both of which armed hidden sockets in play tests.
               let visStat: string | null = null;
-              if (laF) {
+              if (laF && c.gateOff) visStat = "off";
+              else if (laF) {
                 const g = sightlineGapM(laF[0], c.seatVisual, s.placedBoxes);
                 visStat = `${(g.gap * 1000).toFixed(0)}/${((c.burial + VIS_GAP_SLACK_M) * 1000).toFixed(0)}mm`;
                 // Second chance (clearPoints): a structural part's whole GHOST BODY at the delivered pose, a fastener's park point. Either passes a seat that is merely grazed — the side view of DALFRED's pin hole, where the plate's rim stands 60mm before the centre of its own top face; a LACK leg hanging in plain sight under the tabletop it bolts into. No burial slack on these: they are points on the PART, not mouths inside a receiver, so a sample that reports itself buried is a sample standing inside something and is exactly what should not count.

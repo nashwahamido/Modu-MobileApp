@@ -57,6 +57,7 @@ export type StructureOverlay = Record<
       | "lockTravel"
       | "dropOn"
       | "toolAnchor"
+      | "noVisibilityGate"
       | "fastenerKind"
       | "engageDir"
       | "stageOffset"
