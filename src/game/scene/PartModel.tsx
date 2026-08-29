@@ -214,6 +214,8 @@ interface Props {
   inserting?: boolean;
   /** Type of the action currently in hand. The ghost layer resolves both the matchable socket id and the previewed pose from it — see SocketHintGhost. */
   heldActionType?: ActionType;
+  /** The held part was grabbed before its step is legal (free mode's grab-anything). No socket ghost then — see SceneState.heldBlocked. */
+  heldBlocked?: boolean;
 }
 
 /** Resolves a part's entity inside a specific instance of the shared model by node name. */
@@ -730,6 +732,7 @@ function PartModelImpl({
   tightening,
   inserting,
   heldActionType,
+  heldBlocked,
 }: Props) {
   const partActions = useMemo(() => {
     const store = useGameStore.getState();
@@ -879,12 +882,14 @@ function PartModelImpl({
             initial={heldDriver.value}
             rotation={def.pose.rotation}
           />
-          <SocketHintGhost
-            model={model}
-            def={def}
-            partActions={partActions}
-            heldType={heldActionType}
-          />
+          {heldBlocked ? null : (
+            <SocketHintGhost
+              model={model}
+              def={def}
+              partActions={partActions}
+              heldType={heldActionType}
+            />
+          )}
         </>
       );
     case "socket_hint":
@@ -927,5 +932,6 @@ export const PartModel = memo(
     p.slideDriver === n.slideDriver &&
     p.tightening === n.tightening &&
     p.inserting === n.inserting &&
-    p.heldActionType === n.heldActionType,
+    p.heldActionType === n.heldActionType &&
+    p.heldBlocked === n.heldBlocked,
 );

@@ -5,7 +5,7 @@ import {
   currentStageForClusterFocus,
   requiresClusterFocus,
 } from "@/src/game/core/evaluation/clusters";
-import { availableInMode, currentStage } from "@/src/game/core/evaluation/availability";
+import { availableActions, availableInMode, currentStage } from "@/src/game/core/evaluation/availability";
 import { hasTrayCard } from "@/src/game/core/evaluation/trayCard";
 import { isStaged, stagedCarriers, stagedMembers } from "@/src/game/core/model/staging";
 import { isPickupType } from "@/src/game/core/ids";
@@ -64,6 +64,8 @@ export interface SceneState {
   stagedSeat: AssemblyAction | null;
   /** Reorient/combine beat currently awaiting the player's swipe. */
   activeBeat: AssemblyAction | null;
+  /** The part in hand was grabbed before its step is legal — free mode lets any part of a started cluster lift and answers with the error chip (store.noteBlocked). Its socket must NOT be ghosted: a glowing target under a "not yet" message contradicts the message, and the drag cannot snap there anyway (candidates come from store.available()). */
+  heldBlocked: boolean;
 }
 
 /**
@@ -303,6 +305,11 @@ export function deriveSceneState(
     else if (acts.tighten && !done.has(acts.tighten)) modes[id] = "loose";
     else modes[id] = "flush";
   }
+  // LEGALITY, not the mode-filtered offering: the drag's candidates and noteBlocked both ask availableActions, so asking availableIds here would strip the ghost off a legal-but-off-stage grab that can still snap.
+  const heldBlocked =
+    !!heldAction &&
+    !availableActions(furniture, done).some((a) => a.actionId === heldAction.actionId);
+
   return {
     modes,
     heldAction,
@@ -312,6 +319,7 @@ export function deriveSceneState(
     activeInsertPress,
     stagedSeat,
     activeBeat,
+    heldBlocked,
   };
 }
 
@@ -328,7 +336,7 @@ export function useSceneState(): SceneState {
     () =>
       furniture
         ? deriveSceneState(furniture, completed, heldActionId, activeCluster, matchedActionId, mode, focusMode, hintPartId)
-        : { modes: {}, heldAction: null, trayItems: [], allTrayItems: [], activeTighten: null, activeInsertPress: null, stagedSeat: null, activeBeat: null },
+        : { modes: {}, heldAction: null, trayItems: [], allTrayItems: [], activeTighten: null, activeInsertPress: null, stagedSeat: null, activeBeat: null, heldBlocked: false },
     [furniture, completed, heldActionId, activeCluster, matchedActionId, mode, focusMode, hintPartId],
   );
 }

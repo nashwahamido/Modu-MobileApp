@@ -8,6 +8,7 @@ import { useGameStore } from "@/src/game/core/store";
 import { useSharedValue as useWorkletSharedValue } from "react-native-worklets-core";
 import type { ISharedValue } from "react-native-worklets-core";
 import type { StickDeflection } from "@/src/game/scene/OrbitDrive";
+import type { GetLookAt } from "@/src/game/scene/projectToScreen";
 
 import { blocksZoomIn, FOV_Y_DEG } from "@/src/game/scene/cameraConfig";
 /** Drop-in replacement for the library's useCameraManipulator that fixes its swap race. On a pivot change the library hook sets its state to undefined and releases the old native manipulator while the replacement is still arriving via a promise — the Camera's render-thread callback can execute the already-released pointer in between ("Pointer ManipulatorWrapper has already been manually released!"). Here the hook keeps returning the OLD manipulator until the replacement is created (synchronously) and committed; the old wrapper's release is deferred until well after the commit that hands the render callback its replacement. */
@@ -411,6 +412,21 @@ export function useOrbitCamera(
     resetCamera();
   }, [framingCluster, resetCamera]);
 
+  // The look-at the RENDERER draws with: the manipulator's pair plus the accumulated pan, which OrbitDrive applies on the render thread and the manipulator itself never learns about.
+  // Unprojecting a finger through the raw manipulator put every held part exactly one pan away from it on screen, and the drag's own probe could not see it because it projected the part back through the same stale camera.
+  const getLookAt = useCallback<GetLookAt>(() => {
+    const la = manipulator?.getLookAt();
+    if (!la) return null;
+    const p = panShared.value;
+    if (!p.x && !p.y && !p.z) return la;
+    // The pan translates the view, so `up` rides through unchanged.
+    return [
+      [la[0][0] + p.x, la[0][1] + p.y, la[0][2] + p.z],
+      [la[1][0] + p.x, la[1][1] + p.y, la[1][2] + p.z],
+      la[2],
+    ];
+  }, [manipulator, panShared]);
+
   const getFocusPoint = useCallback((): Vec3 => targetRef.current, []);
   const isViewingUnderside = useCallback((): boolean => {
     const lookAt = manipulator?.getLookAt();
@@ -429,6 +445,7 @@ export function useOrbitCamera(
     manipulator,
     stickActive,
     panShared,
+    getLookAt,
     getFocusPoint,
     onStickStart,
     onStickMove,

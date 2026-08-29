@@ -98,7 +98,7 @@ export function AssemblyScene({
   const driveActionId = useGameStore((s) => s.driveActionId);
 
 
-  const { modes, heldAction, activeTighten, activeInsertPress } = sceneState;
+  const { modes, heldAction, activeTighten, activeInsertPress, heldBlocked } = sceneState;
   const pushMap = useMemo(
     () =>
       furniture?.pushOpen
@@ -300,6 +300,7 @@ export function AssemblyScene({
             tightening={activeTighten?.partId === id}
             inserting={activeInsertPress?.partId === id}
             heldActionType={heldAction?.type}
+            heldBlocked={heldBlocked}
           />
         ))}
       </ShaderAssetsProvider>

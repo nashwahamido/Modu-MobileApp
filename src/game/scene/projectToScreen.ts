@@ -22,6 +22,9 @@ export type LookAt = readonly [
   readonly number[],
 ];
 
+/** Reads the look-at the RENDERER is drawing with, pan included — the only camera a screen↔world conversion may use. See useOrbitCamera's getLookAt for why the manipulator's own pair is not that camera. */
+export type GetLookAt = () => readonly [Vec3, Vec3, Vec3] | null;
+
 /** The camera's orthonormal frame, rebuilt from a look-at. Every screen-space question in the game starts here — projecting a point, mapping a finger delta to metres, spreading a plane across the view — so it is derived once and shared rather than re-copied per call site. */
 export interface CameraBasis {
   eye: readonly number[];

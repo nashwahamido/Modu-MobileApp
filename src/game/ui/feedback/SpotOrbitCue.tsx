@@ -19,7 +19,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useGameStore } from "@/src/game/core/store";
-import { projectToScreen, type LookAt } from "@/src/game/scene/projectToScreen";
+import { projectToScreen, type GetLookAt } from "@/src/game/scene/projectToScreen";
 import { ELEVATION, FONT, RADIUS, SPACE, useFixedStyles } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 import type { Vec3 } from "@/src/game/core/type";
@@ -33,9 +33,10 @@ const CHECK_MS = 100;
 const EDGE_PAD = 56;
 
 export function SpotOrbitCue({
-  manipulator,
+  getLookAt,
 }: {
-  manipulator: { getLookAt: () => LookAt | null } | null | undefined;
+  /** The PANNED look-at (useOrbitCamera's getLookAt): projecting through the manipulator's own pair reports a socket as off screen by however far the player has strafed. */
+  getLookAt: GetLookAt;
 }) {
   const m = useMirror();
   const styles = useFixedStyles(makeStyles);
@@ -45,7 +46,7 @@ export function SpotOrbitCue({
   const [offScreen, setOffScreen] = useState(false);
 
   useEffect(() => {
-    if (!hintPartId || !parts || !manipulator) {
+    if (!hintPartId || !parts) {
       setOffScreen(false);
       return;
     }
@@ -61,7 +62,7 @@ export function SpotOrbitCue({
       part.pose.position[2] + off[2],
     ];
     const check = () => {
-      const sp = projectToScreen(manipulator.getLookAt(), world, winW, winH);
+      const sp = projectToScreen(getLookAt(), world, winW, winH);
       setOffScreen(
         !sp ||
           sp.x < EDGE_PAD ||
@@ -73,7 +74,7 @@ export function SpotOrbitCue({
     check();
     const id = setInterval(check, CHECK_MS);
     return () => clearInterval(id);
-  }, [hintPartId, manipulator, parts, winH, winW]);
+  }, [hintPartId, getLookAt, parts, winH, winW]);
 
   // A joystick that rocks left and right — the gesture being asked for, rather than a word for it.
   const rock = useSharedValue(0);

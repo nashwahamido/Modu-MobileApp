@@ -19,6 +19,8 @@ import * as LACK from "./LACK/authored";
 import { PARTS as LACK_PARTS } from "./LACK/parts.gen";
 import * as EKET from "./EKET/authored";
 import { PARTS as EKET_PARTS } from "./EKET/parts.gen";
+import * as DALFRED from "./DALFRED/authored";
+import { PARTS as DALFRED_PARTS } from "./DALFRED/parts.gen";
 
 export interface AuthoredExports {
   AUTHORED_ACTIONS: readonly DraftAction[];
@@ -62,3 +64,4 @@ export function fixture(
 
 export const LACK_FIXTURE = fixture("lack-table", LACK as AuthoredExports, LACK_PARTS);
 export const EKET_FIXTURE = fixture("eket-cabinet", EKET as AuthoredExports, EKET_PARTS);
+export const DALFRED_FIXTURE = fixture("dalfred-stool", DALFRED as AuthoredExports, DALFRED_PARTS);

@@ -29,10 +29,10 @@ import { computeFit, APPROACH_FACTOR } from "@/src/game/core/geometry/fit";
 import { isPickupType } from "@/src/game/core/ids";
 import { stagedMembers } from "@/src/game/core/model/staging";
 import { quatConjugate, quatMultiply, quatRotateVec3, quatSlerp, screenRay } from "@/src/game/core/geometry/math";
-import { AIM_BAND_MAX_PX, aimBandScale, clusterCarryAnchor, holdReachFrom, burialDepthM, ghostSamplePoints, pointToSegmentPx, sightlineGapM, VIS_GAP_SLACK_M, rayPointNearest, segmentInFrame } from "./dragPlane";
+import { AIM_BAND_MAX_PX, aimBandScale, clusterCarryAnchor, clusterCarryOffset, holdReachFrom, burialDepthM, ghostSamplePoints, pointToSegmentPx, sightlineGapM, VIS_GAP_SLACK_M, rayPointNearest, segmentInFrame } from "./dragPlane";
 import { ActionId, AssemblyAction, PartId, Vec3 } from "@/src/game/core/type";
 import { selectFirstDrop, useGameStore } from "@/src/game/core/store";
-import type { OrbitManipulator } from "../../scene/AssemblyScene";
+import type { GetLookAt } from "../../scene/projectToScreen";
 import { occluderBoxes, readLiveBoxes } from "../../scene/partBoxes";
 import { hasPickProber, probePick } from "../../scene/pickProbe";
 import { describePick, judgePick, PickConfirmCache } from "./pickConfirm";
@@ -77,7 +77,8 @@ let lastDragLog = 0;
 let lastRotLogId: ActionId | null = null;
 
 interface Params {
-  manipulator: OrbitManipulator;
+  /** The PANNED look-at (useOrbitCamera's getLookAt), not the manipulator's own — every screen↔world conversion in here depends on it being the camera that actually drew the frame. */
+  getLookAt: GetLookAt;
   heldDriver: OffsetDriver;
   /** Drives a component's non-lead bodies while the lead is held/dragged, so they track the same live offset ("riding" mode). */
   slideDriver: ClusterDriver;
@@ -92,7 +93,7 @@ interface Params {
 
 /** Tray-item drag: long-press a tray card (progress ring) to take the part in hand — it materializes at the spawn point on the work plane — then keep the finger down to pan it; release snaps or returns it to the tray. */
 export function usePartDrag({
-  manipulator,
+  getLookAt,
   heldDriver,
   slideDriver,
   carryShared,
@@ -121,7 +122,7 @@ export function usePartDrag({
     fingerOnPlane,
     fingerOnCameraPlane,
     worldToScreen,
-  } = useDragCamera(manipulator, getFocusPoint);
+  } = useDragCamera(getLookAt, getFocusPoint);
 
   // Read at HOOK level, not inside the gesture callback. The callback that sets the drag plane runs
   // from gesture-handler's event path, and reaching into the store from there was throwing on a
@@ -579,7 +580,7 @@ export function usePartDrag({
             let nearestPx = Infinity;
             let nearestMPerPx = 1;
             // Occlusion gate (layer 1 of socket visibility): a socket whose line of sight from the camera passes through a placed part is hidden — DALFRED's back-leg spots behind the plate from a front view — and is skipped for acquisition exactly like an off-frame one. The nearest skipped-px is remembered so the chip can say WHY nothing matches ("Try turning the camera") instead of hunting silently — the off-frame gate shipped silent and read as a bug. The exemption-based variant that used to live here (receivers and anchor-containing boxes excluded by hand, segmentHitsBox per candidate) was superseded by the sightline-gap rule below and is gone: exemptions made a part transparent to its OWN sockets, so legs snapped through plates from above.
-            const laF = manipulator?.getLookAt();
+            const laF = getLookAt();
             const now = Date.now();
             // Occluder refresh, throttled: the boxes are world-space so camera motion alone never stales them (the eye above is per-frame), but parts can MOVE mid-drag — a second finger toggling cluster focus hides/shows parts, and the previous part's commit animation can still be easing home when this pickup happened. Burials re-derive with the boxes: each is a measurement against the same list.
             if (now - s.boxesStamp > OCCLUDER_REFRESH_MS) {
@@ -722,7 +723,7 @@ export function usePartDrag({
             if (!s.uprightAnchor) s.planeY += (wantY - s.planeY) * 0.25;
             // Socket-depth policy — the second half of the on-ray contract: the plane owns depth only while it is trustworthy. Near a matched socket the depth eases to the point on the finger's RAY nearest that socket — screen-invisible (movement along the ray never moves the part on screen), but it swaps a grazing plane's metres-per-pixel runaway for the socket's own depth, so the snap window is pixels of AIM rather than pixels of tremor. The aim distance is recomputed for the CHOSEN target (hysteresis can keep `current` while bestD measured the rival). Upright parts skip it: their anchor already pins depth.
             if (!s.uprightAnchor) {
-              const la = manipulator?.getLookAt();
+              const la = getLookAt();
               if (la) {
                 frameRay = screenRay(
                   { eye: la[0], center: la[1], up: la[2] },
@@ -878,7 +879,7 @@ export function usePartDrag({
               ? Math.hypot(hp.x - e.absoluteX, hp.y - (e.absoluteY - FINGER_LIFT_DP)).toFixed(0)
               : "offscreen";
             // Zoom and carry depth, so an on-device report says WHICH zoom it happened at instead of leaving it to be guessed — the clearance floor is a function of both, and the last round of reports could not be reproduced without them.
-            const la2 = manipulator?.getLookAt();
+            const la2 = getLookAt();
             const camDist = la2
               ? Math.hypot(la2[1][0] - la2[0][0], la2[1][1] - la2[0][1], la2[1][2] - la2[0][2])
               : 0;
@@ -970,7 +971,7 @@ export function usePartDrag({
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           } else {
             // complimentary function for FLOAT: AUTO-RETURN: the part flies to a recover spot in front of the camera and returns to the tray.
-            const la = manipulator?.getLookAt();
+            const la = getLookAt();
             const off = heldDriver.value;
             let dest: Float3 = s.base;
             if (la) {
@@ -1003,7 +1004,7 @@ export function usePartDrag({
       return g;
     },
     [
-      manipulator,
+      getLookAt,
       heldDriver,
       slideDriver,
       getFocusPoint,
@@ -1092,7 +1093,7 @@ export function usePartDrag({
               fingerOnPlane(e.absoluteX, e.absoluteY, planeY))
             : (fingerOnPlane(e.absoluteX, e.absoluteY, planeY) ??
               fingerOnCameraPlaneAt(e.absoluteX, e.absoluteY, getFocusPoint()));
-          const lastO: Float3 = p ? [p[0] - c[0], 0, p[2] - c[2]] : target;
+          const lastO: Float3 = p ? clusterCarryOffset(p, c, target, !!anchor) : target;
           clusterSession.current = { ref: c, planeY, lastO, anchor };
           store.setCombiningCluster(action.cluster);
           store.setDragFit("held", null);
@@ -1102,8 +1103,7 @@ export function usePartDrag({
             clusterRingX.value = sp.x;
             clusterRingY.value = sp.y;
           }
-          // the carry rides at the LOOSE height: the park offset's out-of-plane (vertical) component lifts the whole glide, so a vertically-parked cluster (DALFRED's seat) hovers above its seat instead of reading as already screwed in; zero for horizontal parks (EKET)
-          carryShared.value = { x: lastO[0], y: target[1], z: lastO[2] };
+          carryShared.value = { x: lastO[0], y: lastO[1], z: lastO[2] };
         })
         .onUpdate((e) => {
           const s = clusterSession.current;
@@ -1115,9 +1115,9 @@ export function usePartDrag({
             : (fingerOnPlane(e.absoluteX, e.absoluteY, s.planeY) ??
               fingerOnCameraPlaneAt(e.absoluteX, e.absoluteY, getFocusPoint()));
           if (!p) return;
-          const o: Float3 = [p[0] - s.ref[0], 0, p[2] - s.ref[2]];
+          const o: Float3 = clusterCarryOffset(p, s.ref, target, !!s.anchor);
           s.lastO = o;
-          carryShared.value = { x: o[0], y: target[1], z: o[2] };
+          carryShared.value = { x: o[0], y: o[1], z: o[2] };
           // re-project the marker each move so it survives a mid-drag zoom
           const sp = worldToScreen([s.ref[0] + target[0], s.ref[1] + target[1], s.ref[2] + target[2]]);
           if (sp) {
@@ -1128,8 +1128,8 @@ export function usePartDrag({
             SNAP_DIST_MAX,
             Math.max(SNAP_DIST_MIN, useGameStore.getState().settings.snapDistance),
           );
-          // the carry glides in the horizontal plane (o[1] is structurally 0), so a VERTICAL park offset (DALFRED's seat parks 0.15 straight up) must not count against the snap — measure the miss in-plane only
-          const d = Math.hypot(o[0] - target[0], o[2] - target[2]);
+          // One measure for both carries, because clusterCarryOffset already made the glide's y equal target[1]: the miss there is still purely in-plane, while an anchored carry's vertical miss is a real one the player can see.
+          const d = Math.hypot(o[0] - target[0], o[1] - target[1], o[2] - target[2]);
           const fit =
             d <= snapDist
               ? "nearCorrect"

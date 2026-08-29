@@ -447,6 +447,26 @@ export function clusterCarryAnchor(
 }
 
 /**
+ * The carried cluster's offset from its baked centroid, for the finger point `p`.
+ *
+ * An ANCHORED carry takes all three axes: `p` is the point under the finger on the camera-facing plane through the park pose, so a finger over the target ring yields exactly the park offset and the park's own lift falls out of the geometry.
+ * Substituting the park height for p's vertical instead — which is what this replaced — froze the cluster at one world height for the whole drag, so it hung off the finger by the full vertical component of the finger's offset from screen centre: ~0.3 m at the bottom of a landscape phone, which is exactly where the tray card the drag starts from sits.
+ * The horizontal glide keeps its 2-DOF contract, riding at the park height; its own plane already pins p's vertical to the centroid's.
+ */
+export function clusterCarryOffset(
+  p: Float3,
+  centroid: Float3,
+  parkOffset: Float3,
+  anchored: boolean,
+): Float3 {
+  return [
+    p[0] - centroid[0],
+    anchored ? p[1] - centroid[1] : parkOffset[1],
+    p[2] - centroid[2],
+  ];
+}
+
+/**
  * The point a finger is aiming at: on the work plane when the plane answers sanely, otherwise on
  * the finger's ray at capped assembly depth. Never fails, and never leaves the ray.
  *

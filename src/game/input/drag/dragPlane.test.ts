@@ -9,7 +9,8 @@ import { quatConjugate, quatMultiply, quatRotateVec3, quatSlerp, screenRay } fro
 import { FOV_Y_DEG } from "@/src/game/scene/cameraConfig";
 import { projectToScreen } from "@/src/game/scene/projectToScreen";
 import type { Vec3 } from "@/src/game/core/type";
-import { AIM_BAND_MAX_PX, aimBandScale, CARRY_CLEARANCE_ENABLED, CARRY_NEAR_MARGIN_M, clusterCarryAnchor, holdReachFrom, dragPlanePoint, dragRayPoint, DRIFT_CAP_FACTOR, RAY_CARRY_MIN_FRACTION, RAY_CARRY_MIN_M, burialDepthM, ghostSamplePoints, rayBoxEntryT, rayPointNearest, sightlineGapM, VIS_GAP_SLACK_M, segmentHitsBox, segmentInFrame } from "./dragPlane";
+import type { Float3 } from "./dragSession";
+import { AIM_BAND_MAX_PX, aimBandScale, CARRY_CLEARANCE_ENABLED, CARRY_NEAR_MARGIN_M, clusterCarryAnchor, clusterCarryOffset, holdReachFrom, dragPlanePoint, dragRayPoint, DRIFT_CAP_FACTOR, RAY_CARRY_MIN_FRACTION, RAY_CARRY_MIN_M, burialDepthM, ghostSamplePoints, rayBoxEntryT, rayPointNearest, sightlineGapM, VIS_GAP_SLACK_M, segmentHitsBox, segmentInFrame } from "./dragPlane";
 import { MIN_ORBIT_DISTANCE_M } from "@/src/game/scene/cameraConfig";
 
 // Landscape, the only orientation the game runs in (app.json).
@@ -165,6 +166,22 @@ test("a vertically-parking cluster gets a camera-plane anchor at its park pose; 
   assert.equal(clusterCarryAnchor([0, 0.3, 0], [0.16, 0, 0]), null);
   // The seed cluster has no park offset at all: it anchors on its own seat, because its glide plane holds the target and a level orbit grazes it there.
   assert.deepEqual(clusterCarryAnchor([0, 0.3, 0], [0, 0, 0]), [0, 0.3, 0]);
+});
+
+test("an anchored cluster carry follows the finger's height; the glide keeps its park height", () => {
+  const centroid: Float3 = [0.1, 0.5, -0.2];
+  const park: Float3 = [0, 0.15, 0];
+  const near = (got: Float3, want: Float3) =>
+    assert.ok(
+      Math.hypot(got[0] - want[0], got[1] - want[1], got[2] - want[2]) < 1e-9,
+      `got ${got.join(",")}, wanted ${want.join(",")}`,
+    );
+  // Finger on the camera plane ABOVE the anchor: the carry rises with it. Freezing y at the park height instead is what left DALFRED's seat hanging at one world height for the whole drag, a third of a metre off the finger at the bottom of the screen.
+  near(clusterCarryOffset([0.1, 0.85, -0.2], centroid, park, true), [0, 0.35, 0]);
+  // Finger dead on the target ring (anchor = centroid + park): the offset IS the park offset, so the parked lift falls out of the geometry.
+  near(clusterCarryOffset([0.1, 0.65, -0.2], centroid, park, true), park);
+  // The horizontal glide is unchanged: its own plane pins the height, and the carry rides at the park's.
+  near(clusterCarryOffset([0.4, 0.5, 0.1], centroid, [0.16, 0, 0], false), [0.3, 0, 0.3]);
 });
 
 test("a leashed point still projects under the finger (the on-ray invariant)", () => {

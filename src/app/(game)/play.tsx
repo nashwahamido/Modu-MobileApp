@@ -117,6 +117,7 @@ function GameScreen() {
     manipulator,
     stickActive,
     panShared,
+    getLookAt,
     onStickStart,
     onStickMove,
     onStickEnd,
@@ -384,7 +385,7 @@ function GameScreen() {
 
   const { gestureFor, canvasGestureFor, clusterGestureFor, ringOverlay } =
     usePartDrag({
-      manipulator,
+      getLookAt,
       heldDriver,
       slideDriver,
       carryShared,
@@ -480,7 +481,7 @@ function GameScreen() {
             any future caller about who it is for. */}
         <IdleCheckIn />
         {/* Only speaks when Spot is running and its target is somewhere the player cannot see. */}
-        <SpotOrbitCue manipulator={manipulator} />
+        <SpotOrbitCue getLookAt={getLookAt} />
         {/* Focus mode clears the workbench: everything below is chrome the task doesn't
             need. What survives is the shortlist — joystick, the next part (PartsTray), the
             progress bar, Settings, and the Focus toggle itself, since hiding it would trap

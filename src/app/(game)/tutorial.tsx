@@ -138,6 +138,7 @@ function TutorialScreen() {
     manipulator,
     stickActive,
     panShared,
+    getLookAt,
     onStickStart,
     onStickMove,
     onStickEnd,
@@ -799,7 +800,7 @@ function TutorialScreen() {
   );
 
   const { gestureFor, canvasGestureFor, clusterGestureFor, ringOverlay } = usePartDrag({
-    manipulator,
+    getLookAt,
     heldDriver,
     slideDriver,
     carryShared,

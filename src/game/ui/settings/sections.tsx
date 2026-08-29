@@ -9,7 +9,6 @@ import { useTutorialStore } from "@/src/game/tutorial/store";
 import { setMusicEnabled, setMusicVolume } from "@/src/game/audio/music";
 // NOT services/auth's bare signOut: this one also clears the zustand stores, so the next account cannot inherit this player's build progress and half-placed furniture, and it resets a demo account before its session ends. src/dev is not __DEV__-gated — the showcase runs from release builds — and useSessionGate already reaches into it for the same reason.
 import { signOutAccount } from "@/src/dev/accounts";
-import { SIGN_IN_ROUTE } from "@/src/hooks/useSessionGate";
 import {
   ActionRow,
   Choice,
@@ -544,6 +543,9 @@ export function AppDisplaySection() {
   );
 }
 
+/** The landing screen — the app's index route, which has no group. Public to useSessionGate, so a signed-out player stays put here instead of being bounced on to /auth. */
+const LANDING_ROUTE = "/" as Href;
+
 /** Account-level actions. Both go through a confirm dialog — this is the first player-facing sign-out in the app, and the reason it was kept to the dev panel until now is that a bare row is one stray tap from ending the session. */
 export function AccountSection() {
   const confirmLogOut = () =>
@@ -559,7 +561,8 @@ export function AccountSection() {
             .finally(() => {
               // THE MODAL LAYER GOES FIRST, for the same reason RedoTutorialSection dismisses before it replaces: this screen is a modal in (presentation) sitting ON TOP of the room, so a bare replace() swaps the modal and leaves the room mounted underneath — with its Filament engine, its shell GLB and every texture still resident, under a login screen that will never show them. Signing out is the one moment the room is certainly finished with, so it should cost nothing to keep. Dismissing first takes the room off the stack, which unmounts its scene and lets the engine actually die.
               if (router.canDismiss()) router.dismissAll();
-              router.replace(SIGN_IN_ROUTE);
+              // The LANDING, not the picker: signing out returns the player to the app's front door, the same screen a fresh install opens on. "Choose Account" is one tap away from there, and index.tsx only skips it while a session exists — which is exactly what we just ended.
+              router.replace(LANDING_ROUTE);
             });
         },
       },

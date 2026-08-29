@@ -1,18 +1,18 @@
-// Every screen↔world conversion the part drag needs, bound once to the live camera and window. Split out of usePartDrag because none of it touches drag STATE: each function answers a question about where a screen point lands in the world (or the reverse) and could be asked by anything holding a manipulator. The finger lift is baked in here rather than at the call sites — the part rides above the fingertip, and a conversion that forgot the lift was a class of one-off bug.
+// Every screen↔world conversion the part drag needs, bound once to the live camera and window. Split out of usePartDrag because none of it touches drag STATE: each function answers a question about where a screen point lands in the world (or the reverse) and could be asked by anything holding the camera. The finger lift is baked in here rather than at the call sites — the part rides above the fingertip, and a conversion that forgot the lift was a class of one-off bug.
 import { useCallback } from "react";
 import { useWindowDimensions } from "react-native";
 
 import type { Furniture, Vec3 } from "@/src/game/core/type";
 import { screenRay } from "@/src/game/core/geometry/math";
-import { cameraBasis, projectToScreen } from "@/src/game/scene/projectToScreen";
+import { cameraBasis, projectToScreen, type GetLookAt } from "@/src/game/scene/projectToScreen";
 import { FOV_Y_DEG } from "@/src/game/scene/cameraConfig";
-import type { OrbitManipulator } from "@/src/game/scene/AssemblyScene";
 import { dragPlanePoint, dragRayPoint, leashAlongRay, rayBoxEntryT } from "./dragPlane";
 import { CARRY_CAP_ENABLED, CARRY_SURFACE_MARGIN_M, FINGER_LIFT_DP } from "./dragConfig";
 import type { DragSession, Float3 } from "./dragSession";
 
 export function useDragCamera(
-  manipulator: OrbitManipulator,
+  // The PANNED look-at, never the manipulator's own: see useOrbitCamera's getLookAt.
+  getLookAt: GetLookAt,
   getFocusPoint: () => Vec3,
 ) {
   const { width: winW, height: winH } = useWindowDimensions();
@@ -20,7 +20,7 @@ export function useDragCamera(
   /** The finger's point on a plane FACING the camera through `anchor` — the mapping a vertically-entering part needs, where screen-up is world-up. */
   const fingerOnCameraPlaneAt = useCallback(
     (absX: number, absY: number, anchor: Vec3): Float3 | null => {
-      const la = manipulator?.getLookAt();
+      const la = getLookAt();
       const basis = cameraBasis(la);
       if (!la || !basis) return null;
       const { eye, fwd, right, camUp } = basis;
@@ -41,7 +41,7 @@ export function useDragCamera(
       ];
       return leashAlongRay(eye as Float3, center as Float3, eye as Float3, p);
     },
-    [manipulator, winW, winH],
+    [getLookAt, winW, winH],
   );
 
   /** EXPERIMENT (drag-no-plane): the finger's point with no plane — on the ray, just in front of the model's near boundary (see dragRayPoint). The adaptive default; level mode keeps fingerOnPlane. `capM` is the eased occlusion cap the caller maintains (DragSession.carryCap); Infinity leaves the carry uncapped. */
@@ -54,7 +54,7 @@ export function useDragCamera(
       socketDepthM: number | null = null,
       capM = Infinity,
     ): Float3 | null => {
-      const la = manipulator?.getLookAt();
+      const la = getLookAt();
       if (!la) return null;
       return dragRayPoint(
         { eye: la[0], center: la[1], up: la[2] },
@@ -69,14 +69,14 @@ export function useDragCamera(
         capM,
       );
     },
-    [manipulator, winW, winH],
+    [getLookAt, winW, winH],
   );
 
   /** The occlusion cap for a finger at (absX, absY): the axial depth of the first placed-part box the finger's ray enters, backed off by the surface margin. Infinity over open space. Bound here rather than in the gesture because it is the same unproject the carry itself runs — one place that knows the finger lift, the FOV and the window. */
   const carryCapAt = useCallback(
     (absX: number, absY: number, boxes: readonly { min: Vec3; max: Vec3; pid?: string }[]): number => {
       if (!CARRY_CAP_ENABLED || !boxes.length) return Infinity;
-      const la = manipulator?.getLookAt();
+      const la = getLookAt();
       if (!la) return Infinity;
       const { eye, dir } = screenRay(
         { eye: la[0], center: la[1], up: la[2] },
@@ -89,7 +89,7 @@ export function useDragCamera(
       const hit = rayBoxEntryT(eye, dir, boxes);
       return Number.isFinite(hit.t) ? hit.t - CARRY_SURFACE_MARGIN_M : Infinity;
     },
-    [manipulator, winW, winH],
+    [getLookAt, winW, winH],
   );
 
   /** Bounding radius of the assembly around the current orbit pivot, from the baked poses — what "in front of the model" measures against. Baked poses are the finished-furniture layout, so the radius is stable for the whole drag. */
@@ -113,7 +113,7 @@ export function useDragCamera(
   /** World point on the work plane under (just above) the finger. Null only when there is no camera yet — a finger aimed past the horizon is answered by the limit, not by a miss (see dragPlanePoint). */
   const fingerOnPlane = useCallback(
     (absX: number, absY: number, planeY: number): Float3 | null => {
-      const la = manipulator?.getLookAt();
+      const la = getLookAt();
       if (!la) return null;
       const [eye, center, up] = la;
       return dragPlanePoint(
@@ -126,13 +126,13 @@ export function useDragCamera(
         planeY,
       );
     },
-    [manipulator, winW, winH],
+    [getLookAt, winW, winH],
   );
 
   /** The camera-plane carry for an upright part: a metres-per-pixel DELTA from where the finger started, rather than an absolute aim, so the part keeps whatever offset the grab had. */
   const fingerOnCameraPlane = useCallback(
     (absX: number, absY: number, s: DragSession): Float3 | null => {
-      const la = manipulator?.getLookAt();
+      const la = getLookAt();
       const basis = cameraBasis(la);
       if (!la || !basis) return null;
       const { eye, right, camUp } = basis;
@@ -158,14 +158,14 @@ export function useDragCamera(
       ];
       return leashAlongRay(eye as Float3, center as Float3, eye as Float3, p);
     },
-    [manipulator, winH],
+    [getLookAt, winH],
   );
 
   /** Projects a world point to screen pixels (+ axial depth along the view axis). Used to match candidates by where the finger AIMS on screen. */
   const worldToScreen = useCallback(
     (w: Vec3): { x: number; y: number; depth: number } | null =>
-      projectToScreen(manipulator?.getLookAt(), w, winW, winH),
-    [manipulator, winW, winH],
+      projectToScreen(getLookAt(), w, winW, winH),
+    [getLookAt, winW, winH],
   );
 
   return {

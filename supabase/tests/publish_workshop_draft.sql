@@ -186,7 +186,8 @@ end $$;
 -- An id that already exists in the live catalog must block the publish, since placeable_items is a union of item_build and item_buy and a collision would make that view ambiguous.
 -- ---------------------------------------------------------------------------------------------
 
-insert into public.item_buy (id, name, category_id, price) values ('wktest-collision', 'Pre-existing Catalog Item', 'deco', 1);
+-- mount is spelled out because 024_mount_required.sql made the column NOT NULL, and this fixture predates it — without it the insert fails before the collision it is here to test is ever reached. 'floor' for the reason 024 gives for its own backfill: it is what the portal preselects, and it is what every existing row carries. The value is irrelevant to this case, which only needs the id to exist.
+insert into public.item_buy (id, name, category_id, price, mount) values ('wktest-collision', 'Pre-existing Catalog Item', 'deco', 1, 'floor');
 
 insert into public.workshop_drafts (id, name, category_id, price, min_level, size_x, size_y, size_z, base_offset_y, variants, status)
 values ('wktest-collision', 'Test Collision', 'deco', 5, 1, 1, 1, 1, 0, '[{"variation": null, "is_default": true}]', 'testing');
