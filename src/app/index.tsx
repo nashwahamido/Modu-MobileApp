@@ -151,7 +151,37 @@ function useWaveSizes() {
   }, [screenW]);
 }
 
+// RESUME THE SIGNED-IN ACCOUNT, rather than offering to pick one again.
+//
+// The session already lives on the device — supabase-js writes it to AsyncStorage and refreshes it
+// itself (src/config/supabase.ts) — so a cold start, a reload, or a crash is NOT a logout, and the
+// app should not behave as though it were. The only thing that ends a session is Settings → Account
+// → Log out (services/auth signOut) or a deliberate account switch; everything else lands back on
+// the same player.
+//
+// Deciding here rather than letting the room's own gate sort it out keeps it to one navigation: the
+// landing screen is the app's entry route, so without this a returning player meets the picker on
+// every launch and has to choose the account they never left.
 export default function App() {
+  const { user, loading } = useAuth();
+  // Includes `loading`: reading the persisted session off AsyncStorage is async, so on the first
+  // frame a signed-in player is indistinguishable from a signed-out one. Holding through that window
+  // is the difference between resuming silently and flashing the landing screen on the way to the room.
+  const resuming = SESSION_REQUIRED && (loading || Boolean(user));
+
+  useEffect(() => {
+    if (SESSION_REQUIRED && !loading && user) router.replace(HOME_ROUTE);
+  }, [loading, user]);
+
+  // Flat cream, not <Landing /> muted: the intro sequence runs off a mount effect, so mounting it
+  // here would spend its first second behind a redirect — and a player who turns out to be signed
+  // OUT would then arrive partway through their own opening animation.
+  if (resuming) return <View style={{ flex: 1, backgroundColor: BG_CREAM }} />;
+
+  return <Landing />;
+}
+
+function Landing() {
   const styles = useStyles(makeStyles);
   const safe = useSafeInsets();
   const waveSize = useWaveSizes();

@@ -72,6 +72,26 @@ describe("sceneSlot", () => {
     assert.equal(currentOwner(), "room");
   });
 
+  // THE CASE THAT LEAKED THE ENGINES. Two rooms are mounted at once whenever the old screen is still
+  // in the tree as the next one arrives — a dev account switch does it every time, since
+  // signInToAccount holds the session gate still and nothing ever navigates away. Both used to pass
+  // the bare name "room", the second claim was swallowed by the queue's includes() check, and both
+  // instances read themselves as the owner and mounted a scene. useSceneSlot now hands each hook
+  // instance its own claim, which is what these two ids stand for.
+  it("revokes the first room when a SECOND room mounts under the same name", () => {
+    requestSlot("room#1");
+    assert.equal(currentOwner(), "room#1");
+    // The replacement arrives while the first is still in the tree. Nobody owns the slot across this
+    // commit, which is what makes the first drop its scene before the second builds one.
+    requestSlot("room#2");
+    assert.equal(currentOwner(), null);
+    settleSlot();
+    assert.equal(currentOwner(), "room#2");
+    // The old screen finally leaves. The newer room keeps the slot rather than being handed back to.
+    withdrawSlot("room#1");
+    assert.equal(currentOwner(), "room#2");
+  });
+
   it("leaves nobody owning it once every claim is gone", () => {
     requestSlot("room");
     requestSlot("play");

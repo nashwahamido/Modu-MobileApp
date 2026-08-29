@@ -1,7 +1,7 @@
 // Every tunable the part drag runs on, in one place. They were scattered through the top of usePartDrag, which made "what would I turn to change how this feels" a reading exercise. The geometry constants that belong to the pure maths (aim-band cap, drift cap, carry clearance) stay in dragPlane.ts next to the functions that consume them; what lives here is the gesture's own feel.
 
 /** Long-press duration before a tray card gives up its part. */
-export const PICKUP_MS = 450;
+export const PICKUP_MS = 250;
 /** The held part rides just above the fingertip so the finger doesn't cover it. */
 export const FINGER_LIFT_DP = 22;
 /** Ghost/magnet targeting starts before the final snap threshold. */

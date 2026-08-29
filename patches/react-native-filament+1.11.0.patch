@@ -163,6 +163,33 @@ index f7c15df..bfb3f9c 100644
      }
  
      @Override
+diff --git a/node_modules/react-native-filament/cpp/RNFChoreographer.cpp b/node_modules/react-native-filament/cpp/RNFChoreographer.cpp
+index 21b2b35..31ba3af 100644
+--- a/node_modules/react-native-filament/cpp/RNFChoreographer.cpp
++++ b/node_modules/react-native-filament/cpp/RNFChoreographer.cpp
+@@ -4,6 +4,7 @@
+ 
+ #include "RNFChoreographer.h"
+ #include "RNFListenerManager.h"
++#include "core/RNFTextureWrapper.h"
+ 
+ namespace margelo {
+ 
+@@ -12,6 +13,14 @@ std::shared_ptr<Listener> Choreographer::addOnFrameListener(Choreographer::OnFra
+ }
+ 
+ void Choreographer::onFrame(double timestamp) {
++  // Textures whose JS wrapper Hermes collected cannot be destroyed by their own destructor — it can
++  // run on the unattached "hades" GC thread, where any Engine or JNI call is a terminate. They queue
++  // instead and are destroyed HERE, which is the render thread on both platforms and is reached
++  // through JNI on Android, so it is attached by construction. See RNFTextureWrapper.h.
++  //
++  // Before the listeners rather than after: a frame that throws out of a render callback should still
++  // have freed last frame's textures.
++  TextureWrapper::drainPendingDestroys();
+   _listeners->forEach([=](const OnFrameCallback& callback) { callback(timestamp); });
+ }
+ 
 diff --git a/node_modules/react-native-filament/cpp/RNFFilamentView.cpp b/node_modules/react-native-filament/cpp/RNFFilamentView.cpp
 index a795171..8b08002 100644
 --- a/node_modules/react-native-filament/cpp/RNFFilamentView.cpp
@@ -543,10 +570,10 @@ index c981aa4..ecfd70b 100644
    void setReceiveShadow(std::shared_ptr<EntityWrapper> entityWrapper, bool receiveShadow);
 diff --git a/node_modules/react-native-filament/cpp/core/RNFTextureWrapper.h b/node_modules/react-native-filament/cpp/core/RNFTextureWrapper.h
 new file mode 100644
-index 0000000..37fe262
+index 0000000..c0a82d6
 --- /dev/null
 +++ b/node_modules/react-native-filament/cpp/core/RNFTextureWrapper.h
-@@ -0,0 +1,77 @@
+@@ -0,0 +1,125 @@
 +#pragma once
 +
 +#include <filament/Engine.h>
@@ -555,12 +582,10 @@ index 0000000..37fe262
 +#include "jsi/RNFHybridObject.h"
 +#include "threading/RNFDispatcher.h"
 +
-+#ifdef __ANDROID__
-+#include <android/log.h>
-+#include <fbjni/fbjni.h>
-+#endif
-+
 +#include <functional>
++#include <memory>
++#include <mutex>
++#include <vector>
 +
 +namespace margelo {
 +
@@ -570,33 +595,63 @@ index 0000000..37fe262
 +class TextureWrapper : public HybridObject {
 +public:
 +  TextureWrapper(std::shared_ptr<Engine> engine, std::shared_ptr<Dispatcher> dispatcher, Texture* texture)
-+      : HybridObject("TextureWrapper"), _engine(engine), _dispatcher(dispatcher), _texture(texture) {}
++      : HybridObject("TextureWrapper"), _engine(engine), _dispatcher(dispatcher), _texture(texture) {
++    // A second pump, for the window where textures were collected but no frame has run since. Safe
++    // from here for the same reason it is safe from onFrame: createTexture is called on the render
++    // thread, so this constructor only ever runs there.
++    drainPendingDestroys();
++  }
 +
-+  // Deferred, exactly as MaterialInstance destruction already is in RNFRenderableManagerImpl: engine calls belong on the renderer thread, and a JS GC can land on any thread.
-+  // INHERITED HAZARD, not introduced here: if this destructor ever ran from inside a job that JDispatcher::trigger is already executing, runAsync would block on the very JDispatcher::_mutex that trigger is holding, self-deadlocking on that non-recursive mutex — RNFRenderableManagerImpl.cpp's existing MaterialInstance deleter has the identical shape, so this is a pre-existing upstream hazard being inherited here, not a new one, and is not being fixed by this patch.
++  // NOTHING IN THIS DESTRUCTOR MAY REACH JNI — that is the entire design, and the two previous
++  // attempts failed because they tried to make the JNI call safe instead of removing it.
++  //
++  // This is the only wrapper in the library whose lifetime belongs to JS rather than to C++, so it is
++  // the only one whose destructor can run on Hermes' concurrent GC thread ("hades") — a thread Hermes
++  // created and never attached to the JVM. Attempt one wrapped the body in a ThreadScope and crashed
++  // at the closing brace, because member destruction runs after the body and dropping _engine posts
++  // through the same JNI-backed runAsync. Attempt two moved the member release inside the scope and
++  // still crashed: a collaborator's logcat shows three SIGABRTs on hades in this destructor in one
++  // evening, all "std::runtime_error: Unable to retrieve jni environment. Is the thread attached?".
++  // A try/catch cannot close that, because the throw can come from a noexcept teardown the catch
++  // never sees. So the destructor now does no work at all beyond handing everything to a queue, and
++  // an already-attached thread does the destroying — see drainPendingDestroys.
++  //
++  // THE MEMBERS ARE MOVED, not copied. That is what keeps the closing brace harmless: a moved-from
++  // shared_ptr destructs to nothing, so neither the Engine's deleter nor ~global_ref on the
++  // Dispatcher can fire here. Both of those are JNI-backed and both are what killed attempt one.
 +  ~TextureWrapper() {
-+    // RELEASES THE MEMBERS ITSELF rather than leaving them to the closing brace, and that is the whole reason this is a lambda. Member destruction runs AFTER the destructor body, which is after the ThreadScope below has already detached — and dropping _engine can be the drop that takes the Engine's refcount to zero, whose deleter (References<Engine>::adoptRef in RNFFilamentProxy.cpp) posts to the render thread through the same JNI-backed runAsync. Dropping _dispatcher can likewise be the last JDispatcher reference, and ~global_ref calls DeleteGlobalRef. Both threw from outside the try and terminated on hades exactly as the original bug did, one build later.
-+    std::function<void()> release = [this]() {
-+      auto engine = _engine;
-+      auto texture = _texture;
-+      _dispatcher->runAsync([engine, texture]() { engine->destroy(texture); });
-+      _engine.reset();
-+      _dispatcher.reset();
-+    };
-+#ifdef __ANDROID__
-+    // CAUGHT, not propagated, and the catch is the point rather than a formality: everything below can still throw for reasons this destructor cannot do anything about (fbjni never initialized, the VM already shutting down under a teardown), and a throw from here is std::terminate. Leaking one texture on a dying process is the strictly better outcome.
 +    try {
-+      // THE DEFERRAL ITSELF NEEDS A JVM. This is the only wrapper in the library whose lifetime belongs to JS rather than to C++, so it is the only one whose destructor can run on Hermes' concurrent GC thread ("hades") — a thread Hermes created and never attached to the JVM. JDispatcher::runAsync ends in a JNI call (scheduleTrigger), fbjni throws std::runtime_error("Unable to retrieve jni environment") when it cannot reach an env, and a throw out of a destructor is std::terminate, not an exception: SIGABRT on hades, no JS stack, nothing in the RN error handler.
-+      // WithClassLoader rather than a bare ThreadScope: scheduleTrigger resolves its jmethodID through javaClassLocal() into a function-local static, and if the GC thread is the first ever to reach that line, a plain attached thread has no application class loader to find com/margelo/filament/Dispatcher with.
-+      jni::ThreadScope::WithClassLoader(std::move(release));
-+    } catch (const std::exception& e) {
-+      __android_log_print(ANDROID_LOG_ERROR, "TextureWrapper", "Failed to schedule texture destruction: %s", e.what());
++      std::lock_guard<std::mutex> lock(pendingMutex());
++      pendingDestroys().push_back({std::move(_engine), std::move(_dispatcher), _texture});
 +    } catch (...) {
-+      __android_log_print(ANDROID_LOG_ERROR, "TextureWrapper", "Failed to schedule texture destruction");
++      // Only a failed allocation reaches here. Leaking one texture beats terminating the process,
++      // and there is nothing else a destructor is allowed to do about it.
 +    }
-+#else
-+    release();
-+#endif
++    _texture = nullptr;
++  }
++
++  /**
++   * Destroy every texture whose JS wrapper has been collected.
++   *
++   * MUST be called from a thread that is attached and may talk to the Engine — Choreographer::onFrame
++   * is where it runs, which is the render thread on both platforms and reached through JNI on Android,
++   * so it is attached by construction. Dropping the queued Engine and Dispatcher references happens
++   * here too, which is the other half of what the destructor must not do itself.
++   */
++  static void drainPendingDestroys() {
++    std::vector<PendingDestroy> batch;
++    {
++      std::lock_guard<std::mutex> lock(pendingMutex());
++      if (pendingDestroys().empty()) return;
++      batch.swap(pendingDestroys());
++    }
++    // Swapped out BEFORE destroying, so a texture whose destroy re-enters this queue cannot deadlock
++    // on the lock this function is otherwise still holding.
++    for (PendingDestroy& item : batch) {
++      if (item.engine != nullptr && item.texture != nullptr) {
++        item.engine->destroy(item.texture);
++      }
++    }
 +  }
 +
 +  void loadHybridMethods() override {
@@ -617,6 +672,26 @@ index 0000000..37fe262
 +  }
 +
 +private:
++  // One collected texture, waiting for an attached thread. Carries the Engine and Dispatcher rather
++  // than just the pointer so that dropping THEM also happens on that thread — see the destructor.
++  struct PendingDestroy {
++    std::shared_ptr<Engine> engine;
++    std::shared_ptr<Dispatcher> dispatcher;
++    Texture* texture;
++  };
++
++  // Function-local statics rather than namespace-scope ones: the queue can be reached from a
++  // destructor during static destruction at process teardown, and a namespace-scope object may
++  // already be gone by then.
++  static std::mutex& pendingMutex() {
++    static std::mutex mutex;
++    return mutex;
++  }
++  static std::vector<PendingDestroy>& pendingDestroys() {
++    static std::vector<PendingDestroy> queue;
++    return queue;
++  }
++
 +  // A STRONG reference, deliberately: it is what makes the deferred destructor safe (the Engine cannot die before the destroy runs), and it matches the deleter changeMaterialTextureMap already uses. The cost is that a leaked TextureWrapper pins the whole Engine and its GPU context, so the failure signature of a leak here is "the Engine never dies", not "a texture never dies" — look for a surviving JS reference to a Texture before suspecting the Engine's own teardown.
 +  std::shared_ptr<Engine> _engine;
 +  std::shared_ptr<Dispatcher> _dispatcher;

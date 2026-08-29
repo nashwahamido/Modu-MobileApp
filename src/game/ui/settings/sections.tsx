@@ -3,10 +3,12 @@
 // Where a section differs between the two panels it takes a named boolean rather than a variant string, so the call site reads as a list of what that panel shows.
 import { Alert, Text, View, type LayoutChangeEvent } from "react-native";
 import { Pressable } from "@/src/components/Pressable";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import { useGameStore } from "@/src/game/core/store";
+import { useTutorialStore } from "@/src/game/tutorial/store";
 import { setMusicEnabled, setMusicVolume } from "@/src/game/audio/music";
-import { signOut } from "@/src/services/auth";
+// NOT services/auth's bare signOut: this one also clears the zustand stores, so the next account cannot inherit this player's build progress and half-placed furniture, and it resets a demo account before its session ends. src/dev is not __DEV__-gated — the showcase runs from release builds — and useSessionGate already reaches into it for the same reason.
+import { signOutAccount } from "@/src/dev/accounts";
 import { SIGN_IN_ROUTE } from "@/src/hooks/useSessionGate";
 import {
   ActionRow,
@@ -137,7 +139,7 @@ export function RestartRow({ onRestarted }: { onRestarted?: () => void } = {}) {
   return (
     <ActionRow
       label="↺  Restart assembly"
-      desc="Clears all progress (asks first)"
+      desc="Clears all progress"
       onPress={confirmReset}
       disabled={completedCount === 0}
     />
@@ -435,6 +437,59 @@ export function BuildAudioSection() {
   );
 }
 
+/** The tutorial route. Cast for the same reason every other caller casts it (GmTestPanel, avatar-recommendation): it lives in the (game) group, which typed routes do not surface as a literal. */
+const TUTORIAL_ROUTE = "/tutorial" as Href;
+
+/**
+ * Replay the guided first build.
+ *
+ * Onboarding is otherwise the ONLY way in (avatar-recommendation, on the way out of the avatar
+ * choice) and it runs once per account — so a player who skipped it, or who changed profile
+ * afterwards and wants to meet their new companion's version of it, had no way back short of a dev
+ * build. That is what this row is for.
+ *
+ * LAST in the assembly tab, under the settings rather than among them: everything above it changes a
+ * value and leaves you on the page, and this one leaves the screen entirely for a full 3D scene.
+ */
+export function RedoTutorialSection() {
+  const confirmRedo = () =>
+    Alert.alert(
+      "Redo the tutorial?",
+      "You'll build the practice table again, step by step. Any assembly in progress is cleared.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Start",
+          onPress: () => {
+            // reset() clears the build the tutorial is about to replace; resetTutorial() drops any run
+            // already in progress so the screen configures from scratch. NOT applyProfile, which
+            // onboarding calls here too: it rewrites the settings object wholesale, and a player
+            // reaching this row has just walked past every one of those settings on this very page.
+            useGameStore.getState().reset();
+            useTutorialStore.getState().resetTutorial();
+            // This screen is a MODAL over the room ((presentation) group), so the modal layer has to
+            // go first — otherwise replace() swaps the modal and the tutorial's 3D scene mounts on
+            // top of the room's, with both engines live. Same two calls as the dev switcher's leaveTo.
+            if (router.canDismiss()) router.dismissAll();
+            router.replace(TUTORIAL_ROUTE);
+          },
+        },
+      ],
+    );
+
+  return (
+    <>
+      <SectionHeader>Tutorial</SectionHeader>
+      <ActionRow
+        label="↺  Redo tutorial"
+        desc="Replay the guided first build"
+        onPress={confirmRedo}
+        tone="text"
+      />
+    </>
+  );
+}
+
 export function AppDisplaySection() {
   const handedness = useGameStore((s) => s.handedness);
   const setHandedness = useGameStore((s) => s.setHandedness);
@@ -498,10 +553,14 @@ export function AccountSection() {
         text: "Log out",
         style: "destructive",
         onPress: () => {
-          signOut()
+          signOutAccount()
             .catch((err) => console.warn("[settings] sign out failed", err))
             // Navigate either way: a failed supabase.auth.signOut() still means the player asked to leave, and useSessionGate bounces anything without a session anyway.
-            .finally(() => router.replace(SIGN_IN_ROUTE));
+            .finally(() => {
+              // THE MODAL LAYER GOES FIRST, for the same reason RedoTutorialSection dismisses before it replaces: this screen is a modal in (presentation) sitting ON TOP of the room, so a bare replace() swaps the modal and leaves the room mounted underneath — with its Filament engine, its shell GLB and every texture still resident, under a login screen that will never show them. Signing out is the one moment the room is certainly finished with, so it should cost nothing to keep. Dismissing first takes the room off the stack, which unmounts its scene and lets the engine actually die.
+              if (router.canDismiss()) router.dismissAll();
+              router.replace(SIGN_IN_ROUTE);
+            });
         },
       },
     ]);

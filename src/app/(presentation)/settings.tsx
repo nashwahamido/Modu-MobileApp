@@ -20,6 +20,7 @@ import {
   GuidanceSection,
   InteractionSection,
   ProfileSection,
+  RedoTutorialSection,
 } from "@/src/game/ui/settings/sections";
 import { FONT, SPACE, TYPE, useFixedStyles } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
@@ -103,6 +104,9 @@ export default function SettingsScreen() {
             <InteractionSection />
             <GuidanceSection />
             <BuildAudioSection />
+            {/* Last, and only on this screen: it leaves for a 3D scene, which the in-build gear panel
+                (SettingsControls) must never do with a part in the player's hand. */}
+            <RedoTutorialSection />
           </View>
         )}
       </ScrollView>

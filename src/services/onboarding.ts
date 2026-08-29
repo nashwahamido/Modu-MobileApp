@@ -1,7 +1,7 @@
 import type { Handedness, ModeId } from "../onboarding/questionnaire";
 import { supabase } from "../config/supabase";
 import { createProfileIfMissing, getProfile, updateProfile } from "./profile";
-import { idForMode } from "../data/player/avatars";
+import { idForMode, modeForId } from "../data/player/avatars";
 
 export type OnboardingSaveInput = {
   handedness: Handedness | null;
@@ -106,6 +106,28 @@ export async function getLatestHandedness(userId: string): Promise<Handedness | 
   if (error) throw error;
   const value = (data?.answers as { handedness?: unknown } | null)?.handedness;
   return value === "left" || value === "right" ? value : null;
+}
+
+/**
+ * The account's CURRENT mode, off user_profile.avatar_id — the counterpart to saveSelectedAvatarMode
+ * above, and the source getLatestOnboardingMode is only a fallback for.
+ *
+ * The two answer different questions and drift apart on purpose: the questionnaire row is what the
+ * player answered once during onboarding and never changes, while avatar_id is what they are set to
+ * NOW — after Settings, or after the demo reset in supabase/migrations/029_demo_reset.sql. Read the
+ * questionnaire when you want the original answer; read this when you want the live one.
+ *
+ * Null means "no current choice recorded", which is the signal to fall back — not an error.
+ */
+export async function getSelectedAvatarMode(userId: string) {
+  const { data, error } = await supabase
+    .from("user_profile")
+    .select("avatar_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return modeForId(data?.avatar_id ?? null);
 }
 
 export async function getLatestOnboardingMode(userId: string) {

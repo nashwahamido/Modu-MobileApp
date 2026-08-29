@@ -1616,7 +1616,7 @@ export function RoomScene({
     () =>
       Gesture.LongPress()
         // 420 ms was long enough that a hold felt like nothing was happening. 300 is iOS's own long-press default and still well clear of a tap.
-        .minDuration(300)
+        .minDuration(250)
         // How far the finger may drift and still count as a hold. The 10 dp default is barely more than the platform's pan slop, so an ordinary steady finger broke the hold; 14 dp is about 2 mm of tremor. It is also what a drag must now travel before the camera starts to orbit (see the Exclusive note below), so it stays modest.
         .maxDistance(14)
         // While a ghost is up, the finger belongs to the ghost: pickUpAt would no-op anyway, but leaving this enabled makes pan wait 300 ms for it to fail before the ghost can be dragged.

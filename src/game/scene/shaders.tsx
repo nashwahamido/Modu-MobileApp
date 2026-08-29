@@ -556,7 +556,10 @@ export function ShaderAssetsProvider({ children }: { children: ReactNode }) {
  * MaterialInstances are still created on the JS thread below — those are CPU-side only,
  * which is why the toon path has been doing it safely all along.
  */
-const materialPromises = new Map<string, Promise<any>>();
+// KEYED ON THE ENGINE, never module-global by style alone. A Material belongs to the Engine that built it, and engine.createMaterial's deleter captures a STRONG shared_ptr<EngineImpl> (RNFEngineImpl.cpp, createMaterial) — so a module-scope entry outlives every scene teardown and pins that engine forever, GPU context and all. The failure signature is an engine that never logs "Destroying material..." and never logs "Destroying scene...", and the cost is ~460 MB per login until the OS jetsams the app.
+// The second bug the old keying carried: a re-login builds a NEW engine but the cache still answered with the OLD engine's Material, handing engine B geometry built by engine A.
+// Same WeakMap-per-engine shape as textureCaches in room/scene/useSurfaceTextures.ts and entityCache below, and it drops each engine's materials along with the engine.
+const materialPromises = new WeakMap<object, Map<string, Promise<any>>>();
 
 function ensureMaterial(
   style: Exclude<ShaderStyleId, "off">,
@@ -568,7 +571,12 @@ function ensureMaterial(
   side: any,
   metal: any,
 ): Promise<any> {
-  const existing = materialPromises.get(style);
+  let byStyle = materialPromises.get(engine);
+  if (!byStyle) {
+    byStyle = new Map();
+    materialPromises.set(engine, byStyle);
+  }
+  const existing = byStyle.get(style);
   if (existing) return existing;
 
   const metalTex = metal;
@@ -590,7 +598,7 @@ function ensureMaterial(
     }),
   );
 
-  materialPromises.set(style, promise);
+  byStyle.set(style, promise);
   return promise;
 }
 

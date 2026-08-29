@@ -84,7 +84,36 @@ export async function startFreshAccount(username: string): Promise<void> {
   });
 }
 
+// Put a demo account back before its session ends, so the next attendee meets the character rather
+// than the last person's half-finished build, empty wallet and swapped Helping Mode. See
+// supabase/migrations/029_demo_reset.sql for what it clears and what it deliberately keeps.
+//
+// NO ROSTER CHECK HERE, on purpose, for two reasons. The database already owns the rule — the RPC
+// refuses any caller not in demo_account — so a check on this side would be a second copy of it, free
+// to drift. And importing isShowcaseAccount would be circular: showcase.ts imports signInToAccount
+// from this module.
+//
+// BEFORE the sign-out, and it has to stay that way: the function is scoped to auth.uid(), so once the
+// session is gone there is no account for it to reset.
+async function resetIfDemoAccount(): Promise<void> {
+  const { error } = await supabase.rpc("dev_reset_demo_account");
+  if (!error) return;
+  // Every dev and real account lands here, so it is not a warning — but it is ALSO exactly what an
+  // unseeded demo_account roster looks like, and that is a misconfiguration which would otherwise be
+  // invisible: the demo simply stops resetting and nothing says why. Logged so the two can be told apart.
+  if (error.message.includes("is not a demo account")) {
+    console.log("[accounts] no demo reset —", error.message);
+    return;
+  }
+  console.warn("[accounts] demo reset failed", error.message);
+}
+
 export async function signOutAccount(): Promise<void> {
+  // Never blocks the sign-out: a player who asked to leave leaves, whatever the reset did. A demo
+  // left un-reset is a tidy-up someone can redo; a sign-out that failed because of one is a stuck app.
+  await resetIfDemoAccount().catch((err) =>
+    console.warn("[accounts] demo reset threw", (err as Error).message),
+  );
   await clearSession();
 }
 

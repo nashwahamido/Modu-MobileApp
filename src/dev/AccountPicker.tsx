@@ -15,7 +15,7 @@ import { RADIUS, SPACE, Theme, TYPE, useFixedStyles } from "@/src/game/ui/system
 import { ENABLED_ROSTERS } from "./rosters";
 import { personaFor } from "./showcase";
 import { getCurrentSession } from "@/src/services/auth";
-import { getLatestOnboardingMode } from "@/src/services/onboarding";
+import { getLatestOnboardingMode, getSelectedAvatarMode } from "@/src/services/onboarding";
 import { useGameStore } from "@/src/game/core/store";
 import type { ProfileId } from "@/src/game/core/profile";
 import { avatarCardForProfile } from "@/src/components/avatarAssets";
@@ -104,15 +104,23 @@ function ShowcaseCard({
   );
 }
 
-/** The account's own mode, from its latest questionnaire answer. Silent on failure: a missing or
- *  unreadable answer leaves the profile at its default, which is what happened before this existed —
- *  never a sign-in that fails because a cosmetic lookup did. */
+/** The account's own mode. Silent on failure: a missing or unreadable answer leaves the profile at its
+ *  default, which is what happened before this existed — never a sign-in that fails because a
+ *  cosmetic lookup did.
+ *
+ *  user_profile.avatar_id FIRST, questionnaire only as a fallback, in that order and for the reason
+ *  the loading gate spells out: avatar_id is the CURRENT choice, and the questionnaire row is the
+ *  answer given once during onboarding. They diverge the moment anything changes the mode afterwards —
+ *  Settings, or the demo reset in 029_demo_reset.sql — and reading the questionnaire unconditionally
+ *  meant the picker put a stale onboarding answer back over the live one on every sign-in. That is
+ *  what pinned Ada to visual with `control` sitting in her profile row, and it silently undid the
+ *  demo reset's whole reason for restoring the mode. */
 async function applySignedInProfile(): Promise<void> {
   try {
     const session = await getCurrentSession();
     const userId = session?.user?.id;
     if (!userId) return;
-    const mode = await getLatestOnboardingMode(userId);
+    const mode = (await getSelectedAvatarMode(userId)) ?? (await getLatestOnboardingMode(userId));
     if (mode && PROFILE_IDS.has(mode as ProfileId)) {
       useGameStore.getState().applyProfile(mode as ProfileId);
     }

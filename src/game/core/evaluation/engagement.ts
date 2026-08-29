@@ -23,19 +23,19 @@ const gammaOf = (f: Furniture): LiaisonMap => f.liaisons ?? buildLiaisons(f.part
 
 export type PlaceEngagement = "drop" | "screw" | "slide" | "press";
 
-/** How far a pressing part parks off its seat before the push gesture drives it home, in meters; a press pushes less far than a slide (SLIDE_BACKOFF_M, in clusterCombine). */
+// How far a pressing part parks off its seat; a press travels less far than a slide.
 export const PRESS_BACKOFF_M = 0.03;
 
-/** Meters of the keyhole lock travel (StructuralFields.lockDir) when the part authors no lockTravel — the short slot-length shove, not a panel-scale glide. */
+// Default keyhole lock travel: a slot-length shove, not a panel-scale glide.
 export const LOCK_TRAVEL_M = 0.015;
 
-/** How far a screwing STRUCTURAL part (leg / tabletop) parks off its seat  before the rotation gesture sinks it home, in meters. */
+// How far a screwing structural part parks off its seat before the dial sinks it home.
 export const SCREW_BACKOFF_M = 0.045;
 
-/** Visible revolutions of the SPINNING part while a screw joint seats: full  turns only, so the start/end orientations equal the baked one — no pop. */
+// Full turns only, so the start and end orientations equal the baked one — no pop.
 export const SCREW_SPIN_DEG = 360;
 
-/** The preloaded connector of `kind` awaiting `partId` as its LATER endpoint: the other endpoint placed and the connector fully driven home. This is what turns the later placement into a joint-realizing gesture — threaded → the part screws on (LACK leg), pin → it presses on (BEKVÄM step over the standing dowel). */
+/** The preloaded connector of `kind` waiting for `partId` as its LATER endpoint: other end placed, connector driven home. This is what turns the later placement into a screw-on or press-on gesture. */
 function preloadedConnectorFor(
   f: Furniture,
   partId: string,
@@ -94,7 +94,7 @@ function directScrewReceiver(
 }
 
 function directScrewAxis(threader: PartDef, receiver: PartDef): Vec3 {
-  // Authored placeDir wins, same doctrine as travelAxis: the centre-delta heuristic below reads DIAGONAL whenever the receiver's centre sits off the thread line (EKET's suspension cover vs its corner-hugging bracket). The screw axis points the way the threader backs out = opposite its authored seating travel.
+  // Authored placeDir wins, as in travelAxis: the centre-delta below reads diagonal whenever the receiver's centre sits off the thread line. The screw axis is the way the threader backs OUT, so it is the reverse of its seating travel.
   const authored = threader.placeDir ? unit(threader.placeDir) : null;
   if (authored) return [-authored[0] || 0, -authored[1] || 0, -authored[2] || 0];
   const d: [number, number, number] = [
@@ -113,14 +113,14 @@ export function placeEngagement(
   done: ReadonlySet<ActionId>,
 ): PlaceEngagement {
   if (action.type === "combineClusters" && action.cluster) {
-    // authored cluster overlay wins; furniture without one keeps the legacy cross-cluster-thread behaviour so DALFRED/LACK/BEKVAM are untouched
+    // The authored overlay wins; furniture without one keeps the legacy cross-cluster-thread behaviour.
     const authored = clusterCombineEngagement(f.clusters, action.cluster);
     if (authored) return authored;
     const threads = crossClusterThreads(gammaOf(f), f.parts, action.cluster);
     return threads.length ? "screw" : "drop";
   }
   if (action.type !== "placePart" || !action.partId) return "drop";
-  // dropOn: the part clicks home at drop even though a press/screw partner stands ready (EKET's suspension cover)
+  // dropOn: clicks home at drop even though a press/screw partner stands ready.
   if (f.parts[action.partId]?.dropOn) return "drop";
   if (directScrewReceiver(f, action.partId, done)) return "screw";
   if (preloadedThreadedFor(f, action.partId, done)) return "screw";
@@ -141,12 +141,7 @@ const unit = (v: Vec3): Vec3 | null => {
   return l < 1e-6 ? null : [v[0] / l, v[1] / l, v[2] / l];
 };
 
-/** Unit direction `part` TRAVELS as it seats. Authored `placeDir` wins (the only reliable source — a groove's axis isn't in the poses). Else the centroid heuristic (toward the joint targets' centre), CHECKED against the generated sweep data when the furniture carries it: a heuristic direction whose corridor holds an already-placed third-party blocker is swapped for the nearest order-viable cardinal — sweep data only VETOES, it never re-derives a direction the state permits, so furniture without data (and every part whose heuristic answer is viable) behaves byte-identically to before. This is the order-aware half of the placeDir story: the authored value bakes one assembly order, the sweep check adapts the derived one to whichever order the player actually chose. */
-/** The part's authored placeDir ORDER-ADAPTED, unit length; null when the part authors none. Exported because the DRAG layer must back its aim anchor and match segment off along the SAME direction the park uses — with only the park flipped, a legally reversed build order parks correctly but aims at a corridor the player cannot see (EKET's back panel bottom-first: the anchor pushed down into the closed bottom, the visibility gate never armed, the snap never went green).
- *
- * Two adaptation regimes, split on what physically constrains the motion:
- * - SLIDERS: the groove fixes the AXIS (not derivable — the device-proven lesson), so only the SIGN adapts, by the sweep's corridor veto.
- * - PRESS/KEYHOLE parts: the placed MATES fix the approach. Toward-their-centroid gives the axis and sign — one standing side pulls the horizontal sideways toward it (either side, so the authored sign flips for the mirrored order), both standing sides cancel laterally and the approach collapses to the closing axis (EKET's bottom panel authors exactly that vertical for its close-over-both; the top panel closing LAST needs its mirror, straight down, where its authored sideways vector would drag the edge dowels across the far side's face). When the mates agree with the authored axis the AUTHORED vector is returned (sign toward the mates) — byte-identical in every device-verified order; a cross-axis candidate must additionally pass the sweep's corridor veto (EKET's suspension bracket points down-toward-its-side's-centre, but the closed top vetoes a vertical approach and the authored sideways tap stands). No placed mates, or a degenerate centroid, falls back to sign-only adaptation. */
+/** The part's authored placeDir, ORDER-ADAPTED; null when it authors none. Exported because the DRAG layer must back its aim anchor off along the SAME direction the park uses. Two adaptation regimes — sliders adapt the sign only, press/keyhole parts read their placed mates — both explained in the README. */
 export function adaptedTravelDir(f: Furniture, part: PartDef, done: ReadonlySet<ActionId>): Vec3 | null {
   if (!part.placeDir) return null;
   const authored = unit(part.placeDir) ?? [0, -1, 0];
@@ -168,7 +163,7 @@ export function adaptedTravelDir(f: Furniture, part: PartDef, done: ReadonlySet<
   const toward = unit([c[0] - pc[0], c[1] - pc[1], c[2] - pc[2]]);
   if (!toward) return signOnly();
   const authoredDom = [0, 1, 2].reduce((a, b) => (Math.abs(authored[a]) >= Math.abs(authored[b]) ? a : b)) as 0 | 1 | 2;
-  // ONE mate never overrides the authored AXIS — the authored value IS the tuned approach to a single mate, and a big mate's centre can sit far from the local attachment (the corner-hugging suspension bracket vs its whole side panel — the same trap directScrewAxis documents). A single mate decides only the SIGN along the authored axis: toward it, so the mirrored one-side order flips.
+  // ONE mate never overrides the authored AXIS — a big mate's centre can sit far from the local attachment. It decides the SIGN only, so the mirrored order flips.
   const signAlongAuthored = Math.sign(toward[authoredDom]);
   if (mates.length < 2) {
     if (!signAlongAuthored || signAlongAuthored === Math.sign(authored[authoredDom])) return authored;
@@ -177,7 +172,7 @@ export function adaptedTravelDir(f: Furniture, part: PartDef, done: ReadonlySet<
   const dom = [0, 1, 2].reduce((a, b) => (Math.abs(toward[a]) >= Math.abs(toward[b]) ? a : b)) as 0 | 1 | 2;
   const sign = Math.sign(toward[dom]) || 1;
   if (dom === authoredDom) {
-    // same axis: keep the authored vector's cleanliness, with the sign facing the mates
+    // Same axis: keep the authored vector, sign facing the mates.
     return Math.sign(authored[dom]) === sign ? authored : [-authored[0] || 0, -authored[1] || 0, -authored[2] || 0];
   }
   const candidate: Vec3 = [0, 0, 0].map((_, i) => (i === dom ? sign : 0)) as unknown as Vec3;
@@ -185,9 +180,10 @@ export function adaptedTravelDir(f: Furniture, part: PartDef, done: ReadonlySet<
   return signOnly();
 }
 
+/** Unit direction `part` TRAVELS as it seats. Authored `placeDir` wins — a groove's axis is not in the poses. Otherwise the centroid heuristic, VETOED (never re-derived) by the generated sweep data when the furniture carries it. See README. */
 function travelAxis(part: PartDef, targets: PartDef[], f?: Furniture, done?: ReadonlySet<ActionId>): Vec3 {
   if (part.placeDir) {
-    // The authored value is the AXIS + preferred sign; the sweep may flip the SIGN to fit the build order the player actually chose (EKET's back panel slides up through the open bottom in the authored order, DOWN through the open top after a bottom-first close — a static vector can only say one of those).
+    // The authored value is the axis + a preferred sign; the sweep may flip the sign to fit the order the player actually chose.
     if (f && done) return adaptedTravelDir(f, part, done)!;
     return unit(part.placeDir) ?? [0, -1, 0];
   }
@@ -206,7 +202,7 @@ function travelAxis(part: PartDef, targets: PartDef[], f?: Furniture, done?: Rea
   return pickEntryDir(f.sweep[part.partId], (id) => done.has(placeId(id)), partnersIn(f, part.partId), heuristic);
 }
 
-/** The parts `partId` MATES with — authored structural joins in either direction. Deliberately NOT every Γ neighbour: a fastener-created edge (EKET's cams give the back panel edges to ALL four box panels) is a securing relation, not a mate engagement, and treating it as a partner would swallow the ordering veto exactly where it matters. */
+/** The parts `partId` MATES with: authored structural joins, either direction. NOT every Γ neighbour — a fastener-created edge is a securing relation, and counting it would swallow the ordering veto. */
 function partnersIn(f: Furniture, partId: PartId): Set<PartId> {
   const partners = new Set<PartId>();
   for (const q of Object.values(f.parts)) {
@@ -237,7 +233,7 @@ function joinedByKind(
   return out;
 }
 
-/** True when a press-fit (directJoins) partner of `partId` is already placed —  the push-fit needs something to press against. */
+/** A press-fit partner is already placed — the push needs something to press against. */
 function pressPartnerPlaced(
   f: Furniture,
   partId: string,
@@ -249,9 +245,9 @@ function pressPartnerPlaced(
 export interface ParkInfo {
   /** Unit direction the part travels to seat (placeDir or heuristic). */
   axis: Vec3;
-  /** Backed-off offset from the baked seat where the part parks; the gesture  eases this to [0,0,0] as it drives home. Points OPPOSITE the travel axis. */
+  /** Where the part parks, relative to the baked seat; the gesture eases it to [0,0,0]. Points OPPOSITE the axis. */
   offset: Vec3;
-  /** Keyhole second phase (part.lockDir): the lock axis and the HOOKED offset the part rests at once the press leg has closed — `offset` above already includes it, so single-phase consumers park correctly without knowing; HookPressControl decomposes the legs from this. Absent for a plain one-phase press. */
+  /** Keyhole second phase: the lock axis and the hooked offset. `offset` already includes it, so single-phase consumers need not know. Absent for a plain press. */
   lock?: { axis: Vec3; offset: Vec3 };
 }
 
@@ -262,7 +258,7 @@ function parkInfo(axis: Vec3, backoff: number): ParkInfo {
   };
 }
 
-/** Fold a part's keyhole lock leg (lockDir/lockTravel) into its press park: the part parks backed off along BOTH legs — press in to the hooked offset, then the lockDir shove seats it. Identity for parts without lockDir. */
+/** Fold the keyhole lock leg into a press park, so the part backs off along BOTH legs. Identity without lockDir. */
 function withLock(part: PartDef, park: ParkInfo): ParkInfo {
   const axis = part.lockDir ? unit(part.lockDir) : null;
   if (!axis) return park;
@@ -279,7 +275,7 @@ function withLock(part: PartDef, park: ParkInfo): ParkInfo {
   };
 }
 
-/** Staging for a SLIDE placement: the glide axis and the backed-off park  offset. Null when `action` isn't a slider ready to glide. */
+/** Staging for a SLIDE placement. Null when `action` is not a slider ready to glide. */
 export function slideParkInfo(
   f: Furniture,
   action: AssemblyAction,
@@ -295,7 +291,7 @@ export function slideParkInfo(
   return parkInfo(travelAxis(part, owners, f, done), part.parkBackoff ?? SLIDE_BACKOFF_M);
 }
 
-/** Staging for a PRESS placement: the push axis and the backed-off park offset.  Null when `action` isn't a push-fit against a placed partner — either an  authored press edge (directJoins) or the placed endpoint of a preloaded pin. */
+/** Staging for a PRESS placement. Null unless the part pushes against a placed partner — an authored press edge, or the placed endpoint of a preloaded pin. */
 export function pressParkInfo(
   f: Furniture,
   action: AssemblyAction,
@@ -303,7 +299,7 @@ export function pressParkInfo(
 ): ParkInfo | null {
   if (action.type !== "placePart" || !action.partId) return null;
   const part = f.parts[action.partId]!;
-  // a dropOn part never parks — the approach ghost must sit at the seat, matching the drop that placeEngagement returns
+  // A dropOn part never parks: its ghost sits at the seat, matching the drop placeEngagement returns.
   if (part.dropOn) return null;
   const partners = joinedByKind(f, action.partId, "press", done);
   if (!partners.length) {
@@ -314,7 +310,7 @@ export function pressParkInfo(
         pin.attached![0] === action.partId ? pin.attached![1] : pin.attached![0]
       ];
     if (!other) return null;
-    // The standing pin IS the press direction: the part travels opposite the signed engage axis (which points toward the missing endpoint and flips with placement order), so a part pressable onto EITHER of two mirrored dowels (BEKVÄM step between two seed legs) approaches whichever one is up — an authored placeDir can only bake one side.
+    // The standing pin IS the press direction, and the signed axis flips with placement order — so a part pressable onto either of two mirrored dowels approaches whichever one is up.
     const pinAxis = unit(engageAxis(pin, done));
     if (pinAxis) {
       return withLock(part, parkInfo(
@@ -327,7 +323,7 @@ export function pressParkInfo(
   return withLock(part, parkInfo(travelAxis(part, partners, f, done), part.parkBackoff ?? PRESS_BACKOFF_M));
 }
 
-/** SIGNED engage axis for a fastener — points from its seat toward the side it backs out of (= toward the MISSING endpoint). The baked `engageDir` assumes the fastener drives into `attached[0]`; when the OTHER endpoint is the one placed (the reverse path: bolt into the LEG instead of the table), the fastener enters from the opposite side, so the axis flips. */
+/** SIGNED engage axis: from the fastener's seat toward the side it backs out of. The baked `engageDir` assumes it drives into `attached[0]`, so the reverse path flips it. */
 export function engageAxis(part: PartDef, done: ReadonlySet<ActionId>): Vec3 {
   const e = part.engageDir ?? [0, 0, 0];
   if (isConnector(part)) {
@@ -338,7 +334,7 @@ export function engageAxis(part: PartDef, done: ReadonlySet<ActionId>): Vec3 {
   return e;
 }
 
-/** Park offset for the LATER part of a screw joint — non-null only when the later part is itself the spinner. Null → it seats directly (and, when the placement isn't a screw at all, it just drops flush as usual). */
+/** Park offset for the LATER part of a screw joint; non-null only when that part is the spinner. */
 export function screwParkOffset(
   f: Furniture,
   action: AssemblyAction,
@@ -365,13 +361,7 @@ export function screwParkOffset(
   ];
 }
 
-/**
- * Displacement from a part's SEATED pose to the pose the drag actually DELIVERS it to — the park it drives home from — or null when the placement drops flush and there is no park at all.
- *
- * One branch for the whole engine, per engagement kind, so that everything downstream of a drop asks the same question of the same function. It existed as an inline branch at the release site alone, and the visibility gate — which has to judge the point the player is aiming AT — could only read the AUTHORED placeDir/parkBackoff instead. The two disagreed wherever a park is DERIVED rather than authored: a LACK leg screws up onto its tightened bolt from 45mm below (screw engagement, no authoring anywhere in the furniture), so the gate judged a seat flush against the tabletop's underside and passed it only from an eye below that plane — measured, elevation ≤5° at a 1.2m orbit, with the gap jumping straight to 27mm against a 6mm threshold one step higher.
- *
- * `eng` is a parameter so the release site can pass the engagement it has already computed for its own branching, and the two can never drift apart.
- */
+/** Seated pose → the pose the drag actually DELIVERS the part to, or null when it drops flush. ONE branch for the whole engine, so everything downstream of a drop — the release site and the visibility gate alike — asks the same function (README). `eng` is a parameter so the release site can pass the engagement it already computed. */
 export function parkOffsetFor(
   f: Furniture,
   action: AssemblyAction,
@@ -384,7 +374,7 @@ export function parkOffsetFor(
   return null;
 }
 
-/** Displacement of the PLACED spinner at the start of the screw phase (reverse path: the flush leg backs off away from the incoming top, then rises in as the gesture progresses). Null when the spinner is the later part instead. */
+/** Displacement of the PLACED spinner at the start of the screw phase — the reverse path, where the flush leg backs off and rises in. Null when the later part is the spinner. */
 export function screwMoverParkOffset(
   f: Furniture,
   action: AssemblyAction,
@@ -402,7 +392,7 @@ export function screwMoverParkOffset(
   ];
 }
 
-/** Which endpoint physically SPINS when a threaded joint screws together — DERIVED, no authoring: the endpoint with FEWER connector joints is the satellite (a LACK leg carries 1 bolt; the top is a 4-bolt hub you'd never spin). Independent of placement order, so the LEG is the spinner in both the top-first and leg-first paths. Ties fall to attached[0]'s counterpart… rare and physically ambiguous anyway — that's what the authored `screwMover` override on the fastener is for. */
+/** Which endpoint physically SPINS. Derived, not authored: the endpoint with FEWER connector joints is the satellite, so a leg spins and its 4-bolt tabletop hub does not — the same answer in either placement order. Ties are physically ambiguous; that is what `screwMover` is for. */
 export function screwMoverFor(
   f: Furniture,
   connector: PartDef,
@@ -424,7 +414,7 @@ export function screwMoverFor(
   return tieBreaker ?? b;
 }
 
-/** Everything the presentation needs to animate a screw-in for `action` (the later endpoint of a preloaded threaded joint): the SIGNED axis and which part spins. Null for non-screw placements. */
+/** What the presentation needs to animate a screw-in: the SIGNED axis and which part spins. Null for non-screw placements. */
 export function screwSpinInfo(
   f: Furniture,
   action: AssemblyAction,
