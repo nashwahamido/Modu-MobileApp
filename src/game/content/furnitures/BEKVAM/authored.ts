@@ -38,6 +38,9 @@ export const STRUCTURE = {
   frontTopRail: { placeDir: [1, 0, 0] as const, unstable: true },
   backTopRail: { placeDir: [-1, 0, 0] as const, unstable: true },
   topPlane: { placeDir: [0, -1, 0] as const }, // closes down onto the top rails
+  // The two dowels opt OUT of the sightline gate. Each taps into a shallow face-on hole in a side panel, and a 22mm plank's box is fatter than the plank: the fat alone eats the whole (burial + 6mm) threshold, so the gate called them hidden at the ordinary build angles and the tap could not be aimed. Their sockets are on the panel's open inward face — there is nothing standing in front of them to be fooled about.
+  dowel101350_1: { noVisibilityGate: true },
+  dowel101350_2: { noVisibilityGate: true },
   // NO per-screw toolAnchor here: the head-face contact is a GENERATED model fact now (parts.gen headOffset, emitted by read-parts.mjs from the mesh bounds) — an 11-entry hand copy of it lived here for one session and was deleted when the extractor learned to emit it.
 } as StructureOverlay;
 

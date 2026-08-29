@@ -190,7 +190,8 @@ for (const F of FURNITURES) {
             : fastenerPark
               ? [[seat[0] + fastenerPark[0], seat[1] + fastenerPark[1], seat[2] + fastenerPark[2]]]
               : [];
-        let best = Infinity;
+        // Authored exemption (PartDef.noVisibilityGate): the runtime never gates this part, so the sweep has no reachability question to ask — seeding `best` at 0 breaks out on the first camera.
+        let best = part.noVisibilityGate ? 0 : Infinity;
         let bestBy: string | null = null;
         for (const eye of eyes) {
           const g = sightlineGapM(eye, seat, occluders);

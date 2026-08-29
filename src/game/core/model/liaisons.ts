@@ -61,6 +61,7 @@ export type StructureOverlay = Record<
       | "engageDir"
       | "stageOffset"
       | "jointAnchor"
+      | "noVisibilityGate"
     >
   >
 >;

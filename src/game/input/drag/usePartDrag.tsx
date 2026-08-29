@@ -395,6 +395,7 @@ export function usePartDrag({
             return {
               ...c,
               burial,
+              ungated: !!furniture.parts[c.action.partId!]?.noVisibilityGate,
             };
           });
           // DEV pickup probe: one line per pickup with the first candidate's WORLD anchors, to catch an anchor landing in the wrong space (a seat that projects fine can still sit centimetres from the LENS — band collapse, unmatched drags).
@@ -596,8 +597,9 @@ export function usePartDrag({
               // A socket the player cannot SEE cannot be aimed at — off-frame candidates are skipped for acquisition (a snap must never be earned against an invisible hole; measured: a seat at y=-88 was still inside the capture band near the top edge). The CURRENT match is not acquired here either — it is held through the more generous nearFrame test below, so a mid-drag orbit that nudges the socket just past the edge does not pop the magnet.
               if (!d.inFrame) continue;
               // Visibility gate, one rule for every part type: the first surface the sightline meets must be within (the anchor's own burial + slack) of the anchor. Looking AT the socket passes; looking at anything in front of it — another part, or the SAME part's far side — fails. Replaces box/halo sampling (neighbourhood visibility) and the exemption-based line-of-sight test (transparent receivers), both of which armed hidden sockets in play tests.
-              let visStat: string | null = null;
-              if (laF) {
+              // Authored exemption (PartDef.noVisibilityGate): this part's sockets are matchable wherever the in-frame test allows. BEKVAM's dowels sit in shallow face-on holes where the boxes' own fat exceeds the whole threshold, so the gate read them as hidden from the angles the player actually builds at.
+              let visStat: string | null = c.ungated ? "off" : null;
+              if (laF && !c.ungated) {
                 const g = sightlineGapM(laF[0], c.seatVisual, s.placedBoxes);
                 visStat = `${(g.gap * 1000).toFixed(0)}/${((c.burial + VIS_GAP_SLACK_M) * 1000).toFixed(0)}mm`;
                 // Second chance (clearPoints): a structural part's whole GHOST BODY at the delivered pose, a fastener's park point. Either passes a seat that is merely grazed — the side view of DALFRED's pin hole, where the plate's rim stands 60mm before the centre of its own top face; a LACK leg hanging in plain sight under the tabletop it bolts into. No burial slack on these: they are points on the PART, not mouths inside a receiver, so a sample that reports itself buried is a sample standing inside something and is exactly what should not count.
@@ -808,7 +810,7 @@ export function usePartDrag({
             }
             // No hover-lift: the part eases straight to the socket so there's no vertical "drop" on release — it just moves to where it should rest (the loose state for screws/legs is still applied on release).
             s.hoverLift = 0;
-            // Hold-point-pinned rotation. The driver composes T·R about the NODE ORIGIN (native updateTransform is new*current), and the node origin is not the hold point — a DALFRED leg's origin is its FOOT, 0.43 m from the held joint. Rotating about the origin swept the joint and the whole body away from the finger in an arc, which read as "the part is not magnetic to the rotation" while the probe swore gapPx=0 (it measures intent, not the entity). Pinning: the magnet pulls the JOINT toward the socket's holdPosition, and the node position is re-aimed through the slerp-rotated anchor so the joint stays exactly where the drag put it at every rotT. At rotT=0 the delta is identity and this is byte-for-byte the old translation.
+            // Hold-point-pinned rotation. The driver composes T·R about the NODE ORIGIN (native updateTransform is new*current), and the node origin is not the hold point — a DALFRED leg's origin is its FOOT, 0.43 m from the held joint. Rotating about the origin swept the joint and the whole body away from the finger in an arc, which read as "the part is not magnetic to the rotation" while the probe swore gapPx=0 (it measures intent, not the entity). Pinning: the magnet pulls the JOINT toward the socket's delivery hold point, and the node position is re-aimed through the slerp-rotated anchor so the joint stays exactly where the drag put it at every rotT. At rotT=0 the delta is identity and this is byte-for-byte the old translation.
             const rotQ = target
               ? quatSlerp(s.bakedRot, target.rotation, rotT)
               : s.bakedRot;
@@ -816,11 +818,12 @@ export function usePartDrag({
               quatMultiply(rotQ, quatConjugate(s.bakedRot)),
               s.grabOffset,
             );
+            // The magnet pulls to matchVisual — the PARK hold point — not the seated one, because the park is where this gesture actually ends: onEnd animates to `matched.position + parkOffsetFor(...)` and hands over to the drive. Pulling to the seat dragged a parked part its whole backoff off the finger just as the aim got good, and the release then carried it straight back up: measured on DALFRED's supportPin (parkBackoff 0.12) at ~84 px at the zoom floor. Identical for every part that authors no backoff — matchVisual IS holdPosition there.
             const holdT: Vec3 = target
               ? [
-                  p[0] + (target.holdPosition[0] - p[0]) * posT,
-                  p[1] + (target.holdPosition[1] - p[1]) * posT,
-                  p[2] + (target.holdPosition[2] - p[2]) * posT,
+                  p[0] + (target.matchVisual[0] - p[0]) * posT,
+                  p[1] + (target.matchVisual[1] - p[1]) * posT,
+                  p[2] + (target.matchVisual[2] - p[2]) * posT,
                 ]
               : p;
             probeAnchor = gRot;
@@ -854,7 +857,15 @@ export function usePartDrag({
                 ? computeFit(
                     held,
                     target.rotation,
-                    { position: target.position, rotation: target.rotation },
+                    // The PARKED node pose, for the same reason the magnet pulls there: judging against the seat asked a part to reach a pose the drag never delivers, so with the magnet parked the green could never arm. matchVisual − holdPosition is the park offset in hold-point space, which is a pure translation, so it carries to the node pose unchanged — and it is [0,0,0] for every part without an authored backoff, leaving this byte-identical.
+                    {
+                      position: [
+                        target.position[0] + target.matchVisual[0] - target.holdPosition[0],
+                        target.position[1] + target.matchVisual[1] - target.holdPosition[1],
+                        target.position[2] + target.matchVisual[2] - target.holdPosition[2],
+                      ],
+                      rotation: target.rotation,
+                    },
                     s.otherSockets,
                     { distance: snapDist * band, angleDeg: 25 },
                   )
