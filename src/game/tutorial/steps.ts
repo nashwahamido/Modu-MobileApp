@@ -379,8 +379,8 @@ export const VISUAL_TUTORIAL_STEPS: TutorialStep[] = [
  * `place-connector`, `tighten-connector`, `install-four-legs`) are the ones tutorial.tsx's tray
  * filter keys on, so keeping them is what keeps the bolt-only tray and the empty joystick-step tray
  * working. The two `visual-` prefixed ids are here for the same reason and read oddly for it: their
- * behaviour is wired to the id in three places — the undo ghost (tutorial.tsx), the second ring over
- * Auto and the un-dimmed scrim (MascotGuideOverlay), and the withheld Spot toast — and reusing them
+ * behaviour is wired to the id in two places — the second ring over Auto and the un-dimmed scrim
+ * (MascotGuideOverlay), and the withheld Spot toast — and reusing them
  * gives this run all of that with no new branches. Renaming them would mean touching the Lumi voice
  * table (game/audio/tutorialVoice.ts), which is keyed by id, so the prefix stays and this comment
  * explains why. Nothing about the recorded voice leaks in: the spoken path is gated on
@@ -537,7 +537,7 @@ export const CLEAR_PATH_TUTORIAL_STEPS: TutorialStep[] = [
  *
  * SHARED IDS, as in Pebble's run above: the assembly ids drive tutorial.tsx's tray filter, and
  * `visual-settings` / `visual-undo-recenter` bring behaviour wired to those ids (the browse-close on
- * the settings panel, the two-pass undo ghost). `hud-stuck-help` is deliberately NOT the visual
+ * the settings panel). `hud-stuck-help` is deliberately NOT the visual
  * one: this run needs the focus-return prompt on that step and Lumi's must not gain it.
  */
 export const CONTROL_TUTORIAL_STEPS: TutorialStep[] = [
@@ -576,9 +576,9 @@ export const CONTROL_TUTORIAL_STEPS: TutorialStep[] = [
     // handleTutorialUndo and the Recenter handler in tutorial.tsx), so a player who reaches for one
     // is not told to tap elsewhere; they simply no longer have to.
     //
-    // The ghost runs TWICE here rather than looping, which comes from sharing the id: the scene
-    // animation in tutorial.tsx keys its iteration count on `visual-undo-recenter`. A looping ghost
-    // was still travelling when the tap moved the player on, so the scene slid under the next card.
+    // NOTHING MOVES ON THIS CARD. The scene used to slide and fade twice as a demonstration; it
+    // showed the whole build going away, which is not what Undo does, and the movement read as the
+    // press having undone the table. Removed 2026-08-29 — see the ghost effect in tutorial.tsx.
     id: "visual-undo-recenter",
     targetId: "undoRecenter",
     message: 'Press "Undo" to go back, or "Recenter" to reset the view.',
@@ -721,9 +721,8 @@ export const MOMENTUM_TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     // `hud-recenter` and `hud-undo` folded into one read-only card naming both, as in Felix's run.
-    // The ghost runs twice rather than looping — that comes from sharing the id, which is what the
-    // iteration count in tutorial.tsx keys on. It also drops the full-screen "UNDO PREVIEW" takeover
-    // that `hud-undo` used to trigger, since that is wired to the id this step no longer uses.
+    // Nothing on screen moves for it — see the note on his copy of this step — and it drops the
+    // full-screen "UNDO PREVIEW" takeover that `hud-undo` triggers, which is wired to that id.
     id: "visual-undo-recenter",
     targetId: "undoRecenter",
     message: 'Press "Undo" to go back, or "Recenter" to reset the view.',
