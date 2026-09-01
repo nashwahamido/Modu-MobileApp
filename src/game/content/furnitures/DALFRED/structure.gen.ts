@@ -4,6 +4,7 @@
 import type { StructureOverlay } from "@/src/game/core/model/liaisons";
 
 export const STRUCTURE_COMPOSED = {
+  "cap107675_1": {"noVisibilityGate":true},
   "circleDown": {"seed":true},
   "circleUpp": {"seed":true},
   "leg_1": {"seed":true,"unstable":true},
@@ -12,6 +13,12 @@ export const STRUCTURE_COMPOSED = {
   "leg_4": {"seed":true,"unstable":true},
   "pole": {"directJoins":["seatPlate"],"screwJoins":["supportPin"],"tool":"mallet"},
   "ringRail": {"unstable":true},
+  "screw100212_1": {"noVisibilityGate":true},
+  "screw100212_2": {"noVisibilityGate":true},
+  "screw100212_3": {"noVisibilityGate":true},
+  "screw100212_4": {"noVisibilityGate":true},
+  "screw108443_1": {"noVisibilityGate":true},
+  "screw108443_3": {"noVisibilityGate":true},
   "seat": {"seed":true},
   "seatPlate": {"seed":true,"unstable":true},
   "supportPin": {"slideJoins":["circleUpp"],"placeDir":[0,-1,0],"parkBackoff":0.12},

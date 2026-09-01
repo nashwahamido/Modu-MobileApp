@@ -55,6 +55,10 @@ export const STRUCTURE: StructureOverlay = {
   screw100212_2: { noVisibilityGate: true },
   screw100212_3: { noVisibilityGate: true },
   screw100212_4: { noVisibilityGate: true },
+  // The seat screws and the pole cap, found by visibilitySweep rather than on device. Same defect: the head sits on the surface of the part its own sibling box swallows. screw108443_1 and _3 drive seat↔seatPlate and read as blocked by the seatPlate they pass through; cap107675_1 caps the pole and reads as blocked by the pole it sits on. Gaps 11-16mm against an 11mm threshold. Only the two screws the sweep names are exempted — _2, _4 and _5 clear it, and an exemption is a hole in the gate, so it is opened per socket rather than per group.
+  screw108443_1: { noVisibilityGate: true },
+  screw108443_3: { noVisibilityGate: true },
+  cap107675_1: { noVisibilityGate: true },
   // dropped in from ABOVE: the sleeve SLIDES down through circleUpp's centre hole until its top flange (y=0.577) lands on the plate's top face (y=0.570) — the flange can't pass the hole, so this is its only insertion direction. The scene renders model space (upright) throughout, so the from-above slide works mid-build with no reorient beat. parkBackoff must clear the full 9.6cm sleeve above the plate; the press default parked it inside the plate stack (the reported collision).
   // supportPin: MIGRATED to JOINTS below. Its travel stays here for now — the derivation knows the axis (Y, through the bore) but not the sign.
   supportPin: { placeDir: [0, -1, 0] as const, parkBackoff: 0.12 },

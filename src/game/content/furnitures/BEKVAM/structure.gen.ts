@@ -6,10 +6,15 @@ import type { StructureOverlay } from "@/src/game/core/model/liaisons";
 export const STRUCTURE_COMPOSED = {
   "backBottomRail": {"placeDir":[-1,0,0],"unstable":true},
   "backTopRail": {"placeDir":[-1,0,0],"unstable":true},
+  "dowel101350_1": {"noVisibilityGate":true},
+  "dowel101350_2": {"noVisibilityGate":true},
   "frontBottomRail": {"placeDir":[1,0,0],"unstable":true},
   "frontTopRail": {"placeDir":[1,0,0],"unstable":true},
   "legL": {"seed":true},
   "legR": {"seed":true},
+  "screw105111_1": {"noVisibilityGate":true},
+  "screw105111_2": {"noVisibilityGate":true},
+  "screw105111_3": {"noVisibilityGate":true},
   "step": {"seed":true},
   "topPlane": {"placeDir":[0,-1,0]},
 } as unknown as StructureOverlay;

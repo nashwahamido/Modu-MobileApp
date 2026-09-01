@@ -44,6 +44,10 @@ export const STRUCTURE = {
   // The two dowels opt OUT of the sightline gate. Each taps into a shallow face-on hole in a side panel, and a 22mm plank's box is fatter than the plank: the fat alone eats the whole (burial + 6mm) threshold, so the gate called them hidden at the ordinary build angles and the tap could not be aimed. Their sockets are on the panel's open inward face — there is nothing standing in front of them to be fooled about.
   dowel101350_1: { noVisibilityGate: true },
   dowel101350_2: { noVisibilityGate: true },
+  // The three step/top screws opt out for the same reason, found by visibilitySweep rather than on device: each drives INTO the very rail that blocks it, and the gate measures against AABB∩OBB, which for a rail is fatter than the rail. Measured gaps 11mm against thresholds of 9-10mm — the box fat alone is the whole margin. screw105111_1 and _2 drive up into the top plane past the back and front top rails; _3 ties the step to the front bottom rail.
+  screw105111_1: { noVisibilityGate: true },
+  screw105111_2: { noVisibilityGate: true },
+  screw105111_3: { noVisibilityGate: true },
   // NO per-screw toolAnchor here: the head-face contact is a GENERATED model fact now (parts.gen headOffset, emitted by read-parts.mjs from the mesh bounds) — an 11-entry hand copy of it lived here for one session and was deleted when the extractor learned to emit it.
 } as StructureOverlay;
 
