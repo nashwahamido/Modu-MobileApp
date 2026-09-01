@@ -1,4 +1,3 @@
-// The beat between the last part landing and the completion screen. The build is done, but instead of the summary snapping up immediately, this pulsing button appears and the player keeps full camera control — they can orbit the finished piece and admire it. Tapping it sets completeConfirmed, which is what actually reveals BuildComplete. Same "don't snatch the last look away" reasoning as the cluster celebration waiting for a tap.
 import {
   useEffect,
   useRef } from "react";
@@ -36,7 +35,6 @@ export function FinishBuildButton() {
 
   const total = furniture?.actions.length ?? 0;
   const isDone = total > 0 && completed.length >= total;
-  // Only in the gap: done, not yet confirmed, not dismissed back into the build.
   if (!isDone || confirmed || dismissed) return null;
 
   return (
@@ -49,7 +47,6 @@ export function FinishBuildButton() {
       accessibilityRole="button"
       accessibilityLabel="Finish and see your reward"
     >
-      {/* Halo swelling out of the button — the same attract-the-eye pulse as the socket cues. */}
       <Animated.View
         pointerEvents="none"
         style={[

@@ -30,21 +30,12 @@ import { SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-inse
 import type { Theme } from "@/src/game/ui/system/theme";
 import { playSfx } from "@/src/game/audio/sfx";
 
-/** The banner art's aspect (900x218 after trimming), so the height is derived from the width rather
- *  than being a second number that has to be kept in step with it.
- *
- *  THE PHONE WIDTH. The sheet scales its own copy of it; anything driven by animation or by an
- *  absolute offset multiplies by the panel's k at the call site — see CompletedRibbon. */
 const RIBBON_W = 200;
 
-// The one size both rewards are drawn at — see the rewardIcon style for why they must match.
 const REWARD_ICON_SIZE = 26;
 const RIBBON_H = Math.round(RIBBON_W * (218 / 900));
 const REVEAL_MS = 520;
 
-/** Where each spark sits along the banner and when it fires. The delays are spread across the wipe
- *  so they trail its leading edge rather than all popping at once — the sparkle is meant to look
- *  like a consequence of the reveal, not a separate effect layered over it. */
 const SPARKS = [
   { x: 0.14, y: -6, size: 5, delay: 200 },
   { x: 0.3, y: RIBBON_H - 4, size: 4, delay: 300 },
@@ -55,7 +46,6 @@ const SPARKS = [
 ];
 const SPARK_COLORS = ["#F0E6D2", "#E8C878", "#FFFFFF"];
 
-/** A single diamond that pops, drifts up and fades. Rotated so it reads as a glint rather than a dot. */
 function Spark({ x, y, size, delay, color }: { x: number; y: number; size: number; delay: number; color: string }) {
   const pop = useSharedValue(0);
   useEffect(() => {
@@ -82,9 +72,6 @@ function Spark({ x, y, size, delay, color }: { x: number; y: number; size: numbe
   );
 }
 
-/** The entrance runs as a SEQUENCE, not a chord: the ribbon opens onto an empty card, then each
- *  piece of the result arrives in the order a player would read it. Every value is the moment that
- *  element starts, so re-timing the whole screen is editing this one block. */
 const STAGE = {
   ribbon: 140,
   piece: 780,
@@ -94,30 +81,22 @@ const STAGE = {
   confetti: 1760,
 } as const;
 
-/** Deliberately darker than t.scrim. That token is tuned for a sheet you look PAST — this is the end
- *  of a build, and the scene behind it has nothing left to say. */
 const SCRIM = "rgba(10,8,9,0.88)";
 
-/** The banner's mauve, reused for the card's rim so the ribbon reads as part of the same object
- *  rather than pinned onto something else. */
 const MAUVE = "#A97480";
 
-/** Scales up past its resting size and settles. Used for things that should feel like they LANDED —
- *  the finished piece, and the two things you can do with it. */
 function PopIn({ delay, style, children }: { delay: number; style?: StyleProp<ViewStyle>; children: ReactNode }) {
   const on = useSharedValue(0);
   useEffect(() => {
     on.value = withDelay(delay, withSpring(1, { damping: 11, stiffness: 170, mass: 0.7 }));
   }, [delay, on]);
   const anim = useAnimatedStyle(() => ({
-    // Faster than the scale so it is never seen at its smallest.
     opacity: Math.min(1, on.value * 3),
     transform: [{ scale: 0.7 + on.value * 0.3 }],
   }));
   return <Animated.View style={[style, anim]}>{children}</Animated.View>;
 }
 
-/** Enters from the right. Used for the two reward panels, which read as arriving into the column. */
 function SlideIn({ delay, style, children }: { delay: number; style?: StyleProp<ViewStyle>; children: ReactNode }) {
   const on = useSharedValue(0);
   useEffect(() => {
@@ -130,20 +109,9 @@ function SlideIn({ delay, style, children }: { delay: number; style?: StyleProp<
   return <Animated.View style={[style, anim]}>{children}</Animated.View>;
 }
 
-/**
- * The completion banner, straddling the card's top edge.
- *
- * It WIPES in left to right: a clip whose width animates from zero, with the art held at full width
- * inside it so nothing squeezes as the clip opens. Sparks trail the opening edge. A reveal reads as
- * the banner being unfurled, which a drop or a fade does not.
- */
 function CompletedRibbon({ label }: { label: string }) {
-  // THE SAME k as its parent, and it has to be: the ribbon is positioned by a negative margin that
-  // pulls it onto the panel below it. A ribbon on one scale overlapping a panel on another does not
-  // overlap by the amount either of them intends.
   const k = useCelebrationScale();
   const styles = useScaledStyles(makeStyles, k);
-  // The banner's own width AT THIS SCALE. The clip and the sparks below are driven by animation and by absolute offsets, neither of which the sheet scaler can reach — so they take the scale by hand or they keep working in phone points inside a tablet-sized ribbon. Left unscaled the wipe stopped at 200pt across a 270pt banner and the last third never opened.
   const ribbonW = RIBBON_W * k;
   const reveal = useSharedValue(0);
   useEffect(() => {
@@ -166,7 +134,6 @@ function CompletedRibbon({ label }: { label: string }) {
         <Spark
           key={i}
           x={sp.x * ribbonW}
-          // y and size in points, so both take the scale — a spark left at phone size sits inside the banner's edge rather than on it.
           y={sp.y * k}
           size={sp.size * k}
           delay={sp.delay}
@@ -177,30 +144,17 @@ function CompletedRibbon({ label }: { label: string }) {
   );
 }
 
-/**
- * The finished-build screen.
- * The coins, XP and ITEM shown are the catalog's configured reward (item_build) — the same source the grant uses — so the display can't drift from what's awarded. The item comes from item_build.reward_item_id (migration 027) and is granted into user_buy by reward_build in the same transaction as the currency; it is ABSENT, not blank, for a furniture that grants none, which is every furniture until a reward item is authored. It replaced a hardcoded "succulent plant" that no row described and no grant ever delivered.
- * Both action buttons go to the inventory: the built piece appears there now, and placement is not
- * wired yet, so "place in the room now!" has nothing to place. They stay separate buttons so the
- * placement route can be restored to the first one without touching the layout.
- */
 export function BuildComplete() {
-  // SCALED on a tablet, fixed on a phone. A single centred panel with generous padding — the shape
-  // theme.ts calls safe to grow — so it opts in to the shared celebration scale. See
-  // celebrationScale for why it is trimmed below the app-wide number.
   const k = useCelebrationScale();
   const styles = useScaledStyles(makeStyles, k);
-  // The reward item's art is sized by a PROP, not a style, so the scaler never sees it — and the coin beside it is styled, so it does grow. Left alone the two ended up different sizes, which is the one thing the rewardIcon comment says must never happen.
   const rewardIconSize = Math.round(REWARD_ICON_SIZE * k);
   const router = useRouter();
   const repos = useRepos();
   const furniture = useGameStore((s) => s.furniture);
-  // The look the build ran in — the catalogue set it when the player picked a finish, and settings can change it mid-build. It is what tells the art below which finish to wear.
   const renderStyle = usePrefsStore((s) => s.renderStyle);
   const completed = useGameStore((s) => s.completed);
   const dismissed = useGameStore((s) => s.doneDismissed);
   const confirmed = useGameStore((s) => s.completeConfirmed);
-  // Annotated rather than inferred from the initial value. Inference would type this {coins, xp}, and the failure would be SILENT rather than a type error: BuildRewardAmount is structurally assignable to that, so setReward(r) still compiles and simply drops `item` on the floor — exactly what ClusterFocusControl does with it today. Destructuring `item` below is what turns it into an error here.
   const [reward, setReward] = useState<BuildRewardAmount>({ coins: 0, xp: 0 });
   const safe = useSafeInsets();
 
@@ -211,7 +165,6 @@ export function BuildComplete() {
     repos.builds
       .buildReward(furnitureId)
       .then((r) => alive && setReward(r))
-      // Showing zero beats an uncaught rejection — the grant is server-side regardless. Matches BuildMap.
       .catch((err) => console.warn("[BuildComplete] reward lookup failed", err));
     return () => {
       alive = false;
@@ -220,24 +173,18 @@ export function BuildComplete() {
 
   const total = furniture?.actions.length ?? 0;
   const isDone = total > 0 && completed.length >= total;
-  // THE FANFARE, on the card APPEARING rather than on the last action landing — useAssemblySfx stays
-  // deliberately silent there, and a fanfare then would play to a screen still showing the model.
-  // Above the early return: a hook past a conditional return changes hook order between renders.
   const celebrating = isDone && !dismissed && confirmed;
   useEffect(() => {
     if (celebrating) playSfx("complete");
   }, [celebrating]);
 
   if (!furniture) return null;
-  // Wait for the player to tap "Complete" — until then the FinishBuildButton is showing and they can still orbit the finished model.
   if (!isDone || dismissed || !confirmed) return null;
 
   const { coins, xp, item: rewardItem } = reward;
-  // One navigation, because the inventory is a POPUP inside the room now rather than a route: the room opens it from ?open=inventory (see RoomExperience). Replacing play rather than pushing is still what drops the finished build off the back stack, and the room remount is still what makes the new piece show up in it.
   const goToInventory = () => {
     router.replace({ pathname: "/room", params: { open: "inventory" } });
   };
-  // Straight into the room with the ghost already in hand; falls back to the inventory for the rare furniture with no room model (the tutorial).
   const placeInRoom = () => {
     if (!furnitureId || !usePlacementStore.getState().startPlacing(furnitureId)) {
       goToInventory();
@@ -250,7 +197,6 @@ export function BuildComplete() {
     <View
       style={[
         styles.scrim,
-        // The card can fill the screen on a short landscape window, so the scrim carries the safe margins rather than the card — nothing inside it can then reach a rounded corner or a notch.
         {
           paddingTop: Math.max(safe.raw.top, SCREEN_VERTICAL_MARGIN),
           paddingBottom: Math.max(safe.raw.bottom, SCREEN_VERTICAL_MARGIN),
@@ -260,11 +206,7 @@ export function BuildComplete() {
       <View style={styles.stack}>
         <CompletedRibbon label="Completed!" />
       <View style={styles.card}>
-        {/* Restart, not undo: this drops the whole build and hands the parts back. reset() clears
-            the steps but NOT the two completion flags, so both are cleared here — otherwise
-            finishing a second time would skip the Complete button and slam this screen back up. */}
         <Pressable
-          // Its corner offsets are absolute, which the scaler skips (see SCALED_PROPS) — so they take the scale here, or the button drifts out of the corner as the card's own padding grows around it.
           style={[styles.redoBtn, { top: 12 * k, left: 14 * k }]}
           onPress={() => {
             useGameStore.getState().setCompleteConfirmed(false);
@@ -287,12 +229,6 @@ export function BuildComplete() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.mainRow}>
-            {/* The finished piece — the reason the screen exists, so it gets the whole left half.
-                In the FINISH IT WAS BUILT IN, resolved the same way the project map and the
-                catalogue resolve it (core/presentation/finish.ts). It used to take
-                meta.thumbnail.light, which is the model's default picture: a player who chose the
-                white EKET off the carousel, built it in white and watched it stand in white was
-                handed a plain grey render at the one moment the screen exists to celebrate. */}
             <PopIn delay={STAGE.piece} style={styles.pieceWrap}>
               <Image
                 source={modelThumbSet(furniture, renderStyle).light}
@@ -313,10 +249,8 @@ export function BuildComplete() {
                     />
                     <Text style={styles.rewardText}>+ {coins} coins</Text>
                   </View>
-                  {/* ABSENT, not blank, when the furniture grants no item (item_build.reward_item_id null) — which is every furniture until one is authored. This panel used to promise a "succulent plant" that no row described and no grant delivered; showing the coins alone is the honest form of that. */}
                   {rewardItem ? (
                     <View style={styles.rewardItem}>
-                      {/* The item's own catalogue art, at the coin's size — see the rewardIcon comment on why the two must match. `variation` is deliberately not passed: CatalogThumb resolves an undefined variation to the item's default, which is the right answer for a reward nobody has chosen a finish for. `surface` is passed because a wallpaper or floor IS its picture and is fetched from a different path than a model's render — without it a surface reward would silently draw nothing, which is the only reason RewardItem carries a category at all. The fixed-size View is the well that path needs: the surface branch ignores `size` and absolute-fills its parent, the same reason every other surface-capable caller wraps the thumb. Renders nothing rather than a broken-image box if the art has not been uploaded yet, leaving the name to stand alone. */}
                       <View style={{ width: rewardIconSize, height: rewardIconSize }}>
                         <CatalogThumb source="bought" itemId={rewardItem.id} surface={isSurfaceCategory(rewardItem.category)} size={rewardIconSize} />
                       </View>
@@ -338,8 +272,6 @@ export function BuildComplete() {
                 </View>
               </SlideIn>
 
-              {/* Under the XP rather than across the card's foot: they are what you do with the
-                  reward, and putting them in this column is what lets it stay narrow. */}
               <PopIn delay={STAGE.actions} style={styles.actionsRow}>
                 <Pressable
                   style={styles.action}
@@ -363,10 +295,6 @@ export function BuildComplete() {
                     style={styles.actionIcon}
                     resizeMode="contain"
                   />
-                  {/* One line: at 11pt "Put in Inventory" is about 106pt against the button's 108,
-                      which is close enough that a wider glyph or a larger UI scale would wrap it.
-                      The floor lets it shrink a hair instead — a two-line label here would sit a
-                      row lower than the button beside it. */}
                   <Text
                     style={styles.actionText}
                     numberOfLines={1}
@@ -382,7 +310,6 @@ export function BuildComplete() {
         </ScrollView>
       </View>
       </View>
-      {/* Paper sized for a phone reads as dust on a tablet — the burst falls across the whole window, so its scraps take the screen's scale rather than the card's. */}
       <ConfettiRain delay={STAGE.confetti} size={k} />
     </View>
   );
@@ -398,24 +325,13 @@ const makeStyles = (t: Theme) =>
       paddingHorizontal: 12,
       zIndex: 45,
     },
-    // The ribbon is a SIBLING of the card, pulled down over it by a negative margin, rather than an absolutely-positioned child: Android clips children that overflow their parent's bounds, and half this banner sits above the card's top edge.
     stack: { width: "100%", maxWidth: 520, maxHeight: "96%", alignItems: "center" },
-    // Width-bounded so the clip can grow from the left edge; sparks sit absolutely inside it.
     ribbonWrap: { width: RIBBON_W, height: RIBBON_H, marginBottom: -RIBBON_H * 0.42, zIndex: 2 },
     ribbonClip: { height: RIBBON_H, overflow: "hidden" },
-    // Full width inside the clip: without this the art and the label would squeeze as the clip opens instead of being uncovered by it.
     ribbonInner: { width: RIBBON_W, height: RIBBON_H, alignItems: "center", justifyContent: "center" },
     ribbonImg: { width: RIBBON_W, height: RIBBON_H },
     ribbonText: {
       position: "absolute",
-      // Centred on the BODY, which occupies the top 73% of the art — the tails and folds hang lower and would drag the label down with them if it were centred on the whole image.
-      // 0.32 rather than the body's true middle at 0.36: the fold along the ribbon's lower edge is
-      // darker than the face above it, and a label centred by measurement sat visually low against
-      // it. Optical centring, which is what the eye reads.
-      // PERCENT, not points. `top` is deliberately outside SCALED_PROPS, so a value derived from
-      // RIBBON_H would stay put while the ribbon it labels grew — the text would slide off the art on
-      // a tablet. 13.2% is the same optical position, expressed so it follows whatever the ribbon
-      // becomes.
       top: "13.2%",
       fontFamily: FONT,
       fontSize: 14,
@@ -423,16 +339,13 @@ const makeStyles = (t: Theme) =>
       color: "#FFFFFF",
       textAlign: "center",
     },
-    // Same shell as the build map: literal cream, purple rim.
     card: {
       width: "100%",
       maxWidth: 520,
-      // #FBF8F3, matching the project map's card (ClusterFocusControl.PANEL_CREAM). Was #E3DACD.
       backgroundColor: "#FBF8F3",
       borderRadius: 22,
       borderWidth: 3,
       borderColor: MAUVE,
-      // Room for the ribbon's body to sit over the top edge without covering the undo/redo row.
       paddingTop: 26,
       paddingBottom: 12,
       paddingHorizontal: 18,
@@ -440,9 +353,6 @@ const makeStyles = (t: Theme) =>
 
     redoBtn: {
       position: "absolute",
-      // Higher on the card: at 24 it sat level with the title block rather than up in the corner
-      // where a secondary control belongs. Both offsets come from the call site, with the scale on
-      // them.
       width: 30,
       height: 30,
       alignItems: "center",
@@ -454,11 +364,9 @@ const makeStyles = (t: Theme) =>
     body: { paddingBottom: 2 },
 
     mainRow: { flexDirection: "row", gap: 16, alignItems: "center" },
-    // No panel and no well: the finished piece sits on the card itself, so nothing frames it but the card.
     pieceWrap: { flex: 1.25, height: 196, alignItems: "center", justifyContent: "center" },
     previewImg: { width: "100%", height: "100%" },
 
-    // maxWidth, not just flex: the panels hold two short lines of text and a couple of icons, and letting them grow with the card only pushes their own content further apart.
     panels: { flex: 1, maxWidth: 208, gap: 8 },
     panel: {
       backgroundColor: t.surface,
@@ -478,7 +386,6 @@ const makeStyles = (t: Theme) =>
     },
     rewardRow: { flexDirection: "row", gap: 18 },
     rewardItem: { alignItems: "center", gap: 4, maxWidth: 84 },
-    // One size for both rewards: they sit side by side, so a coin drawn larger than the item would read as worth more. REWARD_ICON_SIZE is that one size — the item's art is a CatalogThumb, which takes its size as a prop rather than a style, so a literal here would be a second number nothing keeps in step with it.
     rewardIcon: { width: REWARD_ICON_SIZE, height: REWARD_ICON_SIZE },
     rewardText: {
       fontFamily: FONT, fontSize: 10,
@@ -491,8 +398,6 @@ const makeStyles = (t: Theme) =>
     xpIcon: { width: 18, height: 18 },
 
     actionsRow: { flexDirection: "row", justifyContent: "space-around", gap: 12, marginTop: 2 },
-    // 116, was 108: "Put in Inventory" measures about 106 at 11pt, so the old cap left two points of
-    // slack and any widening — a UI scale, a different glyph — pushed it onto a second line.
     action: { alignItems: "center", gap: 3, flex: 1, maxWidth: 116 },
   actionIcon: { width: 30, height: 30, marginBottom: 2 },
     actionText: {

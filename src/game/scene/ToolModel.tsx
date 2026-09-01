@@ -14,20 +14,16 @@ import { LOOSE_OFFSET_M } from "@/src/game/core/geometry/fastenerPose";
 import { AssemblyAction, ToolId } from "@/src/game/core/type";
 import { TIGHTEN_TOTAL_DEG, useGameStore } from "@/src/game/core/store";
 
-/** Direction each tool's body extends away from its contact-point origin (read from the GLB geometry bounds): allen key short arm up +Y, screwdriver body -Z behind the tip, mallet head +Z behind the face. */
 const REST_AXIS: Partial<Record<ToolId, [number, number, number]>> = {
   allenkey: [0, 1, 0],
   screwdriver: [0, 0, -1],
   mallet: [0, 0, 1],
 };
 
-/** Clearance between the tool's contact origin and the fastener's HEAD FACE. Was 0.012 measured off the part ORIGIN — an accidental stand-in for a screw's half-length that only matched EKET's ~24mm screws; now the generated `headOffset` supplies the real half-length per fastener and this is a true small clearance. VERIFY ON DEVICE: the EKET suspension-bracket tighten (authored toolAnchor at the boss) was user-verified under the old 12mm hover and now sits 10mm closer to the back panel. */
 const TIP_GAP_M = 0.002;
 
-/** How far the mallet pulls back between strikes. */
 const MALLET_SWING_M = 0.07;
 
-/** The active tool, rendered at the fastener being tightened. Transform is rebuilt imperatively each update (same plain-array transformManager path as OffsetDriver — SharedValues don't cross into filament): alignment rotation (replace), spin about the fastener axis (multiply), then translation to the sinking fastener head (multiply). */
 export function ToolModel({ action }: { action: AssemblyAction }) {
   const tool = action.tool!;
   const strike = (action.motion ?? (tool === "mallet" ? "strike" : "spin")) === "strike";
@@ -63,7 +59,6 @@ export function ToolModel({ action }: { action: AssemblyAction }) {
     const align = axisAngleBetween(restAxis, axis);
     const p = Math.min(1, deg / TIGHTEN_TOTAL_DEG);
 
-    // Anchor priority: authored toolAnchor outright (EKET suspension bracket: origin on the plate, screw hole at the circular boss — deliberately SIDEWAYS of the tool axis, so it must never be projected) > generated headOffset PROJECTED onto the live tool axis (the projection keeps it exact for straight fasteners and harmlessly ~0 where an authored engageDir override redirects the axis away from the mesh frame, e.g. EKET cams whose mesh −Z is the panel-thickness direction) > the part origin. insertProud-0 parts rest flush, so the tool tip starts at the contact point instead of following a 2cm proud head.
     const [ax0, ay0, az0] = part.toolAnchor ??
       (part.headOffset
         ? (() => {

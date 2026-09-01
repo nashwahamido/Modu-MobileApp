@@ -159,8 +159,6 @@ export default function CreateAccountScreen() {
   );
 }
 
-// k is the device UI scale (see useUiScale): these layouts are authored in phone points,
-// and a tablet needs the same proportions at a larger size, not the same numbers.
 const makeStyles = (t: Theme, k = 1) =>
   StyleSheet.create({
     root: {

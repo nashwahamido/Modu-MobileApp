@@ -26,36 +26,11 @@ import { HUD_SIDE_MARGIN, HUD_VERTICAL_MARGIN } from "@/src/hooks/use-safe-inset
 import type { ClusterId } from "@/src/game/core/type";
 import * as Haptics from "expo-haptics";
 
-/**
- * A ring that swells and fades out of an available stage, over and over. It marks what the
- * player CAN start right now — the locked stages are already paler and the finished ones wear
- * a solid outline, so this is the only cue that has to attract the eye rather than just
- * describe a state, and motion is what does that without another colour.
- *
- * Native-driven: it runs on transform and opacity only, so the loop never touches the JS
- * thread — the same reason the orbit driver moved off it.
- */
-/**
- * The "press this" tab under an openable stage.
- *
- * Rises into place and then breathes, native-driven on transform and opacity only — the same
- * discipline as PulseRing, because this file deliberately keeps its loops off the JS thread.
- */
 function TapCue({ label, resuming, k }: { label: string; resuming: boolean; k: number }) {
-  // The map's own scale, PASSED IN rather than read here: the pill straddles a circle whose size the
-  // card decides, so the two must be the same number or the badge slides off the rim.
   const s = useScaledStyles(makeCueStyles, k);
-  // STILL, not pulsing — and a plain View, not Animated: the ring around the circle already says
-  // "this one is live", and a second thing throbbing beside it competes with the first rather than
-  // reinforcing it.
-  //
-  // BLUE for resume, LAVENDER for start: blue is already the catalogue's "in progress" colour, so a
-  // stage you have opened before is marked the same way there and here. Lavender stays the invitation
-  // to begin something.
   return (
     <View
       pointerEvents="none"
-      // The offset is applied HERE because the sheet scaler deliberately skips top/left/right/bottom — see SCALED_PROPS in theme.ts. This one is geometry, not an inset, so it has to track the circle.
       style={[s.wrap, { top: (CIRCLE - PILL_H / 2) * k }, resuming && s.wrapResume]}
     >
       <Text style={s.text}>{label}</Text>
@@ -63,40 +38,24 @@ function TapCue({ label, resuming, k }: { label: string; resuming: boolean; k: n
   );
 }
 
-/** The panel cream shared by this card and the build-completion screen — the two are the same kind
- *  of surface (a summary floating over a build) and drifting apart is what makes an app look
- *  assembled from parts. */
 const PANEL_CREAM = "#FBF8F3";
 
-/** The stage circle's diameter, and the Start/Resume pill's height — the pill is centred on the
- *  circle's bottom edge, so both numbers have to agree with the `circle` style below. */
 const CIRCLE = 92;
 const PILL_H = 22;
 
-/** The catalogue's "in progress" blue, shared by the map so a stage you have opened before is marked
- *  the same way in both places. */
 const RESUME_BLUE = "#A9BFD9";
 
-/** Takes no theme — the cue is one fixed accent either way — but it is still a `make` so the map can
- *  hand it the same scale as the rest of the card. */
 const makeCueStyles = () =>
   StyleSheet.create({
     wrap: {
-      // Centred on the circle's bottom edge: the circle is CIRCLE tall and starts at the node's top,
-      // so half the pill above that line and half below puts it on the rim. The `top` that does that
-      // lives at the call site, where it can be scaled. zIndex clears the circle, which draws its own
-      // gradient and would otherwise cover it.
       position: "absolute",
       height: PILL_H,
       zIndex: 3,
       paddingHorizontal: 12,
-      // No vertical padding: the height is fixed and `justifyContent` centres the label in it. Padding
-      // plus a fixed height fight each other, and that fight is what left the text sitting high.
       justifyContent: "center",
       borderRadius: 999,
       backgroundColor: "#8D7BA8",
     },
-    // The Continue blue, as used by the catalogue's in-progress pill.
     wrapResume: { backgroundColor: RESUME_BLUE },
     text: {
       color: "#FBF8F3",
@@ -104,9 +63,6 @@ const makeCueStyles = () =>
       fontSize: 11,
       fontWeight: "900",
       letterSpacing: 0.3,
-      // Both lines are about Android. It pads a Text by the font's own ascent and descent, which are
-      // not symmetric — so a label centred by its BOX sits visibly high in a short pill. Dropping that
-      // padding and pinning lineHeight to the pill's own height centres the glyphs instead.
       lineHeight: PILL_H,
       includeFontPadding: false,
       textAlign: "center",
@@ -144,15 +100,11 @@ function PulseRing({ style }: { style: StyleProp<ViewStyle> }) {
 }
 
 interface BuildMapProps {
-  /** Tutorial pause uses the project card without exposing task-stage selection. */
   overviewOnly?: boolean;
 }
 
 export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
-  // THE MAP SCALES, where the rest of the assembly HUD does not — and the difference is what kind of surface it is. The HUD is chrome around a build, laid out to the point with no slack, so theme.ts opts it out; this is a full-screen modal with one thing on it, which is the shape that file calls safe to grow. Left fixed it drew a phone-sized card in the middle of a tablet, with 92dp circles a player is meant to read a stage name inside.
-  // THE FULL SHARED SCALE, not the celebration cards' trim: those float over a scene they must not swamp, and this owns the screen while it is up. The card's widest layout is 620dp against a clamp that never exceeds long/800, so even at the 1.75 ceiling it cannot outgrow the window — see useUiScale.
   const k = useUiScale();
-  // The sheet takes the SAME k as the hand-scaled values below — see useScaledStyles.
   const styles = useScaledStyles(makeStyles, k);
   const isTablet = useIsTablet();
   const router = useRouter();
@@ -164,9 +116,7 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
   const mapSeen = useGameStore((s) => s.mapSeen);
   const repos = useRepos();
 
-  // The reward is DB-authored (item_build, granted by reward_build), so read it rather than recomputing a rate here — what this panel promises and what the grant applies cannot drift. Above the early return: the map unmounts between builds, so these hooks must stay unconditional.
   const furnitureId = furniture?.meta.id ?? null;
-  // Name and brand are DB-authored too; read from the boot-loaded catalogue rather than the bundle. Synchronous by design — this panel opens mid-build and cannot wait on a fetch.
   const catalogRow = useCatalogRow(furnitureId);
   const [reward, setReward] = useState({ coins: 0, xp: 0 });
   useEffect(() => {
@@ -175,7 +125,6 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
     repos.builds
       .buildReward(furnitureId)
       .then((r) => alive && setReward(r))
-      // Showing zero beats blocking the map on a reward lookup — the grant is server-side regardless.
       .catch((err) => console.warn("[BuildMap] reward lookup failed", err));
     return () => {
       alive = false;
@@ -184,22 +133,13 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
 
   if (!furniture) return null;
 
-  // The MODEL's art in the finish being built — the whole-build and combine nodes, which are the two
-  // that picture the finished piece. The finish is resolved from renderStyle against THIS model's own
-  // finishes (presentation/finish.ts), so "realistic" lands on white for EKET and black for DALFRED
-  // rather than falling through to the plain thumbnail as it did while the table lived here.
   const styledThumb = modelThumbSet(furniture, renderStyle).light;
 
   const done = new Set(completed);
   const clusters = focusableClusterIds(furniture);
 
-  // Three ways the map appears, and they differ in the way OUT.
-  //
-  //   mustChoose — several sub-assemblies, none picked. There is nothing to resume to, so the only exit is back to the catalogue. intro      — a single-cluster build (LACK) showing what lies ahead, ONCE. Its exit starts the build; it must not behave like a chooser, because there is nothing to choose and the player would be stuck. paused     — opened deliberately mid-build; exit resumes. combineReady guard: once every cluster is built, a cleared focus means the COMBINE stage (cluster cards in the tray), not an unanswered "which section" question — forcing the chooser there would block the combine.
   const mustChoose = requiresClusterFocus(furniture) && !activeCluster && !combineReady(furniture, done);
   const intro = clusters.length === 0 && !mapSeen;
-  // Tutorial overview is pause-only. It must never inherit the task's
-  // one-time LACK intro behaviour and open before the player taps Pause.
   const showMap = overviewOnly ? mapOpen : mustChoose || intro || mapOpen;
 
   const selectCluster = (clusterId: ClusterId) => {
@@ -208,15 +148,12 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
     useGameStore.getState().setMapSeen(true);
     Haptics.selectionAsync();
   };
-  // Closing always marks the intro seen, so it shows once per loaded furniture rather than every time the player pauses.
   const closeMap = () => {
     useGameStore.getState().setMapOpen(false);
     useGameStore.getState().setMapSeen(true);
   };
 
   if (showMap) {
-    // ── the three nodes ───────────────────────────────────────────────────
-    // Base and Seat are real clusters. COMBINE is not: it is the `combineClusters` action plus whatever cluster-less finishing steps follow it. Counting by cluster alone would bury those inside Seat, so combine is split out and excluded from the cluster counts.
     const isCombine = (a: { type: string }) => a.type === "combineClusters";
 
     const clusterNodes = clusters.map((clusterId) => {
@@ -228,9 +165,6 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
         label: clusterLabel(furniture, clusterId),
         actions,
         doneCount: actions.filter((a) => done.has(a.actionId)).length,
-        // Proper per-cluster artwork — the sub-assembly itself, not a stand-in part — and in the
-        // finish being built, so a cozy EKET's stages are the cozy cabinet and drawers. Falls back
-        // per cluster to the plain generated render when a finish ships no art for that stage.
         thumb: clusterThumbSet(furniture, clusterId, renderStyle)?.light,
         finished: clusterComplete(furniture, clusterId, done),
         enabled: clusterPrereqsMet(furniture, clusterId, done),
@@ -238,17 +172,13 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
       };
     });
 
-    // Everything that isn't part of a focusable cluster: the combine itself and the finishing checks that depend on it.
     const combineActions = furniture.actions.filter(
       (a) => isCombine(a) || actionCluster(furniture, a) == null,
     );
-    // Locked until BOTH sub-assemblies are done — combineReady is exactly that test.
     const combineEnabled = combineReady(furniture, done);
     const combineDone = combineActions.filter((a) => done.has(a.actionId)).length;
-    // Tapping it hands control to the cluster that owns the combine action, which is what makes that step reachable; there is no separate "combine" focus to select.
     const combineOwner = combineActions.map((a) => actionCluster(furniture, a)).find(Boolean);
 
-    // A build with no focusable clusters is ONE stage: the whole thing. Its actions carry no cluster at all, so the per-cluster and combine splits below would both come back empty and the map would draw nothing.
     const wholeNode = {
       key: "whole",
       label: clusterLabel(furniture, (Object.keys(furniture.clusters ?? {})[0] ?? "") as ClusterId),
@@ -264,9 +194,6 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
       ...clusterNodes,
       {
         key: "combine",
-        // Just "Combine". It used to append the catalogue name's last word ("Combine Cabinet"),
-        // which wrapped to two lines inside the circle and repeated a word already in the title
-        // above it.
         label: "Combine",
         actions: combineActions,
         doneCount: combineDone,
@@ -278,14 +205,6 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
       },
     ];
 
-    // The card GROWS with the stage count rather than squeezing the nodes: two stages (LACK) sit in
-    // a compact card, DALFRED's three want more room, and EKET's four need enough that every circle
-    // keeps its natural width instead of shrinking until the labels inside them stop fitting.
-    // WHICH labels stack one-word-per-line. Not "every multi-word name": a name breaks only when
-    // ANOTHER stage in the same row shares a word with it — "Top Drawer" and "Bottom Drawer" are a
-    // matched pair and must be set identically, so both stack. "Step Stool" has no counterpart, so
-    // forcing it onto two lines only made it smaller for no gain. Derived rather than listed, so a
-    // future model's pairs behave without another exception here.
     const words = (label: string) => label.toLowerCase().split(" ");
     const stacksLabel = (label: string) => {
       const mine = words(label);
@@ -295,21 +214,15 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
       );
     };
 
-    // Authored against a phone, then multiplied — so the proportions are the ones that were tuned here and only the size changes. Everything below that measures the card carries the same k, including the connector maths, or the bands stop meeting the circles they join.
     const cardMax = (nodes.length >= 4 ? 620 : nodes.length === 3 ? 520 : 460) * k;
     const INNER = cardMax - 60 * k;
     const slot = NODE_SLOT * k;
     const nodeWidth = Math.min(116 * k, (INNER - (nodes.length - 1) * slot) / nodes.length);
-    // The stage circle, and the SVG halo inside it. Rounded, because the sheet rounds too — a half-pixel between the gradient and the View that clips it shows as a hairline at the rim.
     const circleSize = Math.round(CIRCLE * k);
 
     const totalSteps = furniture.actions.length;
     const pct = totalSteps ? Math.round((done.size / totalSteps) * 100) : 0;
-    // Both come straight from the DB row — zero until the lookup lands, or if it failed.
     const { coins } = reward;
-    // A tutorial awards XP per completed assembly action. Its pause overview
-    // must use the same source as the tutorial HUD (14 × 10 = 140 for LACK),
-    // rather than the catalogue build reward used by a normal task.
     const totalXp = overviewOnly
       ? furniture.actions.length * furniture.xpPerStep
       : reward.xp;
@@ -317,18 +230,7 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
     return (
       <View style={styles.scrim}>
         <View style={[styles.card, { maxWidth: cardMax }, isTablet && { paddingVertical: CARD_VPAD * k * TABLET_VPAD_LIFT }]}>
-          {/* NO close button. Every stage's Start/Resume closes the map by opening that stage, and
-              this leaves the build entirely — an ✕ on the corner was a third exit that did the same
-              thing as the first two, and on a card this size it read as the loudest control on it.
-
-              dismissTo, not push: the catalogue is what opened this build, so it is already sitting
-              below in the stack and popping back to it never remounts. If it somehow is not there —
-              a build reached from the tutorial or a deep link — dismissTo replaces the current
-              screen with it instead, so the exit works from anywhere. */}
           <View style={styles.titleRow}>
-            {/* Anchored to THIS row rather than the card corner, and centred on it by top:'50%' +
-                a negative half-height — that ties it to the title's own vertical centre instead of
-                a hand-tuned offset that drifts whenever the title's line height changes. */}
             <Pressable
               style={({ pressed }) => [
                 styles.home,
@@ -340,11 +242,7 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
               accessibilityRole="button"
               accessibilityLabel="Back to the catalogue"
             >
-              {/* A solid triangle, not a typed "‹" — a chevron drawn as an up-arrow (ChevronIcon's
-                  own point is centred on its box) and rotated 90° left, so nothing about the
-                  glyph's font metrics can throw off its centring beside the label. */}
               <View style={styles.homeChevron}>
-                {/* A `size` PROP, not a style — the sheet scaler never sees it, so it takes the scale by hand. */}
                 <ChevronIcon size={Math.round(13 * k)} color={INK} up />
               </View>
               <Text style={styles.homeText}>Catalogue</Text>
@@ -364,15 +262,10 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
             </View>
           ) : (
           <View style={styles.nodeRow}>
-            {/* Every connector is drawn FIRST, in one absolutely-positioned layer, so all of
-                them sit under all of the circles. Interleaving them with the nodes could only
-                ever put a band under the node that followed it — the last one always landed on
-                top of the circle to its right, and zIndex alone did not settle it on Android. */}
             <View
               style={[
                 styles.connectorLayer,
                 {
-                  // The row centres its children, so a full-width layer would put the bands off by half the slack. Pin it to the content box instead.
                   width: nodes.length * nodeWidth + (nodes.length - 1) * slot,
                   marginLeft: -(nodes.length * nodeWidth + (nodes.length - 1) * slot) / 2,
                 },
@@ -386,10 +279,8 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                     style={[
                       styles.connectorLine,
                       {
-                        // Midpoint of the two circle centres: node i-1's centre plus half a node, plus the slot between them, less half the band's length.
                         left:
                           (i - 1) * (nodeWidth + slot) + nodeWidth + slot / 2 - (CONNECTOR_LEN * k) / 2,
-                        // Both offsets are applied here because the sheet scaler skips top/left/right/bottom — see SCALED_PROPS in theme.ts.
                         top: CONNECTOR_TOP * k,
                       },
                       i % 2 === 1 ? styles.connectorDown : styles.connectorUp,
@@ -402,15 +293,8 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
               <Fragment key={n.key}>
                 {i > 0 ? <View style={styles.connectorSlot} /> : null}
                 <Pressable
-                  // FINISHED IS STILL PRESSABLE. Only a LOCKED stage refuses the tap — one whose
-                  // prerequisites are not met yet. A completed stage was disabled too, which meant a
-                  // player who wanted to look at what they had built, undo a step, or just check a
-                  // part could never get back into it: the map became a one-way door the moment a
-                  // stage went green. The tick and the steady ring already say it is done; they do
-                  // not need to say it is closed as well.
                   disabled={!n.enabled}
                   onPress={n.onPress}
-                  // Odd nodes ride lower, so the row reads as a path stepping between stages rather than three buttons in a line.
                   style={[
                     styles.node,
                     { width: nodeWidth },
@@ -418,18 +302,9 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                   ]}
                   accessibilityLabel={`${n.label}, ${n.doneCount} of ${n.actions.length} steps`}  /* the count lives here now: read aloud, not drawn */
                 >
-                  {/* STRADDLING the circle's lower rim, absolutely — half on the circle, half off.
-                      In flow it pushed every node taller and the pill floated in the gap between
-                      stages; sat on the rim it reads as a badge on the thing it opens, and costs
-                      the node no height at all, so a finished or locked stage still lines up with
-                      its neighbours without reserving a slot it never fills. */}
                   {n.enabled && !n.finished ? (
                     <TapCue label={n.doneCount > 0 ? "Resume" : "Start"} resuming={n.doneCount > 0} k={k} />
                   ) : null}
-                  {/* Available: pulsing. Finished: a steady outline plus the tick. Both are
-                      SIBLINGS of the circle, never a border on it — the circle clips its own
-                      gradient, and a bordered view with a rounded inner overlay is what made
-                      Android flatten these into octagons before. */}
                   {n.enabled && !n.finished ? (
                     <PulseRing
                       style={[styles.pulseRing, n.doneCount > 0 && styles.pulseRingResume]}
@@ -440,7 +315,6 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                       <View style={styles.doneRing} pointerEvents="none" />
                       <Image
                         source={require("@/src/assets/ui/icons/icon-success.png")}
-                        // Its corner offsets ride the circle, so they carry the scale the sheet skips — see SCALED_PROPS in theme.ts.
                         style={[styles.doneCheck, { bottom: 14 * k, left: 6 * k }]}
                         resizeMode="contain"
                       />
@@ -453,15 +327,9 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                       !n.enabled && !n.finished && styles.circleLocked,
                     ]}
                   >
-                    {/* The wireframe's sphere: a light halo in the middle falling off to a
-                        deeper cream at the rim. A flat fill read as a sticker; the gradient is
-                        what gives the node its volume. */}
                     <Svg width={circleSize} height={circleSize} style={StyleSheet.absoluteFill}>
                       <Defs>
                         <RadialGradient id={`halo-${n.key}`} cx="50%" cy="42%" r="65%">
-                          {/* A locked stage is drawn PALER, never more transparent: dropping the
-                              view's opacity is what let the connector band show straight through
-                              the circle. The fill stays fully opaque at every state. */}
                           <Stop offset="0" stopColor="#FBF8F3" />
                           <Stop
                             offset="1"
@@ -486,10 +354,6 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                         resizeMode="contain"
                       />
                     ) : null}
-                    {/* INSIDE the circle, under the thumbnail: the stage's name belongs to the
-                        stage, and outside it the row read as a caption floating beneath a picture.
-                        Absolutely positioned so it cannot push the thumbnail off centre. */}
-                    {/* Its inset from the circle's own edges carries the scale the sheet skips — see SCALED_PROPS in theme.ts. */}
                     <View
                       style={[styles.nodeLabelBox, { left: 4 * k, right: 4 * k, bottom: 12 * k }]}
                       pointerEvents="none"
@@ -498,21 +362,11 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                         style={[styles.nodeLabel, !n.enabled && !n.finished && styles.nodeLabelLocked]}
                         numberOfLines={2}
                       >
-                        {/* Stacked one word per line only where a MATCHED PAIR needs it — see
-                            stacksLabel above. The box centres whatever comes out, so a one-line and
-                            a two-line name still share a midline. */}
                         {stacksLabel(n.label) ? n.label.split(" ").join("\n") : n.label}
                       </Text>
                     </View>
                   </View>
 
-
-                  {/* One tab, on the first stage that can be opened.
-                      The pulsing ring says "this one is LIVE", which is a state. It never says the
-                      circle is a button, and a diagram of stages is a perfectly ordinary thing to
-                      look at without touching — so a first-time player reads the map, understands
-                      it, and waits. This says what to do, in words, exactly once: more than one
-                      would be a scatter of instructions rather than a next step. */}
                 </Pressable>
               </Fragment>
             ))}
@@ -522,8 +376,6 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
           <View style={styles.progressRow}>
             <View style={styles.progressTrack}>
               <View style={[styles.progressFill, { width: `${pct}%` }]} />
-              {/* The label sits centred ON the track, so once the fill passes halfway it
-                  is sitting on accent, not on the groove — and has to flip to match. */}
               <Text
                 style={[
                   styles.progressLabel,
@@ -536,8 +388,6 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
           </View>
 
           <View style={styles.reward}>
-            {/* Rosette overlaps the banner's left end, as in the wireframe — it reads as a
-                seal pinned to the ribbon rather than a third item in the row. */}
             <View style={styles.rewardHeaderRow}>
               <Image
                 source={require("@/src/assets/ui/icons/icon-award.png")}
@@ -577,41 +427,16 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
   return null;
 }
 
-/**
- * The compact Base | Seat switcher, top-right of the HUD.
- *
- * Split from the map deliberately: the map is a FULL-SCREEN overlay and has to render
- * outside play.tsx's inset `chrome` container, or its scrim can only dim that container and
- * leaves a lighter rectangle of scene around the edges. The chips are the opposite — they
- * are positioned AGAINST those insets, so they have to stay inside it.
- */
-/**
- * The one control that opens the project map, in the slot the cluster discs used to occupy.
- *
- * The discs were a SECOND way to change focus — a horizontal stack you scrolled and tapped — sitting
- * beside a map that already does that job with more context. A single button that opens the map is
- * the same capability without a parallel UI to learn, and it gives the HUD's top-right back.
- */
-/** How far the Map chip lifts while held and while its map is open. Small on purpose: it sits at the
- *  top edge beside the parts tray, and anything larger reads as the button growing rather than as it
- *  being picked up. */
 const MAP_RAISED_SCALE = 1.08;
 
 export function MapButton() {
   const styles = useFixedStyles(makeStyles);
-  // ONLY the button's slot mirrors. The map card itself is centred on the screen and its stage circles read left-to-right in reading order — flipping either would be mirroring content, not ergonomics.
   const m = useMirror();
   const furniture = useGameStore((s) => s.furniture);
   const setMapOpen = useGameStore((s) => s.setMapOpen);
   const mapOpen = useGameStore((s) => s.mapOpen);
   const [held, setHeld] = useState(false);
 
-  // Raised while the finger is down AND for as long as the map it opened is up.
-  //
-  // A press state that ends on release would flash and be gone under the card that replaces it —
-  // the player never sees it. Holding the lift while `mapOpen` says so makes the button read as the
-  // thing that is currently open rather than as a button that was tapped a moment ago, which is
-  // what lets it double as the map's own "you are here".
   const raised = held || mapOpen;
   const lift = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -626,11 +451,6 @@ export function MapButton() {
 
   if (!furniture) return null;
   return (
-    // MEASURED, not written down. MapCoach used to place its highlight from a copy of `mapSlot`'s
-    // numbers, but this slot lives inside play.tsx's INSET `chrome` container while the highlight is
-    // drawn on the full-screen overlay layer — so "right: 14" meant two different places, and on any
-    // device reporting a side inset the highlight drifted off the chip. The slot style stays on the
-    // wrapper so the layout is unchanged; the wrapper simply also reports where it landed.
     <HudSpotTarget id="map" style={m(styles.mapSlot)}>
       <Animated.View style={{ transform: [{ scale: lift }] }}>
         <Pressable
@@ -668,28 +488,18 @@ export function ClusterFocusControl() {
   };
   const selectedIndex = Math.max(0, clusters.indexOf(activeCluster));
 
-  // Stacking peaks at the SELECTED disc and falls away in both directions:
-  //
-  //     z = count - |i - selectedIndex|
-  //
-  // so each disc is only ever covered from the side facing the selection, and none is squeezed from both. A plain left-to-right cascade is not enough — it works while the first disc is selected, but choosing the LAST one makes it the peak while the first still sits high, and the middle is buried between them again.
   return (
     <View style={styles.switcher}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.stack}
-        // Enough room for a few clusters; beyond that it scrolls rather than growing into the parts tray below.
         style={styles.stackScroll}
       >
         {clusters.map((clusterId, i) => {
           const selected = activeCluster === clusterId;
           const z = clusters.length - Math.abs(i - selectedIndex);
           const finished = clusterComplete(furniture, clusterId, done);
-          // Same rule as the map's discs: FINISHED is not LOCKED. Only unmet prerequisites refuse
-          // the tap. The rail is how a player moves between stages mid-build, so keeping a completed
-          // one shut here would undo the map fix — you could get back in from the map and then not
-          // leave and return. `discFinished` still marks it green.
           const enabled = clusterPrereqsMet(furniture, clusterId, done);
           return (
             <Pressable
@@ -698,12 +508,9 @@ export function ClusterFocusControl() {
               onPress={() => selectCluster(clusterId)}
               style={[
                 styles.disc,
-                // Overlap: every circle after the first tucks under its neighbour.
                 i > 0 && styles.discOverlap,
-                // Both zIndex and elevation: Android orders overlapping views by elevation, iOS by zIndex. Setting one gives correct stacking on a single platform and a mystery on the other.
                 { zIndex: z, elevation: z },
                 finished && styles.discFinished,
-                // Selected LAST so it wins the fill.
                 selected && styles.discSelected,
                 !enabled && !selected && styles.discDisabled,
               ]}
@@ -727,31 +534,16 @@ export function ClusterFocusControl() {
   );
 }
 
-/** Every text on this modal, per the wireframe. */
-
 const INK = "#231F20";
 
-/** Centre-to-centre span of the band between two stage circles (node 116 + slot 24). */
 const CONNECTOR_LEN = 140;
 
-/** The card's own top and bottom padding on a phone. */
 const CARD_VPAD = 10;
 
-/**
- * How much more of it the card takes on a tablet.
- *
- * PHONES ARE NOT TOUCHED, and that is not caution for its own sake: this card is sized to fit a
- * landscape phone WITHOUT scrolling, and on a 360dp screen a four-stage EKET clears the scrim's
- * gutters by about 20dp. Spending that on padding is how the reward row ends up cut off at the
- * bottom edge, because the card has no scroll to fall back on. A tablet has the room, so it gets the
- * air.
- */
 const TABLET_VPAD_LIFT = 2.2;
 
-/** The gap between two stage circles in the row. Shared by `connectorSlot`'s width and the connector maths, which have to agree about where the next circle starts. */
 const NODE_SLOT = 24;
 
-/** The band's own top offset inside the node row. Circle centres sit at y=46 and y=80 (the 34dp stagger); their midpoint is 63, less half the band's 14dp height. Applied at the call site rather than in the sheet: the scaler skips absolute offsets (see SCALED_PROPS), and this one is geometry rather than an inset. */
 const CONNECTOR_TOP = 63 - 7;
 
 const makeStyles = (t: Theme) =>
@@ -761,34 +553,16 @@ const makeStyles = (t: Theme) =>
       backgroundColor: t.scrim,
       alignItems: "center",
       justifyContent: "center",
-      // The same floors the assembly HUD uses, so the modal never sits closer to the glass than the controls behind it. Immersive mode reports 0 insets, hence the constants.
-      // These are paddings, so the map's scale grows them with the card — deliberately: a card half again as big wants a gutter to match, and the card's own maxWidth is capped well inside what is left.
       paddingHorizontal: HUD_SIDE_MARGIN,
-      // A real gutter, not the HUD's floor — but only just: at +18 the card had to give back more
-      // height than the reward row could spare, so the tiles ran past its edge. 10 keeps a visible
-      // margin top and bottom while returning that room to the content.
       paddingVertical: HUD_VERTICAL_MARGIN + 10,
-      // zIndex only — NO elevation. On Android `elevation` draws a drop shadow around the view's bounds, and a full-screen dimmer does not want one: while this sat inside play.tsx's inset chrome container that shadow landed ON SCREEN as a dark band tracing the container's edges, which read as a mystery rectangle behind the card.
       zIndex: 30,
     },
 
-    // ── the build-map card ────────────────────────────────────────────────
-    // Sized to fit a landscape phone WITHOUT scrolling: every block below is deliberately tight, because a chooser you have to scroll hides the very options it exists to show.
     card: {
       width: "100%",
-      // A CEILING, not a fixed height: the card sizes to its content but can never grow past the
-      // window minus the scrim's own padding — which is what let EKET's four stages push it to the
-      // top and bottom edges. maxWidth is set inline, per stage count.
       maxHeight: "100%",
-      // The CELEBRATION screen's panel colour, and no outline: the accent border made the map read
-      // as an alert, where it is really the same kind of surface as the finish summary.
-      //
-      // #FBF8F3, the app's lightest cream — was #E3DACD, a step darker. Both cards float over a
-      // build that may be running in dark mode, and the darker cream sat close enough to the scrim
-      // to read as part of it rather than as a panel on top of it.
       backgroundColor: PANEL_CREAM,
       borderRadius: 22,
-      // The phone's own vertical padding; a tablet overrides it at the call site with room to spare — see TABLET_VPAD_LIFT.
       paddingTop: CARD_VPAD,
       paddingBottom: CARD_VPAD,
       paddingHorizontal: 20,
@@ -798,13 +572,8 @@ const makeStyles = (t: Theme) =>
       shadowOffset: { width: 0, height: 10 },
       elevation: 12,
     },
-    // Top-left of the card. Absolute so it cannot push the centred title off centre. (It used to be
-    // described as "opposite the close button"; the close button is gone, this is the only corner
-    // control now.)
     home: {
       position: "absolute",
-      // Centred on titleRow's own height rather than pinned to a fixed top, so it tracks the
-      // title's vertical centre instead of the card's edge.
       top: "50%",
       marginTop: -12,
       left: 0,
@@ -815,20 +584,13 @@ const makeStyles = (t: Theme) =>
       height: 24,
       paddingHorizontal: 10,
       borderRadius: 999,
-      // A lighter tint of the "Start" pill's own lavender (#8D7BA8, makeCueStyles' wrap), not an
-      // unrelated purple — ties this pill back to the same accent family as the card's other pill.
       backgroundColor: "#CCC4D8",
     },
-    // Phone only. Text and icon sizes are untouched — only the chip around them shrinks — so this
-    // overrides just the box, including a matching marginTop to keep the shorter pill centred on
-    // titleRow (that offset is half of `home`'s own height, and this height is smaller).
     homePhone: {
       height: 24,
       marginTop: -12,
       paddingHorizontal: 8,
     },
-    // `home`'s own alignItems: "center" centres this on the row's cross-axis, which is what puts
-    // it level with "Catalogue" regardless of the icon's fixed pixel size.
     homeChevron: { transform: [{ rotate: "-90deg" }] },
     homeText: {
       fontFamily: FONT,
@@ -846,8 +608,6 @@ const makeStyles = (t: Theme) =>
     },
     title: { fontFamily: FONT, fontSize: 18, fontWeight: "800", color: t.text },
 
-    // Tutorial pause is an overview, not a stage chooser. Keep the task card's
-    // visual language but give the finished furniture the whole centre area.
     overviewHero: {
       height: 150,
       alignItems: "center",
@@ -869,28 +629,17 @@ const makeStyles = (t: Theme) =>
     },
     overviewImage: { width: 154, height: 126 },
 
-    // ── the nodes ─────────────────────────────────────────────────────────
     nodeRow: {
       flexDirection: "row",
       alignItems: "flex-start",
       justifyContent: "center",
-      // Room for the Start/Resume pill, which straddles the circle's bottom edge and so hangs half
-      // its height (PILL_H / 2) past the node it belongs to — THEN the row's own gap on top of it.
-      //
-      // The two were netted against each other at first, to keep the card the same height as before
-      // the pill moved. That was the wrong instinct: it gave the pill its space and took the gap
-      // away again, so the pill cleared the node and landed straight on the progress bar. The card
-      // is allowed to grow by the height of a thing that was added to it.
       paddingBottom: PILL_H / 2,
       marginBottom: 12,
     },
-    // The connector's SLOT in the row is narrow; the line itself is longer and overflows it deliberately, running across the empty padding either side of the circles. Midpoint between the two circle centres: radius 46 + half the 34dp stagger. Pure spacer now — the bands live in connectorLayer, which paints before any node.
     connectorSlot: { width: 24 },
     connectorLayer: { position: "absolute", top: 0, bottom: 0, left: "50%", zIndex: 0 },
-    // The rims are 58.8dp apart on the diagonal; drawing 44 leaves ~7dp clear at each end so the line stops short of both circles instead of butting into them. Spans CENTRE to CENTRE (node 116 + slot 24 = 140), not rim to rim: the long run makes the tilt shallow (atan 34/140 ≈ 13.7°) and buries both rounded ends under the circles, which draw after it and carry elevation. A short rim-to-rim band showed its own caps.
     connectorLine: {
       position: "absolute",
-      // `top` comes from the call site, with the scale on it — see CONNECTOR_TOP.
       width: CONNECTOR_LEN,
       height: 14,
       borderRadius: 7,
@@ -899,20 +648,15 @@ const makeStyles = (t: Theme) =>
     connectorDown: { transform: [{ rotate: "13.7deg" }] },
     connectorUp: { transform: [{ rotate: "-13.7deg" }] },
     node: { alignItems: "center", width: 116, zIndex: 1 },
-    // The dip that turns a row into a route. Matches the wireframe, where the middle stage sits below its neighbours.
-    // Half the old 34: the dip still reads as a path stepping between stages, but it was adding its
-    // full height to the card — the tallest node sets the row, so the offset is paid twice over.
     nodeLow: { marginTop: 18 },
     circle: {
       width: 92,
       height: 92,
       borderRadius: 46,
-      // Fill comes from the SVG radial gradient inside; keep the View transparent, and NO border — a bordered View with a rounded inner overlay is what made Android flatten the corners into an octagon.
       overflow: "hidden",
       alignItems: "center",
       justifyContent: "center",
       paddingBottom: 6,
-      // Depth comes from the drop shadow alone. RN has no inset shadow, and faking one with an inset ring is what broke the shape.
       shadowColor: "#000",
       shadowOpacity: 0.18,
       shadowRadius: 5,
@@ -920,7 +664,6 @@ const makeStyles = (t: Theme) =>
       elevation: 4,
     },
     circleFinished: {},
-    // Sits UNDER the circle so the swell reads as a halo growing out from behind it.
     pulseRing: {
       position: "absolute",
       top: 0,
@@ -929,8 +672,6 @@ const makeStyles = (t: Theme) =>
       height: 92,
       borderRadius: 46,
       borderWidth: 3,
-      // The ring says the same thing its pill does, in the same colour: LAVENDER around a stage
-      // waiting to be started, BLUE around one already under way.
       borderColor: "#8D7BA8",
       zIndex: 0,
     },
@@ -946,10 +687,6 @@ const makeStyles = (t: Theme) =>
       zIndex: 2,
     },
     pulseRingResume: { borderColor: RESUME_BLUE },
-    // Bottom-left of the circle. It used to share this spot with the resume badge, which is now
-    // retired — a finished stage is the only thing marked here.
-    // Measured from the BOTTOM, so it follows the circle without needing the cue-slot offset above.
-    // The two offsets below are the PHONE values; the map re-applies them scaled at the call site.
     doneCheck: {
       position: "absolute",
       bottom: 14,
@@ -958,23 +695,12 @@ const makeStyles = (t: Theme) =>
       height: 28,
       zIndex: 3,
     },
-    // NOT opacity — see the gradient comment above.
     circleLocked: {},
     dimmed: { opacity: 0.4 },
-    // Lifted off centre so the label below has clear air — but only just: at 22 the icon sat too
-    // high in the circle, and the gap read as a gap rather than as spacing.
     nodeThumb: { width: 46, height: 46, marginBottom: 15 },
 
-    // Pinned to the LOWER THIRD of the circle, clear of the thumbnail above it.
-    // A FIXED box that centres whatever it holds. Bottom-anchored text grew upward as it wrapped,
-    // so a one-line name ("Top Drawer") sat lower than a two-line one ("Bottom Drawer") in the same
-    // row — the box gives both the same midline, whatever they wrap to.
-    // Its three offsets are the PHONE values; the map re-applies them scaled at the call site.
     nodeLabelBox: {
       position: "absolute",
-      // Full width inside the circle: the per-word break is decided by stacksLabel above, so this
-      // no longer needs to force wrapping — and at 16 it was squeezing "Step Stool" onto two lines
-      // regardless of that decision.
       left: 4,
       right: 4,
       bottom: 12,
@@ -992,8 +718,6 @@ const makeStyles = (t: Theme) =>
     },
     nodeLabelLocked: { color: t.textFaint },
 
-    // ── overall progress ──────────────────────────────────────────────────
-    // Narrow and centred, as in the wireframe — a full-width bar competed with the nodes.
     progressRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -1004,8 +728,6 @@ const makeStyles = (t: Theme) =>
     },
     progressTrack: {
       flex: 1,
-      // Tall enough to CONTAIN the label: at 13 the text had no room and sat on the bottom edge,
-      // because a Text with no lineHeight is laid out from its baseline, not its box.
       height: 22,
       borderRadius: 11,
       backgroundColor: t.surfaceInset,
@@ -1018,8 +740,6 @@ const makeStyles = (t: Theme) =>
       backgroundColor: "#8FA876",
       borderRadius: 7,
     },
-    // Absolutely filled and line-height-matched to the track, so the label is centred by its BOX
-    // rather than by where its baseline happens to fall.
     progressLabel: {
       ...StyleSheet.absoluteFillObject,
       textAlign: "center",
@@ -1031,19 +751,14 @@ const makeStyles = (t: Theme) =>
       color: INK,
     },
     progressLabelOnFill: { color: t.onAccent },
-    // Sized to the drawn icon it replaces, so the reward row keeps its rhythm.
     rewardIcon: { width: 22, height: 22 },
 
-    // ── reward ────────────────────────────────────────────────────────────
-    // Full width now: the banner is a ribbon across the card, with the two tiles under it. Sized to the wireframe: a ribbon a bit over half the card, not a full-width bar.
     reward: {
       alignSelf: "center",
       alignItems: "stretch",
-      // A hair wider now it carries three tiles rather than two.
       width: "44%",
       marginBottom: 4,
     },
-    // Rosette sits beside the ribbon, not over it — no part of the banner runs behind it. No gap: the rosette butts against the ribbon, as drawn.
     rewardHeaderRow: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
     rewardBanner: {
       flex: 1,
@@ -1053,10 +768,7 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       justifyContent: "center",
     },
-    // Pulled a hair over the ribbon so there is no seam between the two.
-    // The ribbon continues beneath the rosette, as drawn — a bigger bite than a seam.
     awardIcon: { width: 30, height: 30, marginRight: -16, zIndex: 1 },
-    // Icon ABOVE the label, per the reference — a row read as a chip, not a reward card.
     rewardTile: {
       flex: 1,
       alignItems: "center",
@@ -1095,45 +807,27 @@ const makeStyles = (t: Theme) =>
     rewardCoin: { width: 26, height: 26 },
     rewardText: { fontFamily: FONT, fontSize: 10, fontWeight: "700", color: INK },
 
-  // TOP-RIGHT corner. top:8 is the HUD's grid line — the settings gear, the hint and the pause row
-  // all sit on it — and right:14 is the parts tray's own margin, so the button lines up with the
-  // tray column beneath it and with the left-hand controls across from it.
-  // Mirrored at the call site, so in left-hand mode this sits opposite the parts rail exactly as it does here.
   mapSlot: { position: "absolute", right: 14, top: 8, zIndex: 20 },
-  // The same 36pt chip height the settings gear, hint and undo sit on, and the PARTS TRAY's width
-  // (86) so the button and the column beneath it read as one right-hand rail rather than two
-  // stacked shapes of different sizes.
   mapButton: {
     width: 86,
     minHeight: SIZE.controlHeightSm,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: RADIUS.pill,
-    // LAVENDER, always — the app's one "you can act on this" colour, which this chip used to take
-    // only while held. It is the only way into the project map and the only coloured thing in a row
-    // of cream chrome, so it should look like the offer it is rather than announce itself for the
-    // length of a tap. The theme surface it replaced is still right for the gear and the tray
-    // beside it; those are settings, and this is the map.
     backgroundColor: t.accent,
     borderWidth: 1,
     borderColor: t.accent,
     boxShadow: "0px 3px 3px rgba(0,0,0,0.28)",
   },
-  // The press and open states are the LIFT now (see MapButton), not a second fill: a colour change
-  // on a chip that is already the accent has nowhere to go, and scale reads at a glance on a button
-  // this small.
-  // The accent is the same lavender in both themes — "act on this" does not change meaning.
   mapLabel: { fontFamily: FONT, fontSize: 13, fontWeight: "800", color: t.onAccent, letterSpacing: 0.2, textAlign: "center" },
   switcher: {
     position: "absolute",
     right: 14,
     top: 2,
-    // The stack is much narrower than the old pill row, so it sits clear of the objective bar even when that bar is at full width.
     maxWidth: 190,
     zIndex: 20,
   },
   stackScroll: { flexGrow: 0 },
-  // paddingRight leaves room for the last disc's shadow; paddingVertical for the lift.
   stack: { flexDirection: "row", alignItems: "center", paddingVertical: 6, paddingRight: 4 },
 
   disc: {
@@ -1151,10 +845,8 @@ const makeStyles = (t: Theme) =>
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
   },
-  // Each disc tucks under the previous one, so the row reads as a stack rather than a spaced-out set of buttons — and takes far less width.
   discOverlap: { marginLeft: -14 },
   discFinished: { backgroundColor: t.surface },
-  // Bigger, filled, and lifted ABOVE its neighbours on both sides.
   discSelected: {
     width: 56,
     height: 56,

@@ -1,4 +1,3 @@
-// Free mode lets a part of a STARTED cluster lift even when its step is illegal (store.beginPickup) and answers with the avatar's error chip (store.noteBlocked). The scene must not contradict that chip by ghosting the socket: reported on DALFRED's ring-rail screws, which glowed a target while the chip said the step was blocked.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { deriveSceneState } from "./useSceneState";
@@ -7,7 +6,6 @@ import { DALFRED_FIXTURE } from "@/src/game/content/furnitures/fixtures.testutil
 import { ActionId } from "@/src/game/core/type";
 
 const F = DALFRED_FIXTURE;
-// Everything stage 1 places without prerequisites, so this is the earliest state a player can reach the ring-rail screws from — and the ring rail itself is still out (it waits on all eight screw105251 tightens).
 const PLATES_AND_LEGS = [
   "place_circleUpp",
   "place_leg_1",

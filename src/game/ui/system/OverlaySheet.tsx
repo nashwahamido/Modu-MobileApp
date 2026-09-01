@@ -1,4 +1,3 @@
-// The shared overlay primitive: a full-screen scrim with a centered card that slides up + fades in on mount. One source of truth for how modal overlays are framed — scrim, card radius, elevation, and the optional title/subtitle/close header — so every overlay reads as one system instead of each surface re-styling its own scrim and card. Render your content as children.
 import {
   PropsWithChildren,
   useEffect,
@@ -16,20 +15,15 @@ import { SLIDE_UP } from "./slideUp";
 import { ELEVATION, RADIUS, SPACE, Theme, TYPE, useFixedStyles, useTheme } from "./theme";
 import { GrainOverlay } from "@/src/game/ui/system/Button";
 
-// "panel" = a large near-full card (lists, grids). "dialog" = a small centered card (confirmations).
 type SheetSize = "panel" | "dialog";
-// "center" = a small fade-up in place. "bottom" = a bottom sheet that slides all the way up from off-screen, matching the OS modal transition the (presentation) routes use.
 type SheetAnchor = "center" | "bottom";
 
 export interface OverlaySheetProps {
-  // Tap-the-scrim / close-button handler. Omit to make the sheet non-dismissable.
   onClose?: () => void;
-  // Optional header. When `title` is set, a title/subtitle row (with a close button, if onClose) is drawn above the children.
   title?: string;
   subtitle?: string;
   size?: SheetSize;
   anchor?: SheetAnchor;
-  // Whether tapping the scrim dismisses. Default true; ignored without onClose.
   dismissOnBackdrop?: boolean;
 }
 
@@ -46,7 +40,6 @@ export function OverlaySheet({
   const t = useTheme();
   const { height } = useWindowDimensions();
 
-  // Slide + fade on mount. The sheet is conditionally rendered by its caller, so mounting == opening. "bottom" travels a full screen height (starts fully off-screen below); "center" is a small nudge. The timing lives in ./slideUp, shared with the shop and inventory popups, so one definition of this feel serves all three.
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(anim, {
@@ -104,11 +97,9 @@ const makeStyles = (t: Theme) =>
       justifyContent: "center",
       padding: SPACE.lg,
     },
-    // Bottom-anchored: the panel rests against the bottom edge and slides up into it.
     scrimBottom: { justifyContent: "flex-end" },
     card: { backgroundColor: t.surface, borderRadius: RADIUS.panel, padding: SPACE.xl, ...ELEVATION.card },
     panel: { width: "88%", height: "88%" },
-    // A wider, taller card for the bottom-sheet form so it reads like the Shop modal.
     panelBottom: { width: "100%", height: "92%" },
     dialog: { width: 320, alignItems: "center" },
     header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: SPACE.md },

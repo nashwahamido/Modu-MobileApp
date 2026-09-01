@@ -5,7 +5,6 @@ import { availableInMode } from "@/src/game/core/evaluation/availability";
 import { LACK_FIXTURE } from "@/src/game/content/furnitures/fixtures.testutil";
 import { ActionId } from "@/src/game/core/type";
 
-// After the tabletop is placed, free mode's grab-anything rule makes every leg card `enabled` (its cluster is "started"), even though no leg action is legal — the only available actions are the four bolt inserts. Focus mode's single card must be the actually-available bolt, not the enabled-but-illegal leg.
 test("focus mode picks the available bolt, not the merely-enabled leg, once the tabletop is placed", () => {
   const done: ActionId[] = [LACK_FIXTURE.actions.find((a) => a.actionId === "place_tableTop")!.actionId];
 
@@ -31,13 +30,11 @@ test("focus mode picks the available bolt, not the merely-enabled leg, once the 
   assert.equal(focusState.trayItems[0].group, "bolt115980");
 });
 
-// Guided mode leads the player, so the tray should list actionable cards (an available action) before non-actionable ones — the leg card has no legal action once only the tabletop is done, but the bolt card does.
 test("guided mode lists the actionable bolt card before the non-actionable leg card", () => {
   const done: ActionId[] = [LACK_FIXTURE.actions.find((a) => a.actionId === "place_tableTop")!.actionId];
 
   const state = deriveSceneState(LACK_FIXTURE, done, null, null, null, "guide", false);
 
-  // GUARD: prove the unsorted order actually has a non-actionable card first, otherwise this test cannot demonstrate anything.
   assert.equal(
     state.allTrayItems[0].kind,
     "structural",
@@ -48,7 +45,6 @@ test("guided mode lists the actionable bolt card before the non-actionable leg c
   assert.equal(state.trayItems[0].group, "bolt115980");
 });
 
-// Free mode is "build it your way" — reordering its tray would railroad the player, so it must keep authored order even though the same actionable/non-actionable split exists underneath.
 test("free mode tray keeps authored order (not reordered by actionability)", () => {
   const done: ActionId[] = [LACK_FIXTURE.actions.find((a) => a.actionId === "place_tableTop")!.actionId];
 
@@ -61,7 +57,6 @@ test("free mode tray keeps authored order (not reordered by actionability)", () 
   );
 });
 
-// THE TUTORIAL'S CARD, which is the one its spotlight rings. The rectangle over the parts tray frames the FIRST card (tutorial.tsx's partsTrayTarget), so on a free-mode profile — Control pins free — "first" was whatever the model authored first: LACK's Leg. Finish a leg and the only legal move is the next bolt, but the ring stayed on the Leg card, which free mode's grab-anything also lets the player lift and then fail to place. tutorial.tsx runs `actionableFirst` over its tray for exactly this state.
 test("actionableFirst puts the bolt under the tutorial's spotlight after a leg is finished", () => {
   const done: ActionId[] = [
     "place_tableTop",
@@ -85,6 +80,5 @@ test("actionableFirst puts the bolt under the tutorial's spotlight after a leg i
 
   const sorted = actionableFirst(state.trayItems, new Set(available.map((a) => a.actionId)));
   assert.equal(sorted[0].group, "bolt115980", "the spotlight's card must be the one the player can actually use");
-  // Nothing is dropped: the tray still holds every group it held before, so no card vanishes mid-step.
   assert.deepEqual([...sorted].map((t) => t.group).sort(), [...state.trayItems].map((t) => t.group).sort());
 });

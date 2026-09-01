@@ -1,4 +1,3 @@
-// In-game settings: a gear button that opens the shared SettingsControls in a cream modal card. Same controls as the homepage /settings screen — one source of truth, one look (adopted from the on-release engine).
 import { router } from "expo-router";
 import { useHudIcon } from "@/src/game/ui/hud/hudIcons";
 import { useEffect, useRef, useState } from "react";
@@ -25,7 +24,6 @@ import {
 import { GrainOverlay } from "@/src/game/ui/system/Button";
 import { useGameStore } from "@/src/game/core/store";
 
-
 interface GameSettingsProps {
   headerContent?: ReactNode;
   controls?: ReactNode;
@@ -34,8 +32,6 @@ interface GameSettingsProps {
   onConfirm?: () => void;
   tutorialTarget?: SettingsFocusTarget | null;
   onTutorialTargetActivated?: () => void;
-  /** Fired on EVERY close, changed or not. For a tutorial step that asks the player to look through
-   *  Settings rather than to change something in it. */
   onClosed?: () => void;
 }
 
@@ -49,7 +45,6 @@ export function GameSettings({
   onTutorialTargetActivated,
   onClosed,
 }: GameSettingsProps = {}) {
-  // THE CHIP AND THE CARD ARE SIZED SEPARATELY, which is why there are two sheets. The gear is HUD chrome: a 36dp box on the same grid as undo, the hint and the pause row, so it stays exactly as authored on every device — growing it alone would break the column it belongs to. The card is a modal with one thing on it, which is the shape theme.ts calls safe to scale.
   const chrome = useFixedStyles(makeChromeStyles);
   const k = useUiScale();
   const styles = useScaledStyles(makeCardStyles, k);
@@ -62,16 +57,10 @@ export function GameSettings({
   const tutorialWasOpen = useRef(false);
   const tutorialSelectionMade = useRef(false);
   const { height: winH } = useWindowDimensions();
-  // The FLOORED insets, not the raw ones: immersive mode reports 0 on both test devices, so reading them directly made this the full window height and the card ran off the top and bottom edges.
   const insets = useSafeInsets();
   const cardMaxHeight = winH - insets.top - insets.bottom;
-  // WIDER THAN THE SCALE ALONE WOULD MAKE IT, and only on a tablet. Every row here is a label on the left and a control on the right, so width buys something a phone column cannot give it: the descriptions stop wrapping to three lines and the whole list gets shorter to scroll. The controls do not grow with it — they are sized to themselves (see segBtnTight) — so the extra room goes to the words. `maxWidth: "90%"` in the sheet is still the backstop on a narrow screen.
   const cardWidth = CARD_W * k * (isTablet ? TABLET_WIDEN : 1);
 
-  // MIRRORED INTO THE STORE, not replaced by it: `open` drives this component's own animation and
-  // scroll work, so it stays local, and one effect publishes it for anything that needs to know the
-  // build is covered (see useBuildPaused). Cleared on unmount too — leaving the flag set when the
-  // screen goes away would silence every coach for the rest of the session.
   useEffect(() => {
     useGameStore.getState().setSettingsOpen(open);
     return () => useGameStore.getState().setSettingsOpen(false);
@@ -85,10 +74,6 @@ export function GameSettings({
     if (shouldAdvanceTutorial) {
       requestAnimationFrame(() => onTutorialTargetActivated?.());
     }
-    // EVERY close, whether or not anything was changed — Done, the backdrop, the hardware back.
-    // `onTutorialTargetActivated` above is the other kind of report: it fires only when the player
-    // committed to a setting the tutorial pointed at. A step that just asks them to look around
-    // needs to hear about the close itself.
     requestAnimationFrame(() => onClosed?.());
   };
 
@@ -114,7 +99,6 @@ export function GameSettings({
 
   return (
     <>
-      {/* Settings icon — rounded-square chip with a minimalist sliders glyph. subject to change*/}
       <Pressable
         style={({ pressed }) => [m(chrome.gear), pressed && { opacity: 0.6 }]}
         onPress={() => {
@@ -135,7 +119,6 @@ export function GameSettings({
         />
       </Pressable>
 
-      {/* Real Modal so the scrim covers the WHOLE screen: this component lives inside the inset HUD container, where a plain absolute-fill overlay could only cover the container, leaving uncovered screen edges. */}
       <Modal
         visible={open}
         transparent
@@ -165,11 +148,9 @@ export function GameSettings({
               contentContainerStyle={styles.cardScroll}
               showsVerticalScrollIndicator={false}
             >
-              {/* The rows are shared with the tabbed /settings screen and size themselves from this — see SettingsSizeScope. It wraps `controls` too, so a caller that passes its own list (the tutorial does) is drawn at the same size as the default one. */}
               <SettingsSizeScope k={k} wide={isTablet}>
                 {controls ?? (
                   <SettingsControls
-                    // Restarting rebuilds the project map behind this card, so the card gets out of the way.
                     onRestarted={closeSettings}
                     focusTarget={tutorialTarget}
                     onFocusTargetLayout={setTutorialTargetY}
@@ -203,9 +184,6 @@ export function GameSettings({
                 onPress={() => {
                   if (confirmDisabled) return;
                   onConfirm?.();
-                  // Viewing the highlighted setting is enough during the
-                  // walkthrough. Players may keep the current value and use
-                  // Done to return to the assembly before the next cue.
                   if (tutorialTarget) {
                     tutorialSelectionMade.current = true;
                   }
@@ -224,21 +202,16 @@ export function GameSettings({
   );
 }
 
-/** The card's width on a phone, and the number the tablet sizes grow out of. */
 const CARD_W = 340;
 
-/** How much wider than its own scale the card runs on a tablet. Deliberately modest: past about this the label column stops being a column and the eye has to travel the whole card to pair a setting with its control. */
 const TABLET_WIDEN = 1.12;
 
-/** The HUD chip that opens the panel. Its own sheet because it does NOT scale — see the note where it is read. */
 const makeChromeStyles = (t: Theme) =>
   StyleSheet.create({
   gear: {
     position: "absolute",
     top: 8,
-    // Top-left corner, above the undo button (top:54) and clear of the centred objective bar. The XP that used to sit here now lives on the progress bar itself.
     left: 14,
-    // 36×36 with RADIUS.control corners — the exact box IconButton(small) draws, so the gear, the hint, and undo/redo below all sit on the same grid.
     width: 36,
     height: 36,
     borderRadius: RADIUS.control,
@@ -249,24 +222,14 @@ const makeChromeStyles = (t: Theme) =>
     alignItems: "center",
     justifyContent: "center",
   },
-  // 22 in a 36 box leaves the same breathing room as the glyphs in undo/redo; at 30 the gear filled its button edge to edge once the box came down to 36.
-  // NO SHADOW ON THE IMAGE. A view shadow follows the BORDER BOX, not the artwork's alpha, so on this
-  // transparent PNG it painted a soft dark 24×24 square behind the gear — a background the icon does
-  // not have. Android's `elevation` was the worse half: it ignores shadowColor/shadowOpacity and
-  // paints its own grey ramp on the view bounds (see CARD_CHROME in theme.ts). The lift belongs to the
-  // chip, which already carries ELEVATION.card — the same split RoomExperience's gear uses. A glyph
-  // that really needs its own shadow needs an alpha-shaped one, i.e. an SVG feDropShadow (ChevronIcon).
   icon: {
-    // Matches HUD_ICON so the gear sits at the same weight as undo, recenter and pause.
     width: 24,
     height: 24,
   },
   });
 
-/** The modal itself, at the panel's scale. */
 const makeCardStyles = (t: Theme) =>
   StyleSheet.create({
-  // The PNG is dark artwork; invert it (tint white) for the dark chip.
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: t.scrim,
@@ -274,7 +237,6 @@ const makeCardStyles = (t: Theme) =>
     justifyContent: "center",
   },
   card: {
-    // `width` comes from the call site, which is where the tablet widening is applied — see cardWidth.
     maxWidth: "90%",
     backgroundColor: t.bg,
     borderRadius: 18,
@@ -286,7 +248,6 @@ const makeCardStyles = (t: Theme) =>
     elevation: 8,
   },
   title: { fontFamily: FONT, fontSize: 17, fontWeight: "800", color: t.text, marginBottom: 2 },
-  // flexShrink is the whole fix for the cut-off card: without it a ScrollView sizes to its CONTENT and overflows a maxHeight parent instead of scrolling inside it, pushing the title off the top and the footer off the bottom.
   cardScrollView: { flexShrink: 1 },
   cardScroll: { paddingBottom: 4 },
   footer: {
@@ -299,7 +260,6 @@ const makeCardStyles = (t: Theme) =>
   homeRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   homeIcon: { width: 20, height: 20 },
   done: {
-    // Purple, not green: Done is an ACTION, and every action in this palette is the accent. Green is reserved for a COMPLETED step.
     backgroundColor: t.accent,
     borderRadius: 12,
     paddingHorizontal: 18,
