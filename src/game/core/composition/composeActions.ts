@@ -140,7 +140,6 @@ const pair = (
 
 export type FastenerRule = {
   group: GroupId;
-  stage: number;
   /** RARE per-build override. Tool normally comes from the global hardware  catalogue (data/hardware.ts) — resolution chain:  rule.tool → HARDWARE[group].tool → part.tool → none (bare hands). */
   tool?: ToolId;
   /** Optional override for AND prereqs before insertion. Defaults from fastenerKind. */
@@ -172,34 +171,95 @@ function defaultTightenRequires(p: PartDef, parts: Parts): readonly ActionId[] {
   return isConnector(p) && fastenerKindOf(p) === "cam" ? attachedSnaps(p) : [];
 }
 
-/** Expand each authored rule into insert+tighten pairs for every fastener in  the group. `hardware` is the global catalogue (data/hardware.ts), passed in  by the data layer so core stays free of data imports. Tool resolution:  rule.tool (rare override) → hardware[group].tool → part.tool → none. */
+/** Each fastener instance's resolved prereqs, kept for the stage derivation below before any action is built. */
+interface FastenerInstance {
+  rule: FastenerRule;
+  part: PartDef;
+  requires: readonly ActionId[];
+  requiresAny: readonly ActionId[];
+  tightenRequires: readonly ActionId[];
+}
+
+/**
+ * A fastener's stage FOLLOWS the joint it closes: the max stage over the placements its own prereqs name, and recursively over any fastener it waits on (EKET's back pins wait on the cams). The OR side takes the MIN, because a preload connector goes in as soon as its first host is down and belongs in that host's chunk, not its partner's.
+ *
+ * Authored per-group stages did the same job by hand and could drift from the parts: BEKVAM's third step screw sat a stage above the two stage-1 parts it joins purely so it stayed with its group, and EKET's rear cams+pins sat a stage above the back panel they bite into. Both now land with their joints. Legality is untouched either way — `requires` already held them behind their hosts; stage is the tray's chunking, and the chunk a fastener belongs in is the one where its joint closes.
+ */
+function deriveFastenerStages(
+  instances: readonly FastenerInstance[],
+  placementStage: ReadonlyMap<PartId, number>,
+): Map<PartId, number> {
+  // Both ids for a structural part answer with that part's authored stage: a staged carrier's hardware names the take-out beat, which is the same chunk as the placement it was split from.
+  const byPlacementAction = new Map<ActionId, number>();
+  for (const [partId, stage] of placementStage) {
+    byPlacementAction.set(placeId(partId), stage);
+    byPlacementAction.set(stageId(partId), stage);
+  }
+  const byFastenerAction = new Map<ActionId, PartId>();
+  for (const i of instances) {
+    for (const id of [insertId(i.part.partId), tightenId(i.part.partId), placeFastenerId(i.part.partId)]) {
+      byFastenerAction.set(id, i.part.partId);
+    }
+  }
+  const byPart = new Map(instances.map((i) => [i.part.partId, i]));
+
+  const out = new Map<PartId, number>();
+  const resolving = new Set<PartId>();
+  const stageOfFastener = (partId: PartId): number => {
+    const cached = out.get(partId);
+    if (cached !== undefined) return cached;
+    // A prereq cycle is an authoring bug the validator reports; bail to stage 1 rather than blowing the stack here.
+    if (resolving.has(partId)) return 1;
+    resolving.add(partId);
+    const inst = byPart.get(partId);
+    const stageOfPrereq = (id: ActionId): number => {
+      const placement = byPlacementAction.get(id);
+      if (placement !== undefined) return placement;
+      const fastener = byFastenerAction.get(id);
+      return fastener ? stageOfFastener(fastener) : 1;
+    };
+    const and = [...(inst?.requires ?? []), ...(inst?.tightenRequires ?? [])].map(stageOfPrereq);
+    const or = inst?.requiresAny.length ? [Math.min(...inst.requiresAny.map(stageOfPrereq))] : [];
+    const value = Math.max(1, ...and, ...or);
+    resolving.delete(partId);
+    out.set(partId, value);
+    return value;
+  };
+  for (const i of instances) stageOfFastener(i.part.partId);
+  return out;
+}
+
+/** Expand each authored rule into insert+tighten pairs for every fastener in  the group. `hardware` is the global catalogue (data/hardware.ts), passed in  by the data layer so core stays free of data imports. Tool resolution:  rule.tool (rare override) → hardware[group].tool → part.tool → none. `placementStage` carries the authored stage of every structural placement, which is where each fastener's own stage comes from — see deriveFastenerStages. */
 export function expandFastenerRules(
   rules: readonly FastenerRule[],
   parts: Record<PartId, PartDef>,
   hardware: Partial<Record<GroupId, { tool: ToolId; motion?: DriveMotion }>> = {},
+  placementStage: ReadonlyMap<PartId, number> = new Map(),
 ): DraftAction[] {
-  return rules.flatMap((r) =>
-    groupParts(parts, r.group).flatMap((p) => {
-      const kind = fastenerKindOf(p);
-      const tool = r.tool ?? hardware[r.group]?.tool ?? p.tool;
-      return pair(
-        p.partId,
-        tool,
-        r.requires?.(p) ?? defaultInsertRequires(p, parts),
-        r.stage,
-        {
-          insertRequiresAny:
-            r.insertRequiresAny?.(p) ?? defaultInsertRequiresAny(p, parts),
-          tightenRequires: r.tightenRequires?.(p) ?? defaultTightenRequires(p, parts),
-          insertTool: kind === "cam" ? tool : undefined,
-          motion:
-            hardware[r.group]?.motion ??
-            (kind === "cam" ? "turn" : kind === "pin" ? "strike" : "spin"),
-          threePhase: !!p.insertStage,
-        },
-      );
-    }),
+  const instances: FastenerInstance[] = rules.flatMap((r) =>
+    groupParts(parts, r.group).map((part) => ({
+      rule: r,
+      part,
+      requires: r.requires?.(part) ?? defaultInsertRequires(part, parts),
+      requiresAny: r.insertRequiresAny?.(part) ?? defaultInsertRequiresAny(part, parts),
+      tightenRequires: r.tightenRequires?.(part) ?? defaultTightenRequires(part, parts),
+    })),
   );
+  const stages = deriveFastenerStages(instances, placementStage);
+
+  return instances.flatMap(({ rule: r, part: p, requires, requiresAny, tightenRequires }) => {
+    const kind = fastenerKindOf(p);
+    const tool = r.tool ?? hardware[r.group]?.tool ?? p.tool;
+    return pair(p.partId, tool, requires, stages.get(p.partId) ?? 1, {
+      insertRequiresAny: requiresAny,
+      tightenRequires,
+      insertTool: kind === "cam" ? tool : undefined,
+      motion:
+        hardware[r.group]?.motion ??
+        (kind === "cam" ? "turn" : kind === "pin" ? "strike" : "spin"),
+      threePhase: !!p.insertStage,
+    });
+  });
 }
 
 /**
@@ -375,10 +435,18 @@ export function composeFurnitureActions(
   hardware: Partial<Record<GroupId, { tool: ToolId; motion?: DriveMotion }>> = {},
   clusters?: Record<ClusterId, ClusterDef>,
 ): AssemblyAction[] {
+  // Every structural placement's authored stage, which is what each fastener's own stage is derived from.
+  const placementStage = new Map<PartId, number>();
+  for (const a of authored) {
+    if (a.type === "placePart" && a.partId) placementStage.set(a.partId, a.stage);
+  }
   return withOrder(
     withClusterCombines(
       withFastenersBeforeCombines(
-        withStaging([...authored, ...expandFastenerRules(rules, parts, hardware)], parts),
+        withStaging(
+          [...authored, ...expandFastenerRules(rules, parts, hardware, placementStage)],
+          parts,
+        ),
         parts,
       ),
       clusters,

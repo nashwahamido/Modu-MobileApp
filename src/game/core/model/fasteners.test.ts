@@ -17,37 +17,37 @@ import { PARTS as DALFRED_PARTS } from "@/src/game/content/furnitures/DALFRED/pa
 import * as EKET from "@/src/game/content/furnitures/EKET/authored";
 import { PARTS as EKET_PARTS } from "@/src/game/content/furnitures/EKET/parts.gen";
 
-const connector = (completesOn: "insert" | "tighten", counterpartMountsBy: "press" | "screw", stage: number): FastenerEntry =>
-  ({ home: "liaison", role: "connector", preload: { completesOn, counterpartMountsBy }, stage }) as FastenerEntry;
-const securer = (stage: number): FastenerEntry => ({ home: "liaison", role: "securer", stage }) as FastenerEntry;
+const connector = (completesOn: "insert" | "tighten", counterpartMountsBy: "press" | "screw"): FastenerEntry =>
+  ({ home: "liaison", role: "connector", preload: { completesOn, counterpartMountsBy } }) as FastenerEntry;
+const securer = (): FastenerEntry => ({ home: "liaison", role: "securer" }) as FastenerEntry;
 
 // Defs in the same order as each furniture's authored FASTENER_RULES — rule order drives action order, so the fixture must speak in the authored sequence.
 const FASTENERS: Record<string, Record<string, FastenerEntry>> = {
   LACK: {
-    bolt115980: connector("tighten", "screw", 1),
+    bolt115980: connector("tighten", "screw"),
   },
   BEKVAM: {
-    dowel101350: connector("insert", "press", 1),
-    screw105215: securer(1),
-    screw105111: securer(2),
+    dowel101350: connector("insert", "press"),
+    screw105215: securer(),
+    screw105111: securer(),
   },
   DALFRED: {
-    screw105251: securer(1),
-    screw100212: securer(2),
-    screw105298: securer(2),
-    screw108443: securer(3),
-    cap107675: { home: "part", stage: 3 },
+    screw105251: securer(),
+    screw100212: securer(),
+    screw105298: securer(),
+    screw108443: securer(),
+    cap107675: { home: "part" },
   },
   EKET: {
-    screw110519: securer(1),
-    screw109041: securer(1),
+    screw110519: securer(),
+    screw109041: securer(),
     // re-typed structural→fastener 2026-08-24; ordered before screw100349 as in authored (the voiceover script pins the cap's line position). EKET's authored module lowers through the seam itself now, so its leg of this test pins fixture↔authored-def agreement.
-    suspCap: securer(3),
-    screw100349: securer(1),
+    suspCap: securer(),
+    screw100349: securer(),
     // the drop step is REQUIRED here: the instances author insertStage, and the drop↔insertStage validator holds def and parts to the same 3-phase story
-    dowel145572: { ...connector("insert", "press", 3), lifecycle: ["drop", "insert", "tighten"] } as FastenerEntry,
-    cam139434: securer(3),
-    dowel139435: { home: { extraOf: "cam139434" }, stage: 3 } as unknown as FastenerEntry,
+    dowel145572: { ...connector("insert", "press"), lifecycle: ["drop", "insert", "tighten"] } as FastenerEntry,
+    cam139434: securer(),
+    dowel139435: { home: { extraOf: "cam139434" } } as unknown as FastenerEntry,
   },
 };
 
@@ -95,61 +95,61 @@ const F = (defs: Record<string, FastenerEntry>): FastenerMap => defs as unknown 
 
 test("validator: every fastener group needs a def, and instances must fit the def's form", () => {
   const parts = P(part("a"), part("b"), hw("gizmo_1", ["a", "b"]), hw("orphan_1", ["a"]));
-  const issues = fastenerIssues(F({ gizmo: securer(1) }), parts);
+  const issues = fastenerIssues(F({ gizmo: securer() }), parts);
   assert.equal(issues.length, 1);
   assert.match(issues[0], /orphan_1.*no FASTENERS def/);
 
-  const single = fastenerIssues(F({ gizmo: securer(1), orphan: securer(1) }), parts);
+  const single = fastenerIssues(F({ gizmo: securer(), orphan: securer() }), parts);
   assert.equal(single.length, 1);
   assert.match(single[0], /orphan_1.*names 1 attached/);
 
-  const cap = fastenerIssues(F({ gizmo: { home: "part", stage: 1 }, orphan: { home: "part", stage: 1 } }), parts);
+  const cap = fastenerIssues(F({ gizmo: { home: "part" }, orphan: { home: "part" } }), parts);
   assert.equal(cap.length, 1);
   assert.match(cap[0], /gizmo_1.*sits on exactly one/);
 });
 
 test("validator: one connector group per liaison", () => {
   const parts = P(part("a"), part("b"), hw("gizmo_1", ["a", "b"]), hw("widget_1", ["b", "a"]));
-  const issues = fastenerIssues(F({ gizmo: connector("insert", "press", 1), widget: connector("insert", "press", 1) }), parts);
+  const issues = fastenerIssues(F({ gizmo: connector("insert", "press"), widget: connector("insert", "press") }), parts);
   assert.equal(issues.length, 1);
   assert.match(issues[0], /already has connector group "gizmo"/);
 });
 
 test("validator: extraOf must ride an existing liaison-homed primary with a covering instance", () => {
   const parts = P(part("a"), part("b"), hw("gizmo_1", ["a", "b"]), hw("rider_1", ["a"]), hw("cap_1", ["a"]));
-  const ok = fastenerIssues(F({ gizmo: securer(1), rider: { home: { extraOf: "gizmo" }, stage: 1 } as unknown as FastenerEntry, cap: { home: "part", stage: 1 } }), parts);
+  const ok = fastenerIssues(F({ gizmo: securer(), rider: { home: { extraOf: "gizmo" } } as unknown as FastenerEntry, cap: { home: "part" } }), parts);
   assert.deepEqual(ok, []);
 
-  const onCap = fastenerIssues(F({ gizmo: securer(1), rider: { home: { extraOf: "cap" }, stage: 1 } as unknown as FastenerEntry, cap: { home: "part", stage: 1 } }), parts);
+  const onCap = fastenerIssues(F({ gizmo: securer(), rider: { home: { extraOf: "cap" } } as unknown as FastenerEntry, cap: { home: "part" } }), parts);
   assert.equal(onCap.length, 1);
   assert.match(onCap[0], /a cap — extras ride a LIAISON-homed primary/);
 
-  const missing = fastenerIssues(F({ gizmo: securer(1), rider: { home: { extraOf: "nothing" }, stage: 1 } as unknown as FastenerEntry, cap: { home: "part", stage: 1 } }), parts);
+  const missing = fastenerIssues(F({ gizmo: securer(), rider: { home: { extraOf: "nothing" } } as unknown as FastenerEntry, cap: { home: "part" } }), parts);
   assert.equal(missing.length, 1);
   assert.match(missing[0], /extraOf "nothing", which has no FASTENERS def/);
 
-  const uncovered = fastenerIssues(F({ gizmo: securer(1), rider: { home: { extraOf: "gizmo" }, stage: 1 } as unknown as FastenerEntry, cap: { home: "part", stage: 1 } }), P(part("a"), part("b"), part("c"), hw("gizmo_1", ["a", "b"]), hw("rider_1", ["c"]), hw("cap_1", ["a"])));
+  const uncovered = fastenerIssues(F({ gizmo: securer(), rider: { home: { extraOf: "gizmo" } } as unknown as FastenerEntry, cap: { home: "part" } }), P(part("a"), part("b"), part("c"), hw("gizmo_1", ["a", "b"]), hw("rider_1", ["c"]), hw("cap_1", ["a"])));
   assert.equal(uncovered.length, 1);
   assert.match(uncovered[0], /no "gizmo" instance covering its host/);
 });
 
 test("validator: a connector's liaison must not also carry an authored structural join", () => {
   const authored = P(part("a", { directJoins: ["b"] }), part("b"), hw("gizmo_1", ["a", "b"]));
-  const conflict = fastenerIssues(F({ gizmo: connector("insert", "press", 1) }), authored);
+  const conflict = fastenerIssues(F({ gizmo: connector("insert", "press") }), authored);
   assert.equal(conflict.length, 1);
   assert.match(conflict[0], /also carries an authored directJoins join/);
   // a securer on the same authored joint is the normal wood-screw shape — no issue
-  assert.deepEqual(fastenerIssues(F({ gizmo: securer(1) }), authored), []);
+  assert.deepEqual(fastenerIssues(F({ gizmo: securer() }), authored), []);
 });
 
 test("validator: the drop step and insertStage must agree", () => {
-  const dropDef = { ...connector("insert", "press", 1), lifecycle: ["drop", "insert", "tighten"] } as FastenerEntry;
+  const dropDef = { ...connector("insert", "press"), lifecycle: ["drop", "insert", "tighten"] } as FastenerEntry;
   const bare = P(part("a"), part("b"), hw("gizmo_1", ["a", "b"]));
   const staged = P(part("a"), part("b"), hw("gizmo_1", ["a", "b"], [0, 0, 0], { insertStage: 0.03 }));
   const inert = fastenerIssues(F({ gizmo: dropDef }), bare);
   assert.equal(inert.length, 1);
   assert.match(inert[0], /declares a drop step but instance "gizmo_1" has no insertStage/);
-  const undeclared = fastenerIssues(F({ gizmo: connector("insert", "press", 1) }), staged);
+  const undeclared = fastenerIssues(F({ gizmo: connector("insert", "press") }), staged);
   assert.equal(undeclared.length, 1);
   assert.match(undeclared[0], /authors insertStage but the lifecycle has no drop step/);
   assert.deepEqual(fastenerIssues(F({ gizmo: dropDef }), staged), []);
@@ -158,17 +158,17 @@ test("validator: the drop step and insertStage must agree", () => {
 test("validator: lifecycle grammar, and completesOn must name a lifecycle step", () => {
   const parts = P(part("a"), part("b"), hw("gizmo_1", ["a", "b"]));
   const bad = (entry: FastenerEntry): string[] => fastenerIssues(F({ gizmo: entry }), parts);
-  assert.match(bad({ ...securer(1), lifecycle: [] })[0], /cannot be empty/);
-  assert.match(bad({ ...securer(1), lifecycle: ["tighten", "insert"] })[0], /ordered subset/);
-  assert.match(bad({ ...securer(1), lifecycle: ["insert", "insert"] } as unknown as FastenerEntry)[0], /ordered subset/);
-  assert.match(bad({ ...connector("tighten", "press", 1), lifecycle: ["insert"] })[0], /completes on "tighten" but the lifecycle/);
-  assert.deepEqual(bad({ ...connector("insert", "press", 1), lifecycle: ["insert"] }), []);
+  assert.match(bad({ ...securer(), lifecycle: [] })[0], /cannot be empty/);
+  assert.match(bad({ ...securer(), lifecycle: ["tighten", "insert"] })[0], /ordered subset/);
+  assert.match(bad({ ...securer(), lifecycle: ["insert", "insert"] } as unknown as FastenerEntry)[0], /ordered subset/);
+  assert.match(bad({ ...connector("tighten", "press"), lifecycle: ["insert"] })[0], /completes on "tighten" but the lifecycle/);
+  assert.deepEqual(bad({ ...connector("insert", "press"), lifecycle: ["insert"] }), []);
 });
 
 test("lowering: role-implied kinds override only where the name prefix disagrees", () => {
   const parts = P(part("a"), part("b"), hw("camgizmo_1", ["a", "b"]), hw("screwgizmo_1", ["a", "b"]), hw("dowelgizmo_1", ["a", "b"]));
   const { kindOverrides } = lowerFasteners(
-    F({ camgizmo: securer(1), screwgizmo: securer(1), dowelgizmo: connector("tighten", "press", 1) }),
+    F({ camgizmo: securer(), screwgizmo: securer(), dowelgizmo: connector("tighten", "press") }),
     parts,
   );
   // cam prefix vs securer → secured; screw prefix already secured → silent; dowel prefix (pin) vs connector{tighten, press} → the enum's fourth cell, cam
@@ -182,7 +182,7 @@ test("lowering: an extra pairs to the nearest covering primary and requires host
     hw("gizmo_2", ["back", "bottom"], [1, 0, 0]),
     hw("rider_1", ["bottom"], [0.1, 0, 0]),
   );
-  const { rules } = lowerFasteners(F({ gizmo: securer(1), rider: { home: { extraOf: "gizmo" }, stage: 1 } as unknown as FastenerEntry }), parts);
+  const { rules } = lowerFasteners(F({ gizmo: securer(), rider: { home: { extraOf: "gizmo" } } as unknown as FastenerEntry }), parts);
   const riderRule = rules.find((r) => (r.group as string) === "rider")!;
   assert.deepEqual(riderRule.requires!(parts["rider_1" as PartId]), ["place_bottom", "place_back", "tighten_gizmo_1"]);
 });

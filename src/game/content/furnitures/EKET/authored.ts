@@ -22,9 +22,10 @@ import {
 } from "@/src/game/core/type";
 import { PARTS } from "./parts.gen";
 
-// Lives here, not in meta.ts, because it is an AUTHORED input to composition like everything else in this file — the recipe serializer reads the authored module only (never meta.ts, whose thumbnail requires are asset handles), so a mode pinned in meta.ts alone is silently dropped from a recipe-composed build.
+// default guide node
 export const MODE: AssemblyMode = "guide";
 
+// part name in part tray
 export const LABELS = {
   topPanel: { standard: "Top panel" },
   bottomPanel: { standard: "Bottom panel" },
@@ -52,7 +53,7 @@ export const LABELS = {
   stabilizerRod: { standard: "Stabiliser rod", simple: "Rod" },
 } as LabelMap;
 
-// combine overlay: the cabinet is the seed and seats first; each drawer then slides onto it travelling −X (front is +X, so a drawer parks OUT the front and drives inward — the inverse of PUSH_OPEN's outward axis). parkBackoff matches PUSH_OPEN.distance so a drawer parks fully withdrawn rather than at the 10cm slide default. The runners do NOT move during the combine — the drawer slides in over static rails; the telescoping is saved for the test beats.
+// clusters
 export const CLUSTERS = {
   cabinet: { id: "cabinet", label: "Cabinet", seed: true },
   drawerA: {
@@ -92,25 +93,33 @@ export const COMPONENTS: ComponentMap = Object.fromEntries(
 ) as ComponentMap;
 
 // A drawer's Γ + build overlay (shared by A and B; `s` = "1" | "2").
-const drawer = (s: string): StructureOverlay => ({
-  // box: LEFT side is the seed and always goes down first; the keyhole bolts ship PRE-ATTACHED to the side panels (merged into the side mesh in the GLB, 2026-07-20), pointing FORWARD (+X) out of the sides' front edges into keyhole slots in the FRONT's back face — same two-phase hook press as the cabinet's side↔horizontal joints (user-confirmed on device). The slots run VERTICALLY with the narrow ends ABOVE the big ends, so the mover rule gives: FRONT (keyhole carrier) presses backward onto the bolts a bit ABOVE its seat, then shoves DOWN to hang — the picture-frame motion; a SIDE as mover (bolt carrier) presses forward into the placed front, then shoves UP. The RIGHT side is Γ-reachable via the FRONT's directJoins (below), which stands in for the bolt liaison the separate bolts used to provide. the BOTTOM then slides into grooves in the front + both sides; the BACK closes over it and is SCREWED to the sides (screw110519, secured after the box is up).
-  [`drawerFront_${s}`]: {
-    seed: true, // ALSO a seed (mirrors the cabinet horizontals): free mode may start the drawer from the front — the sides then hook onto IT with their bolt-carrier lockDir; as the strict-order mover after sideL it hangs as below
-    directJoins: [pid(`drawerSideL_${s}`), pid(`drawerSideR_${s}`)],
-    placeDir: [-1, 0, 0] as const,
-    lockDir: [0, -1, 0] as const,
-  },
-  // placeDir on every parked mover below: the centroid heuristic in travelAxis() guessed visibly wrong axes on-device — a groove's axis isn't derivable from poses, so it must be authored. World frame is documented once on STRUCTURE; the short version is FRONT = +X.
-  [`drawerSideL_${s}`]: { seed: true, directJoins: [pid(`drawerFront_${s}`)], placeDir: [1, 0, 0] as const, lockDir: [0, 1, 0] as const }, // its lockDir engages only when the front seeded first and this side becomes the mover (press forward, shove up — sideR's mirror); as the strict-order seed it just drops
-  [`drawerSideR_${s}`]: { seed: true, directJoins: [pid(`drawerFront_${s}`)], placeDir: [1, 0, 0] as const, lockDir: [0, 1, 0] as const }, // not a seed — reachable via the front's directJoins once the front is down (replaces the front↔side bolt liaison that went away when bolt128918 merged into the sides); presses FORWARD so its bolts enter the front's keyholes, then shoves UP to lock (was: travelling inward +Z, wrong for a keyhole — the bolts enter along their own axis)
-  // drawerBottom: MIGRATED to JOINTS below — three slide joints, and the +X travel now comes from the contact slabs (joints.gen.ts) instead of being typed here.
-  [`drawerBack_${s}`]: { unstable: true },
-  // (bolt128918 overrides removed 2026-07-20 — the keyhole bolts are pre-attached geometry on the sides now, not parts, so nothing to override)
-  // runner catches — screwed to the drawer FRONT (screw109041, manual step 21);
-  // the box later CLIPS onto the cabinet's runners via these at combine time
-  [`runnerBracketL_${s}`]: {}, // reachable via screw109041 liaison to the front
-  [`runnerBracketR_${s}`]: {},
-} as StructureOverlay);
+const drawer = (s: string): StructureOverlay =>
+  ({
+    [`drawerFront_${s}`]: {
+      seed: true,
+      directJoins: [pid(`drawerSideL_${s}`), pid(`drawerSideR_${s}`)],
+      placeDir: [-1, 0, 0] as const,
+      lockDir: [0, -1, 0] as const,
+    },
+    [`drawerSideL_${s}`]: {
+      seed: true,
+      directJoins: [pid(`drawerFront_${s}`)],
+      placeDir: [1, 0, 0] as const,
+      lockDir: [0, 1, 0] as const,
+    },
+    [`drawerSideR_${s}`]: {
+      seed: true,
+      directJoins: [pid(`drawerFront_${s}`)],
+      placeDir: [1, 0, 0] as const,
+      lockDir: [0, 1, 0] as const,
+    },
+    [`drawerBack_${s}`]: { unstable: true },
+    // (bolt128918 overrides removed 2026-07-20 — the keyhole bolts are pre-attached geometry on the sides now, not parts, so nothing to override)
+    // runner catches — screwed to the drawer FRONT (screw109041, manual step 21);
+    // the box later CLIPS onto the cabinet's runners via these at combine time
+    [`runnerBracketL_${s}`]: {}, // reachable via screw109041 liaison to the front
+    [`runnerBracketR_${s}`]: {},
+  }) as StructureOverlay;
 
 /** The cabinet-side runner mechanism for one drawer level (`lvl` = "A" | "B",
  *  matching runnerFix?A/?B; part index `s` = "1" | "2"). The telescoping slide
@@ -187,19 +196,24 @@ const STRUCTURE_BASE: StructureOverlay = {
 
 // Fastener defs (fastener-model-v2 seam, model/fasteners.ts) — the def declares each hardware GROUP's form; per-instance bindings stay in the mesh names (plus the suspCap re-typing above). Entry order is the old rule order: it drives the composed action order.
 export const FASTENERS: FastenerMap = {
-  // drawer sub-assemblies (stage 1)
+  // drawer sub-assemblies
   // bolt128918 (front keyhole bolts) def removed 2026-07-20: the bolts are pre-attached to the sides in the GLB, so they are no longer parts — the front's press-down placement still locks the keyholes over the pre-installed heads
-  screw110519: { home: "liaison", role: "securer", stage: 1 }, // back screws (back → sides)
-  screw109041: { home: "liaison", role: "securer", stage: 1 },
+  screw110519: { home: "liaison", role: "securer" }, // back screws (back → sides)
+  screw109041: { home: "liaison", role: "securer" },
   // cover cap — re-typed structural→fastener (see STRUCTURE): a securer on the cover↔bracket liaison; its insert waits for both and its tighten secures the unstable cover. Listed BEFORE screw100349 so its actions lead the moved cabinet fastener block: the voiceover script then keeps the cap's line at clip 22, where the RECORDED files have it (stepVoice pins).
-  suspCap: { home: "liaison", role: "securer", stage: 3 },
-  // cabinet: rails onto flat sides first (stage 1); back cams + pins only after the back panel is seated in its groove (stage 3, manual step 9); stabiliser-rod pins couple the rod to the rails after the rod clicks on
-  screw100349: { home: "liaison", role: "securer", stage: 1 },
+  suspCap: { home: "liaison", role: "securer" },
+  // cabinet: rails onto flat sides first; back cams + pins only after the back panel is seated in its groove (manual step 9 — held there by their requires, and they now take that panel's stage); stabiliser-rod pins couple the rod to the rails after the rod clicks on
+  screw100349: { home: "liaison", role: "securer" },
   // rod↔frame coupling dowels: preloaded connectors (the rod mounts by press once they are in); staging derives "press into the rod once it is out, rotate home once it is seated", the drop step is the 3-phase insertStage above
-  dowel145572: { home: "liaison", role: "connector", preload: { completesOn: "insert", counterpartMountsBy: "press" }, lifecycle: ["drop", "insert", "tighten"], stage: 3 },
-  cam139434: { home: "liaison", role: "securer", stage: 3 },
+  dowel145572: {
+    home: "liaison",
+    role: "connector",
+    preload: { completesOn: "insert", counterpartMountsBy: "press" },
+    lifecycle: ["drop", "insert", "tighten"],
+  },
+  cam139434: { home: "liaison", role: "securer" },
   // each pin rides its co-located cam (extraOf; instance pairing = same liaison + nearest, reproducing the old hand-written PIN_TO_CAM table): the pin crosses the cam's slots inside the panel, so a still-loose cam physically blocks it — lowering emits "own host place, remaining endpoint place (backPanel), then the cam's tighten" per instance
-  dowel139435: { home: { extraOf: "cam139434" }, stage: 3 },
+  dowel139435: { home: { extraOf: "cam139434" } },
 } as unknown as FastenerMap;
 
 // Lower against the RE-TYPED parts — suspCap's fastener binding lives in the overlay, not the GLB.

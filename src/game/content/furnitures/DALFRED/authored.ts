@@ -81,11 +81,11 @@ export const JOINTS: JointDef[] = [
 ];
 
 export const FASTENER_RULES: FastenerRule[] = [
-  { group: asGroupId("screw105251"), stage: 1 },
-  { group: asGroupId("screw100212"), stage: 2 },
-  { group: asGroupId("screw105298"), stage: 2 },
-  { group: asGroupId("screw108443"), stage: 3 },
-  { group: asGroupId("cap107675"), stage: 3 },
+  { group: asGroupId("screw105251") },
+  { group: asGroupId("screw100212") },
+  { group: asGroupId("screw105298") },
+  { group: asGroupId("screw108443") },
+  { group: asGroupId("cap107675") },
 ];
 
 const LEG_IDS = groupParts(P, asGroupId("leg")).map((p) => p.partId);
@@ -105,17 +105,36 @@ export const AUTHORED_ACTIONS: DraftAction[] = [
   action({ type: "placePart", stage: 2, partId: "supportPin", requires: [] }),
 
   action({ type: "placePart", stage: 3, partId: "seat", requires: [] }),
-  action({ type: "placePart", stage: 3, partId: "seatPlate", requires: ["place_seat"] }),
-  action({ type: "placePart", stage: 3, partId: "pole", requires: ["place_seatPlate"] }),
+  action({
+    type: "placePart",
+    stage: 3,
+    partId: "seatPlate",
+    requires: ["place_seat"],
+  }),
+  action({
+    type: "placePart",
+    stage: 3,
+    partId: "pole",
+    requires: ["place_seatPlate"],
+  }),
 
-  // ── combine: seat the base (seed drop), then lower the seat onto it; finish. combine_seat's dependence on combine_base is DERIVED from the CLUSTERS slideJoins overlay — do not hand-write it here. ──
-  action({ actionId: "combine_base", type: "combineClusters", stage: 4, cluster: "base", requires: [] }),
-  action({ actionId: "combine_seat", type: "combineClusters", stage: 4, cluster: "seat", requires: [] }),
-  // The ceremonial `finishing_checks` beat was REMOVED 2026-08-19 — it moved no part, so it was a
-  // swipe card standing between the player and a finished build. The last real assembly step is
-  // the last step now.
+  action({
+    actionId: "combine_base",
+    type: "combineClusters",
+    stage: 4,
+    cluster: "base",
+    requires: [],
+  }),
+  action({
+    actionId: "combine_seat",
+    type: "combineClusters",
+    stage: 4,
+    cluster: "seat",
+    requires: [],
+  }),
 ];
 
+// complementary steps / instrution overwrite
 export const BEATS = {
   combine_base: {
     text: "Set the base down in place.",

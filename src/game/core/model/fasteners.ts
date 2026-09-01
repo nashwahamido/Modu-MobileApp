@@ -13,7 +13,7 @@ type Parts = Record<PartId, PartDef>;
 
 export type FastenerLifecycleStep = "drop" | "insert" | "tighten";
 
-/** One hardware GROUP's def — its map key is the group, so the def carries form + capabilities and never a location. `stage` is the Γ-wave the expanded actions land in (stays a rule-level fact); `tool` is the rare per-build override ahead of the HARDWARE catalogue. */
+/** One hardware GROUP's def — its map key is the group, so the def carries form + capabilities and never a location. No stage: a fastener's stage is derived from the placements it joins (composeActions.deriveFastenerStages). `tool` is the rare per-build override ahead of the HARDWARE catalogue. */
 export type FastenerDef =
   // joint-defining hardware: the joint exists BECAUSE this is driven (BEKVÄM dowel, LACK bolt, EKET rod dowel)
   | {
@@ -29,7 +29,7 @@ export type FastenerDef =
   // part-dressing hardware: no joint at all (DALFRED pole cap)
   | { home: "part"; lifecycle?: readonly FastenerLifecycleStep[] };
 
-export type FastenerEntry = FastenerDef & { stage: number; tool?: ToolId };
+export type FastenerEntry = FastenerDef & { tool?: ToolId };
 
 export type FastenerMap = Record<GroupId, FastenerEntry>;
 
@@ -194,7 +194,7 @@ export function lowerFasteners(fasteners: FastenerMap, parts: Parts): LoweredFas
       }
     }
 
-    const base: FastenerRule = { group, stage: d.stage, ...(d.tool ? { tool: d.tool } : {}) };
+    const base: FastenerRule = { group, ...(d.tool ? { tool: d.tool } : {}) };
     if (roleOf(d) !== "extra") {
       rules.push(base);
       continue;
