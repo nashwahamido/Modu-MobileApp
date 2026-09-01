@@ -2,7 +2,9 @@ import {
   action,
   FastenerRule,
 } from "@/src/game/core/composition/composeActions";
-import { StructureOverlay } from "@/src/game/core/model/liaisons";
+import { applyStructure, StructureOverlay } from "@/src/game/core/model/liaisons";
+import { lowerFasteners, withFastenerFacts, type FastenerMap } from "@/src/game/core/model/fasteners";
+import { PARTS } from "./parts.gen";
 import { asGroupId, asPartId } from "@/src/game/core/ids";
 import type { JointDef } from "@/src/game/core/model/joints";
 import {
@@ -29,7 +31,7 @@ export const CLUSTERS = {
   whole: { id: "whole", label: "Step Stool" },
 } as Record<ClusterId, ClusterDef>;
 
-export const STRUCTURE = {
+const STRUCTURE_BASE = {
   legL: { seed: true },
   step: { seed: true },
   legR: { seed: true },
@@ -69,11 +71,17 @@ export const JOINTS: JointDef[] = [
   ),
 ];
 
-export const FASTENER_RULES: FastenerRule[] = [
-  { group: asGroupId("dowel101350") },
-  { group: asGroupId("screw105215") },
-  { group: asGroupId("screw105111") },
-];
+export const FASTENERS: FastenerMap = {
+  dowel101350: { home: "liaison", role: "connector", preload: { completesOn: "insert", counterpartMountsBy: "press" } },
+  screw105215: { home: "liaison", role: "securer" },
+  screw105111: { home: "liaison", role: "securer" },
+} as unknown as FastenerMap;
+
+const LOWERED = lowerFasteners(FASTENERS, applyStructure(PARTS, STRUCTURE_BASE));
+
+export const STRUCTURE: StructureOverlay = withFastenerFacts(STRUCTURE_BASE, LOWERED);
+
+export const FASTENER_RULES: FastenerRule[] = LOWERED.rules;
 
 const place = (partId: string, stage: number) =>
   action({ type: "placePart", stage, partId, requires: [] });

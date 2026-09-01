@@ -16,10 +16,6 @@ export const ACTIONS = composeFurnitureActions(
   HARDWARE,
 );
 
-// Hand-authored catalogue art, deliberately NOT the generated render in thumbs.gen.ts: that file is regenerated from the model, so an override placed there is lost on the next gen:thumbs. The asset lives outside the generated tree for the same reason.
-// ORDER IS MEANINGFUL: the catalogue's finish carousel opens AND closes on the LAST entry,
-// passing through the others on the way. This model opens on cartoon; the resting tile below
-// is the same finish, so an idle card and its first animated frame agree.
 const CATALOGUE_THUMBS: Record<string, ThumbSet> = {
   wooden: { light: require("../../../../assets/thumbnails/catalogue/BEKVAM-wooden.png") },
   cozy: { light: require("../../../../assets/thumbnails/catalogue/BEKVAM-cozy.png") },

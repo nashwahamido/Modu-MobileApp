@@ -3,9 +3,10 @@ import {
   FastenerRule,
   tightenActionIds,
 } from "@/src/game/core/composition/composeActions";
-import { StructureOverlay } from "@/src/game/core/model/liaisons";
+import { applyStructure, StructureOverlay } from "@/src/game/core/model/liaisons";
 import type { JointDef } from "@/src/game/core/model/joints";
 import { groupParts } from "@/src/game/core/scene/targets";
+import { lowerFasteners, withFastenerFacts, type FastenerMap } from "@/src/game/core/model/fasteners";
 import { asGroupId, asPartId } from "@/src/game/core/ids";
 import {
   ClusterDef,
@@ -29,7 +30,7 @@ export const LABELS = {
   seatPlate: { standard: "Seat plate", simple: "Plate" },
 } as LabelMap;
 
-// combine overlay: the base is the seed and seats first; the seat assembly (pole + top) then joins onto it travelling straight DOWN (−Y), its pole THREADING into the base's centre ring — driveMotion "screw" hands the drive to the dial, which spins the whole seat about the axis as it sinks. parkBackoff 0.15 lifts the parked seat clearly above the base (the pole's cap sits at y≈0.455, the base ring at y≈0.549) before the drive.
+//clusters
 export const CLUSTERS = {
   base: { id: "base", label: "Base", seed: true },
   seat: {
@@ -42,7 +43,7 @@ export const CLUSTERS = {
   },
 } as Record<ClusterId, ClusterDef>;
 
-export const STRUCTURE: StructureOverlay = {
+const STRUCTURE_BASE: StructureOverlay = {
   leg_1: { seed: true, unstable: true },
   leg_2: { seed: true, unstable: true },
   leg_3: { seed: true, unstable: true },
@@ -71,22 +72,25 @@ export const STRUCTURE: StructureOverlay = {
   },
 } as StructureOverlay;
 
-//     tool/label/motion come from the global catalogue (data/hardware.ts).
-/** Joints stated as ENTITIES rather than per-part arrays (core/model/joints.ts).
- * The circleDown joint is NEW, and it is not bookkeeping: structuralSweep.furniture.test.ts has carried it as a finding since 2026-08-24 — "supportPin tip rests inside circleDown's bore, a REAL coaxial contact the flat authoring never names". Undeclared, that contact looked like a THIRD-PARTY obstruction in every corridor, which is why the pin's travel could not be derived: circleDown blocked both signs while having no right to. Declaring it makes it a partner, and a partner's body is what the park math handles by construction.
- * It adds a Γ edge, so unlike the other migrations this one is NOT byte-equal: the pin now needs circleDown placed before it. The authored order already satisfies that (circleDown is a stage-1 seed, the pin is stage 2); what changes is FREE mode, where the pin could previously be dropped into a bore that was not there yet. */
+
 export const JOINTS: JointDef[] = [
   { kind: "slide", a: asPartId("supportPin"), b: asPartId("circleUpp"), mover: asPartId("supportPin") },
   { kind: "slide", a: asPartId("supportPin"), b: asPartId("circleDown"), mover: asPartId("supportPin"), gates: false },
 ];
 
-export const FASTENER_RULES: FastenerRule[] = [
-  { group: asGroupId("screw105251") },
-  { group: asGroupId("screw100212") },
-  { group: asGroupId("screw105298") },
-  { group: asGroupId("screw108443") },
-  { group: asGroupId("cap107675") },
-];
+export const FASTENERS: FastenerMap = {
+  screw105251: { home: "liaison", role: "securer" },
+  screw100212: { home: "liaison", role: "securer" },
+  screw105298: { home: "liaison", role: "securer" },
+  screw108443: { home: "liaison", role: "securer" },
+  cap107675: { home: "part" },
+} as unknown as FastenerMap;
+
+const LOWERED = lowerFasteners(FASTENERS, applyStructure(P, STRUCTURE_BASE));
+
+export const STRUCTURE: StructureOverlay = withFastenerFacts(STRUCTURE_BASE, LOWERED);
+
+export const FASTENER_RULES: FastenerRule[] = LOWERED.rules;
 
 const LEG_IDS = groupParts(P, asGroupId("leg")).map((p) => p.partId);
 export const AUTHORED_ACTIONS: DraftAction[] = [

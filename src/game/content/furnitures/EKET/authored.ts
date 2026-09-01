@@ -3,7 +3,7 @@ import {
   FastenerRule,
 } from "@/src/game/core/composition/composeActions";
 import { applyStructure, StructureOverlay } from "@/src/game/core/model/liaisons";
-import { lowerFasteners, type FastenerEntry, type FastenerMap } from "@/src/game/core/model/fasteners";
+import { lowerFasteners, withFastenerFacts, type FastenerEntry, type FastenerMap } from "@/src/game/core/model/fasteners";
 import type { JointDef } from "@/src/game/core/model/joints";
 import { asComponentId, asPartId } from "@/src/game/core/ids";
 import {
@@ -219,11 +219,8 @@ export const FASTENERS: FastenerMap = {
 // Lower against the RE-TYPED parts — suspCap's fastener binding lives in the overlay, not the GLB.
 const LOWERED = lowerFasteners(FASTENERS, applyStructure(PARTS, STRUCTURE_BASE));
 
-// The lowered kind overrides land back on the overlay (cam→secured ×8), replacing the fields this file used to hand-write.
-export const STRUCTURE: StructureOverlay = Object.entries(LOWERED.kindOverrides).reduce(
-  (s, [id, kind]) => ({ ...s, [id]: { ...s[id as PartId], fastenerKind: kind } }),
-  STRUCTURE_BASE,
-);
+// Every fastener instance carries its def's role (and a connector's preload) from here on — the evaluation layer reads those, never the group name. This replaced the cam→secured kind overrides, which existed only because "cam139434" is a name and the cams are securers; a role is stated, so there is nothing left to override.
+export const STRUCTURE: StructureOverlay = withFastenerFacts(STRUCTURE_BASE, LOWERED);
 
 export const FASTENER_RULES: FastenerRule[] = LOWERED.rules;
 
