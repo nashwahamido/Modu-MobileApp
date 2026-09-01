@@ -11,7 +11,7 @@ import { sequenceIssues } from "@/src/game/core/composition/sequence";
 import { actionIdFor, isPartTiedType, placeId, stageId } from "@/src/game/core/ids";
 import { memberPlaceIdsForLead } from "@/src/game/core/model/components";
 import { hardwareOn, isStaged } from "@/src/game/core/model/staging";
-import { ActionId, ClusterDef, ClusterId, Furniture, PartId, PushOpenSpec } from "@/src/game/core/type";
+import { ActionId, ClusterDef, ClusterId, Furniture, PartId, PRESS_LIKE, PushOpenSpec } from "@/src/game/core/type";
 
 export interface ValidationIssue {
   level: "error" | "warn";
@@ -328,7 +328,7 @@ export function validateFurniture(f: Furniture): ValidationIssue[] {
   {
     const liaisons = f.liaisons ?? buildLiaisons(f.parts);
     const pressEdges = new Set(
-      Object.values(liaisons).filter((l) => l.kind === "press").flatMap((l) => [l.a, l.b]),
+      Object.values(liaisons).filter((l) => l.kind && PRESS_LIKE.has(l.kind)).flatMap((l) => [l.a, l.b]),
     );
     for (const p of Object.values(f.parts)) {
       if (p.lockTravel !== undefined && !p.lockDir) {
@@ -360,7 +360,7 @@ export function validateFurniture(f: Furniture): ValidationIssue[] {
   {
     const liaisons = f.liaisons ?? buildLiaisons(f.parts);
     const pressEdges = new Set(
-      Object.values(liaisons).filter((l) => l.kind === "press").flatMap((l) => [l.a, l.b]),
+      Object.values(liaisons).filter((l) => l.kind && PRESS_LIKE.has(l.kind)).flatMap((l) => [l.a, l.b]),
     );
     for (const p of Object.values(f.parts)) {
       if (p.type !== "structural" || !p.placeDir) continue;

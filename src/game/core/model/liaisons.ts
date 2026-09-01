@@ -4,6 +4,7 @@ import { lowerJoints, mergeOverlays, type JointDef } from "./joints";
 import {
   FastenerKind,
   JoinKind,
+  JointGeometry,
   Liaison,
   LiaisonMap,
   PartDef,
@@ -65,14 +66,15 @@ export type StructureOverlay = Record<
   >
 >;
 
-/** Overlay the authored structure onto the generated parts. `joints` is the v2 authoring route (model/joints.ts): joint ENTITIES are lowered into the same flat fields first, then the flat overlay lands on top, so a furniture may use either form or both during a migration and the engine downstream never learns the difference. */
+/** Overlay the authored structure onto the generated parts. `joints` is the v2 authoring route (model/joints.ts): joint ENTITIES are lowered into the same flat fields first, then the flat overlay lands on top, so a furniture may use either form or both during a migration and the engine downstream never learns the difference. `geometry` is the generated travel table (joints.gen.ts), which lowering consults for any joint that does not override it — passing it without `joints` does nothing, which is what keeps derivation opt-in per joint. */
 export function applyStructure(
   parts: Parts,
   overlay: StructureOverlay,
   joints?: readonly JointDef[],
+  geometry?: JointGeometry,
 ): Parts {
   const merged = joints?.length
-    ? mergeOverlays(lowerJoints(joints, parts), overlay)
+    ? mergeOverlays(lowerJoints(joints, parts, geometry), overlay)
     : overlay;
   const out: Parts = {};
   for (const [id, p] of Object.entries(parts) as [PartId, PartDef][]) {

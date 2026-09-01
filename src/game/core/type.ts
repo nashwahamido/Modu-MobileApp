@@ -60,7 +60,11 @@ export type ToolMap = Record<ToolId, ToolInfo>;
 
 export type PartType = "structural" | "fastener";
 
-export type JoinKind = "slide" | "screw" | "press";
+/** ONE vocabulary for joins, shared by `Liaison.kind` and the authoring union in model/joints.ts — `JoinKind` and a separate `JointKind` differed by one letter and meant overlapping things. Γ carries only `press`/`slide`/`screw` today; the rest are sayable so the authoring shape and the graph cannot drift apart, and each arrives in Γ as its lowering teaches it to (model/joints.ts). */
+export type JoinKind = "slide" | "screw" | "press" | "snap" | "hookAndSlot" | "hinge";
+
+/** The kinds that behave as a press wherever code asks "is this a press edge" — they all lower onto a press edge today, so a filter written as `kind === "press"` means THIS set and breaks silently once a keyhole states its own kind. `snap` is deliberately absent: no live edge carries it, and the fastener-secured edges about to be classified `snap` are `undefined` today, so excluding it is what keeps those filters seeing exactly the edges they see now. */
+export const PRESS_LIKE: ReadonlySet<JoinKind> = new Set<JoinKind>(["press", "hookAndSlot"]);
 
 export type FastenerKind = "threaded" | "pin" | "cam" | "secured";
 
@@ -170,6 +174,9 @@ export type LiaisonMap = Record<LiaisonId, Liaison>;
 /** Exit-sweep blockers per structural part, per cardinal direction — GENERATED per furniture (helper-scripts/derive-sweep.mts) from final-pose geometry: the parts whose bodies obstruct this part's exit corridor along the key direction within its bounded park travel (cluster-scoped; the mover is eroded 4mm for fit clearance; fasteners excluded — their sequencing is the home lane). A missing key means the corridor is clear. Consumed by engagement.travelAxis for parts with NO authored placeDir: an entry travel `t` is order-viable when every already-placed blocker of the reverse corridor `-t` is one of the part's own joint partners. */
 export type SweepDirKey = "+x" | "-x" | "+y" | "-y" | "+z" | "-z";
 export type SweepMap = Record<PartId, Partial<Record<SweepDirKey, readonly PartId[]>>>;
+
+/** Travel vectors DERIVED from the contact geometry at baked pose — GENERATED per furniture (helper-scripts/derive-joints.mts, math in model/jointGeometry.ts) so a direction is a fact about the mesh instead of a hand-typed vector that a re-export silently invalidates. Vectors ONLY, never join arrays: derivation answers "which way", never "who joins whom", so it can never fabricate a Γ edge. A part is absent when the derivation was undetermined — an absent key means whatever the part authors stands, so nothing changes. Consumed under the authored overlay by applyStructure, and only for parts a JOINTS entry names. */
+export type JointGeometry = Record<PartId, { placeDir?: Vec3; lockDir?: Vec3 }>;
 
 export interface ClusterDef {
   id: ClusterId;
