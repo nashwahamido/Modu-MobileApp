@@ -12,10 +12,10 @@ import type {
   SweepMap,
   Vec3,
 } from "@/src/game/core/type";
-import type { ComponentIndex } from "./components";
-import type { JointDef } from "./joints";
-import { boxCenter, boxOverlap, CONTACT_EXPANSION_M, deriveJointFrames } from "./jointFrames";
-import { isConnector } from "./liaisons";
+import type { ComponentIndex } from "../model/components";
+import type { JointDef } from "../model/joints";
+import { boxCenter, boxOverlap, CONTACT_EXPANSION_M, deriveJointFrames } from "../model/jointFrames";
+import { isConnector } from "../model/liaisons";
 
 /** One mover-side claim: `partId` travels into `partner`, and the join is of `kind`. Built either from a furniture's JOINTS or, until one exists, from the flat join arrays — which is what lets the whole corpus be measured before anything migrates. */
 export interface JointStatement {

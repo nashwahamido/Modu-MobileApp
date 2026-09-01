@@ -1,4 +1,4 @@
-// Derived joint geometry pins (2026-09-01) — the travel vectors core/model/jointGeometry.ts computes from the contact slabs, scored against the whole shipped corpus.
+// Derived joint geometry pins (2026-09-01) — the travel vectors core/derive/jointGeometry.ts computes from the contact slabs, scored against the whole shipped corpus.
 // Pin 1: the checked-in joints.gen.ts files match a fresh computation from the GLBs — a model re-export or STRUCTURE change without `npx tsx src/game/helper-scripts/derive-joints.mts --write` fails here, named.
 // Pin 2, the one that earns the feature: a derived vector NEVER contradicts a placeDir the corpus authors by hand. Those 33 values are device-verified, so a derivation that disagrees with one is wrong about a fact somebody already checked on a phone — it fails here rather than misdirecting a drag. A disagreement that is genuinely correct goes in KNOWN_DIVERGENT with its reason; the map is empty today because nothing disagrees.
 // Pin 3: the counts. UNVALIDATED is the uncomfortable one and is meant to be: those parts author no placeDir, so pin 2 cannot see them and nothing has confirmed the direction they were handed. They are inert until a JOINTS entry names their part — the count is here so that stops being invisible.
@@ -9,9 +9,9 @@ import path from "node:path";
 
 import { composeFurnitureActions } from "@/src/game/core/composition/composeActions";
 import { HARDWARE } from "@/src/game/content/hardware";
-import { buildComponents } from "./components";
+import { buildComponents } from "../model/components";
 import { deriveJointGeometry, statementsFor } from "./jointGeometry";
-import { applyStructure, buildLiaisons, composeStructure, isConnector } from "./liaisons";
+import { applyStructure, buildLiaisons, composeStructure, isConnector } from "../model/liaisons";
 import type { PartBox, PartDef, PartId, SweepMap, Vec3 } from "@/src/game/core/type";
 
 import * as LACK from "@/src/game/content/furnitures/LACK/authored";
