@@ -80,6 +80,8 @@ export interface PartCore {
   /** World-space offset from pose.position to the TOOL's contact point for this part's tighten (ToolModel) — for when the node origin is not where the tool works (EKET suspension bracket: the origin sits on the plate, the screw hole at the circular boss ~1cm over). */
   toolAnchor?: Vec3;
   tool?: ToolId;
+  /** Exempt this part's sockets from the drag's sightline visibility gate — they stay matchable from any angle the in-frame test allows. The escape hatch for a socket the gate's boxes over-block: the rule measures against AABB∩OBB, which is always fatter than the mesh, and where a part seats into a shallow face-on hole a millimetre of box fat is the whole threshold. Per part, never global — the gate is what stops a snap being earned against a hole the player cannot see. */
+  noVisibilityGate?: boolean;
 }
 export interface StructuralFields {
   directJoins?: readonly PartId[];

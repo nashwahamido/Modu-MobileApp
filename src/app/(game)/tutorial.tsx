@@ -161,26 +161,18 @@ function TutorialScreen() {
   const [undoPreviewActive, setUndoPreviewActive] = useState(false);
   const undoPreviewProgress = useRef(new Animated.Value(0)).current;
 
-  // THE GHOST, AND ONLY THE GHOST.
+  // THE GHOST BELONGS TO THE UNDO PREVIEW, AND TO NOTHING ELSE.
   //
-  // `undoPreviewActive` drives TWO separate things: this scene animation, and a whole card takeover
-  // in MascotGuideOverlay — header replaced with "UNDO PREVIEW", its own copy, the spotlight moved
-  // to the assembly area, and a full-screen Pressable that dismisses by firing `step_undone`.
+  // `undoPreviewActive` is `hud-undo`'s whole-card takeover in MascotGuideOverlay — its own header
+  // and copy, the spotlight on the assembly area, a full-screen Pressable to close it. This scene
+  // animation is one part of that takeover and runs for as long as it is up.
   //
-  // Lumi's step can have the first but NOT the second. `visual-undo-recenter` closes on
-  // `controls_acknowledged`, so that Pressable's `step_undone` would match nothing and the tap would
-  // do nothing at all — a player stuck on a card with no way off it. The takeover would also throw
-  // away her authored line and its recorded clip. So the scene animation reads this flag while
-  // `showingUndoPreview` below, which is what the overlay receives, stays pinned to `hud-undo`.
-  // Its own subscription rather than the `tutorialStepId` further down: this sits above that
-  // declaration, and a const reading it from here would be in its temporal dead zone.
-  const onVisualUndoStep = useTutorialStore(
-    (s) => s.steps[s.currentIndex]?.id === "visual-undo-recenter",
-  );
-  const undoGhostRunning = undoPreviewActive || onVisualUndoStep;
-
+  // It also ran on `visual-undo-recenter`, the read-only card every profile actually reaches.
+  // Removed 2026-08-29: it slid and faded the WHOLE build, which is not what Undo does — undo takes
+  // back the last part — and players read the movement as their press having undone the table. The
+  // card rings both buttons and says what they do; nothing has to move for that to land.
   useEffect(() => {
-    if (!undoGhostRunning) {
+    if (!undoPreviewActive) {
       undoPreviewProgress.stopAnimation();
       undoPreviewProgress.setValue(0);
       return;
@@ -201,25 +193,15 @@ function TutorialScreen() {
         }),
         Animated.delay(220),
       ]),
-      // TWO PASSES ON LUMI'S STEP, then the scene sits still.
-      //
-      // Looping forever is right for `hud-undo`, whose card waits on the player and whose whole
-      // screen IS the preview — so -1 stays the default for it. On `visual-undo-recenter` the ghost
-      // is a one-off demonstration beside a card the player is reading, and left looping it was
-      // still travelling when the tap moved them to step 8, so the scene slid and faded under a card
-      // about Spot and Auto that has nothing to do with undo.
-      //
-      // Two rather than one: a single pass reads as a glitch, a second says it was deliberate. The
-      // sequence ends on a timing back to 0, so when it finishes the tabletop is already home and
-      // nothing has to put it there.
-      { iterations: onVisualUndoStep ? 2 : -1 },
+      // Forever: the preview's card waits on the player, and the whole screen IS the preview.
+      { iterations: -1 },
     );
     animation.start();
     return () => {
       animation.stop();
       undoPreviewProgress.setValue(0);
     };
-  }, [undoGhostRunning, onVisualUndoStep, undoPreviewProgress]);
+  }, [undoPreviewActive, undoPreviewProgress]);
 
   const undoPreviewSceneStyle = {
     opacity: undoPreviewProgress.interpolate({

@@ -50,6 +50,11 @@ export const STRUCTURE: StructureOverlay = {
   circleUpp: { seed: true },
   circleDown: { seed: true },
   ringRail: { unstable: true },
+  // The four ring-rail screws opt OUT of the sightline gate, same reason as BEKVAM's dowels: each drives through a splayed leg into the rail, and a leg is a 35mm stick inside a box the gate treats as solid — its own fat blocks the sightline to a head sitting on its surface.
+  screw100212_1: { noVisibilityGate: true },
+  screw100212_2: { noVisibilityGate: true },
+  screw100212_3: { noVisibilityGate: true },
+  screw100212_4: { noVisibilityGate: true },
   // dropped in from ABOVE: the sleeve SLIDES down through circleUpp's centre hole until its top flange (y=0.577) lands on the plate's top face (y=0.570) — the flange can't pass the hole, so this is its only insertion direction. The scene renders model space (upright) throughout, so the from-above slide works mid-build with no reorient beat. parkBackoff must clear the full 9.6cm sleeve above the plate; the press default parked it inside the plate stack (the reported collision).
   // supportPin: MIGRATED to JOINTS below. Its travel stays here for now — the derivation knows the axis (Y, through the bore) but not the sign.
   supportPin: { placeDir: [0, -1, 0] as const, parkBackoff: 0.12 },
