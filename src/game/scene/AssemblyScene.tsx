@@ -11,6 +11,7 @@ import {
 } from "react-native-filament";
 import type { ISharedValue } from "react-native-worklets-core";
 import { useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import type { PartBox, PartId } from "@/src/game/core/type";
 import { useThemeId } from "@/src/game/ui/system/theme";
 import { CombineCarry, type CarryOffset } from "./CombineCarry";
@@ -68,7 +69,7 @@ export function AssemblyScene({
   onModelReady,
 }: Props) {
   const furniture = useGameStore((s) => s.furniture);
-  const renderStyle = useGameStore((s) => s.renderStyle);
+  const renderStyle = usePrefsStore((s) => s.renderStyle);
   const model = useModel(
     furniture?.styleModels?.[renderStyle] ?? furniture?.model ?? 0,
     { instanceCount: 2, addToScene: false },

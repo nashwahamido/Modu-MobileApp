@@ -34,6 +34,7 @@ import { createContext, useContext, useMemo } from "react";
 import type { TextStyle } from "react-native";
 import { ThemeId } from "@/src/game/core/type";
 import { useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 
 // ── the raw palette ─────────────────────────────────────────────────────────
 const PALETTE = {
@@ -300,7 +301,7 @@ export const ThemeScope = ThemeOverride.Provider;
 /** The ThemeId in effect here — the scope's, if one is set, else the app's. */
 export function useThemeId(): ThemeId {
   const scoped = useContext(ThemeOverride);
-  const app = useGameStore((s) => s.theme);
+  const app = usePrefsStore((s) => s.theme);
   return scoped ?? app;
 }
 

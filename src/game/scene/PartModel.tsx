@@ -32,6 +32,7 @@ import { buildPartActions, hintSlotFor, type PartActionIds } from "@/src/game/co
 import type { ClusterDriver, OffsetDriver } from "./offsetDriver";
 import { useShaderOverride, useShaderStyle } from "./shaders";
 import type { PartMode } from "./useSceneState";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 
 const FIT_GLOW: Record<FitState, [number, number, number]> = {
   // ORANGE while hunting, BLUE once the right socket is close, GREEN the moment it would land.
@@ -116,7 +117,7 @@ const EPSILON = 1e-6;
 /** The material override for a part under the active render style (realistic/cartoon), or undefined → no override (the scene leaves the GLB's own materials = the fallback). Looks up the style's RenderStyle, then the override keyed by meshName, then by group. */
 
 function usePartMaterial(def: PartDef): MaterialParams | undefined {
-  const renderStyle = useGameStore((s) => s.renderStyle);
+  const renderStyle = usePrefsStore((s) => s.renderStyle);
   const styles = useGameStore((s) => s.furniture?.styles);
   return useMemo(() => {
     const style = styleFor(styles, renderStyle);

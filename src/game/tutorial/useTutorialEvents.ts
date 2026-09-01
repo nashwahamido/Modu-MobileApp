@@ -20,6 +20,7 @@
 import { useEffect } from "react";
 
 import { useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import { useTutorialStore } from "./store";
 
 /**
@@ -109,9 +110,6 @@ export function useTutorialEvents(onPickupDuringPlacement?: () => void): void {
         ) {
           tutorial.completeEvent("focus_mode_toggled");
         }
-        if (!settingsTutorialActive && state.backdrop !== previous.backdrop) {
-          tutorial.completeEvent("backdrop_changed");
-        }
         if (
           !settingsTutorialActive &&
           (state.settings.textLevel !== previous.settings.textLevel ||
@@ -124,5 +122,17 @@ export function useTutorialEvents(onPickupDuringPlacement?: () => void): void {
     // needs re-subscribing — and re-subscribing on every render is how a store subscription starts
     // missing the transition it was written for.
     [onPickupDuringPlacement],
+  );
+
+ 
+  useEffect(
+    () =>
+      usePrefsStore.subscribe((state, previous) => {
+        if (state.backdrop === previous.backdrop) return;
+        const tutorial = useTutorialStore.getState();
+        if (tutorial.steps[tutorial.currentIndex]?.targetId === "settings") return;
+        tutorial.completeEvent("backdrop_changed");
+      }),
+    [],
   );
 }

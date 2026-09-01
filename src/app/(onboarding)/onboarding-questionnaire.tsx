@@ -21,6 +21,7 @@ import { ACCENT_LIGHT, ELEVATION, FONT, SIZE, SPACE, TYPE, useIsTablet, useStyle
 import { SCREEN_SIDE_MARGIN, SCREEN_VERTICAL_MARGIN, useSafeInsets } from "@/src/hooks/use-safe-insets";
 import { saveOnboardingResults } from "@/src/services/onboarding";
 import { useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import type { Theme } from "@/src/game/ui/system/theme";
 
 import Reanimated, {
@@ -699,7 +700,7 @@ export default function QuestionnaireScreen() {
           onPress={() => {
             Speech.stop();
             // Apply the hand HERE, not only where it is saved. A first run goes questionnaire -> avatar -> room without passing the loading gate again, so a left-hander who waited for the gate to read it back would build their whole first session right-handed. The DB write still happens at the end of the questionnaire; this is the same answer reaching the session it was given in.
-            if (handedness) useGameStore.getState().setHandedness(handedness);
+            if (handedness) usePrefsStore.getState().setHandedness(handedness);
             setIntroComplete(true);
             // The voice notice is its own screen now (app/(onboarding)/voice-intro.tsx), shown before
             // this one. Firing it here as well would say the same thing twice, the second time on top

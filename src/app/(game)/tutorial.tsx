@@ -34,6 +34,7 @@ import { useStepObjective } from "@/src/game/core/presentation/useStepObjective"
 import { useAssemblySfx } from "@/src/game/audio/useAssemblySfx";
 
 import { useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import { useCurrentUserId, useRepos } from "@/src/data";
 import { useProfileStore } from "@/src/data/player/profileStore";
 import { useShopStore } from "@/src/data/shop/store";
@@ -391,11 +392,11 @@ function TutorialScreen() {
   }, [spotPartId, hintPulse]);
   const profile = useGameStore((s) => s.profile);
   const heldActionId = useGameStore((s) => s.heldActionId);
-  const renderStyle = useGameStore((s) => s.renderStyle);
-  const backdrop = useGameStore((s) => s.backdrop);
+  const renderStyle = usePrefsStore((s) => s.renderStyle);
+  const backdrop = usePrefsStore((s) => s.backdrop);
   // The BUILD's theme, not the app's: "Assemble in Dark Mode" darkens this screen only. Everything
   // under ThemeScope below (the HUD, the settings panel, the toasts) resolves through it.
-  const theme: ThemeId = useGameStore((s) => s.assembleDark) ? "dark" : "light";
+  const theme: ThemeId = usePrefsStore((s) => s.assembleDark) ? "dark" : "light";
   const focus = settings.focusMode;
   // Recenter means nothing until there IS a build on the canvas — same rule as play.tsx.
   const sceneHasParts = Object.values(sceneState.modes).some(

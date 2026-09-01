@@ -75,6 +75,7 @@ import { setCameraAzimuth, usePlacementStore } from "../core/placement";
 import { AIM_DOWN, aimToDirection, aimTuple } from "../core/lightAim";
 import { CEILING_LIGHT_AT, CEILING_LIGHT_RIG, ceilingCone, fillLumens } from "../core/ceilingLight";
 import { useGameStore } from "../../game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import { WALL_FILL_DIRECTIONS, sunDirection, sunPreset, type CeilingLight } from "../core/timeOfDay";
 import {
   dragTopTarget,
@@ -1187,9 +1188,9 @@ export function RoomScene({
 }: RoomSceneProps) {
   const [loaded, setLoaded] = useState(false);
   // The player's chosen hour. Every preset is authored to enter through walls the resting camera can see — see src/room/core/timeOfDay.ts for why that constraint exists and what breaks without it.
-  const hour = useGameStore((s) => s.roomTimeOfDay);
+  const hour = usePrefsStore((s) => s.roomTimeOfDay);
   // Read HERE rather than passed down from RoomExperience, so it reaches every route that mounts this scene — the hub and a friend's room alike. It is the player's own display preference, not a fact about whose room is being drawn, so a visited room honours it too.
-  const avatarVisible = useGameStore((s) => s.roomAvatarVisible);
+  const avatarVisible = usePrefsStore((s) => s.roomAvatarVisible);
   const sun = sunPreset(hour);
   const handleReady = useCallback(() => setLoaded(true), []);
   const win = useWindowDimensions();

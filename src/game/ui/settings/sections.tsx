@@ -5,6 +5,7 @@ import { Alert, Text, View, type LayoutChangeEvent } from "react-native";
 import { Pressable } from "@/src/components/Pressable";
 import { router, type Href } from "expo-router";
 import { useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import { useTutorialStore } from "@/src/game/tutorial/store";
 import { setMusicEnabled, setMusicVolume } from "@/src/game/audio/music";
 // NOT services/auth's bare signOut: this one also clears the zustand stores, so the next account cannot inherit this player's build progress and half-placed furniture, and it resets a demo account before its session ends. src/dev is not __DEV__-gated — the showcase runs from release builds — and useSessionGate already reaches into it for the same reason.
@@ -212,13 +213,13 @@ export function BuildDisplaySection({
   ...focus
 }: FocusProps & { showFocusMode?: boolean }) {
   const settings = useGameStore((s) => s.settings);
-  const renderStyle = useGameStore((s) => s.renderStyle);
-  const backdrop = useGameStore((s) => s.backdrop);
+  const renderStyle = usePrefsStore((s) => s.renderStyle);
+  const backdrop = usePrefsStore((s) => s.backdrop);
   const setSettings = useGameStore((s) => s.setSettings);
-  const setRenderStyle = useGameStore((s) => s.setRenderStyle);
-  const setBackdrop = useGameStore((s) => s.setBackdrop);
-  const assembleDark = useGameStore((s) => s.assembleDark);
-  const setAssembleDark = useGameStore((s) => s.setAssembleDark);
+  const setRenderStyle = usePrefsStore((s) => s.setRenderStyle);
+  const setBackdrop = usePrefsStore((s) => s.setBackdrop);
+  const assembleDark = usePrefsStore((s) => s.assembleDark);
+  const setAssembleDark = usePrefsStore((s) => s.setAssembleDark);
   const { targetLayout, targetActivated } = useFocusHandlers(focus);
   // A FRAGMENT, not a View: the walkthrough scrolls to a row by the `y` its onLayout reports, and that y is relative to the immediate parent. Wrapping a section in its own container would measure the target against the section instead of against the scrolled list, and the panel would scroll to the wrong row.
   return (
@@ -490,12 +491,12 @@ export function RedoTutorialSection() {
 }
 
 export function AppDisplaySection() {
-  const handedness = useGameStore((s) => s.handedness);
-  const setHandedness = useGameStore((s) => s.setHandedness);
-  const roomBackground = useGameStore((s) => s.roomBackground);
-  const setRoomBackground = useGameStore((s) => s.setRoomBackground);
-  const roomAvatarVisible = useGameStore((s) => s.roomAvatarVisible);
-  const setRoomAvatarVisible = useGameStore((s) => s.setRoomAvatarVisible);
+  const handedness = usePrefsStore((s) => s.handedness);
+  const setHandedness = usePrefsStore((s) => s.setHandedness);
+  const roomBackground = usePrefsStore((s) => s.roomBackground);
+  const setRoomBackground = usePrefsStore((s) => s.setRoomBackground);
+  const roomAvatarVisible = usePrefsStore((s) => s.roomAvatarVisible);
+  const setRoomAvatarVisible = usePrefsStore((s) => s.setRoomAvatarVisible);
   return (
     <>
       <SectionHeader>Display</SectionHeader>

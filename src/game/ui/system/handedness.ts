@@ -10,6 +10,7 @@ import { useMemo } from "react";
 import type { TextStyle, ViewStyle } from "react-native";
 
 import { useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import type { Handedness } from "@/src/game/core/type";
 
 /** What this module will mirror.
@@ -97,12 +98,12 @@ export function mirrorTable<T extends Record<string, ViewStyle>>(table: T, hande
 
 /** The player's hand, for anything that needs to branch rather than mirror a style — a cue that points, an icon that faces. */
 export function useHandedness(): Handedness {
-  return useGameStore((s) => s.handedness);
+  return usePrefsStore((s) => s.handedness);
 }
 
 /** True when the HUD is mirrored. The readable form of `useHandedness() === "left"`. */
 export function useIsLeftHanded(): boolean {
-  return useGameStore((s) => s.handedness === "left");
+  return usePrefsStore((s) => s.handedness === "left");
 }
 
 /** A mirroring function bound to the current hand, memoised so a right-handed session re-uses one identity and never re-renders on it. */

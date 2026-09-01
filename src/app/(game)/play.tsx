@@ -41,6 +41,7 @@ import {
 } from "@/src/game/core/evaluation/engagement";
 
 import { useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import { useBuildPersistence } from "@/src/hooks/useBuildPersistence";
 import { asFurnitureId } from "@/src/game/core/ids";
 
@@ -194,11 +195,11 @@ function GameScreen() {
 
   // Dev-setting: float mode vs auto return
   const heldActionId = useGameStore((s) => s.heldActionId);
-  const renderStyle = useGameStore((s) => s.renderStyle);
-  const backdrop = useGameStore((s) => s.backdrop);
+  const renderStyle = usePrefsStore((s) => s.renderStyle);
+  const backdrop = usePrefsStore((s) => s.backdrop);
   // The BUILD's theme, not the app's: "Assemble in Dark Mode" darkens this screen only. Everything
   // under ThemeScope below (the HUD, the settings panel, the toasts) resolves through it.
-  const theme: ThemeId = useGameStore((s) => s.assembleDark) ? "dark" : "light";
+  const theme: ThemeId = usePrefsStore((s) => s.assembleDark) ? "dark" : "light";
   const focus = settings.focusMode;
   const dark = theme === "dark";
   const t = useTheme();

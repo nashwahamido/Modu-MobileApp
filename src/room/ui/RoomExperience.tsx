@@ -12,6 +12,7 @@ import { SceneBackdrop } from '../../game/ui/backdrop/SceneBackdrop';
 import { roomBackgroundView } from './roomBackdrops';
 import { ceilingLightOn, timeOfDayPhase, type CeilingLightOverride } from '../core/timeOfDay';
 import { useGameStore } from '../../game/core/store';
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import { avatarForProfile } from '@/src/components/avatarAssets';
 import { CARD_CHROME, CREAM, useFixedStyles, useIsTablet, LEXEND } from "@/src/game/ui/system/theme";
 import { useCurrentUserId } from '../../data';
@@ -83,9 +84,9 @@ export function RoomExperience() {
     setSceneReady(false);
     setRevealed(false);
   }, [sceneMounted]);
-  const hour = useGameStore((s) => s.roomTimeOfDay);
-  const setRoomTimeOfDay = useGameStore((s) => s.setRoomTimeOfDay);
-  const roomBackground = useGameStore((s) => s.roomBackground);
+  const hour = usePrefsStore((s) => s.roomTimeOfDay);
+  const setRoomTimeOfDay = usePrefsStore((s) => s.setRoomTimeOfDay);
+  const roomBackground = usePrefsStore((s) => s.roomBackground);
 
   const [lightOverride, setLightOverride] = useState<CeilingLightOverride>(null);
   const ceilingLight = ceilingLightOn(hour, lightOverride);

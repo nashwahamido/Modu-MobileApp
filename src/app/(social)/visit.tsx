@@ -7,6 +7,7 @@ import { StatusBar } from "expo-status-bar";
 import { Button } from "@/src/game/ui/system/Button";
 import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
 import { useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import { TYPE, SPACE, useFixedStyles } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
 import { useCurrentUserId, useRepos } from "@/src/data";
@@ -36,10 +37,10 @@ export default function VisitScreen() {
   // Immersive mode reports 0 insets, so these floors sit UNDER the design's own offsets — the same treatment VisitHud gives its own header.
   const safe = useScreenInsets();
   // The visitor's own dressing: the backdrop follows the hour AND the Room Background they chose, same as in their own room.
-  const hour = useGameStore((g) => g.roomTimeOfDay);
-  const roomBackground = useGameStore((g) => g.roomBackground);
+  const hour = usePrefsStore((g) => g.roomTimeOfDay);
+  const roomBackground = usePrefsStore((g) => g.roomBackground);
   // A visitor gets the SAME light controls they have at home, and that is safe precisely because neither half of them is the host's: the hour is the visitor's own store setting and the switch is local state, so relighting a friend's room changes nothing the friend owns and needs no write permission. What you are adjusting is your VIEW of their furniture.
-  const setRoomTimeOfDay = useGameStore((g) => g.setRoomTimeOfDay);
+  const setRoomTimeOfDay = usePrefsStore((g) => g.setRoomTimeOfDay);
   const [lightOverride, setLightOverride] = useState<CeilingLightOverride>(null);
   const ceilingLight = ceilingLightOn(hour, lightOverride);
   const startViewing = usePlacementStore((p) => p.startViewing);
