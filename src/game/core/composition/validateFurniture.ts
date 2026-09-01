@@ -3,7 +3,7 @@ import { actionCluster, focusableClusterIds, requiresClusterFocus } from "@/src/
 import {
   buildLiaisons,
   crossClusterThreads,
-  fastenerKindOf,
+  preloadOf,
   isConnector,
 } from "@/src/game/core/model/liaisons";
 import { geometryWarnings } from "@/src/game/core/model/geometryCheck";
@@ -149,19 +149,21 @@ export function validateFurniture(f: Furniture): ValidationIssue[] {
   }
 
   {
-    const connectorKind = new Map<string, { kind: string; from: string }>();
+    // Two connectors on one joint must agree about the joint, and the preload record IS what they have to agree about: same completesOn (or the lock has two answers about when the cluster frees) and same counterpartMountsBy (or the later part both drops on and dials on).
+    const connectorPreload = new Map<string, { spec: string; from: string }>();
     for (const p of Object.values(f.parts)) {
       if (!isConnector(p)) continue;
       const key = [...p.attached!].sort().join("__");
-      const kind = fastenerKindOf(p);
-      const prev = connectorKind.get(key);
-      if (prev && prev.kind !== kind) {
+      const pre = preloadOf(p);
+      const spec = pre ? `${pre.completesOn}/${pre.counterpartMountsBy}` : "(no preload)";
+      const prev = connectorPreload.get(key);
+      if (prev && prev.spec !== spec) {
         err(
           `joint "${key}" is defined by two connectors that disagree — ` +
-            `${prev.kind} ("${prev.from}") vs ${kind} ("${p.partId}")`,
+            `${prev.spec} ("${prev.from}") vs ${spec} ("${p.partId}")`,
         );
       } else if (!prev) {
-        connectorKind.set(key, { kind, from: p.partId });
+        connectorPreload.set(key, { spec, from: p.partId });
       }
     }
   }
@@ -205,7 +207,7 @@ export function validateFurniture(f: Furniture): ValidationIssue[] {
   {
     const threadedPairs = new Set<string>();
     for (const p of Object.values(f.parts)) {
-      if (isConnector(p) && fastenerKindOf(p) === "threaded") {
+      if (isConnector(p) && preloadOf(p)?.counterpartMountsBy === "screw") {
         threadedPairs.add([...p.attached!].sort().join("__"));
       }
     }
@@ -369,7 +371,7 @@ export function validateFurniture(f: Furniture): ValidationIssue[] {
       const pinned = Object.values(f.parts).some(
         (q) =>
           isConnector(q) &&
-          fastenerKindOf(q) === "pin" &&
+          preloadOf(q)?.counterpartMountsBy === "press" &&
           q.attached!.includes(p.partId) &&
           !q.attached!.some((t) => isStaged(f.parts[t])),
       );

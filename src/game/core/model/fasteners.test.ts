@@ -65,17 +65,17 @@ const CORPUS: [string, AuthoredExports, Record<PartId, PartDef>][] = [
   ["EKET", EKET as AuthoredExports, EKET_PARTS],
 ];
 
-test("FASTENERS-authored corpus composes byte-identical to the hand-written rules, and lowers exactly the hand-written kind overrides", () => {
+test("FASTENERS-authored corpus composes byte-identical to the hand-written rules, and every fastener instance carries a role", () => {
   for (const [id, m, raw] of CORPUS) {
     const parts = applyStructure(raw, m.STRUCTURE);
-    const { rules, kindOverrides } = lowerFasteners(FASTENERS[id] as unknown as FastenerMap, parts);
+    const { rules, partFacts } = lowerFasteners(FASTENERS[id] as unknown as FastenerMap, parts);
 
-    const authoredKinds = Object.fromEntries(
-      Object.entries(m.STRUCTURE as Record<string, { fastenerKind?: string }>)
-        .filter(([, e]) => e.fastenerKind)
-        .map(([pid, e]) => [pid, e.fastenerKind]),
-    );
-    assert.deepEqual(kindOverrides, authoredKinds, `${id}: lowered kind overrides diverged from STRUCTURE's hand-written ones`);
+    // The 2026-09-01 invariant that replaced "the lowered overrides match the hand-written ones": no shipped fastener may fall through to the name-prefix prefill, so a mis-named fastener cannot change how a shipped furniture behaves.
+    const unrolled = Object.values(parts).filter((p) => p.type === "fastener" && !partFacts[p.partId]);
+    assert.deepEqual(unrolled.map((p) => p.partId), [], `${id}: fastener instances with no lowered role`);
+    for (const [pid, f] of Object.entries(partFacts)) {
+      assert.equal(f.fastenerRole === "connector", !!f.preload, `${id}: ${pid} — preload is present exactly on connectors`);
+    }
 
     const expected = composeFurnitureActions(m.AUTHORED_ACTIONS, m.FASTENER_RULES, parts, HARDWARE, m.CLUSTERS);
     const actual = composeFurnitureActions(m.AUTHORED_ACTIONS, rules, parts, HARDWARE, m.CLUSTERS);
@@ -165,14 +165,18 @@ test("validator: lifecycle grammar, and completesOn must name a lifecycle step",
   assert.deepEqual(bad({ ...connector("insert", "press"), lifecycle: ["insert"] }), []);
 });
 
-test("lowering: role-implied kinds override only where the name prefix disagrees", () => {
+test("lowering: every instance carries its def's role, whatever its name says", () => {
   const parts = P(part("a"), part("b"), hw("camgizmo_1", ["a", "b"]), hw("screwgizmo_1", ["a", "b"]), hw("dowelgizmo_1", ["a", "b"]));
-  const { kindOverrides } = lowerFasteners(
+  const { partFacts } = lowerFasteners(
     F({ camgizmo: securer(), screwgizmo: securer(), dowelgizmo: connector("tighten", "press") }),
     parts,
   );
-  // cam prefix vs securer → secured; screw prefix already secured → silent; dowel prefix (pin) vs connector{tighten, press} → the enum's fourth cell, cam
-  assert.deepEqual(kindOverrides, { camgizmo_1: "secured", dowelgizmo_1: "cam" });
+  // The point of writing all three, not just the two that disagree with their prefixes: after lowering, no runtime decision rests on the words "cam", "screw" or "dowel". The dowel def is the {tighten, press} cell that had no sayable kind before the enum retired.
+  assert.deepEqual(partFacts, {
+    camgizmo_1: { fastenerRole: "securer" },
+    screwgizmo_1: { fastenerRole: "securer" },
+    dowelgizmo_1: { fastenerRole: "connector", preload: { completesOn: "tighten", counterpartMountsBy: "press" } },
+  });
 });
 
 test("lowering: an extra pairs to the nearest covering primary and requires hosts, remaining endpoints, then the primary's tighten", () => {

@@ -1,8 +1,9 @@
-import FASTENER_KINDS from "@/src/game/core/model/fastener-kinds.json";
+import FASTENER_ROLES from "@/src/game/core/model/fastener-roles.json";
 import { liaisonId } from "@/src/game/core/ids";
 import { lowerJoints, mergeOverlays, type JointDef } from "./joints";
 import {
-  FastenerKind,
+  FastenerPreload,
+  FastenerRole,
   JoinKind,
   JointGeometry,
   Liaison,
@@ -15,22 +16,36 @@ type Parts = Record<PartId, PartDef>;
 
 const toArray = (x?: readonly PartId[]): readonly PartId[] => x ?? [];
 
-const KIND_BY_PREFIX = FASTENER_KINDS.prefixes as Record<string, FastenerKind>;
+type RolePrefill = { role: FastenerRole; preload?: FastenerPreload };
 
-/** What a fastener DOES: the authored `fastenerKind` override, else derived  from the group name's prefix (fastener-kinds.json). A group matching no  prefix (a typeOverride / an unlisted `…__a&b` name) falls back to  "secured" — the inert choice: it never defines a joint or preloads. */
-export function fastenerKindOf(p: PartDef): FastenerKind {
-  if (p.fastenerKind) return p.fastenerKind;
-  for (const [prefix, kind] of Object.entries(KIND_BY_PREFIX)) {
-    if (p.group.toLowerCase().startsWith(prefix)) return kind;
+const PREFILL_BY_PREFIX = FASTENER_ROLES.prefixes as Record<string, RolePrefill>;
+
+/** The name-prefix prefill, used ONLY when a part carries no generated `fastenerRole` — an un-authored GLB, or a fastener group with no FASTENERS def. A shipped furniture never reaches this path: lowerFasteners writes the role onto every instance. `cap` is the one prefix the name cannot settle alone, so the mesh name's attached count decides between dressing one part and locking two. */
+function prefillFor(p: PartDef): RolePrefill {
+  for (const [prefix, fill] of Object.entries(PREFILL_BY_PREFIX)) {
+    if (!p.group.toLowerCase().startsWith(prefix)) continue;
+    if (prefix === "cap" && (p.attached?.length ?? 0) === 1) return { role: "cap" };
+    return fill;
   }
-  return "secured";
+  return { role: "securer" };
 }
 
-/** A JOINT-DEFINING fastener bridging two named endpoints (bolt/pin/cam between  `…__a&b`) — the parts that get OR-side insertion + the preload lock. Any  non-"secured" kind qualifies; only a plain securer (screw/nail/…) does not. */
+/** What a fastener is FOR: the generated `fastenerRole`, else the group name's prefill. */
+export function fastenerRoleOf(p: PartDef): FastenerRole {
+  return p.fastenerRole ?? prefillFor(p).role;
+}
+
+/** A connector's ordering record. Reads the generated field first so an authored def always wins, and only falls back to the prefill for the same un-authored cases as `fastenerRoleOf`. Null for every other role. */
+export function preloadOf(p: PartDef): FastenerPreload | null {
+  if (fastenerRoleOf(p) !== "connector") return null;
+  return p.preload ?? prefillFor(p).preload ?? null;
+}
+
+/** A JOINT-DEFINING fastener bridging two named endpoints — the parts that get OR-side insertion + the preload lock. Was `fastenerKindOf(p) !== "secured"`, which reached the same set the long way round: every non-"secured" kind was a connector kind, so the enum was being asked a question the role answers directly. */
 export function isConnector(p: PartDef): boolean {
   return (
     p.type === "fastener" &&
-    fastenerKindOf(p) !== "secured" &&
+    fastenerRoleOf(p) === "connector" &&
     p.attached?.length === 2
   );
 }
@@ -58,7 +73,8 @@ export type StructureOverlay = Record<
       | "lockTravel"
       | "dropOn"
       | "toolAnchor"
-      | "fastenerKind"
+      | "fastenerRole"
+      | "preload"
       | "engageDir"
       | "stageOffset"
       | "jointAnchor"

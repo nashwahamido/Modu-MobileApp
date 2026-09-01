@@ -24,7 +24,7 @@ import {
   ToolId,
 } from "@/src/game/core/type";
 import { combinePrereqClusters } from "../evaluation/clusterCombine";
-import { fastenerKindOf, isConnector } from "../model/liaisons";
+import { isConnector, preloadOf } from "../model/liaisons";
 import { hardwareOn, stagedCarrierOf, stagedCarriers } from "../model/staging";
 import { groupParts } from "../scene/targets";
 
@@ -165,10 +165,11 @@ function defaultInsertRequiresAny(p: PartDef, parts: Parts): readonly ActionId[]
   return isConnector(p) ? attachedSnaps(p) : [];
 }
 
+// The `kind === "cam"` branch here — a connector whose TIGHTEN waited for both endpoints — was DELETED with the enum on 2026-09-01, and it was not merely unused: combined with the preload lock it was unreachable. stability holds place(missing) until a completesOn-tighten connector is TIGHTENED, while this made that tighten wait for place(missing) — a deadlock the corpus never hit only because no fastener ever lowered to "cam". The fitting it was modelling is a bolt plus a separate disc: a connector plus an extra, which sequences through the extra's own rule.
 function defaultTightenRequires(p: PartDef, parts: Parts): readonly ActionId[] {
   const carrier = stagedCarrierOf(p, parts);
   if (carrier) return [placeId(carrier)];
-  return isConnector(p) && fastenerKindOf(p) === "cam" ? attachedSnaps(p) : [];
+  return [];
 }
 
 /** Each fastener instance's resolved prereqs, kept for the stage derivation below before any action is built. */
@@ -248,15 +249,12 @@ export function expandFastenerRules(
   const stages = deriveFastenerStages(instances, placementStage);
 
   return instances.flatMap(({ rule: r, part: p, requires, requiresAny, tightenRequires }) => {
-    const kind = fastenerKindOf(p);
     const tool = r.tool ?? hardware[r.group]?.tool ?? p.tool;
     return pair(p.partId, tool, requires, stages.get(p.partId) ?? 1, {
       insertRequiresAny: requiresAny,
       tightenRequires,
-      insertTool: kind === "cam" ? tool : undefined,
-      motion:
-        hardware[r.group]?.motion ??
-        (kind === "cam" ? "turn" : kind === "pin" ? "strike" : "spin"),
+      // FEEL, not sequencing, and the only default the role model needs to supply: a fastener that is HOME once pressed in is tapped, everything else is turned. That is what `kind === "pin" ? "strike" : "spin"` picked out, since pin was the sole completesOn-insert kind. The retired third branch (cam → "turn", with a tool at insert) is unreachable as a default now; hardware.ts already overrides motion per group, which is where EKET's cams get their "turn" from today.
+      motion: hardware[r.group]?.motion ?? (preloadOf(p)?.completesOn === "insert" ? "strike" : "spin"),
       threePhase: !!p.insertStage,
     });
   });

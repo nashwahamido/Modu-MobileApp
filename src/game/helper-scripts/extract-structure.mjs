@@ -69,10 +69,10 @@ function rotQ([x, y, z, w], [vx, vy, vz]) {
     vz + w * tz + (x * ty - y * tx),
   ];
 }
-// A fastener GROUP by name — prefixes from the SHARED table core/fastener-kinds.json (same source as read-parts.mjs and the runtime's fastenerKindOf). A furniture with an unseen hardware word needs one line there, or a typeOverride in read-parts.mjs.
+// A fastener GROUP by name — prefixes from the SHARED table core/model/fastener-roles.json (same source as read-parts.mjs). Keys only: this detects hardware, it does not classify it. A furniture with an unseen hardware word needs one line there, or a typeOverride in read-parts.mjs.
 const FASTENER_PREFIXES = Object.keys(
   JSON.parse(
-    fs.readFileSync(path.join(ROOT, "..", "core", "model", "fastener-kinds.json"), "utf8"),
+    fs.readFileSync(path.join(ROOT, "..", "core", "model", "fastener-roles.json"), "utf8"),
   ).prefixes,
 );
 const isFastenerName = (group) =>

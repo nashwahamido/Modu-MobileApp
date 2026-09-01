@@ -1,12 +1,13 @@
 // The ANALYZER — the portal's derivation pass over an uploaded GLB, per the fastener-model-v2 geometry/wizard split: everything geometry can MEASURE comes out of here as facts and proposals; the wizard asks only the per-group functional questions, with these proposals prefilled. Pure and environment-neutral (feeds on glb.ts, no Node APIs), so the same code runs in the portal's browser, in scripts, and in the corpus pin test that keeps every derivation honest.
 // Two-stage by design: `analyzeGlb(bytes)` is the raw pass over convention data alone; `analyzeGlb(bytes, { overlay })` re-runs the state-dependent parts (part types, travel spans, the sweep) with the wizard's answers applied — re-typings and authored fields refine the analysis exactly the way applyStructure refines the runtime's parts.
-import FASTENER_KINDS from "@/src/game/core/model/fastener-kinds.json";
+import FASTENER_ROLES from "@/src/game/core/model/fastener-roles.json";
 import { buildSweepMap, columnsOf, type SweepMember } from "@/src/game/core/model/sweep";
 import { SWEEP_CELL_M } from "@/src/game/core/model/sweep";
-import type { FastenerKind, SweepMap, Vec3 } from "@/src/game/core/type";
+import type { FastenerPreload, FastenerRole, SweepMap, Vec3 } from "@/src/game/core/type";
 import { readGlbMeshes, type GlbMesh } from "./glb";
 
-const KIND_BY_PREFIX = FASTENER_KINDS.prefixes as Record<string, FastenerKind>;
+type RolePrefill = { role: FastenerRole; preload?: FastenerPreload };
+const PREFILL_BY_PREFIX = FASTENER_ROLES.prefixes as Record<string, RolePrefill>;
 
 /** A head must be ≥15% wider than the tip to count as seen (measured margins: confident groups ≥1.28, headless ≤1.11). */
 const HEAD_RATIO_MIN = 1.15;
@@ -29,8 +30,8 @@ export interface GlbAnalysis {
   parts: Record<string, { partId: string; group: string; cluster: string; attached?: string[]; type: "structural" | "fastener"; position: Vec3 }>;
   /** Per-fastener measured geometry. */
   fasteners: Record<string, FastenerGeometry>;
-  /** Prefix-derived kind prefill per fastener group — output of the names, never an input (the wizard shows it, the roles decide). */
-  kindPrefill: Record<string, FastenerKind>;
+  /** Prefix-derived ROLE prefill per fastener group — output of the names, never an input: the wizard shows it and the human's answer decides. Was `kindPrefill` (a FastenerKind) until the enum retired 2026-09-01; it now proposes the same shape the def is written in, so the wizard's answer needs no translation. */
+  rolePrefill: Record<string, RolePrefill>;
   /** Detected two-piece fittings: extra group → primary group, with per-instance pairing (the `extraOf` home proposal — 28 candidates → the 1 true pair on the corpus). */
   pairings: { extraGroup: string; primaryGroup: string; byInstance: Record<string, string> }[];
   /** Host-membership proposals per fastener instance, best-first: structural parts ranked by how much of the fastener's body sits inside their 3-axis column envelope. Thin-sheet engagements are invisible to this (measured) — proposals, never truth. */
@@ -126,7 +127,7 @@ export function analyzeGlb(bytes: Uint8Array, hints: AnalyzeHints = {}): GlbAnal
   const typeOf = (m: GlbMesh): "structural" | "fastener" => {
     const o = ov[m.partId]?.type;
     if (o) return o;
-    const prefixed = Object.keys(KIND_BY_PREFIX).some((p) => m.group.toLowerCase().startsWith(p));
+    const prefixed = Object.keys(PREFILL_BY_PREFIX).some((p) => m.group.toLowerCase().startsWith(p));
     return prefixed || m.attached?.length === 2 ? "fastener" : "structural";
   };
 
@@ -146,11 +147,13 @@ export function analyzeGlb(bytes: Uint8Array, hints: AnalyzeHints = {}): GlbAnal
   const fasteners: GlbAnalysis["fasteners"] = {};
   for (const m of fastenerMeshes) fasteners[m.partId] = fastenerGeometry(m);
 
-  const kindPrefill: GlbAnalysis["kindPrefill"] = {};
+  const rolePrefill: GlbAnalysis["rolePrefill"] = {};
   for (const m of fastenerMeshes) {
-    if (kindPrefill[m.group]) continue;
-    const hit = Object.entries(KIND_BY_PREFIX).find(([p]) => m.group.toLowerCase().startsWith(p));
-    kindPrefill[m.group] = hit ? hit[1] : "secured";
+    if (rolePrefill[m.group]) continue;
+    const hit = Object.entries(PREFILL_BY_PREFIX).find(([p]) => m.group.toLowerCase().startsWith(p));
+    // A "cap"-prefixed group splits on its binding: one named host means it dresses that part, two means it locks their joint (EKET's suspCap).
+    rolePrefill[m.group] =
+      hit && !(hit[0] === "cap" && (parts[m.partId].attached?.length ?? 0) === 1) ? hit[1] : { role: hit ? "cap" : "securer" };
   }
 
   // Pairing detection: two fastener groups with equal instance counts whose instances match 1:1 by proximity — the `extraOf` proposal. The one-confirm wizard step; never auto-committed.
@@ -209,5 +212,5 @@ export function analyzeGlb(bytes: Uint8Array, hints: AnalyzeHints = {}): GlbAnal
   const sweep: SweepMap = {} as SweepMap;
   for (const members of clusters.values()) Object.assign(sweep, buildSweepMap(members));
 
-  return { parts, fasteners, kindPrefill, pairings, hostProposals, sweep };
+  return { parts, fasteners, rolePrefill, pairings, hostProposals, sweep };
 }

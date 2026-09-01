@@ -1,13 +1,13 @@
 // Fastener entities — the v2 authoring shape from docs/superpowers/specs/2026-08-22-fastener-model-v2.md (as amended 2026-08-24), landed as a LOWERING SEAM only: a furniture may author FASTENERS instead of hand-written FastenerRule lists + fastenerKind overrides, and this module rewrites them into exactly those flat facts. Evaluation, composition and presentation are untouched, so the flat form stays the single runtime truth and nothing on device changes.
 // The def declares the FORM of a group's home (liaison + role, part, or extraOf another group); WHICH liaison/part/primary each INSTANCE binds to stays derived from the mesh-name `attached` pairs, exactly as today — the def never repeats a location the GLB already states. Lowering marries kind (def) to location (attached) and validates the fit per instance, so a mis-named mesh is a named error instead of broken gameplay.
-// The FastenerKind enum survives BELOW this seam as the lowering target: a role/preload combination lowers to the kind whose runtime defaults implement it (securer→secured, connector{insert,press}→pin, connector{tighten,screw}→threaded, connector{tighten,press}→cam), emitted as a per-part override only where the group-name prefix would derive a different kind — reproducing byte-for-byte the overrides EKET authors by hand today.
+// 2026-09-01 (spec step 3): the FastenerKind enum below this seam is GONE. A def's role and preload now land on the part unchanged (`fastenerRole`, `preload`) and evaluation reads them directly, instead of being squeezed through four drive-names — secured/threaded/pin/cam — that every call site then decoded back into the same two questions ("is this a connector", "does it complete on tighten"). The cam name retired with the enum: it had zero corpus users, its cell {tighten, press} is now just a preload record, and the two-piece fitting it conflated is a connector plus an extra.
 // Extras (subordinate hardware riding a primary: the EKET plug on its half pin) lower to the sequencing today's PIN_TO_CAM table hand-authors: each extra instance pairs to the NEAREST primary instance whose binding covers its own hosts, and its insert requires its own host places, the inherited liaison's remaining endpoint places (the securer gate), then the primary's tighten. Securement is a property of the whole attachment bundle — primary plus extras — which today's runtime already realizes through those tighten edges.
 // Staging stays orthogonal (a carrier's stageOffset rewrites the expanded actions in withStaging); `lifecycle` is validated here but lowers to nothing new — the 3-phase drop step remains the part-level `insertStage` switch. A per-instance `anchor` is deliberately absent from this seam: bindings vary per instance, so a group-level PartId cannot express it; it arrives with the geometry deriver as instance data.
 import { placeId, tightenId } from "@/src/game/core/ids";
-import type { FastenerKind, GroupId, PartDef, PartId, ToolId } from "@/src/game/core/type";
+import type { FastenerPreload, FastenerRole, GroupId, PartDef, PartId, ToolId } from "@/src/game/core/type";
 import type { FastenerRule } from "../composition/composeActions";
-import { fastenerKindOf } from "./liaisons";
 import { groupParts } from "../scene/targets";
+import type { StructureOverlay } from "./liaisons";
 
 type Parts = Record<PartId, PartDef>;
 
@@ -33,10 +33,10 @@ export type FastenerEntry = FastenerDef & { tool?: ToolId };
 
 export type FastenerMap = Record<GroupId, FastenerEntry>;
 
-/** What lowering emits: the rule list expandFastenerRules already consumes, plus the per-part kind overrides that today live as hand-written `fastenerKind` fields in STRUCTURE. */
+/** What lowering emits: the rule list expandFastenerRules already consumes, plus the per-part role facts the evaluation layer reads. `partFacts` covers EVERY instance of every defined group, not just the ones whose name would have prefilled something else — the point of the 2026-09-01 migration is that a shipped furniture's behaviour rests on its def and never on a mesh name. */
 export interface LoweredFasteners {
   rules: FastenerRule[];
-  kindOverrides: Record<PartId, FastenerKind>;
+  partFacts: Record<PartId, { fastenerRole: FastenerRole; preload?: FastenerPreload }>;
 }
 
 const LIFECYCLE_ORDER: readonly FastenerLifecycleStep[] = ["drop", "insert", "tighten"];
@@ -46,24 +46,13 @@ const DEFAULT_LIFECYCLE: readonly FastenerLifecycleStep[] = ["insert", "tighten"
 const roleOf = (d: FastenerDef): "connector" | "securer" | "extra" | "cap" =>
   d.home === "part" ? "cap" : typeof d.home === "object" ? "extra" : d.role;
 
-/** The kind whose runtime defaults implement this def's behaviour. Extras return null: their sequencing is authored by the lowered rule, and their presentation kind stays whatever the name prefix says. */
-function impliedKind(d: FastenerDef): FastenerKind | null {
-  switch (roleOf(d)) {
-    case "securer":
-    case "cap":
-      return "secured";
-    case "extra":
-      return null;
-    case "connector": {
-      const p = (d as Extract<FastenerDef, { role: "connector" }>).preload;
-      if (p.completesOn === "insert") return "pin";
-      return p.counterpartMountsBy === "screw" ? "threaded" : "cam";
-    }
-  }
-}
-
-/** The prefix-derived kind, ignoring any override already applied to the part — lowering must decide overrides from the NAME baseline, whether it is handed raw or structured parts. */
-const prefixKind = (p: PartDef): FastenerKind => fastenerKindOf({ ...p, fastenerKind: undefined } as PartDef);
+/** The role facts this def puts on each of its instances. A one-line function now that role IS the runtime vocabulary — it used to be `impliedKind`, translating the def into whichever of four drive-names happened to imply the same behaviour, which is exactly the indirection this migration removed. */
+const factsOf = (d: FastenerDef): { fastenerRole: FastenerRole; preload?: FastenerPreload } => {
+  const role = roleOf(d);
+  return role === "connector"
+    ? { fastenerRole: role, preload: (d as Extract<FastenerDef, { role: "connector" }>).preload }
+    : { fastenerRole: role };
+};
 
 const dist = (a: PartDef, b: PartDef): number => {
   const [x1, y1, z1] = a.pose.position;
@@ -184,15 +173,11 @@ export function lowerFasteners(fasteners: FastenerMap, parts: Parts): LoweredFas
   if (issues.length) throw new Error(`invalid FASTENERS:\n` + issues.map((m) => "  - " + m).join("\n"));
 
   const rules: FastenerRule[] = [];
-  const kindOverrides: Record<PartId, FastenerKind> = {};
+  const partFacts: LoweredFasteners["partFacts"] = {};
 
   for (const [group, d] of Object.entries(fasteners) as [GroupId, FastenerEntry][]) {
-    const implied = impliedKind(d);
-    if (implied) {
-      for (const p of groupParts(parts, group)) {
-        if (prefixKind(p) !== implied) kindOverrides[p.partId] = implied;
-      }
-    }
+    const facts = factsOf(d);
+    for (const p of groupParts(parts, group)) partFacts[p.partId] = facts;
 
     const base: FastenerRule = { group, ...(d.tool ? { tool: d.tool } : {}) };
     if (roleOf(d) !== "extra") {
@@ -214,5 +199,14 @@ export function lowerFasteners(fasteners: FastenerMap, parts: Parts): LoweredFas
       },
     });
   }
-  return { rules, kindOverrides };
+  return { rules, partFacts };
+}
+
+/** Land the lowered role facts back on the authoring overlay — the one line every furniture writes between `lowerFasteners` and its exported STRUCTURE, so that `applyStructure` carries role and preload onto the parts alongside every other authored field, and structure.gen.ts shows them as reviewable text. Authored fields win: a hand-written `fastenerRole` on a part stays, which is the escape hatch for a single instance that differs from its group. */
+export function withFastenerFacts(overlay: StructureOverlay, lowered: LoweredFasteners): StructureOverlay {
+  const out: StructureOverlay = { ...overlay };
+  for (const [id, facts] of Object.entries(lowered.partFacts) as [PartId, LoweredFasteners["partFacts"][PartId]][]) {
+    out[id] = { ...facts, ...out[id] };
+  }
+  return out;
 }

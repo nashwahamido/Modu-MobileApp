@@ -45,10 +45,10 @@ function parseName(name) {
 }
 
 // Fasteners: screws, bolts, cams, dowels… detected by the group's leading word.
-// The prefix list comes from the SHARED table core/fastener-kinds.json — the same table the runtime derives each fastener's KIND from (fastenerKindOf), so this script emits NO kind field at all: name the hardware by its function and everything downstream derives. Unseen hardware word = one line in the table.
+// The prefix list comes from the SHARED table core/model/fastener-roles.json. Only the KEYS are used here — this is name-based fastener DETECTION, not classification: the script emits no role field, because a furniture's FASTENERS def decides the role and lowering writes it onto every instance. Unseen hardware word = one line in the table (or a typeOverride below).
 const FASTENER_PREFIXES = Object.keys(
   JSON.parse(
-    fs.readFileSync(path.join(ROOT, "..", "core", "model", "fastener-kinds.json"), "utf8"),
+    fs.readFileSync(path.join(ROOT, "..", "core", "model", "fastener-roles.json"), "utf8"),
   ).prefixes,
 );
 const isFastenerName = (group) =>
@@ -161,7 +161,7 @@ function buildParts(json, bin, typeOverrides = {}) {
       cluster: p.cluster,
       ...(p.attached ? { attached: p.attached } : {}),
       ...(bounds ? { visualCenterOffset: visualCenterOffset(n, bounds) } : {}),
-      // NO kind field: the runtime derives it from the group name (fastenerKindOf ← core/fastener-kinds.json).
+      // NO role field: the furniture's FASTENERS def states it and lowerFasteners writes it onto every instance (core/model/fasteners.ts).
       ...(type === 'fastener'
         ? { engageDir: snapAxis(rotateByQuat(rotation, LOCAL_ENGAGE)) }
         : {}),

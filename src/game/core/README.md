@@ -35,9 +35,16 @@ legality asks — `isSlider`, `andFrontierTargets`, `crossClusterThreads`, `isRe
 **Authoring seams.** How a human states something, lowered to what the runtime consumes. `joints.ts`
 holds the `JOINTS` shape and `lowerJoints`, which rewrites joint entities into the flat per-part fields
 the engine already reads. `fasteners.ts` is the same idea for hardware: a def declares a group's HOME
-(liaison + role, part, or extra-of), lowered to the `FastenerKind` whose runtime defaults implement it.
-Both are seams on purpose — the flat form stays the single runtime truth, so a furniture may use either
-form, or both mid-migration, and nothing downstream learns the difference.
+(liaison + role, part, or extra-of), lowered onto every instance as `fastenerRole` + a connector's
+`preload`. Both are seams on purpose — the flat form stays the single runtime truth, so a furniture may
+use either form, or both mid-migration, and nothing downstream learns the difference.
+
+The role IS the runtime vocabulary as of 2026-09-01. It replaced a four-name `FastenerKind` enum
+(`secured`/`threaded`/`pin`/`cam`) that answered a different question — how the hardware is DRIVEN — and
+so had to be decoded back at every call site: `!== "secured"` meant "is a connector", `"threaded" ||
+"cam"` meant "completes on tighten", `"threaded"` vs `"pin"` meant the counterpart screws on vs presses
+on. `fastener-roles.json` maps a group's leading word to a def PREFILL, and that is all a name does now:
+lowering writes a role onto every fastener instance, so no shipped furniture's behaviour rests on one.
 
 **Geometry over the parts.** `jointFrames.ts` finds where two parts actually MEET — a contact anchor and
 facing per liaison, from the boxes at baked pose. It is why the drag holds a part by its joint and aims
