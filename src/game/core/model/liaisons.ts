@@ -66,6 +66,16 @@ export type StructureOverlay = Record<
   >
 >;
 
+/** The authored overlay with any JOINTS already lowered into it — everything a human decides about a part, in the exact shape it will be spread over the mesh facts. Exported and generated to `structure.gen.ts` because it is the ONE artifact nobody could review before: `parts.gen`, `sweep.gen`, `joints.gen` and `authored.ts` are all checked in, but the MERGE of them lived only in memory at load time, and predicting it means simulating the bridged-pair suppression, the dropOn split and the geometry fallback by hand. `applyStructure` calls this, so what the file records is what the device runs. */
+export function composeStructure(
+  parts: Parts,
+  overlay: StructureOverlay,
+  joints?: readonly JointDef[],
+  geometry?: JointGeometry,
+): StructureOverlay {
+  return joints?.length ? mergeOverlays(lowerJoints(joints, parts, geometry), overlay) : overlay;
+}
+
 /** Overlay the authored structure onto the generated parts. `joints` is the v2 authoring route (model/joints.ts): joint ENTITIES are lowered into the same flat fields first, then the flat overlay lands on top, so a furniture may use either form or both during a migration and the engine downstream never learns the difference. `geometry` is the generated travel table (joints.gen.ts), which lowering consults for any joint that does not override it — passing it without `joints` does nothing, which is what keeps derivation opt-in per joint. */
 export function applyStructure(
   parts: Parts,
@@ -73,9 +83,7 @@ export function applyStructure(
   joints?: readonly JointDef[],
   geometry?: JointGeometry,
 ): Parts {
-  const merged = joints?.length
-    ? mergeOverlays(lowerJoints(joints, parts, geometry), overlay)
-    : overlay;
+  const merged = composeStructure(parts, overlay, joints, geometry);
   const out: Parts = {};
   for (const [id, p] of Object.entries(parts) as [PartId, PartDef][]) {
     out[id] = merged[id] ? { ...p, ...merged[id] } : p;
@@ -113,6 +121,15 @@ export function buildLiaisons(parts: Parts): LiaisonMap {
     if (p.type === "fastener" && p.attached?.length === 2) {
       edgeOf(p.attached[0], p.attached[1]);
     }
+  }
+
+  // NAME the leftover. An edge that exists only because a fastener names both endpoints has carried no kind at all — 48 of the corpus's 85 liaisons, the MAJORITY of its joins, in a field every reader has to treat as optional. A hardware-made joint whose parts state no travel is a SNAP: they meet in the placement motion itself and the hardware does the joining.
+  // GUARDED, because a part can travel THROUGH a hardware-made joint: BEKVAM's rails are screwed to their legs and still come in along X, EKET's runner frames land flat against a panel face. Where either endpoint states a travel this leaves the edge alone — calling that a snap would deny a motion the manual describes.
+  // CLASSIFICATION ONLY: `snap` is deliberately outside PRESS_LIKE, so `validateFurniture` sees exactly the edges it saw before; `isSlider`, `directScrewReceiver`, `andFrontierTargets` and `crossClusterThreads` test for slide/screw/press and skip it exactly as they skipped `undefined`. Nothing reads it yet — that is the point. `dropOn` stays authored per-part, so no part's placement feel changes.
+  for (const l of Object.values(liaisons)) {
+    if (l.kind) continue;
+    if (parts[l.a]?.placeDir || parts[l.b]?.placeDir) continue;
+    l.kind = "snap";
   }
 
   return liaisons;

@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { SCRIPT_BLOCKS, stepVoicePath } from "./stepVoice";
 import { composeFurnitureActions } from "@/src/game/core/composition/composeActions";
 import { composeLabels } from "@/src/game/core/composition/composeLabels";
-import { applyStructure } from "@/src/game/core/model/liaisons";
+import { applyStructure, type StructureOverlay } from "@/src/game/core/model/liaisons";
 import { buildInstructions, instructionText } from "@/src/game/core/presentation/instructions";
 import { HARDWARE } from "@/src/game/content/hardware";
 import * as LACK from "@/src/game/content/furnitures/LACK/authored";
@@ -16,6 +16,7 @@ import { PARTS as DALFRED_PARTS } from "@/src/game/content/furnitures/DALFRED/pa
 import * as EKET from "@/src/game/content/furnitures/EKET/authored";
 import { PARTS as EKET_PARTS } from "@/src/game/content/furnitures/EKET/parts.gen";
 import type { Furniture, PartDef, TextLevel } from "@/src/game/core/type";
+import { COMPOSED } from "@/src/game/content/furnitures/composed";
 
 type AuthoredLike = {
   AUTHORED_ACTIONS: never;
@@ -150,8 +151,8 @@ test("every block starts and ends where the script says, with the folder names a
 // that SAYS that step. Fixture composed exactly as instructionSim.test.ts does — what each model's
 // index.ts does, minus the GLB and thumbnail requires node cannot parse — under the real furniture
 // ids, because anything less would not be testing the numbers the app resolves.
-const fixture = (id: string, m: AuthoredLike, raw: Record<string, PartDef>): Furniture => {
-  const parts = applyStructure(raw as never, m.STRUCTURE);
+const fixture = (id: string, m: AuthoredLike, raw: Record<string, PartDef>, composed: StructureOverlay): Furniture => {
+  const parts = applyStructure(raw as never, composed);
   return {
     meta: { id },
     parts,
@@ -166,10 +167,10 @@ const MODELS: { id: string; f: Furniture; counts: Record<TextLevel, number> }[] 
   // The counts are the UPLOADED FILE counts, probed against the live bucket on 24 Aug: every block's
   // first and last file returns 200 and the numbers either side return 400. A model that grows a
   // step needs new audio, and this is the number that says so.
-  { id: "lack-table", f: fixture("lack-table", LACK as never, LACK_PARTS as never), counts: { standard: 4, simple: 4 } },
-  { id: "dalfred-stool", f: fixture("dalfred-stool", DALFRED as never, DALFRED_PARTS as never), counts: { standard: 20, simple: 14 } },
-  { id: "bekvam-stool", f: fixture("bekvam-stool", BEKVAM as never, BEKVAM_PARTS as never), counts: { standard: 14, simple: 9 } },
-  { id: "eket-cabinet", f: fixture("eket-cabinet", EKET as never, EKET_PARTS as never), counts: { standard: 44, simple: 35 } },
+  { id: "lack-table", f: fixture("lack-table", LACK as never, LACK_PARTS as never, COMPOSED.LACK), counts: { standard: 4, simple: 4 } },
+  { id: "dalfred-stool", f: fixture("dalfred-stool", DALFRED as never, DALFRED_PARTS as never, COMPOSED.DALFRED), counts: { standard: 20, simple: 14 } },
+  { id: "bekvam-stool", f: fixture("bekvam-stool", BEKVAM as never, BEKVAM_PARTS as never, COMPOSED.BEKVAM), counts: { standard: 14, simple: 9 } },
+  { id: "eket-cabinet", f: fixture("eket-cabinet", EKET as never, EKET_PARTS as never, COMPOSED.EKET), counts: { standard: 44, simple: 35 } },
 ];
 
 for (const { id, f, counts } of MODELS) {

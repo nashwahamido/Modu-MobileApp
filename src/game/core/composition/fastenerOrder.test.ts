@@ -9,10 +9,11 @@ import { HARDWARE } from "@/src/game/content/hardware";
 import { applyStructure } from "@/src/game/core/model/liaisons";
 import type { DraftAction, PartDef, PartId } from "@/src/game/core/type";
 import { composeFurnitureActions, withFastenersBeforeCombines } from "./composeActions";
+import { COMPOSED } from "@/src/game/content/furnitures/composed";
 
 // A cluster's own hardware must be asked for while the cluster is still loose on the bench. The fastener appendix used to land after every combine, so EKET asked for the drawer-back screws with the drawer already inside the finished cabinet (box-blocked from all 72 sweep cameras) and DALFRED asked for the pole's end cap after the pole had been threaded down over the support pin. The authored stage said otherwise both times and never got a say against array position.
 test("EKET: every screw sits at its earliest legal step — after its own endpoints, before any combine", () => {
-  const actions = composeFurnitureActions(EKET.AUTHORED_ACTIONS, EKET.FASTENER_RULES, applyStructure(EKET_PARTS, EKET.STRUCTURE), HARDWARE, EKET.CLUSTERS);
+  const actions = composeFurnitureActions(EKET.AUTHORED_ACTIONS, EKET.FASTENER_RULES, applyStructure(EKET_PARTS, COMPOSED.EKET), HARDWARE, EKET.CLUSTERS);
   const at = (id: string) => actions.findIndex((a) => a.actionId === id);
   const firstCombine = actions.findIndex((a) => a.type === "combineClusters");
   for (const s of ["screw110519_1", "screw110519_8", "screw109041_1", "screw109041_8"]) {
@@ -30,7 +31,7 @@ test("EKET: every screw sits at its earliest legal step — after its own endpoi
 });
 
 test("DALFRED: the pole's cap is fitted before the seat assembly is combined onto the base", () => {
-  const actions = composeFurnitureActions(DALFRED.AUTHORED_ACTIONS, DALFRED.FASTENER_RULES, applyStructure(DALFRED_PARTS, DALFRED.STRUCTURE), HARDWARE, DALFRED.CLUSTERS);
+  const actions = composeFurnitureActions(DALFRED.AUTHORED_ACTIONS, DALFRED.FASTENER_RULES, applyStructure(DALFRED_PARTS, COMPOSED.DALFRED), HARDWARE, DALFRED.CLUSTERS);
   const at = (id: string) => actions.findIndex((a) => a.actionId === id);
   assert.ok(at("place_pole") < at("insert_cap107675_1"), "the cap needs the pole placed");
   assert.ok(at("tighten_cap107675_1") < at("combine_base"), "the cap must be on before the seat threads onto the base");

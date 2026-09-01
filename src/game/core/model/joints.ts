@@ -22,11 +22,14 @@ interface JointBase {
   anchor?: { a?: Vec3; b?: Vec3 };
 }
 
+/** `gates: false` — a real joint that must NOT constrain the build order. A slide or screw edge is what `andFrontierTargets` reads as "you cannot enter a groove, or a thread, that is not there yet", which is right for the contact a motion BEGINS at and wrong for one it merely arrives at. DALFRED's support pin makes one downward slide through circleUpp's hole and lands its tip in circleDown's bore: two joints, one motion, and only the first is a precondition. Declaring the second still buys what declaring it is for — the derivation stops reading circleDown as an obstruction — while emitting no Γ edge, so nothing waits on it.
+ * Only slide and screw carry the flag, because only they gate; a press or snap edge already constrains nothing.
+ */
 /** One joint between two STRUCTURAL parts, discriminated by kind so each carries exactly the data it needs and illegal combinations are unrepresentable rather than validator checks. Fasteners are deliberately NOT a variant: hardware is a physical part with its own lifecycle whose joint is a consequence of `attached`, so declaring it here too would store the same fact twice. */
 export type JointDef =
   | (JointBase & { kind: "press"; mover?: PartId; approach?: Approach })
-  | (JointBase & { kind: "slide"; mover: PartId; approach?: Approach })
-  | (JointBase & { kind: "screw"; mover: PartId; approach?: Approach })
+  | (JointBase & { kind: "slide"; mover: PartId; approach?: Approach; gates?: boolean })
+  | (JointBase & { kind: "screw"; mover: PartId; approach?: Approach; gates?: boolean })
   /** A press with the drive gesture removed: the parts click together in the placement motion itself (EKET's suspension cover pushes over its bracket as it lands). It still TRAVELS — `dropOn` kills the PARK, not the direction, which is why it carries an approach like any other kind: BEKVAM's rails drop flush and still come in along −X, and the drag work plane reads that off the part. The `mover` is required precisely because the feel is one part's, not the pair's. Not the same as authoring nothing: a part with no joint drops for want of a placed partner, while this one drops even though its partner stands ready. */
   | (JointBase & { kind: "snap"; mover: PartId; approach?: Approach })
   /** The two-phase keyhole (project name: hook-and-slot): press in along the approach, then a short shove seats the bolts in their slots. `lock.dir` is the shove when `mover` moves; `lock.dirOther` is the shove when the OTHER endpoint moves — the pair-level fact v1 could only express by authoring lockDir on both parts and hoping they stayed in sync. */
@@ -133,8 +136,9 @@ export function lowerJoints(
       at(id).jointAnchor = value;
     }
 
-    // A joint whose pair HARDWARE already joins emits its vectors only. The edge exists either way, and stamping a kind onto it would let a part press home before its own dowel is in — BEKVAM's rails would open the moment a leg is down, and "the dowel locks drive the real BEKVÄM order by themselves" collapses. So the kind still chooses which slab axis is the travel; the edge stays the hardware's.
-    const hardwareJoins = bridged(j.a, j.b);
+    // A PRESS or SNAP whose pair hardware already joins emits its vectors only. The edge exists either way, and stamping a press kind onto it would let a part press home before its own dowel is in — BEKVAM's rails would open the moment a leg is down, and "the dowel locks drive the real BEKVÄM order by themselves" collapses.
+    // A SLIDE or SCREW is different, and the difference is not cosmetic: those kinds are what `andFrontierTargets` reads to require the groove owner or the thread receiver be placed FIRST. Withholding them silently removes a gate — DALFRED's supportPin is bridged to circleUpp and its flat authoring declared the slideJoins anyway, so suppressing it dropped "the pin waits for circleUpp" and the test that names that behaviour went red. A press edge withheld costs nothing because the press kind gates nothing; a slide edge withheld costs the ordering.
+    const hardwareJoins = bridged(j.a, j.b) && (j.kind === "press" || j.kind === "snap");
 
     switch (j.kind) {
       case "press": {
@@ -145,12 +149,12 @@ export function lowerJoints(
         break;
       }
       case "slide": {
-        if (!hardwareJoins) join(j.mover, "slideJoins", other(j, j.mover));
+        if (!hardwareJoins && j.gates !== false) join(j.mover, "slideJoins", other(j, j.mover));
         travel(j.mover, j.approach);
         break;
       }
       case "screw": {
-        if (!hardwareJoins) join(j.mover, "screwJoins", other(j, j.mover));
+        if (!hardwareJoins && j.gates !== false) join(j.mover, "screwJoins", other(j, j.mover));
         travel(j.mover, j.approach);
         break;
       }

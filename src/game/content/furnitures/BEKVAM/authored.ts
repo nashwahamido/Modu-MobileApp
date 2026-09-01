@@ -3,7 +3,8 @@ import {
   FastenerRule,
 } from "@/src/game/core/composition/composeActions";
 import { StructureOverlay } from "@/src/game/core/model/liaisons";
-import { asGroupId } from "@/src/game/core/ids";
+import { asGroupId, asPartId } from "@/src/game/core/ids";
+import type { JointDef } from "@/src/game/core/model/joints";
 import {
   ClusterDef,
   ClusterId,
@@ -33,13 +34,32 @@ export const STRUCTURE = {
   step: { seed: true },
   legR: { seed: true },
   // rails go in AFTER both sides are up (the dowel locks force it), so each travels along X between the standing panels and parks outside its own face rather than inside a side panel
-  backBottomRail: { placeDir: [-1, 0, 0] as const, unstable: true }, // from behind, forward
-  frontBottomRail: { placeDir: [1, 0, 0] as const, unstable: true }, // from the front, backward under the step's front edge
+  // All four rails are MIGRATED to JOINTS below. The two BOTTOM rails take their travel from the contact slabs (joints.gen.ts) and state none here.
+  backBottomRail: { unstable: true },
+  frontBottomRail: { unstable: true },
+  // The two TOP rails keep theirs: their derivation abstains, and it is right to. Their slab against a leg is [0.04,0.06,0.02] — thinnest in Z — so a resolved sign would confidently produce a Z travel where the truth is X. The legs are splayed ~5°, so the WORLD-aligned overlap box is thinnest along an axis nothing joins along; the same defect holds legR/step in KNOWN_WRONG_AXIS, and measuring the slab in the parts' own frames (PartBox.obb) is the fix. Until then the authored value stands, which is exactly what the precedence rules are for.
   frontTopRail: { placeDir: [1, 0, 0] as const, unstable: true },
   backTopRail: { placeDir: [-1, 0, 0] as const, unstable: true },
   topPlane: { placeDir: [0, -1, 0] as const }, // closes down onto the top rails
   // NO per-screw toolAnchor here: the head-face contact is a GENERATED model fact now (parts.gen headOffset, emitted by read-parts.mjs from the mesh bounds) — an 11-entry hand copy of it lived here for one session and was deleted when the extractor learned to emit it.
 } as StructureOverlay;
+
+/** Joints stated as ENTITIES rather than per-part arrays (core/model/joints.ts). The kind and the pair are the human's; the travel comes from the contact slab in joints.gen.ts.
+ * A SNAP, not a press — measured, not assumed: the rail's edge to the legs is kindless, its screws are securers so no preload path applies, and `placeEngagement` therefore returns "drop". It drops flush and still travels, which is exactly what a snap is. And because screw105215 already makes the Γ edge, lowering emits the travel alone: no join array, no `dropOn` — there is no press edge here to suppress.
+ * BOTH legs, not one. The rail spans them and is screwed to each, so it has two joints — satisfied by ONE placement, the way the drawer bottom's three slide joints are one glide. State every joint: a travel direction has to satisfy all of them at once AND miss whatever is already standing, so a joint left unstated is a constraint the derivation never gets to apply. */
+export const JOINTS: JointDef[] = [
+  // All four rails, every joint each one has: screw105215 ties every rail to BOTH legs, and screw105111 ties the front bottom rail to the step and each top rail to the top plane.
+  ...(
+    [
+      ["frontBottomRail", ["legR", "legL", "step"]],
+      ["backBottomRail", ["legR", "legL"]],
+      ["frontTopRail", ["legR", "legL", "topPlane"]],
+      ["backTopRail", ["legR", "legL", "topPlane"]],
+    ] as const
+  ).flatMap(([rail, partners]) =>
+    partners.map((p): JointDef => ({ kind: "snap", a: asPartId(rail), b: asPartId(p), mover: asPartId(rail) })),
+  ),
+];
 
 export const FASTENER_RULES: FastenerRule[] = [
   // the global catalogue, data/hardware.ts.

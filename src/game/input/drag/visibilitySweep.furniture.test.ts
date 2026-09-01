@@ -17,6 +17,7 @@ import { parkOffsetFor } from "@/src/game/core/evaluation/engagement";
 import { isPickupType, placeId } from "@/src/game/core/ids";
 import { burialDepthM, ghostSamplePoints, sightlineGapM, VIS_GAP_SLACK_M } from "./dragPlane";
 import type { ClusterId, Furniture, PartBox, PartId, Vec3 } from "@/src/game/core/type";
+import { COMPOSED } from "@/src/game/content/furnitures/composed";
 
 const MODELS = path.join(process.cwd(), "src", "assets", "models", "furnitures");
 const CONTENT = path.join(process.cwd(), "src", "game", "content", "furnitures");
@@ -120,7 +121,7 @@ for (const F of FURNITURES) {
   test(`${F}: every pickup socket is visible from somewhere, at every point of the build`, async () => {
     const { PARTS } = await import(`@/src/game/content/furnitures/${F}/parts.gen`);
     const authored = await import(`@/src/game/content/furnitures/${F}/authored`);
-    const parts = applyStructure(PARTS, authored.STRUCTURE);
+    const parts = applyStructure(PARTS, COMPOSED[F]);
     const liaisons = buildLiaisons(parts);
     const named = glbBoxes(path.join(MODELS, F, `${F}.glb`));
     const boxes: Record<string, PartBox> = {};

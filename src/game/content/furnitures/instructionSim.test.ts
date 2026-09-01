@@ -33,6 +33,7 @@ import * as DALFRED from "./DALFRED/authored";
 import { PARTS as DALFRED_PARTS } from "./DALFRED/parts.gen";
 import * as EKET from "./EKET/authored";
 import { PARTS as EKET_PARTS } from "./EKET/parts.gen";
+import { COMPOSED } from "@/src/game/content/furnitures/composed";
 
 interface AuthoredExports {
   AUTHORED_ACTIONS: readonly DraftAction[];
@@ -44,8 +45,8 @@ interface AuthoredExports {
   GATES?: Record<string, Gate>;
 }
 
-function fixture(id: string, m: AuthoredExports, raw: Record<PartId, PartDef>): Furniture {
-  const parts = applyStructure(raw, m.STRUCTURE);
+function fixture(id: string, m: AuthoredExports, raw: Record<PartId, PartDef>, composed: StructureOverlay): Furniture {
+  const parts = applyStructure(raw, composed);
   const actions = composeFurnitureActions(
     m.AUTHORED_ACTIONS,
     m.FASTENER_RULES,
@@ -71,10 +72,10 @@ function fixture(id: string, m: AuthoredExports, raw: Record<PartId, PartDef>): 
 }
 
 const FIXTURES: { id: string; f: Furniture }[] = [
-  { id: "lack-table", f: fixture("lack-table", LACK as AuthoredExports, LACK_PARTS) },
-  { id: "bekvam-stool", f: fixture("bekvam-stool", BEKVAM as AuthoredExports, BEKVAM_PARTS) },
-  { id: "dalfred-stool", f: fixture("dalfred-stool", DALFRED as AuthoredExports, DALFRED_PARTS) },
-  { id: "eket-cabinet", f: fixture("eket-cabinet", EKET as AuthoredExports, EKET_PARTS) },
+  { id: "lack-table", f: fixture("lack-table", LACK as AuthoredExports, LACK_PARTS, COMPOSED.LACK) },
+  { id: "bekvam-stool", f: fixture("bekvam-stool", BEKVAM as AuthoredExports, BEKVAM_PARTS, COMPOSED.BEKVAM) },
+  { id: "dalfred-stool", f: fixture("dalfred-stool", DALFRED as AuthoredExports, DALFRED_PARTS, COMPOSED.DALFRED) },
+  { id: "eket-cabinet", f: fixture("eket-cabinet", EKET as AuthoredExports, EKET_PARTS, COMPOSED.EKET) },
 ];
 
 // deterministic PRNG so a fuzz failure reproduces from its seed

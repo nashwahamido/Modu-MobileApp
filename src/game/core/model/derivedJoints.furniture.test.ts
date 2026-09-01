@@ -10,42 +10,43 @@ import path from "node:path";
 import { composeFurnitureActions } from "@/src/game/core/composition/composeActions";
 import { HARDWARE } from "@/src/game/content/hardware";
 import { buildComponents } from "./components";
-import { deriveJointGeometry, statementsFromFlat } from "./jointGeometry";
-import { applyStructure, buildLiaisons, isConnector } from "./liaisons";
+import { deriveJointGeometry, statementsFor } from "./jointGeometry";
+import { applyStructure, buildLiaisons, composeStructure, isConnector } from "./liaisons";
 import type { PartBox, PartDef, PartId, SweepMap, Vec3 } from "@/src/game/core/type";
 
 import * as LACK from "@/src/game/content/furnitures/LACK/authored";
 import { PARTS as LACK_PARTS } from "@/src/game/content/furnitures/LACK/parts.gen";
 import { SWEEP as LACK_SWEEP } from "@/src/game/content/furnitures/LACK/sweep.gen";
 import { JOINT_GEOMETRY as LACK_GEN } from "@/src/game/content/furnitures/LACK/joints.gen";
+import { STRUCTURE_COMPOSED as LACK_COMPOSED } from "@/src/game/content/furnitures/LACK/structure.gen";
 import * as BEKVAM from "@/src/game/content/furnitures/BEKVAM/authored";
 import { PARTS as BEKVAM_PARTS } from "@/src/game/content/furnitures/BEKVAM/parts.gen";
 import { SWEEP as BEKVAM_SWEEP } from "@/src/game/content/furnitures/BEKVAM/sweep.gen";
 import { JOINT_GEOMETRY as BEKVAM_GEN } from "@/src/game/content/furnitures/BEKVAM/joints.gen";
+import { STRUCTURE_COMPOSED as BEKVAM_COMPOSED } from "@/src/game/content/furnitures/BEKVAM/structure.gen";
 import * as DALFRED from "@/src/game/content/furnitures/DALFRED/authored";
 import { PARTS as DALFRED_PARTS } from "@/src/game/content/furnitures/DALFRED/parts.gen";
 import { SWEEP as DALFRED_SWEEP } from "@/src/game/content/furnitures/DALFRED/sweep.gen";
 import { JOINT_GEOMETRY as DALFRED_GEN } from "@/src/game/content/furnitures/DALFRED/joints.gen";
+import { STRUCTURE_COMPOSED as DALFRED_COMPOSED } from "@/src/game/content/furnitures/DALFRED/structure.gen";
 import * as EKET from "@/src/game/content/furnitures/EKET/authored";
 import { PARTS as EKET_PARTS } from "@/src/game/content/furnitures/EKET/parts.gen";
 import { SWEEP as EKET_SWEEP } from "@/src/game/content/furnitures/EKET/sweep.gen";
 import { JOINT_GEOMETRY as EKET_GEN } from "@/src/game/content/furnitures/EKET/joints.gen";
+import { STRUCTURE_COMPOSED as EKET_COMPOSED } from "@/src/game/content/furnitures/EKET/structure.gen";
 
 /** Measured corpus state — a changed count means the geometry, the authoring or the rule moved: re-measure and understand WHY before touching these. */
-const DERIVED = 43;
-const MATCHED = 20;
-const UNDETERMINED = 13;
-/** Derived vectors on parts that author none, so pin 2 cannot check them. Inert until a JOINTS entry names the part. */
-const UNVALIDATED = 23;
+const DERIVED = 47;
+const MATCHED = 17;
+const UNDETERMINED = 10;
+/** Derived vectors on parts that author none, so pin 2 cannot check them. Two populations: parts nothing has ever confirmed, and parts MIGRATED to JOINTS — those gave up their authored value on purpose and are guarded by jointsMigration.furniture.test.ts instead, which pins the exact pre-migration parts. A migration therefore moves a part from MATCHED to here, and both counts move together. */
+const UNVALIDATED = 30;
 /** A derived vector that legitimately disagrees with an authored one: partId → why. Empty is the healthy state. */
 const KNOWN_DIVERGENT = new Map<string, string>();
 /** Derived vectors the JOINING HARDWARE contradicts — open BUGS, not accepted exceptions. Each is a vector the contact slab got wrong and nothing else could catch, since neither part authors a placeDir for the honesty guard to check. Listed so the pin stays green while no NEW one can appear unnoticed; the entry is deleted when the rule stops producing it, and the pin fails if a listed one starts agreeing. */
-const KNOWN_WRONG_AXIS = new Map<string, string>([
-  ["BEKVAM/legR", "slab says Y, dowel101350_1 drives along -Z: the leg is splayed ~5deg, so the AXIS-ALIGNED overlap box between it and the step is thinnest along an axis nothing joins along"],
-  ["BEKVAM/step", "the mirror of BEKVAM/legR, via dowel101350_2"],
-]);
+const KNOWN_WRONG_AXIS = new Map<string, string>();
 /** Derived vectors a joint-defining connector can adjudicate — the only independent check that reaches the UNVALIDATED ones. Ten of forty-three: most joints are made by securers, whose drive axis says nothing about how the parts came together. */
-const CONNECTOR_SCORED = 10;
+const CONNECTOR_SCORED = 11;
 
 // World-box parser — twin of the copies in visibilitySweep.furniture.test.ts and derive-joints.mts (same flat-hierarchy convention), duplicated because importing either would run its tests or its main.
 const rotQ = ([x, y, z, w]: number[], [vx, vy, vz]: Vec3): Vec3 => {
@@ -116,17 +117,18 @@ function glbBoxes(file: string): Record<string, PartBox> {
   return out;
 }
 
-type Mod = { STRUCTURE: never; AUTHORED_ACTIONS: never; FASTENER_RULES: never; CLUSTERS: never; COMPONENTS?: never };
+type Mod = { STRUCTURE: never; AUTHORED_ACTIONS: never; FASTENER_RULES: never; CLUSTERS: never; COMPONENTS?: never; JOINTS?: never };
 const CORPUS = [
-  ["LACK", LACK as unknown as Mod, LACK_PARTS, LACK_SWEEP, LACK_GEN],
-  ["BEKVAM", BEKVAM as unknown as Mod, BEKVAM_PARTS, BEKVAM_SWEEP, BEKVAM_GEN],
-  ["DALFRED", DALFRED as unknown as Mod, DALFRED_PARTS, DALFRED_SWEEP, DALFRED_GEN],
-  ["EKET", EKET as unknown as Mod, EKET_PARTS, EKET_SWEEP, EKET_GEN],
+  ["LACK", LACK as unknown as Mod, LACK_PARTS, LACK_SWEEP, LACK_GEN, LACK_COMPOSED],
+  ["BEKVAM", BEKVAM as unknown as Mod, BEKVAM_PARTS, BEKVAM_SWEEP, BEKVAM_GEN, BEKVAM_COMPOSED],
+  ["DALFRED", DALFRED as unknown as Mod, DALFRED_PARTS, DALFRED_SWEEP, DALFRED_GEN, DALFRED_COMPOSED],
+  ["EKET", EKET as unknown as Mod, EKET_PARTS, EKET_SWEEP, EKET_GEN, EKET_COMPOSED],
 ] as const;
 
 /** Recompute one furniture's geometry exactly as derive-joints.mts does — the pin is only worth anything if the two agree on every input. */
 function recompute(id: string, mod: Mod, raw: unknown, sweep: unknown) {
-  const parts = applyStructure(raw as Record<PartId, PartDef>, mod.STRUCTURE) as Record<PartId, PartDef>;
+  // Lower the joints for TOPOLOGY first, with no geometry: a migrated part's edges live in JOINTS now, and without them Γ has no liaison for the pair and every derivation abstains with "no contact frame". Passing no geometry is what keeps this from being circular — the join arrays are all Γ needs, and the vectors are what this pass is about to compute.
+  const parts = applyStructure(raw as Record<PartId, PartDef>, mod.STRUCTURE, mod.JOINTS) as Record<PartId, PartDef>;
   const liaisons = buildLiaisons(parts);
   const named = glbBoxes(path.join(process.cwd(), "src", "assets", "models", "furnitures", id, `${id}.glb`));
   const boxes: Record<PartId, PartBox> = {};
@@ -138,7 +140,7 @@ function recompute(id: string, mod: Mod, raw: unknown, sweep: unknown) {
   composeFurnitureActions(mod.AUTHORED_ACTIONS, mod.FASTENER_RULES, parts, HARDWARE, mod.CLUSTERS).forEach((a, i) => {
     if (a.type === "placePart" && a.partId) placeOrder.set(a.partId, i);
   });
-  const statements = statementsFromFlat(parts, liaisons, buildComponents(mod.COMPONENTS, parts));
+  const statements = statementsFor(parts, liaisons, buildComponents(mod.COMPONENTS, parts), mod.JOINTS);
   return { parts, ...deriveJointGeometry(parts, liaisons, boxes, sweep as SweepMap, statements, placeOrder) };
 }
 
@@ -233,4 +235,16 @@ test("the derived total is pinned, and derivation never emits a join array", () 
     }
   }
   assert.equal(derived, DERIVED, "derived count moved — geometry, authoring or the rule changed: re-measure");
+});
+
+// structure.gen.ts is the one artifact a reviewer can read to see what a joint actually DID — the join array it emitted or withheld, the dropOn it added or did not, the travel it took from joints.gen. That is only worth anything if the file matches what applyStructure will compute at load time, which is why both go through composeStructure rather than each having its own opinion.
+test("the checked-in structure.gen.ts files match a fresh composition", () => {
+  for (const [id, mod, raw, sweep, gen, composed] of CORPUS) {
+    const { parts } = recompute(id, mod, raw, sweep);
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(composeStructure(parts, mod.STRUCTURE, mod.JOINTS, gen))),
+      JSON.parse(JSON.stringify(composed)),
+      `${id}: structure.gen.ts is STALE — regenerate with \`npx tsx src/game/helper-scripts/derive-joints.mts --write\``,
+    );
+  }
 });

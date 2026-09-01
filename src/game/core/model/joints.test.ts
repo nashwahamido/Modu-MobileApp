@@ -61,7 +61,8 @@ test("a joint whose pair is joined by hardware emits its travel only, never a jo
     PARTS as never,
   ) as Record<string, Record<string, unknown>>;
   assert.deepEqual(lowered.shelf, { placeDir: [1, 0, 0] }, "the screw between them owns the edge; only the direction is the joint's to state");
-  assert.equal(Object.values(buildLiaisons(applyStructure(PARTS, {} as StructureOverlay))).find((l) => l.a === "pole" && l.b === "shelf")?.kind, undefined, "the hardware edge stays kindless, as it is today");
+  // The edge is the hardware's, and buildLiaisons now NAMES it — a fastener-made joint whose parts state no travel is a snap. What matters here is that the name came from the classification and not from the joint: had the joint emitted its array it would read "press", and a press edge is what would let the part press home before its own fastener is in.
+  assert.equal(Object.values(buildLiaisons(applyStructure(PARTS, {} as StructureOverlay))).find((l) => l.a === "pole" && l.b === "shelf")?.kind, "snap", "a hardware-made joint with no travel stated is a snap; the joint contributed nothing to it");
 });
 
 // dropOn exists to cancel a drive gesture something ELSE implies. On a hardware-joined pair no join array is emitted, so there is nothing to cancel and the flag would be dead data.

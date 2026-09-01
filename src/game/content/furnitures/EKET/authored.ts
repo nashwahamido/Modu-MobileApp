@@ -4,6 +4,7 @@ import {
 } from "@/src/game/core/composition/composeActions";
 import { applyStructure, StructureOverlay } from "@/src/game/core/model/liaisons";
 import { lowerFasteners, type FastenerEntry, type FastenerMap } from "@/src/game/core/model/fasteners";
+import type { JointDef } from "@/src/game/core/model/joints";
 import { asComponentId, asPartId } from "@/src/game/core/ids";
 import {
   AssemblyMode,
@@ -102,10 +103,7 @@ const drawer = (s: string): StructureOverlay => ({
   // placeDir on every parked mover below: the centroid heuristic in travelAxis() guessed visibly wrong axes on-device — a groove's axis isn't derivable from poses, so it must be authored. World frame is documented once on STRUCTURE; the short version is FRONT = +X.
   [`drawerSideL_${s}`]: { seed: true, directJoins: [pid(`drawerFront_${s}`)], placeDir: [1, 0, 0] as const, lockDir: [0, 1, 0] as const }, // its lockDir engages only when the front seeded first and this side becomes the mover (press forward, shove up — sideR's mirror); as the strict-order seed it just drops
   [`drawerSideR_${s}`]: { seed: true, directJoins: [pid(`drawerFront_${s}`)], placeDir: [1, 0, 0] as const, lockDir: [0, 1, 0] as const }, // not a seed — reachable via the front's directJoins once the front is down (replaces the front↔side bolt liaison that went away when bolt128918 merged into the sides); presses FORWARD so its bolts enter the front's keyholes, then shoves UP to lock (was: travelling inward +Z, wrong for a keyhole — the bolts enter along their own axis)
-  [`drawerBottom_${s}`]: {
-    slideJoins: [pid(`drawerSideL_${s}`), pid(`drawerSideR_${s}`), pid(`drawerFront_${s}`)],
-    placeDir: [1, 0, 0] as const, // enters through the still-open back (drawerBack is placed after it) and glides FORWARD along the grooves — forward is +X, so it parks behind its seat at x≈-0.07, level with the open back edge
-  },
+  // drawerBottom: MIGRATED to JOINTS below — three slide joints, and the +X travel now comes from the contact slabs (joints.gen.ts) instead of being typed here.
   [`drawerBack_${s}`]: { unstable: true },
   // (bolt128918 overrides removed 2026-07-20 — the keyhole bolts are pre-attached geometry on the sides now, not parts, so nothing to override)
   // runner catches — screwed to the drawer FRONT (screw109041, manual step 21);
@@ -170,8 +168,9 @@ const STRUCTURE_BASE: StructureOverlay = {
   dowel145572_3: { insertStage: 0.03, insertRetract: 0.04 },
   dowel145572_4: { insertStage: 0.03, insertRetract: 0.04 },
   // suspension fittings (top-rear corners), fully USER-VERIFIED against manual steps 10-13 (2026-07-22, corrected on device): each BRACKET is TWO beats — tap it in SIDEWAYS BY HAND toward its own side panel (left to left, right to right, the plate pins entering the side's rear-edge holes), then a separate stationary TIGHTEN with the screwdriver on the screw whose hole faces the BACK (step 11's drill; the screw is not a GLB part, so the tighten beat rides the bracket itself — engageDir-less, zero loose offset, no positional movement). The KNOB then SCREWS in from the rear BY HAND (dial, no tool). The COVER just CLICKS home at drop (dropOn — no tap, no dial), and is UNSTABLE until its CAP is driven over it (the cap re-typed structural→fastener 2026-08-24 per fastener-model-v2: a SECURER on the cover↔bracket liaison, so the ordinary fastener-securing stability rule holds the cover and the screw-place special case is gone). Corner stack rear-to-front for the record: knob (-0.170) -> bracket (-0.160) -> back panel (-0.149) -> cover (-0.146) -> cap (-0.144). bracket engageDir/insertProud/toolAnchor serve the TIGHTEN VISUAL only (user-verified): the screwdriver stands perpendicular to the back panel (engageDir [-1,0,0] — TightenControl never sinks/spins a structural part) with zero proud travel (insertProud 0), rotating at the CIRCULAR BOSS centre — the node origin sits on the plate ~1cm from it, toolAnchor bridges the gap (boss z ±0.308 vs origin z ±0.317873)
-  suspBracket_1: { directJoins: [pid("sidePanelR")], placeDir: [0, 0, -1] as const, engageDir: [-1, 0, 0] as const, insertProud: 0, toolAnchor: [0, 0, 0.009873] as const }, // sits at z=-0.318: taps outward toward the RIGHT side's rear-edge holes, bare-handed
-  suspBracket_2: { directJoins: [pid("sidePanelL")], placeDir: [0, 0, 1] as const, engageDir: [-1, 0, 0] as const, insertProud: 0, toolAnchor: [0, 0, -0.009873] as const }, // sits at z=+0.318: taps outward toward the LEFT side's rear-edge holes, bare-handed
+  // The two brackets are MIGRATED to JOINTS below: the press and its travel are stated there, and what stays here is the screwdriver's business — engageDir, insertProud and toolAnchor serve the TIGHTEN visual, not the join.
+  suspBracket_1: { engageDir: [-1, 0, 0] as const, insertProud: 0, toolAnchor: [0, 0, 0.009873] as const }, // sits at z=-0.318: taps outward toward the RIGHT side's rear-edge holes, bare-handed
+  suspBracket_2: { engageDir: [-1, 0, 0] as const, insertProud: 0, toolAnchor: [0, 0, -0.009873] as const }, // sits at z=+0.318: taps outward toward the LEFT side's rear-edge holes, bare-handed
   // cover: dropOn — the press liaison keeps it Γ-reachable through its bracket, but the placement is a plain snap (user-verified: "it's placed", no tap and no dial). cap: RE-TYPED to a fastener here (the GLB ships it as a bare structural node with no `__a&b` binding, so the overlay's re-typing escape hatch supplies type + attached — cover first, bracket second, the insert-requires order). It seats travelling −X onto the cover, so its head/outward engageDir is +X; hand-spun (HARDWARE suspCap: tool "hand"), securer sequencing (both attached placed) comes from the FASTENERS def below.
   suspCover_1: { directJoins: [pid("suspBracket_1")], dropOn: true, unstable: true },
   suspCover_2: { directJoins: [pid("suspBracket_2")], dropOn: true, unstable: true },
@@ -213,6 +212,19 @@ export const STRUCTURE: StructureOverlay = Object.entries(LOWERED.kindOverrides)
 );
 
 export const FASTENER_RULES: FastenerRule[] = LOWERED.rules;
+
+/** Joints stated as ENTITIES rather than per-part arrays (core/model/joints.ts). The kind and the pair are the human's; the travel direction comes from the contact slabs in joints.gen.ts, so nothing here types a vector. The rest of this furniture still authors the flat form — both routes lower to the same fields, and applyStructure lands the flat overlay on top. */
+export const JOINTS: JointDef[] = [
+  // Each bracket taps sideways onto its own side panel's rear-edge holes. Nothing bridges the pair — the tighten screw is not a GLB part — so the joint itself makes the Γ edge that `directJoins` used to.
+  { kind: "press", a: pid("suspBracket_1"), b: pid("sidePanelR"), mover: pid("suspBracket_1") },
+  { kind: "press", a: pid("suspBracket_2"), b: pid("sidePanelL"), mover: pid("suspBracket_2") },
+  // The drawer bottom glides forward along three grooves, so it is three slide joints rather than one array of three targets: a joint is a PAIR, and the mover is the same part in each.
+  ...(["1", "2"] as const).flatMap((s) =>
+    (["drawerSideL", "drawerSideR", "drawerFront"] as const).map(
+      (owner): JointDef => ({ kind: "slide", a: pid(`drawerBottom_${s}`), b: pid(`${owner}_${s}`), mover: pid(`drawerBottom_${s}`) }),
+    ),
+  ),
+];
 
 /** Gate: whichever horizontal closes SECOND over the back panel's groove must wait for the back (manual steps 6-7) — under the linear build order topPanel always goes first (gated trivially true) and bottomPanel always goes second (gated on the back), but both gates stay symmetric in case the order ever changes. */
 export const GATES = {

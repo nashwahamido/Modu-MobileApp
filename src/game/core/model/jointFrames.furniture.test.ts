@@ -6,6 +6,7 @@ import path from "node:path";
 import { applyStructure, buildLiaisons } from "./liaisons";
 import { boxCenter, clampIntoBox, deriveJointFrames, partAnchorOffsets, CONTACT_EXPANSION_M } from "./jointFrames";
 import type { PartBox, Vec3 } from "@/src/game/core/type";
+import { COMPOSED } from "@/src/game/content/furnitures/composed";
 
 const MODELS = path.join(process.cwd(), "src", "assets", "models", "furnitures");
 const CONTENT = path.join(process.cwd(), "src", "game", "content", "furnitures");
@@ -87,8 +88,7 @@ test("furniture discovery found the measured baseline", () => {
 for (const F of FURNITURES) {
   test(`${F}: joint frames derive automatically`, async () => {
     const { PARTS } = await import(`@/src/game/content/furnitures/${F}/parts.gen`);
-    const { STRUCTURE } = await import(`@/src/game/content/furnitures/${F}/authored`);
-    const parts = applyStructure(PARTS, STRUCTURE);
+    const parts = applyStructure(PARTS, COMPOSED[F]);
     const liaisons = buildLiaisons(parts);
     const named = glbBoxes(path.join(MODELS, F, `${F}.glb`));
 
@@ -133,8 +133,7 @@ for (const F of FURNITURES) {
 
   test(`${F}: the contact expansion is not fitted to this furniture`, async () => {
     const { PARTS } = await import(`@/src/game/content/furnitures/${F}/parts.gen`);
-    const { STRUCTURE } = await import(`@/src/game/content/furnitures/${F}/authored`);
-    const parts = applyStructure(PARTS, STRUCTURE);
+    const parts = applyStructure(PARTS, COMPOSED[F]);
     const liaisons = buildLiaisons(parts);
     const named = glbBoxes(path.join(MODELS, F, `${F}.glb`));
     const boxes: Record<string, PartBox> = {};

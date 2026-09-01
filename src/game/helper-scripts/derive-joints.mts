@@ -6,12 +6,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { applyStructure, buildLiaisons } from "@/src/game/core/model/liaisons";
+import { applyStructure, buildLiaisons, composeStructure } from "@/src/game/core/model/liaisons";
 import { composeFurnitureActions } from "@/src/game/core/composition/composeActions";
 import { HARDWARE } from "@/src/game/content/hardware";
 import { buildComponents } from "@/src/game/core/model/components";
-import { deriveJointGeometry, statementsFromFlat, type DerivationNote } from "@/src/game/core/model/jointGeometry";
+import { deriveJointGeometry, statementsFor, type DerivationNote } from "@/src/game/core/model/jointGeometry";
 import type { PartBox, PartDef, PartId, SweepMap, Vec3 } from "@/src/game/core/type";
+import type { JointDef } from "@/src/game/core/model/joints";
 
 import * as LACK from "@/src/game/content/furnitures/LACK/authored";
 import * as BEKVAM from "@/src/game/content/furnitures/BEKVAM/authored";
@@ -123,7 +124,8 @@ const unit = (v: Vec3): Vec3 => {
 const score = { match: 0, flipped: 0, wrongAxis: 0, undetermined: 0, authored: 0, newlyCovered: 0 };
 
 for (const [id, raw, structure, sweep, mod] of CORPUS) {
-  const parts = applyStructure(raw as Record<PartId, PartDef>, structure) as Record<PartId, PartDef>;
+  // Lower the joints for TOPOLOGY first, with no geometry: a migrated part's edges live in JOINTS now, and without them Γ has no liaison for the pair and every derivation abstains with "no contact frame". Passing no geometry is what keeps this from being circular — the join arrays are all Γ needs, and the vectors are what this pass is about to compute.
+  const parts = applyStructure(raw as Record<PartId, PartDef>, structure, (mod as { JOINTS?: never }).JOINTS) as Record<PartId, PartDef>;
   const liaisons = buildLiaisons(parts);
   const named = glbBoxes(path.join(MODELS, id, `${id}.glb`));
   const boxes: Record<PartId, PartBox> = {};
@@ -136,11 +138,11 @@ for (const [id, raw, structure, sweep, mod] of CORPUS) {
   composeFurnitureActions(mod.AUTHORED_ACTIONS, mod.FASTENER_RULES, parts, HARDWARE, mod.CLUSTERS).forEach((a, i) => {
     if (a.type === "placePart" && a.partId) placeOrder.set(a.partId, i);
   });
-  const statements = statementsFromFlat(parts, liaisons, buildComponents((mod as { COMPONENTS?: never }).COMPONENTS, parts));
+  const statements = statementsFor(parts, liaisons, buildComponents((mod as { COMPONENTS?: never }).COMPONENTS, parts), (mod as { JOINTS?: never }).JOINTS);
   const { geometry, notes } = deriveJointGeometry(parts, liaisons, boxes, sweep as SweepMap, statements, placeOrder);
 
   const noteFor = (pid: PartId): DerivationNote | undefined => notes.find((n) => n.partId === pid && n.status === "derived") ?? notes.find((n) => n.partId === pid);
-  console.log(`\n══ ${id} ══  ${Object.keys(geometry).length} parts derived, ${new Set(notes.filter((n) => n.status === "undetermined").map((n) => n.partId)).size} undetermined`);
+  console.log(`\n══ ${id} ══  ${Object.keys(geometry).length} parts derived, ${new Set(notes.filter((n) => n.status === "undetermined" && !geometry[n.partId]).map((n) => n.partId)).size} undetermined`);
 
   for (const p of Object.values(parts)) {
     const authored = (p as PartDef & { placeDir?: Vec3 }).placeDir;
@@ -182,10 +184,12 @@ for (const [id, raw, structure, sweep, mod] of CORPUS) {
     const body = keys
       .map((pid) => {
         const n = noteFor(pid as PartId);
-        return `  ${JSON.stringify(pid)}: ${JSON.stringify(geometry[pid as PartId])},   // ${n?.kind} ↔ ${n?.partner}, ${n?.rule}, ext ${fmt(n!.ext!)}, sign: ${n?.sign}`;
+        // A HARDWARE-derived vector has no slab to report — the connector's drive axis IS the answer, so there are no extents to quote.
+        return `  ${JSON.stringify(pid)}: ${JSON.stringify(geometry[pid as PartId])},   // ${n?.kind} ↔ ${n?.partner}, ${n?.rule}${n?.ext ? `, ext ${fmt(n.ext)}` : ""}, sign: ${n?.sign}`;
       })
       .join("\n");
-    const undet = [...new Set(notes.filter((n) => n.status === "undetermined").map((n) => `${n.partId}: ${n.why}`))].sort();
+    // UNDETERMINED means the PART got no vector — not that one of its contacts lost. A part with three contacts can derive cleanly and still carry two "discarded" notes from the majority tie-break, and listing those here made the header claim a part had abstained when its answer sits a few lines below it.
+    const undet = [...new Set(notes.filter((n) => n.status === "undetermined" && !geometry[n.partId]).map((n) => `${n.partId}: ${n.why}`))].sort();
     const out = path.join(OUT, id, "joints.gen.ts");
     fs.writeFileSync(
       out,
@@ -201,6 +205,39 @@ ${body}
 `,
     );
     console.log(`  → wrote ${out}`);
+
+    // The SECOND artifact, and the one a reviewer reads: the authored overlay with the joints already lowered into it. Written in the same pass so it can never be composed against a stale joints.gen — and via the same composeStructure applyStructure itself calls, so the file records what the device runs rather than a second opinion about it.
+    const authoredJoints = (mod as { JOINTS?: readonly JointDef[] }).JOINTS;
+    const composedPath = path.join(OUT, id, "structure.gen.ts");
+    if (!authoredJoints?.length) {
+      // No joints to lower, so the composition IS the authored overlay. Re-exported rather than copied: a generated duplicate of a hand-written file is a second source of truth waiting to drift, and consumers still get one uniform name to import.
+      fs.writeFileSync(
+        composedPath,
+        `// GENERATED by src/game/helper-scripts/derive-joints.mts — do not edit by hand.
+// This furniture authors no JOINTS, so its composed structure IS its authored STRUCTURE. Re-exported so every consumer imports the same name whether or not a furniture has migrated; the day it authors one, this file becomes a literal.
+export { STRUCTURE as STRUCTURE_COMPOSED } from "./authored";
+`,
+      );
+    } else {
+      const composed = composeStructure(parts, structure, authoredJoints, geometry) as Record<string, unknown>;
+      const lines = Object.keys(composed)
+        .sort()
+        .map((pid) => `  ${JSON.stringify(pid)}: ${JSON.stringify(composed[pid])},`)
+        .join("\n");
+      fs.writeFileSync(
+        composedPath,
+        `// GENERATED by src/game/helper-scripts/derive-joints.mts — do not edit by hand.
+// The authored STRUCTURE with this furniture's JOINTS lowered into it — what applyStructure spreads over the mesh facts, and therefore what the game actually runs. Review THIS to see a joint's consequences: the join array a joint emitted (or deliberately did not, where hardware already makes the edge), the dropOn it did or did not add, and the travel it took from joints.gen.
+// Regenerate after any JOINTS/STRUCTURE change or model re-export; the derivedJoints pin test fails, named, when this file is stale.
+import type { StructureOverlay } from "@/src/game/core/model/liaisons";
+
+export const STRUCTURE_COMPOSED = {
+${lines}
+} as unknown as StructureOverlay;
+`,
+      );
+    }
+    console.log(`  → wrote ${composedPath}`);
   }
 }
 

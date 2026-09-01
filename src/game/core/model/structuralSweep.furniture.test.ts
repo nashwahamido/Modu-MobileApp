@@ -24,6 +24,7 @@ import { SWEEP as DALFRED_SWEEP } from "@/src/game/content/furnitures/DALFRED/sw
 import * as EKET from "@/src/game/content/furnitures/EKET/authored";
 import { PARTS as EKET_PARTS } from "@/src/game/content/furnitures/EKET/parts.gen";
 import { SWEEP as EKET_SWEEP } from "@/src/game/content/furnitures/EKET/sweep.gen";
+import { COMPOSED } from "@/src/game/content/furnitures/composed";
 
 /** Measured corpus state — a changed count means the geometry or the authoring moved: re-measure. */
 const SCORED = 33;
@@ -123,7 +124,7 @@ test("sweep.gen.ts files are fresh, and authored travel directions have no earli
   let scored = 0, exitClear = 0, mateOnly = 0;
   const unmodeled: string[] = [];
   for (const [id, m, raw, gen] of CORPUS) {
-    const parts = applyStructure(raw, m.STRUCTURE);
+    const parts = applyStructure(raw, COMPOSED[id]);
     const actions = composeFurnitureActions(m.AUTHORED_ACTIONS, m.FASTENER_RULES, parts, HARDWARE, m.CLUSTERS);
     const placeOrder = new Map<string, number>();
     actions.forEach((a, i) => { if (a.type === "placePart" && a.partId) placeOrder.set(a.partId, i); });

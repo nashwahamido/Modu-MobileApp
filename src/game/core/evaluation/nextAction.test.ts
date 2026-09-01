@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { availableActions, nextAction } from "./availability";
 import { LACK_FIXTURE, EKET_FIXTURE } from "@/src/game/content/furnitures/fixtures.testutil";
 import type { ActionId, Furniture } from "@/src/game/core/type";
+import { COMPOSED } from "@/src/game/content/furnitures/composed";
 
 /** An action by its literal id string, typed as this fixture's own ActionId. */
 function id(f: Furniture, actionId: string): ActionId {
@@ -78,7 +79,7 @@ test("at the combine stage, unfocused focus filtering still offers the combine b
   const { fixture } = await import("@/src/game/content/furnitures/fixtures.testutil");
   const DALFRED = await import("@/src/game/content/furnitures/DALFRED/authored");
   const { PARTS } = await import("@/src/game/content/furnitures/DALFRED/parts.gen");
-  const f = fixture("dalfred-stool", DALFRED as never, PARTS);
+  const f = fixture("dalfred-stool", DALFRED as never, PARTS, COMPOSED.DALFRED);
   const { actionsForClusterFocus } = await import("./clusters");
   // Everything except the combines is complete.
   const done = new Set(f.actions.filter((a) => a.type !== "combineClusters").map((a) => a.actionId));

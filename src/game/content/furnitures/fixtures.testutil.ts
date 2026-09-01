@@ -15,6 +15,7 @@ import type {
   PartId,
 } from "@/src/game/core/type";
 
+import { COMPOSED } from "./composed";
 import * as LACK from "./LACK/authored";
 import { PARTS as LACK_PARTS } from "./LACK/parts.gen";
 import * as EKET from "./EKET/authored";
@@ -36,8 +37,10 @@ export function fixture(
   id: string,
   m: AuthoredExports,
   raw: Record<PartId, PartDef>,
+  /** The furniture's COMPOSED structure (structure.gen.ts) — its STRUCTURE with any JOINTS already lowered in. Passed rather than looked up by `id`, because `id` here is the furniture id ("eket-cabinet") and the composed table is keyed by folder; defaulting to m.STRUCTURE would silently drop a migrated part's joins, which is the exact failure this argument exists to prevent. */
+  composed: StructureOverlay,
 ): Furniture {
-  const parts = applyStructure(raw, m.STRUCTURE);
+  const parts = applyStructure(raw, composed);
   const actions = composeFurnitureActions(
     m.AUTHORED_ACTIONS,
     m.FASTENER_RULES,
@@ -62,6 +65,6 @@ export function fixture(
   } as Furniture;
 }
 
-export const LACK_FIXTURE = fixture("lack-table", LACK as AuthoredExports, LACK_PARTS);
-export const EKET_FIXTURE = fixture("eket-cabinet", EKET as AuthoredExports, EKET_PARTS);
-export const DALFRED_FIXTURE = fixture("dalfred-stool", DALFRED as AuthoredExports, DALFRED_PARTS);
+export const LACK_FIXTURE = fixture("lack-table", LACK as AuthoredExports, LACK_PARTS, COMPOSED.LACK);
+export const EKET_FIXTURE = fixture("eket-cabinet", EKET as AuthoredExports, EKET_PARTS, COMPOSED.EKET);
+export const DALFRED_FIXTURE = fixture("dalfred-stool", DALFRED as AuthoredExports, DALFRED_PARTS, COMPOSED.DALFRED);

@@ -4,6 +4,7 @@ import {
   tightenActionIds,
 } from "@/src/game/core/composition/composeActions";
 import { StructureOverlay } from "@/src/game/core/model/liaisons";
+import type { JointDef } from "@/src/game/core/model/joints";
 import { groupParts } from "@/src/game/core/scene/targets";
 import { asGroupId, asPartId } from "@/src/game/core/ids";
 import {
@@ -50,7 +51,8 @@ export const STRUCTURE: StructureOverlay = {
   circleDown: { seed: true },
   ringRail: { unstable: true },
   // dropped in from ABOVE: the sleeve SLIDES down through circleUpp's centre hole until its top flange (y=0.577) lands on the plate's top face (y=0.570) — the flange can't pass the hole, so this is its only insertion direction. The scene renders model space (upright) throughout, so the from-above slide works mid-build with no reorient beat. parkBackoff must clear the full 9.6cm sleeve above the plate; the press default parked it inside the plate stack (the reported collision).
-  supportPin: { slideJoins: [asPartId("circleUpp")], placeDir: [0, -1, 0] as const, parkBackoff: 0.12 },
+  // supportPin: MIGRATED to JOINTS below. Its travel stays here for now — the derivation knows the axis (Y, through the bore) but not the sign.
+  supportPin: { placeDir: [0, -1, 0] as const, parkBackoff: 0.12 },
   seat: { seed: true },
   seatPlate: { seed: true, unstable: true },
   pole: {
@@ -61,6 +63,14 @@ export const STRUCTURE: StructureOverlay = {
 } as StructureOverlay;
 
 //     tool/label/motion come from the global catalogue (data/hardware.ts).
+/** Joints stated as ENTITIES rather than per-part arrays (core/model/joints.ts).
+ * The circleDown joint is NEW, and it is not bookkeeping: structuralSweep.furniture.test.ts has carried it as a finding since 2026-08-24 — "supportPin tip rests inside circleDown's bore, a REAL coaxial contact the flat authoring never names". Undeclared, that contact looked like a THIRD-PARTY obstruction in every corridor, which is why the pin's travel could not be derived: circleDown blocked both signs while having no right to. Declaring it makes it a partner, and a partner's body is what the park math handles by construction.
+ * It adds a Γ edge, so unlike the other migrations this one is NOT byte-equal: the pin now needs circleDown placed before it. The authored order already satisfies that (circleDown is a stage-1 seed, the pin is stage 2); what changes is FREE mode, where the pin could previously be dropped into a bore that was not there yet. */
+export const JOINTS: JointDef[] = [
+  { kind: "slide", a: asPartId("supportPin"), b: asPartId("circleUpp"), mover: asPartId("supportPin") },
+  { kind: "slide", a: asPartId("supportPin"), b: asPartId("circleDown"), mover: asPartId("supportPin"), gates: false },
+];
+
 export const FASTENER_RULES: FastenerRule[] = [
   { group: asGroupId("screw105251"), stage: 1 },
   { group: asGroupId("screw100212"), stage: 2 },

@@ -5,9 +5,9 @@
 import type { JointGeometry } from "@/src/game/core/type";
 
 export const JOINT_GEOMETRY = {
-  "leg_1": {"placeDir":[0,1,0]},   // snap ↔ tableTop, normal, ext [0.07,0.02,0.07], sign: toward-partner
-  "leg_2": {"placeDir":[0,1,0]},   // snap ↔ tableTop, normal, ext [0.07,0.02,0.07], sign: toward-partner
-  "leg_3": {"placeDir":[0,1,0]},   // snap ↔ tableTop, normal, ext [0.07,0.02,0.07], sign: toward-partner
-  "leg_4": {"placeDir":[0,1,0]},   // snap ↔ tableTop, normal, ext [0.07,0.02,0.07], sign: toward-partner
-  "tableTop": {"placeDir":[0,-1,0]},   // snap ↔ leg_4, normal, ext [0.07,0.02,0.07], sign: toward-partner
+  "leg_1": {"placeDir":[0,1,0]},   // snap ↔ tableTop, hardware, sign: toward-partner
+  "leg_2": {"placeDir":[0,1,0]},   // snap ↔ tableTop, hardware, sign: toward-partner
+  "leg_3": {"placeDir":[0,1,0]},   // snap ↔ tableTop, hardware, sign: toward-partner
+  "leg_4": {"placeDir":[0,1,0]},   // snap ↔ tableTop, hardware, sign: toward-partner
+  "tableTop": {"placeDir":[0,-1,0]},   // snap ↔ leg_4, hardware, sign: toward-partner
 } as JointGeometry;

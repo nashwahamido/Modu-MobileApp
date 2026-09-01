@@ -19,6 +19,7 @@ import { STRUCTURE as DALFRED_STRUCTURE } from "@/src/game/content/furnitures/DA
 import { PARTS as DALFRED_PARTS } from "@/src/game/content/furnitures/DALFRED/parts.gen";
 import { STRUCTURE as EKET_STRUCTURE } from "@/src/game/content/furnitures/EKET/authored";
 import { PARTS as EKET_PARTS } from "@/src/game/content/furnitures/EKET/parts.gen";
+import { COMPOSED } from "@/src/game/content/furnitures/composed";
 
 const FURNITURES = [
   { id: "LACK", parts: LACK_PARTS, structure: LACK_STRUCTURE },
@@ -165,7 +166,7 @@ test("fastener geometry pins: PCA axis 83/83, head-end abstains only on headless
     const glb = path.join(process.cwd(), "src", "assets", "models", "furnitures", f.id, `${f.id}.glb`);
     const { json, bin } = parseGlb(glb);
     const verts = worldVerts(json, bin);
-    const played = applyStructure(f.parts as Record<PartId, PartDef>, f.structure);
+    const played = applyStructure(f.parts as Record<PartId, PartDef>, COMPOSED[f.id]);
     for (const p of Object.values(played)) {
       if (p.type !== "fastener" || !p.engageDir) continue;
       // Overlay-RE-TYPED hardware (EKET's suspCap, a disc with authored bindings + engageDir) is excluded: these pins measure derivation against GLB-native fastener geometry, and the frame convention never applied to a re-typed mesh.

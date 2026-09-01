@@ -20,6 +20,7 @@ import { SWEEP as DALFRED_SWEEP } from "@/src/game/content/furnitures/DALFRED/sw
 import { STRUCTURE as EKET_STRUCTURE } from "@/src/game/content/furnitures/EKET/authored";
 import { PARTS as EKET_PARTS } from "@/src/game/content/furnitures/EKET/parts.gen";
 import { SWEEP as EKET_SWEEP } from "@/src/game/content/furnitures/EKET/sweep.gen";
+import { COMPOSED } from "@/src/game/content/furnitures/composed";
 
 /** Measured corpus state — a moved number means geometry or authoring changed: re-measure, do not weaken. */
 const FASTENERS_ANALYZED = 85; // 83 GLB-native + the 2 overlay-retyped suspension caps
@@ -56,7 +57,7 @@ test("the analyzer reproduces the corpus: identity, geometry counts, the one tru
   for (const [id, raw, structure, gen] of CORPUS) {
     const bytes = fs.readFileSync(path.join(process.cwd(), "src", "assets", "models", "furnitures", id, `${id}.glb`));
     const a = analyzeGlb(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength), hintsFrom(structure));
-    const played = applyStructure(raw, structure);
+    const played = applyStructure(raw, COMPOSED[id]);
 
     // 1. extraction ≡ the identity facts the runtime plays (post-overlay)
     assert.deepEqual(Object.keys(a.parts).sort(), Object.keys(played).sort(), `${id}: part id set diverged`);
