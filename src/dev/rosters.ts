@@ -1,22 +1,14 @@
-// The rosters that are live in this build, in the order they should be listed. Shared by the two surfaces that offer accounts — AccountPicker (the auth screen, signed out) and AccountSwitcher (/settings, signed in) — so a roster is described ONCE and both screens agree on what exists.
-//
-// A build normally has exactly one: a dev build has "Dev accounts", a release showcase build has "Showcase accounts". Both appear only in a dev build with EXPO_PUBLIC_SHOWCASE also set, which is the case where the group headers earn their keep — see the note at the top of accounts.ts.
 import type { TestAccount } from "./accounts";
 import { DEV_ACCOUNTS, DEV_ACCOUNTS_ENABLED, signInToDevAccount, startFreshDevAccount } from "./devAccounts";
 import { SHOWCASE_ACCOUNTS, SHOWCASE_ENABLED, signInToShowcaseAccount, startFreshShowcaseAccount } from "./showcase";
 
 export interface Roster {
-  // The settings-screen heading — a plain label, since that surface is openly dev tooling.
   title: string;
-  // The auth-screen divider. Separate from `title` because an attendee reads that one during a demo, where "Showcase accounts" would be naming the machinery rather than offering them a way in.
   pickerLabel: string;
   accounts: TestAccount[];
   signIn: (email: string) => Promise<void>;
   startFresh: () => Promise<void>;
-  // Named so an empty roster tells you which variable to fill, rather than just that it is empty.
   envVar: string;
-  /** Presented as CHARACTERS (avatar cards) rather than a list of buttons. True for the demo roster
-   *  only: an attendee picks a player, where a developer picks an account. */
   showcase?: boolean;
 }
 

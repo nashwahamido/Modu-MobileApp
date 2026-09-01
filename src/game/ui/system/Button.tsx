@@ -1,10 +1,3 @@
-// The button and surface primitives.
-//
-// The look, in one line: a DARK TRANSLUCENT FILL, a HAIRLINE BORDER, and a SOFT WIDE
-// SHADOW. That trio is what makes every control in the reference read as a physical chip lifted off the workbench rather than a flat rectangle. Drop any one of the three and it stops working — most obviously the border, without which the surfaces dissolve into the background on a phone in daylight.
-//
-// Press feedback is a FILL change, never a scale or an opacity fade: opacity makes a control look disabled for the length of the press, and on a touch device the finger is covering the thing anyway. The fill lifts to `surfaceRaised` — the same value the mockup uses for an active segment, so "pressed" and "active" are visibly the same idea.
-
 import { ReactNode } from "react";
 import {
   Pressable,
@@ -19,44 +12,25 @@ import {
 import { playSfx } from "@/src/game/audio/sfx";
 import { ELEVATION, RADIUS, SIZE, SPACE, Theme, TYPE, useTheme } from "./theme";
 
-/**
- * RETIRED: the clay grain is gone from every surface.
- *
- * This stays as a no-op rather than being deleted because 26 call sites across ten files render it,
- * and a component that returns null removes the texture everywhere at once — where deleting it would
- * mean touching every one of those files to say the same thing. The prop is kept so the call sites
- * still typecheck, and restoring the look is a matter of putting the image back in here.
- */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function GrainOverlay({ radius }: { radius: number }) {
   return null;
 }
 
-/** primary  — the ONE action that moves the build forward. At most one on screen.
- *  secondary — everything else that can be pressed.
- *  success   — a completed / confirming state. Not an invitation to press.
- *  ghost     — a control that must not compete: chrome over the 3D scene. */
 export type ButtonVariant = "primary" | "secondary" | "success" | "ghost";
 
 interface ButtonProps {
   label?: string;
-  /** A glyph or an <Image>. Sits before the label. */
   icon?: ReactNode;
   onPress?: () => void;
   variant?: ButtonVariant;
   disabled?: boolean;
-  /** Pill instead of the standard 14pt radius — for chips and toggles. */
   pill?: boolean;
   small?: boolean;
-  /** A count, rendered in the accent (the Hint button's "2" in the reference). */
   badge?: number | string;
   style?: StyleProp<ViewStyle>;
-  /** Overrides on top of the label's `TYPE.label`/`TYPE.labelSm` — e.g. a bigger `fontSize` for
-   *  one screen's buttons, without touching every other caller of this shared component. */
   labelStyle?: StyleProp<TextStyle>;
   hitSlop?: number;
-  /** Overrides the label for screen readers — needed for icon-only buttons that have no
-   *  visible text label to announce. */
   accessibilityLabel?: string;
 }
 
@@ -64,14 +38,9 @@ function fillFor(t: Theme, variant: ButtonVariant, pressed: boolean): string {
   if (variant === "primary") return pressed ? t.accentPressed : t.accent;
   if (variant === "success") return t.success;
   if (variant === "ghost") return pressed ? t.surfaceRaised : "transparent";
-  // A pressed ACTION button takes the accent, not a slightly darker paper. The press is the moment the control is live, and "live" is the one thing the accent means.
   return pressed ? t.accentPressed : t.surface;
 }
 
-/** The label has to follow the FILL. A pressed action button turns accent, so its dark text
- *  would sink into it — the text flips to `onAccent` for exactly as long as the press lasts.
- *  (This is also why button text can't simply be set to the light linen: at rest a button
- *  sits on near-white paper, and linen on paper is invisible.) */
 function textFor(t: Theme, variant: ButtonVariant, pressed: boolean): string {
   if (variant === "primary") return t.onAccent;
   if (variant === "success") return t.onSuccess;
@@ -79,17 +48,6 @@ function textFor(t: Theme, variant: ButtonVariant, pressed: boolean): string {
   return t.text;
 }
 
-/**
- * THE CLICK, added here rather than at 140 call sites.
- *
- * Every button in the app goes through one of these four primitives, so wrapping the handler once
- * means a new button is audible for free and nobody has to remember. Dragging a part is deliberately
- * NOT a button: it runs through usePartDrag's gestures and keeps its own pickup and drop sounds,
- * which are about the PART rather than about a control being pressed.
- *
- * A disabled button never reaches here — Pressable does not call onPress — so a refused tap stays
- * silent, which is the right answer: a sound would read as "that worked".
- */
 function withClick(onPress?: () => void) {
   if (!onPress) return undefined;
   return () => {
@@ -134,8 +92,6 @@ export function Button({
           borderWidth: variant === "ghost" ? 0 : StyleSheet.hairlineWidth * 2,
         },
         variant !== "ghost" && ELEVATION.card,
-        // The ONE place opacity is used: a genuinely unavailable control. It reads as
-        // "not yet", which is exactly what a disabled Redo is.
         disabled && styles.disabled,
         style,
       ]}
@@ -171,9 +127,6 @@ export function Button({
   );
 }
 
-/** A square control carrying only a glyph — the gear, the back arrow, undo/redo. Square
- *  rather than round: the reference reserves the CIRCLE for the primary action, so shape
- *  alone tells you which control is the important one. */
 export function IconButton({
   icon,
   onPress,
@@ -209,7 +162,6 @@ export function IconButton({
           height: size,
           paddingHorizontal: 0,
           borderRadius: RADIUS.control,
-          // No label to flip, so an icon button keeps the quieter raised press.
           backgroundColor:
             pressed && !disabled && variant === "secondary"
               ? t.surfaceRaised
@@ -228,8 +180,6 @@ export function IconButton({
   );
 }
 
-/** The primary action. A CIRCLE, filled with the accent, and the only control on screen
- *  allowed the heavy shadow — so it is findable by shape and weight, not just colour. */
 export function Fab({
   icon,
   onPress,
@@ -267,9 +217,6 @@ export function Fab({
   );
 }
 
-/** A panel. Also the "grouped control" from the reference (Reset view / Undo / Redo) when
- *  you put Rows inside it — a stack of controls sharing one card, divided by hairlines,
- *  which is quieter than three floating buttons. */
 export function Panel({
   children,
   style,
@@ -298,7 +245,6 @@ export function Panel({
   );
 }
 
-/** A row inside a Panel — the grouped-control pattern. */
 export function PanelRow({
   label,
   icon,
@@ -344,8 +290,6 @@ export function PanelRow({
   );
 }
 
-/** The segmented control (Parts | Steps). An inset groove with the active segment lifted
- *  into the accent — the same "raised = active" language as a pressed button. */
 export function Segmented<T extends string>({
   value,
   options,
@@ -401,10 +345,6 @@ export function Segmented<T extends string>({
   );
 }
 
-/** Progress. Inset track, accent fill at every value — the bar stays the interactive
- *  lavender even when full. (It used to flip to green at 100%; completion is already said
- *  by the objective text and the ✓ on a finished cluster, and the colour change read as a
- *  different control rather than the same one finished.) */
 export function ProgressBar({
   value,
   total,
@@ -467,7 +407,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.md,
   },
   track: { height: 8, borderRadius: RADIUS.pill, overflow: "hidden" },
-  // 100% (not a fixed 8) so a caller overriding `track`'s height via `style` gets a fill that
-  // still fills it — at the default 8px height this renders identically to a fixed 8.
   fill: { height: "100%", borderRadius: RADIUS.pill },
 });

@@ -1,4 +1,3 @@
-// The one loading look in the app: mascot/initial ring + name line + creep/jump bar, with an error state. Every wait — onboarding gate, catalogue, assembly loader — renders THIS; nothing else owns loading style or the progress cadence.
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, Image, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useGameStore } from "@/src/game/core/store";
@@ -13,8 +12,6 @@ const wavyLeft2 = require("@/src/assets/ui/landing/wavy-left-2.png");
 const wavyRight1 = require("@/src/assets/ui/landing/wavy-right-1.png");
 const modumascot = require("@/src/assets/images/mascot/modu-mascot.png");
 
-/** Native pixel dims (for aspect-correct sizing) and the width each layer occupies, as a fraction
- *  of screen width. The purple wash sits behind and reads bigger than the shape on top of it. */
 const WAVE_ASSETS = {
   purpleLeft: { w: 2024, h: 2544, frac: 0.3 },
   purpleRight: { w: 746, h: 939, frac: 0.26 },
@@ -37,34 +34,16 @@ function useWaveSizes() {
 
 const WAVE_STAGGER = 90;
 const WAVE_MS = 500;
-/** Idle drift once a layer has settled: half-amplitude in px and one full cycle's duration. Each
- *  caller passes its own `floatMs` so the four layers drift out of phase instead of in lockstep —
- *  that's the whole "asynchronous" look, not a randomised value (which would differ every reload). */
 const FLOAT_AMP = 20;
-/** A precomputed sine table, not a ping-pong `Animated.sequence` between +/-FLOAT_AMP: a sequence
- *  needs a JS-thread round trip to hand off between legs, which is exactly the stutter at each
- *  turnaround that reads as "laggy". One continuous `Animated.loop` driving a single linear phase
- *  through this table has no direction to reverse — the phase always moves the same way, only the
- *  interpolated OUTPUT curves — so there's nothing for the JS thread to hand off mid-cycle. The
- *  loop's own restart (phase 1 → 0) is seamless too: sin(2π) === sin(0), so the position doesn't
- *  jump at the wrap. */
 const SINE_STEPS = 24;
 const SINE_INPUT = Array.from({ length: SINE_STEPS + 1 }, (_, i) => i / SINE_STEPS);
 const SINE_OUTPUT = SINE_INPUT.map((p) => Math.sin(p * Math.PI * 2) * FLOAT_AMP);
 
 interface WaveInOptions {
-  /** Mirrors the art vertically (the purple-wave source art is authored bottom-up) — folded into
-   *  the same transform array as the animated translateX, since RN style merging replaces a later
-   *  `transform` array wholesale rather than combining it with an earlier one. */
   flipY?: boolean;
-  /** One full float cycle's duration, once the entrance settles. Vary this per layer. */
   floatMs?: number;
 }
 
-/** One wave layer's entrance: fades and slides in from `fromX` px off its resting position,
- *  starting `delay` ms after mount, while a SEPARATE value idly sweeps a few px side to side the
- *  whole time (added to the entrance offset, not sequenced after it) — so the float is already
- *  moving by the time the slide-in settles instead of visibly kicking off late. */
 function useWaveIn(delay: number, fromX: number, { flipY = false, floatMs = 2600 }: WaveInOptions = {}) {
   const opacity = useRef(new Animated.Value(0)).current;
   const entranceX = useRef(new Animated.Value(fromX)).current;
@@ -91,24 +70,16 @@ function useWaveIn(delay: number, fromX: number, { flipY = false, floatMs = 2600
   return { opacity, transform: flipY ? [{ translateX: x }, { scaleY: -1 }] : [{ translateX: x }] };
 }
 
-/** Ring content: the onboarding mascot, or a profile initial (the assembly loader's avatar slot). */
 export type LoadingAvatar = "mascot" | { initial: string };
 
 interface Props {
-  /** Reached load signal (loadingProgress.ts); the parent derives it from whatever it is waiting on. */
   milestone: Milestone;
   avatar?: LoadingAvatar;
-  /** Line under the ring while loading. */
   label?: string;
-  /** Set to switch to the error state: this message replaces the label, `actions` replaces the bar, and the tick pauses — a moving bar under an error message reads as a lie. */
   errorMessage?: string;
-  /** Buttons rendered in a row under the error message. */
   actions?: ReactNode;
-  /** Cover the screen this is rendered over (absolute fill, above the HUD) instead of being a screen of its own. */
   overlay?: boolean;
-  /** Fade out over FADE_MS once the bar fills, before onComplete — for overlays that sit on top of live content. */
   fadeOnComplete?: boolean;
-  /** Fired after the bar reaches 100% and the hold (plus the fade, if any) elapses: navigate, unmount, whatever comes next. */
   onComplete?: () => void;
 }
 
@@ -140,7 +111,6 @@ export function LoadingScreen({
   const right = useWaveIn(WAVE_STAGGER, 90, { floatMs: 1400 });
   const left = useWaveIn(WAVE_STAGGER, -90, { floatMs: 1800 });
 
-  // Held in a ref so an inline arrow from the parent can't restart the hold timer on every re-render.
   const completeRef = useRef(onComplete);
   completeRef.current = onComplete;
 
@@ -150,7 +120,6 @@ export function LoadingScreen({
     return () => clearInterval(iv);
   }, [milestone, error]);
 
-  // The final beat: bar at 100% → short hold → (fade) → onComplete. finishing ref guards double-runs when deps churn mid-beat, and re-arms on error so a later successful retry can complete again; an error arriving mid-fade stops the animation and restores full opacity, and the finished:false that stopAnimation produces is what keeps onComplete from firing on an aborted fade.
   useEffect(() => {
     if (error) {
       finishing.current = false;
@@ -207,8 +176,6 @@ export function LoadingScreen({
   );
 }
 
-// Matches the landing screen's cream field — not `t.bg`, since this look is meant to read the
-// same on every loading screen regardless of theme.
 const LOADING_BG = "#F3ECE0";
 
 const makeStyles = (t: Theme) => {
@@ -216,8 +183,6 @@ const makeStyles = (t: Theme) => {
     backgroundColor: LOADING_BG,
     alignItems: "center",
     justifyContent: "center",
-    // Biases the centered content (mascot/bar/label — the wave art is `position: absolute` and
-    // sits outside this flex flow, so it's untouched) upward off dead-centre.
     paddingBottom: 60,
     gap: 10,
   } as const;
@@ -227,14 +192,10 @@ const makeStyles = (t: Theme) => {
       ...StyleSheet.absoluteFillObject,
       overflow: "hidden",
       ...centred,
-      // Being the LAST child is not enough to cover the HUD: on Android an elevated view draws above later siblings regardless of tree order, so the cluster chooser (elevation 20) and every ELEVATION.card panel punched through. zIndex covers iOS/web ordering, elevation covers Android, and 100 sits far above the highest value any HUD element uses.
       zIndex: 100,
       elevation: 100,
     },
     clay: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
-    // Negative, not 0: the source art carries transparent padding inside its own canvas, so
-    // anchoring flush to 0 left a visible gap before the drawn shape actually reached the
-    // corner. `root`/`overlayRoot`'s `overflow: hidden` clips the bled-out edge safely.
     waveRight: { position: "absolute", top: -24, right: -24 },
     waveLeft: { position: "absolute", bottom: -24, left: -24 },
     avatarRing: {
@@ -249,12 +210,9 @@ const makeStyles = (t: Theme) => {
       overflow: "hidden",
     },
     avatarText: { ...LEXEND.bold, color: t.text, fontSize: 28 },
-    // modu-mascot.png is 915x941 — near-square, height follows width off its own aspect.
     mascot: { width: 180, height: Math.round(180 * (941 / 915)) },
     mascotTablet: { width: 260, height: Math.round(260 * (941 / 915)) },
     label: { ...LEXEND.semibold, color: t.textDim },
-    // Negative marginTop only — pulls the bar closer to the mascot above it without touching the
-    // container's `gap` (which would also close up the label's distance below the bar).
     bar: { width: "60%", maxWidth: 420, height: 14, marginTop: -8 },
     actions: { flexDirection: "row", gap: 12, marginTop: 6 },
   });

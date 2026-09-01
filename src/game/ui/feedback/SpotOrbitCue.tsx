@@ -1,13 +1,3 @@
-// "Turn the model" — shown while Spot is running but its target is not on screen.
-//
-// Spot plays a ghost of the next part travelling into its socket. That is only useful if the socket
-// is in view; if the player has orbited to the far side, Spot appears to do nothing at all, and the
-// obvious conclusion is that the button is broken rather than that the answer is behind the model.
-//
-// WHAT THIS CAN AND CANNOT SEE: the socket is projected to screen coordinates, so "off screen" and
-// "behind the camera" are known exactly. Being OCCLUDED — the ghost is in frame but hidden behind the
-// tabletop — is not detected: that needs depth testing or per-part bounds, and the pure data carries
-// neither. The common case after orbiting is the far side, which this does catch.
 import { useEffect, useState } from "react";
 import { Image, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Animated, {
@@ -25,17 +15,12 @@ import type { Theme } from "@/src/game/ui/system/theme";
 import type { Vec3 } from "@/src/game/core/type";
 import { useMirror } from "@/src/game/ui/system/handedness";
 
-/** Re-checked at ~10fps, not per frame: this answers a yes/no question that only changes when the
- *  camera moves a long way, and the cue itself has to be stable enough to read. */
 const CHECK_MS = 100;
-/** Treat a socket within this margin of the edge as off screen — a ghost half behind the HUD is no
- *  more findable than one fully outside it. */
 const EDGE_PAD = 56;
 
 export function SpotOrbitCue({
   getLookAt,
 }: {
-  /** The PANNED look-at (useOrbitCamera's getLookAt): projecting through the manipulator's own pair reports a socket as off screen by however far the player has strafed. */
   getLookAt: GetLookAt;
 }) {
   const m = useMirror();
@@ -76,7 +61,6 @@ export function SpotOrbitCue({
     return () => clearInterval(id);
   }, [hintPartId, getLookAt, parts, winH, winW]);
 
-  // A joystick that rocks left and right — the gesture being asked for, rather than a word for it.
   const rock = useSharedValue(0);
   useEffect(() => {
     if (!offScreen) return;
@@ -111,8 +95,6 @@ export function SpotOrbitCue({
 
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
-    // Above the joystick, because the joystick is the answer. A cue about a control belongs beside
-    // that control, not in the middle of the scene it is asking the player to move.
     wrap: {
       position: "absolute",
       left: 24,

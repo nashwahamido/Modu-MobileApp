@@ -1,6 +1,3 @@
-// The one FULL settings surface, reached from the room's top-left gear and from the profile screen. Edits the global store, so choices made here become the defaults when you enter a build.
-//
-// Two tabs. General is the app and the account — what follows the player across every screen. Assembly is every build setting, including the ones the in-build gear panel deliberately hides (see SettingsControls).
 import {
   useState } from "react";
 import { router } from "expo-router";
@@ -36,7 +33,6 @@ export default function SettingsScreen() {
   const styles = useFixedStyles(makeStyles);
   const safe = useScreenInsets();
   const [tab, setTab] = useState<SettingsTab>("general");
-  // Landscape: the notch / home-indicator sit on the sides, so left/right insets matter as much as top. Pad the header and scroll content by them.
   const padL = 16 + safe.left;
   const padR = 16 + safe.right;
   return (
@@ -54,7 +50,6 @@ export default function SettingsScreen() {
         <View style={styles.back} />
       </View>
 
-      {/* Same accent-pill language as the Segmented control inside the list, so the tabs read as one more choice on the page rather than a second design. */}
       <View style={[styles.tabs, { paddingLeft: padL, paddingRight: padR }]}>
         {TABS.map((t) => {
           const active = t.id === tab;
@@ -78,7 +73,6 @@ export default function SettingsScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          // raw.bottom, not the floored value: this pad already clears the gesture bar by 96, so flooring it would only push the last row further up
           { paddingLeft: padL + 4, paddingRight: padR + 4, paddingBottom: safe.raw.bottom + 96 },
         ]}
         showsVerticalScrollIndicator={false}
@@ -86,26 +80,16 @@ export default function SettingsScreen() {
         {tab === "general" ? (
           <View style={styles.list}>
             <AppDisplaySection />
-            {/* AMBIENT music only — the track that plays in the room, catalogue and profile. The
-                build's own audio lives in the assembly tab, beside the effects it shares a screen
-                with. */}
             <AudioSection />
             <AccountSection />
           </View>
         ) : (
           <View style={styles.list}>
-            {/* Display before Interaction: the look is what a player comes here to change, and the
-                handling settings under it are the rarer, more considered choice. Restart is NOT in
-                this list — it lives only in the in-build gear panel (SettingsControls). There is no
-                assembly in progress on this screen, so the row could only ever be the disabled state
-                of itself: it reads `completed.length`, which is 0 outside a build. */}
             <ProfileSection />
             <BuildDisplaySection />
             <InteractionSection />
             <GuidanceSection />
             <BuildAudioSection />
-            {/* Last, and only on this screen: it leaves for a 3D scene, which the in-build gear panel
-                (SettingsControls) must never do with a part in the player's hand. */}
             <RedoTutorialSection />
           </View>
         )}
@@ -126,7 +110,6 @@ const makeStyles = (t: Theme) =>
     borderBottomColor: t.border,
   },
   back: { minWidth: 64 },
-  // The back affordance is the only pressable thing in the header, so it carries the accent — nothing else here should look tappable.
   backText: { ...TYPE.label, fontSize: 16, color: t.accent },
   title: { ...TYPE.title, color: t.text },
   tabs: { flexDirection: "row", gap: 6, paddingTop: SPACE.md },

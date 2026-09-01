@@ -15,10 +15,6 @@ import { tutorialPresentationForProfile } from "./presentation";
 import { useTutorialStore } from "./store";
 
 const sparkySmile = avatarForProfile("momentum");
-// One pose for now: sparky-happy.png is the PREVIOUS art style, and a celebration that swapped to
-// the old drawing mid-moment read worse than a celebration that keeps the current one. Restore the
-// two-pose swap the day a happy pose exists in the new style — the source line below is the only
-// thing that changes back.
 const sparkyHappy = sparkySmile;
 const confettiImage = require("../../assets/images/avatars/confetti.png");
 
@@ -39,10 +35,6 @@ export function momentumFeedbackForStep(index: number): string {
 
 export function MomentumCompanion() {
   const styles = useFixedStyles(makeStyles);
-  // LEFT-HAND MODE. Sparky hangs off the side of a CENTRED row, so which side he hangs off is a
-  // placement like any other in the HUD and flips with the player's hand. Applied to the frame, the
-  // confetti and the bubble — but never to `avatarImage`, which is a crop inside the circle rather
-  // than a placement (see its note below).
   const m = useMirror();
   const profile = useGameStore((state) => state.profile);
   const mapOpen = useGameStore((state) => state.mapOpen);
@@ -142,11 +134,6 @@ const makeStyles = (theme: Theme) =>
   StyleSheet.create({
     root: {
       position: "absolute",
-      // Level with the objective bar and one avatar-width to its left, which is where he belongs:
-      // he reads as part of that row rather than as a loose token floating under it.
-      //
-      // The row's own top is 8, so with HUD_VERTICAL_MARGIN's floor of 15 this frame starts at y 21,
-      // and that is the whole budget above him — the constraint confettiArt below is sized against.
       left: -82,
       top: -2,
       width: 74,
@@ -166,9 +153,6 @@ const makeStyles = (theme: Theme) =>
       zIndex: 2,
       ...ELEVATION.card,
     },
-    // The head art inside its circular frame. NOT a placement — it is a crop, so it is the one
-    // offset in this file that must never be mirrored for a left-handed HUD: flipping it would slide
-    // the face off-centre inside the circle.
     avatarImage: {
       position: "absolute",
       width: 140,
@@ -176,19 +160,6 @@ const makeStyles = (theme: Theme) =>
       left: -36,
       top: -13,
     },
-    // SIZED TO THE HEADROOM, and centred on Sparky rather than nudged.
-    //
-    // The frame's top sits at y 21 — HUD_VERTICAL_MARGIN's floor of 15, plus the row's top of 8,
-    // plus this frame's -2. That is the whole budget above him, and the burst scales while it plays:
-    // `confettiScale` reaches 1.12 at t=0.7, while it is still fully opaque. Centred on the 74pt
-    // frame, a burst of size S therefore needs 21 - (S - 74)/2 - S*0.06 >= 0 to survive that peak.
-    //
-    // 160 needed 43 above and lost 32 of it — that is the band with its top sliced off. 128 still
-    // loses 14, 112 loses 5. 100 is the largest round size that clears it with room to spare (+2),
-    // so the burst is smaller than it was and, for the first time, WHOLE.
-    //
-    // Centred on both axes: (74 - 100) / 2 = -13. It was -47 vertically, four points worse than even
-    // a correct centring of the old size.
     confettiArt: {
       position: "absolute",
       left: -13,
@@ -197,12 +168,6 @@ const makeStyles = (theme: Theme) =>
       height: 100,
       zIndex: 1,
     },
-    // BELOW SPARKY. It used to sit above him (`bottom: 72`), which the old comment blamed on the
-    // Pause button and the progress card — and Pause has since been removed from this row entirely.
-    // Above was also the clipped direction: the bubble's own height put its top edge off-screen.
-    //
-    // `top: 78` clears the 68pt avatar inside the 74pt frame with a small gap. Horizontally it is
-    // centred on the frame the same way the confetti is: (74 - 118) / 2 = -22.
     feedback: {
       position: "absolute",
       left: -22,

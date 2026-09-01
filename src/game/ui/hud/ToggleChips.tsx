@@ -4,16 +4,10 @@ import { Button } from "@/src/game/ui/system/Button";
 import { SPACE, useThemeId } from "@/src/game/ui/system/theme";
 import { hudIcon } from "@/src/game/ui/hud/hudIcons";
 import { HudSpotTarget } from "@/src/game/ui/hud/hudSpotlight";
-/** The two in-scene toggles. A chip that is ON takes the ACCENT — the same fill as a
- *  pressed button — because "on" and "pressed" are the same idea in this language: the
- *  control is lifted and live. It is deliberately not the success green: green means the
- *  build is done, and a toggle being on is not an achievement. */
 export function ToggleChips() {
   return (
     <View style={styles.row}>
       <FocusToggleButton />
-      {/* Wrapped so a coach can ring it: in a release build Spot IS the "I am stuck" control, since
-          Auto does not ship. The wrapper is box-none and adds no layout of its own. */}
       <HudSpotTarget id="spot">
         <SpotButton />
       </HudSpotTarget>
@@ -24,10 +18,6 @@ export function FocusToggleButton() {
   const focusMode = useGameStore((s) => s.settings.focusMode);
   const setSettings = useGameStore((s) => s.setSettings);
   const dark = useThemeId() !== "light";
-  // The icon INVERTS when the chip is on. An active chip takes the accent fill, so the glyph that
-  // reads on the resting chip is the wrong one on the lit one: in light mode the chip goes dark, so
-  // it needs the cream icon; in dark mode the chip lifts, so it needs the dark icon. Same reason the
-  // label colour flips — the art is following the fill, not the theme.
   const focusIcon = hudIcon("focus", focusMode ? !dark : dark);
   return (
     <Button
@@ -47,11 +37,6 @@ export function FocusToggleButton() {
     />
   );
 }
-// Exported so the tutorial renders the SAME control the build does, rather than its own copy — that
-// divergence is how the tutorial ended up teaching a chip the assembly no longer shows.
-// Rendered in FOCUS MODE too. Focus strips the HUD down to the current step, and Spot is about the
-// current step — "which part, and where does it go" is the question focus mode leaves a player alone
-// with, so it is the last thing that should disappear alongside the rest of the chrome.
 export function SpotButton() {
   return (
     <Button

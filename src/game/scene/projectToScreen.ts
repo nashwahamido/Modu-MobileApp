@@ -1,18 +1,9 @@
-// Projecting a world point to screen pixels, so a HUD overlay can ask "is that socket actually on
-// screen?" and the drag can match drop candidates by where the finger AIMS. One implementation for
-// both: the gesture layer used to carry its own copy of this maths, which meant the projector the
-// drag ran on and the projector its tests measured with were two functions that merely looked alike.
-//
-// Manual projection rather than a camera matrix: Filament's manipulator exposes getLookAt() and
-// nothing else, so the basis has to be rebuilt from eye/center/up on each call.
 import { FOV_Y_DEG } from "@/src/game/scene/cameraConfig";
 import type { Vec3 } from "@/src/game/core/type";
 
 export interface ScreenPoint {
   x: number;
   y: number;
-  /** Distance along the view axis. Zero or negative means the point is BEHIND the camera — the case
-   *  a naive projection silently turns into a mirrored on-screen position. */
   depth: number;
 }
 
@@ -22,10 +13,8 @@ export type LookAt = readonly [
   readonly number[],
 ];
 
-/** Reads the look-at the RENDERER is drawing with, pan included — the only camera a screen↔world conversion may use. See useOrbitCamera's getLookAt for why the manipulator's own pair is not that camera. */
 export type GetLookAt = () => readonly [Vec3, Vec3, Vec3] | null;
 
-/** The camera's orthonormal frame, rebuilt from a look-at. Every screen-space question in the game starts here — projecting a point, mapping a finger delta to metres, spreading a plane across the view — so it is derived once and shared rather than re-copied per call site. */
 export interface CameraBasis {
   eye: readonly number[];
   fwd: Vec3;

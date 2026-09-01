@@ -46,16 +46,8 @@ export function ToolsIcon({ size = 31, color = '#807277' }: Props) {
   </Svg>;
 }
 export function ChevronIcon({ size = 28, color = '#807277', up = false, outlineColor, outlineWidth = 1.5, shadow = false }: Props & { up?: boolean; outlineColor?: string; outlineWidth?: number; shadow?: boolean }) {
-  // Fill plus a same-colour stroke, whose round linejoin softens the corners.
   const d = up ? 'M2.6 17.2 12 6.8l9.4 10.4H2.6Z' : 'M2.6 6.8 12 17.2l9.4-10.4H2.6Z';
-  // A REAL drop shadow, shaped to the arrow. RN's own boxShadow and elevation follow a view's border
-  // box, so on a transparent triangle they cast a rectangle — an SVG filter is what makes the shadow
-  // the shape of the thing casting it. Matched to CARD_CHROME (0 5 4 rgba(0,0,0,0.22)); a CSS blur
-  // radius is roughly twice the Gaussian deviation, hence 2. The filter region is oversized because
-  // the default (-10%) would clip the blur off at the glyph's own edges.
   const body = <>
-    {/* Behind the arrow, at its width plus twice the outline, so only the outer half shows.
-        Stroking the arrow itself would eat inward and change its shape. */}
     {outlineColor ? <Path d={d} fill="none" stroke={outlineColor} strokeWidth={2 + outlineWidth * 2} strokeLinejoin="round"/> : null}
     <Path d={d} fill={color} stroke={color} strokeWidth={2} strokeLinejoin="round"/>
   </>;
@@ -68,12 +60,6 @@ export function ChevronIcon({ size = 28, color = '#807277', up = false, outlineC
     {shadow ? <G filter="url(#chevronDrop)">{body}</G> : body}
   </Svg>;
 }
-// A back arrow for a round button. The points are chosen so the ANGLE'S OWN BOX is centred on the
-// 24x24 viewBox — x runs 8.75..15.25 and y 5..19, both centred on 12 — and the stroke grows evenly
-// around it, so the glyph sits in the middle of whatever disc it is dropped into. That is the whole
-// reason this exists rather than a "‹" in a Text: a typed chevron carries the font's own side bearings
-// and baseline, which put it off-centre in a circle, and the fix was hand-tuned margins that only held
-// for one font at one size.
 export function BackIcon({ size = 22, color = '#231F20' }: Props) { return <Svg {...base(size)} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><Polyline points="15.25,5 8.75,12 15.25,19"/></Svg> }
 export function CheckIcon({ size, color = '#555' }: Props) { return <Svg {...base(size)} fill="none" stroke={color} strokeWidth="2.5"><Polyline points="4,12 9,17 20,6"/></Svg> }
 export function CloseIcon({ size, color = '#555' }: Props) { return <Svg {...base(size)} fill="none" stroke={color} strokeWidth="2.5"><Line x1="5" y1="5" x2="19" y2="19"/><Line x1="19" y1="5" x2="5" y2="19"/></Svg> }
@@ -84,14 +70,10 @@ export function TrashIcon({ size, color = '#555' }: Props) { return <Svg {...bas
 export function LevelStarIcon({ size = 48 }: Props) { return <Svg {...base(size)}><Path d="M12 1.25 15.05 8l7.35.75-5.45 5 1.48 7.25L12 17.35 5.57 21l1.48-7.25-5.45-5L8.95 8 12 1.25Z" fill="#927fb1" stroke="#75658d" strokeWidth=".72" strokeLinejoin="round"/></Svg> }
 export function CoinMedalIcon({ size = 44 }: Props) { return <Svg {...base(size)}><Circle cx="12" cy="12" r="10.25" fill="#ead58b" stroke="#c6ad5e" strokeWidth=".8"/><Path d="m12 3.5 2.38 4.94 5.42.72-3.94 3.82.98 5.38L12 15.8l-4.86 2.56.98-5.38-3.94-3.82 5.42-.72L12 3.5Z" fill="#fff3bd" stroke="#fff9df" strokeWidth=".55" strokeLinejoin="round"/></Svg> }
 
-
-/** Build stages — a rising step line, matching the "N stages" row on a catalogue card. */
 export function StagesIcon({ size = 24, color = '#807277' }: Props) { return <Svg {...base(size)} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"><Polyline points="3,17 9,11 13,15 21,7"/><Polyline points="15,7 21,7 21,13"/></Svg> }
 
-/** Estimated build time — the clock on a catalogue card. */
 export function ClockIcon({ size = 24, color = '#807277' }: Props) { return <Svg {...base(size)} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round"><Circle cx="12" cy="12" r="8.5"/><Polyline points="12,7 12,12 15.5,14"/></Svg> }
 
-// Filled when lit, outline when not: the bulb IS the switch's state readout, so the two states have to differ at a glance and not only by tint.
 export function BulbIcon({ size = 24, color = '#807277', on = false }: Props & { on?: boolean }) {
   return <Svg {...base(size)} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <Path d="M9 16.8a6 6 0 1 1 6 0V18a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 18v-1.2Z" fill={on ? color : 'none'}/>

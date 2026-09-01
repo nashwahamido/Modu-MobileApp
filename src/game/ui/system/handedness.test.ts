@@ -5,11 +5,7 @@ import type { TextStyle, ViewStyle } from "react-native";
 
 import { mirror, mirrorTable } from "./handedness";
 
-// mirror returns the type it was GIVEN — a knowing inaccuracy, since a mirrored style swaps left for
-// right. Assertions therefore read the result as a plain style, not as the literal that went in.
 const as = (style: ViewStyle): Record<string, unknown> => style as Record<string, unknown>;
-
-// Only the pure functions are covered — the hooks are the same call with the store's value in front.
 
 test("right-handed returns the very same object", () => {
   const style: ViewStyle = { position: "absolute", left: 14, bottom: 16 };
@@ -20,7 +16,6 @@ test("an edge MOVES rather than being copied to both sides", () => {
   const out = as(mirror<ViewStyle>({ position: "absolute", left: 14, bottom: 16 }, "left"));
   assert.equal(out.right, 14);
   assert.equal("left" in out, false);
-  // Untouched: a horizontal mirror has no opinion about the vertical.
   assert.equal(out.bottom, 16);
   assert.equal(out.position, "absolute");
 });
@@ -55,12 +50,10 @@ test("margins, padding and per-corner radii mirror too", () => {
 test("alignSelf and textAlign flip; centre is left alone", () => {
   assert.equal(mirror<ViewStyle>({ alignSelf: "flex-end" }, "left").alignSelf, "flex-start");
   assert.equal(mirror<ViewStyle>({ alignSelf: "center" }, "left").alignSelf, "center");
-  // Through TextStyle, which is what a text style actually is — mirror's parameter is the wider ViewStyle so it takes either.
   assert.equal(mirror<TextStyle>({ textAlign: "left" }, "left").textAlign, "right");
 });
 
 test("alignItems flips on a column, where it means which SIDE the children sit on", () => {
-  // No flexDirection at all is a column in React Native, unlike the web.
   assert.equal(mirror<ViewStyle>({ alignItems: "flex-end", paddingRight: 56 }, "left").alignItems, "flex-start");
   assert.equal(mirror<ViewStyle>({ flexDirection: "column", alignItems: "flex-start" }, "left").alignItems, "flex-end");
 });
@@ -68,7 +61,6 @@ test("alignItems flips on a column, where it means which SIDE the children sit o
 test("alignItems is LEFT ALONE on a row, where it means top vs bottom", () => {
   const out = mirror<ViewStyle>({ flexDirection: "row", alignItems: "flex-end" }, "left");
   assert.equal(out.alignItems, "flex-end");
-  // The row itself still reverses — only the vertical alignment is out of scope for a horizontal mirror.
   assert.equal(out.flexDirection, "row-reverse");
 });
 
@@ -86,8 +78,6 @@ test("a whole placement table mirrors in one pass", () => {
   const out = mirrorTable(table, "left");
   assert.equal(out.joystickZone.right, 14);
   assert.equal(out.togglesRow.left, 14);
-  // The centred bar is the same on either hand and must not drift.
   assert.deepEqual(out.objectiveWrap, table.objectiveWrap);
-  // Right-handed hands back the original table, identity included.
   assert.equal(mirrorTable(table, "right"), table);
 });

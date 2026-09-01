@@ -15,8 +15,6 @@ test("a fast pick-up and snap skips the already-satisfied card without flashing 
     softHints: true,
   });
 
-  // Start past the grip step: it is acknowledged by a button, not a gesture, so the
-  // fast-gesture latch this test exercises begins at the first touch step.
   useTutorialStore.setState({ currentIndex: 1 });
 
   useTutorialStore.getState().completeEvent("part_picked_up");
@@ -75,8 +73,6 @@ test("the completion card waits for the final step to settle", async () => {
     manualTools: false,
     softHints: true,
   });
-  // The last step is installing the fourth leg now — "stand-table-upright" was removed with the
-  // ceremonial beat it waited on. What this test pins is the SETTLING, not which step settles.
   const finalStep = tutorial.steps.find(
     (step) => step.id === "install-four-legs",
   );

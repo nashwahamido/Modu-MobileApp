@@ -25,22 +25,14 @@ interface Props {
   sinkDriver: OffsetDriver;
 }
 
-/** Ships in every build, release included **/
 export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
   const styles = useFixedStyles(makeStyles);
-  // Read with the other hooks: this component returns null when it is not showing, so the icon
-  // cannot be looked up down in the render.
   const playIcon = useHudIcon("play");
   const step = () => {
     const store = useGameStore.getState();
     const furniture = store.furniture;
     if (!furniture) return;
 
-    // A PARKED DRIVE — a slide, a screw-down combine — is its own state: parkDrive sets
-    // driveActionId and the action stays in available() as a placePart, so auto used to take the
-    // pickup branch and call beginPickup on a part already parked mid-drive, which does nothing.
-    // Drives advance through advanceDrive, and stepping it rather than jumping to 1 plays the same
-    // travel the gesture produces.
     const driveId = store.driveActionId;
     if (driveId) {
       const tick = setInterval(() => {
@@ -54,9 +46,6 @@ export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
       return;
     }
 
-    // A part in hand used to stop auto dead. Finishing what is already held IS the next step — and
-    // it is the state a stuck player is most likely to press this in, since a floating part is
-    // exactly when the gesture is not working for them.
     if (store.heldActionId) {
       const heldId = store.heldActionId;
       const held = furniture.actions.find((a) => a.actionId === heldId);
@@ -77,10 +66,6 @@ export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
         animateDriver(heldDriver, dest, 450, () => {
           const st = useGameStore.getState();
           st.releaseHeld();
-          // releaseHeld runs a FIT CHECK, and some held actions do not satisfy it — the seat slide
-          // holds its part through a local progress track and finishes with completeAction, not with
-          // a drop. If the release did not take, finish it outright: this is a dev stepper, and
-          // "nothing happened" is the one outcome it must not produce.
           const after = useGameStore.getState();
           if (!after.completed.includes(heldId)) {
             after.completeAction(heldId);
@@ -92,20 +77,13 @@ export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
       }
       return;
     }
-    // Auto drives only the FOCUSED cluster: available() lets cluster-less actions (combineClusters, finishing beats) through no matter what is focused, and stepping those would assemble work that isn't the section on screen. With a focus set, auto goes quiet once that cluster is done rather than running ahead.
     const legal = store.available();
-    // Prefer the focused cluster, but never REFUSE because of it. Cluster-less actions (combines,
-    // finishing beats) and a focus whose work is already done both left this undefined, and the
-    // button silently did nothing — which reads as broken rather than as scoped.
     const action =
       (store.activeCluster
         ? legal.find((a) => actionCluster(furniture, a) === store.activeCluster)
         : undefined) ?? legal[0];
     if (!action) return;
     const done = new Set(store.completed);
-    // Equip whatever the step calls for BEFORE driving it. The tool model is rendered from
-    // selectedTool, so auto used to sink a screw with no screwdriver anywhere in the scene — the
-    // motion happened but nothing said which tool did it, which is the part worth demonstrating.
     if (action.tool && action.tool !== "hand") {
       store.setSelectedTool(action.tool);
     }
@@ -154,9 +132,6 @@ export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
         if (applied >= TIGHTEN_TOTAL_DEG) clearInterval(tick);
       }, 60);
     } else if (action.partId && furniture.parts[action.partId]) {
-      // Drives — a mallet strike, a press, a slide. These used to force-complete, so the part simply
-      // appeared home: no travel, no tool, nothing to learn from. Running the sink driver from the
-      // parked pose down to zero plays the same motion the real gesture produces, just unattended.
       const part = furniture.parts[action.partId];
       const ld = looseDelta(part, engageAxis(part, done));
       sinkDriver.set([ld[0], ld[1], ld[2]]);
@@ -164,20 +139,12 @@ export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
         useGameStore.getState().completeAction(action.actionId);
       });
     } else {
-      // reorient / combineClusters — no part to move, so there is nothing to animate.
       store.completeAction(action.actionId);
     }
   };
 
-  // Visible in EVERY build, release included — deliberately ungated.
-  //
-  // It started as a DEV/SHOWCASE stepper, but the state it is most pressed in is a player stuck on a
-  // gesture that will not take, and that happens in shipped builds too. Nothing here reaches past the
-  // real store actions a player could perform by hand, so leaving it in costs nothing but the chip.
   return (
     <Pressable style={styles.btn} onPress={step}>
-      {/* icon + word, matching the Spot/recenter chips on the row. The play glyph is the app's own
-          icon-play.png rather than the ▶ text character, so it renders in the UI font/weight. */}
       <View style={styles.content}>
         <Image source={playIcon} style={styles.icon} resizeMode="contain" />
         <Text style={styles.text}>auto</Text>
@@ -188,9 +155,6 @@ export function DevAutoStep({ heldDriver, sinkDriver }: Props) {
 
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
-  // Styled as a HUD CHIP, matching Spot and the recenter button beside it. The old dark translucent
-  // scrim pill read as disabled next to solid cream neighbours — nothing was wrong with its state,
-  // it simply did not look like the other controls on the row.
   btn: {
     minHeight: SIZE.controlHeightSm,
     paddingHorizontal: SPACE.md,

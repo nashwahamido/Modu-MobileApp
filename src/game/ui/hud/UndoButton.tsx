@@ -4,7 +4,6 @@ import { useGameStore } from "@/src/game/core/store";
 import { HUD_ICON, IconButtonBare } from "@/src/game/ui/hud/hudChrome";
 import { useMirror } from "@/src/game/ui/system/handedness";
 
-/** Back one step. Disabled dims rather than disappears — "not yet", not "gone". */
 export function UndoButton({ onPress }: { onPress?: () => void } = {}) {
   const completedCount = useGameStore((s) => s.completed.length);
   const undoLastAction = useGameStore((s) => s.undoLastAction);
@@ -24,8 +23,6 @@ export function UndoButton({ onPress }: { onPress?: () => void } = {}) {
   );
 }
 
-/** Forward one step after an undo. Kept separate so tutorial and other screens
- * can opt into the pair without changing the existing Undo-only HUD. */
 export function RedoButton() {
   const undoneCount = useGameStore((s) => s.undoneActions.length);
   const redoLastAction = useGameStore((s) => s.redoLastAction);
@@ -44,7 +41,6 @@ export function RedoButton() {
 }
 
 const styles = StyleSheet.create({
-  // Same left edge and 36px grid as the gear above and Recenter below.
   button: { position: "absolute", top: 54, left: 14 },
   redoButton: { position: "absolute", top: 54, left: 58 },
 });
