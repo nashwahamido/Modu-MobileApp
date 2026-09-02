@@ -11,5 +11,4 @@ export const BRANDS: Record<BrandId, BrandInfo> = {
   },
 };
 
-/** Resolve a furniture's brand id to its name + logo. */
 export const brandFor = (id: BrandId): BrandInfo => BRANDS[id];
