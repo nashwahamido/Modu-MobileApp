@@ -11,10 +11,6 @@ export type AvatarSpecialAction = {
   duration: number;
 };
 
-/**
- * Select a one-shot action without immediately repeating the previous one.
- * A model with only one special action waits instead of violating that rule.
- */
 export function chooseDistinctSpecialAction(
   actions: readonly AvatarSpecialAction[],
   lastIndex: number | null,
@@ -39,11 +35,6 @@ export type AvatarMotionSituation = {
   specialActive: boolean;
 };
 
-/**
- * Animation follows physical state. Safety always wins: editing/recovery force
- * idle, a route outranks a queued one-shot action, and sharp turns complete
- * before translation starts so the avatar cannot walk sideways.
- */
 export function avatarMotionPhase({
   editing,
   recovering,

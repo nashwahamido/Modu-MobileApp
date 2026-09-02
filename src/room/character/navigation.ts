@@ -10,44 +10,65 @@ const manhattan = (a: Cell, b: Cell): number => Math.abs(a.x - b.x) + Math.abs(a
 const inside = (cell: Cell, bounds: NavigationBounds): boolean =>
   cell.x >= 0 && cell.y >= 0 && cell.x < bounds.w && cell.y < bounds.h;
 const neighbours = (cell: Cell): Cell[] => [
-  { x: cell.x + 1, y: cell.y }, { x: cell.x - 1, y: cell.y },
-  { x: cell.x, y: cell.y + 1 }, { x: cell.x, y: cell.y - 1 },
+  { x: cell.x + 1, y: cell.y },
+  { x: cell.x - 1, y: cell.y },
+  { x: cell.x, y: cell.y + 1 },
+  { x: cell.x, y: cell.y - 1 },
 ];
 
 export function inflateBlocked(
-  occupied: ReadonlySet<string>, bounds: NavigationBounds, radius: number, wallMargin = radius,
+  occupied: ReadonlySet<string>,
+  bounds: NavigationBounds,
+  radius: number,
+  wallMargin = radius,
 ): Set<string> {
   const blocked = new Set<string>();
-  for (let x = 0; x < bounds.w; x += 1) for (let y = 0; y < bounds.h; y += 1) {
-    if (x < wallMargin || y < wallMargin || x >= bounds.w - wallMargin || y >= bounds.h - wallMargin)
-      blocked.add(cellKey({ x, y }));
+  for (let x = 0; x < bounds.w; x += 1) {
+    for (let y = 0; y < bounds.h; y += 1) {
+      const insideWallMargin =
+        x < wallMargin ||
+        y < wallMargin ||
+        x >= bounds.w - wallMargin ||
+        y >= bounds.h - wallMargin;
+      if (insideWallMargin) blocked.add(cellKey({ x, y }));
+    }
   }
   for (const key of occupied) {
     const centre = parseKey(key);
-    for (let dx = -radius; dx <= radius; dx += 1) for (let dy = -radius; dy <= radius; dy += 1) {
-      const cell = { x: centre.x + dx, y: centre.y + dy };
-      if (inside(cell, bounds)) blocked.add(cellKey(cell));
+    for (let dx = -radius; dx <= radius; dx += 1) {
+      for (let dy = -radius; dy <= radius; dy += 1) {
+        const cell = { x: centre.x + dx, y: centre.y + dy };
+        if (inside(cell, bounds)) blocked.add(cellKey(cell));
+      }
     }
   }
   return blocked;
 }
 
 export function findPath(
-  start: Cell, goal: Cell, blocked: ReadonlySet<string>, bounds: NavigationBounds,
+  start: Cell,
+  goal: Cell,
+  blocked: ReadonlySet<string>,
+  bounds: NavigationBounds,
 ): Cell[] | null {
   if (!inside(start, bounds) || !inside(goal, bounds)) return null;
   if (blocked.has(cellKey(start)) || blocked.has(cellKey(goal))) return null;
   if (start.x === goal.x && start.y === goal.y) return [];
-  const startKey = cellKey(start), goalKey = cellKey(goal);
+  const startKey = cellKey(start);
+  const goalKey = cellKey(goal);
   const open = new Set([startKey]);
   const cameFrom = new Map<string, string>();
   const gScore = new Map<string, number>([[startKey, 0]]);
   const fScore = new Map<string, number>([[startKey, manhattan(start, goal)]]);
   while (open.size > 0) {
-    let currentKey = "", best = Infinity;
+    let currentKey = "";
+    let best = Infinity;
     for (const key of open) {
       const score = fScore.get(key) ?? Infinity;
-      if (score < best) { best = score; currentKey = key; }
+      if (score < best) {
+        best = score;
+        currentKey = key;
+      }
     }
     if (currentKey === goalKey) {
       const reversed: Cell[] = [];
@@ -77,17 +98,21 @@ export function findPath(
 }
 
 export function nearestWalkable(
-  origin: Cell, blocked: ReadonlySet<string>, bounds: NavigationBounds,
+  origin: Cell,
+  blocked: ReadonlySet<string>,
+  bounds: NavigationBounds,
 ): Cell | null {
   if (inside(origin, bounds) && !blocked.has(cellKey(origin))) return origin;
   const queue: Cell[] = [origin];
   const seen = new Set([cellKey(origin)]);
-  for (let index = 0; index < queue.length; index += 1) for (const next of neighbours(queue[index])) {
-    const key = cellKey(next);
-    if (!inside(next, bounds) || seen.has(key)) continue;
-    if (!blocked.has(key)) return next;
-    seen.add(key);
-    queue.push(next);
+  for (let index = 0; index < queue.length; index += 1) {
+    for (const next of neighbours(queue[index])) {
+      const key = cellKey(next);
+      if (!inside(next, bounds) || seen.has(key)) continue;
+      if (!blocked.has(key)) return next;
+      seen.add(key);
+      queue.push(next);
+    }
   }
   return null;
 }
