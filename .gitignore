@@ -76,6 +76,6 @@ src/assets/models/room/*.blend[0-9]
 src/assets/models/room/room_ao.png
 
 # database
-# *.sql
+supabase/
 # furniture deriver review kit (regenerate with extract-structure.mjs)
 src/game/content/furnitures/*/dev/
