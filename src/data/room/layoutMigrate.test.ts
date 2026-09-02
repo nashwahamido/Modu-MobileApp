@@ -236,7 +236,8 @@ test("v1 floor placement preserves all fields including optional color", () => {
   assert.equal(item.color, "oak");
 });
 
-// The per-lamp switch was added as an OPTIONAL field with no layout version bump, on the strength of v2 passing rows through untouched. If that ever stops being true — a v3 branch that rebuilds each row field by field, say — every switched-off lamp silently relights on the next load, in every saved room, with nothing to point at. This is the test that fails first.
+// the per-lamp switch was added as an OPTIONAL field with no version bump, on the strength of v2 passing rows through untouched
+// if a v3 branch rebuilds rows field by field, every switched-off lamp silently relights — this test fails first
 test("a switched-off lamp stays off across a v2 load", () => {
   const envelope = {
     version: 2,
@@ -248,11 +249,11 @@ test("a switched-off lamp stays off across a v2 load", () => {
   const result = migrateRoomPlacements(envelope);
   assert.equal(result.length, 2);
   assert.equal(result[0]!.lightOn, false, "an explicitly switched-off lamp must survive the load");
-  // Absent means ON, which is the whole reason this field needed no migration: rooms saved before the switch existed keep every lamp burning, exactly as they looked.
+  // absent means ON, the reason this field needed no migration — rooms saved before it keep every lamp burning
   assert.equal(result[1]!.lightOn, undefined, "a lamp with no flag must stay unflagged rather than be defaulted to a literal");
 });
 
-// Two of the same lamp differing is the entire point of storing this per instance rather than on item_lights, which is keyed by item and could never express it.
+// two of the same lamp differing is the point of storing this per instance — item_lights is keyed by item
 test("two instances of one lamp carry independent switches", () => {
   const envelope = {
     version: 2,

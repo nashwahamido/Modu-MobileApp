@@ -1,16 +1,10 @@
-// The player-facing name for a variation.
-//
-// The stored value is a PATH SEGMENT — lowercase, no spaces, because it is half of
-// room/<source>/<id>/<variation>.glb. Showing it raw put "cozy" and "wooden" in the room's colour
-// picker in the same voice as a filename. This is the one place that turns one into the other, so
-// the picker, the inventory and anything else that names a finish agree.
-//
-// Unknown values fall through to Title Case rather than to a placeholder: a variation added to the
-// DB tomorrow reads correctly without a code change, which is the point of the DB owning the list.
+// the player-facing name for a variation — the stored value is a PATH SEGMENT, so showing it raw reads as a filename
+// the ONE place that turns one into the other, so the picker and the inventory agree
+// an unknown value falls through to Title Case, so a variation added to the DB tomorrow reads correctly with no code change
 
-/** Names that Title Case alone would not produce. */
+// names Title Case alone would not produce
 const SPECIAL: Record<string, string> = {
-  // Not "colours" but LOOKS — the two stylised finishes the catalogue offers.
+  // not "colours" but LOOKS — the two stylised finishes the catalogue offers
   cozy: "Cozy",
   cartoon: "Cartoon",
 };

@@ -10,13 +10,9 @@ import { registerPlaceables, roomItemDefs } from "@/src/room/core/placeableItems
 import { ROOM_LAYOUT_VERSION } from "../core/types";
 import { STARTER_ROOM_ITEM_IDS, createStarterRoomPlacements } from "./initialLayout";
 
-// The catalog rows the starter items are placed with. window-wood-classic is copied from migration
-// 010; sofa-modular's extent is the one migration 015 measured for its footprint mask (8x6
-// quarter-cells = 1.9 x 1.275 m), and its mask comes from there verbatim. painting-nature has no row
-// in this repo's migrations — it is published through the portal — so its size is a stand-in for a
-// small hung frame. That only bounds how much this test can claim: it checks that the AUTHORED CELLS
-// are legal for pieces of about this size, which is what catches a placement moved off the wall's
-// window band or a sofa pushed through the far wall, not that the shipped art is exactly this big.
+// window-wood-classic is copied from 010; sofa-modular's extent and mask are the ones 015 measured (8x6 quarter-cells)
+// painting-nature is portal-published with no row here, so its size stands in for a small hung frame
+// so this checks the AUTHORED CELLS are legal for pieces of about this size, not that the shipped art is exactly this big
 const starterRows = [
   { id: "window-wood-classic", source: "bought" as const, category: "win" as const, size: { x: 1.239, y: 1.231, z: 0.349 }, baseOffsetY: 0, mount: "wall" as const, opensWall: true },
   { id: "painting-nature", source: "bought" as const, category: "deco" as const, size: { x: 0.8, y: 0.6, z: 0.05 }, baseOffsetY: 0, mount: "wall" as const },
@@ -49,17 +45,12 @@ test("starter inventory covers every item placed in the starter room", () => {
   );
 });
 
-// The SQL half of the starter room. Provisioning happens in the DATABASE (migration 028's auth
-// trigger), so the rows a new account actually gets are the ones written there, not the ones this
-// module returns — the TS copy exists for the in-memory adapter and for the checks above. Nothing
-// but this test keeps the two agreeing, and drift is silent in the worst way: bump
-// ROOM_LAYOUT_VERSION and the migration's hardcoded `'version', 2` becomes an unknown version, which
-// migrateRoomPlacements reads as an EMPTY room for every new player, with no error anywhere.
+// provisioning happens in the DATABASE, so a new account gets 028's trigger rows — the TS copy is for the fixture
+// nothing but this test keeps the two agreeing, and the drift is silent: bump ROOM_LAYOUT_VERSION and the migration's
+// hardcoded `'version', 2` becomes an unknown version, an EMPTY room for every new player with no error anywhere
 const MIGRATION = resolve(dirname(fileURLToPath(import.meta.url)), "../../../supabase/migrations/028_initial_room_layout.sql");
 
-// Parses the jsonb_build_object / jsonb_build_array literal the migration returns. Deliberately a
-// parser rather than a regex per field: a regex would match the fields it was told about and stay
-// quiet about a field added on one side only, which is exactly the drift this test is here to catch.
+// a parser, not a regex per field: a regex matches what it was told about and stays quiet about a field added on one side
 function parseJsonbLiteral(sql: string, start: number): { value: unknown; end: number } {
   let i = start;
   const skipSpace = () => { while (i < sql.length && /\s/.test(sql[i]!)) i += 1; };
@@ -102,7 +93,7 @@ function parseJsonbLiteral(sql: string, start: number): { value: unknown; end: n
     for (;;) {
       assert.notEqual(i, sql.length, "unterminated string literal");
       if (sql[i] === "'") {
-        // '' inside a literal is an escaped quote, not the end of the string.
+        // '' inside a literal is an escaped quote, not the end of the string
         if (sql[i + 1] !== "'") return (i += 1, { value: text, end: i });
         text += "'";
         i += 2;
@@ -121,8 +112,7 @@ function migrationSql(): string {
   return readFileSync(MIGRATION, "utf8");
 }
 
-// The function body between the initial_room_layout() header and its closing $$, so a later function
-// in the same file (provision_initial_room) can never be what gets parsed.
+// the body between the initial_room_layout() header and its closing $$, so a later function is never what gets parsed
 function initialRoomLayoutBody(sql: string): string {
   const header = sql.indexOf("create or replace function public.initial_room_layout()");
   assert.notEqual(header, -1, "migration 028 no longer defines initial_room_layout()");
@@ -141,8 +131,7 @@ test("the migration provisions exactly the layout this module describes", () => 
 
   assert.deepEqual(value, {
     version: ROOM_LAYOUT_VERSION,
-    // Through JSON so the comparison is against what Postgres will actually hand back: an optional
-    // TS field left undefined is absent in jsonb, and deepEqual counts undefined and absent apart.
+    // through JSON, so an optional TS field left undefined is absent as it is in jsonb — deepEqual counts the two apart
     placements: JSON.parse(JSON.stringify(createStarterRoomPlacements())),
   });
 });
