@@ -1,11 +1,9 @@
-import FASTENER_ROLES from "@/src/game/core/model/fastener-roles.json";
 import { liaisonId } from "@/src/game/core/ids";
-import { lowerJoints, mergeOverlays, type JointDef } from "./joints";
 import {
   FastenerPreload,
   FastenerRole,
+  JOIN_ARRAYS,
   JoinKind,
-  JointGeometry,
   Liaison,
   LiaisonMap,
   PartDef,
@@ -16,29 +14,14 @@ type Parts = Record<PartId, PartDef>;
 
 const toArray = (x?: readonly PartId[]): readonly PartId[] => x ?? [];
 
-type RolePrefill = { role: FastenerRole; preload?: FastenerPreload };
-
-const PREFILL_BY_PREFIX = FASTENER_ROLES.prefixes as Record<string, RolePrefill>;
-
-/** The name-prefix prefill, used ONLY when a part carries no generated `fastenerRole` — an un-authored GLB, or a fastener group with no FASTENERS def. A shipped furniture never reaches this path: lowerFasteners writes the role onto every instance. `cap` is the one prefix the name cannot settle alone, so the mesh name's attached count decides between dressing one part and locking two. */
-function prefillFor(p: PartDef): RolePrefill {
-  for (const [prefix, fill] of Object.entries(PREFILL_BY_PREFIX)) {
-    if (!p.group.toLowerCase().startsWith(prefix)) continue;
-    if (prefix === "cap" && (p.attached?.length ?? 0) === 1) return { role: "cap" };
-    return fill;
-  }
-  return { role: "securer" };
-}
-
-/** What a fastener is FOR: the generated `fastenerRole`, else the group name's prefill. */
+/** What a fastener is FOR: the role lowering wrote onto it. A shipped furniture always carries one (validateFurniture enforces it); a bare fixture without one is "securer", the inert role — it never defines a joint and never preloads. The name-prefix fallback that used to live here is gone: prefixes are a tooling prefill (helper-scripts/fastener-roles.json), never a runtime fact. */
 export function fastenerRoleOf(p: PartDef): FastenerRole {
-  return p.fastenerRole ?? prefillFor(p).role;
+  return p.fastenerRole ?? "securer";
 }
 
-/** A connector's ordering record. Reads the generated field first so an authored def always wins, and only falls back to the prefill for the same un-authored cases as `fastenerRoleOf`. Null for every other role. */
+/** A connector's ordering record; null for every other role. */
 export function preloadOf(p: PartDef): FastenerPreload | null {
-  if (fastenerRoleOf(p) !== "connector") return null;
-  return p.preload ?? prefillFor(p).preload ?? null;
+  return fastenerRoleOf(p) === "connector" ? (p.preload ?? null) : null;
 }
 
 /** A JOINT-DEFINING fastener bridging two named endpoints — the parts that get OR-side insertion + the preload lock. Was `fastenerKindOf(p) !== "secured"`, which reached the same set the long way round: every non-"secured" kind was a connector kind, so the enum was being asked a question the role answers directly. */
@@ -50,7 +33,7 @@ export function isConnector(p: PartDef): boolean {
   );
 }
 
-/** Overlay authored structural data (directJoins / slideJoins / seed / unstable) onto the generated parts. Most joints come from the fasteners' `attached` (mesh names), so `directJoins`/`slideJoins` are only needed for fastener-free contacts; the rest is build intent. `type`/`attached` are the RE-TYPING escape hatch: a part whose mesh name lied about its category (EKET's suspCap ships as a bare structural node) is re-typed here with its bindings, instead of renaming meshes in the GLB (see never-modify-models) or hand-editing parts.gen. */
+/** Overlay authored structural data (pressJoins / slideJoins / seed / unstable) onto the generated parts. Most joints come from the fasteners' `attached` (mesh names), so `pressJoins`/`slideJoins` are only needed for fastener-free contacts; the rest is build intent. `type`/`attached` are the RE-TYPING escape hatch: a part whose mesh name lied about its category (EKET's suspCap ships as a bare structural node) is re-typed here with its bindings, instead of renaming meshes in the GLB (see never-modify-models) or hand-editing parts.gen. */
 export type StructureOverlay = Record<
   PartId,
   Partial<
@@ -58,7 +41,7 @@ export type StructureOverlay = Record<
       PartDef,
       | "type"
       | "attached"
-      | "directJoins"
+      | "pressJoins"
       | "slideJoins"
       | "screwJoins"
       | "seed"
@@ -83,27 +66,11 @@ export type StructureOverlay = Record<
   >
 >;
 
-/** The authored overlay with any JOINTS already lowered into it — everything a human decides about a part, in the exact shape it will be spread over the mesh facts. Exported and generated to `structure.gen.ts` because it is the ONE artifact nobody could review before: `parts.gen`, `sweep.gen`, `joints.gen` and `authored.ts` are all checked in, but the MERGE of them lived only in memory at load time, and predicting it means simulating the bridged-pair suppression, the dropOn split and the geometry fallback by hand. `applyStructure` calls this, so what the file records is what the device runs. */
-export function composeStructure(
-  parts: Parts,
-  overlay: StructureOverlay,
-  joints?: readonly JointDef[],
-  geometry?: JointGeometry,
-): StructureOverlay {
-  return joints?.length ? mergeOverlays(lowerJoints(joints, parts, geometry), overlay) : overlay;
-}
-
-/** Overlay the authored structure onto the generated parts. `joints` is the v2 authoring route (model/joints.ts): joint ENTITIES are lowered into the same flat fields first, then the flat overlay lands on top, so a furniture may use either form or both during a migration and the engine downstream never learns the difference. `geometry` is the generated travel table (joints.gen.ts), which lowering consults for any joint that does not override it — passing it without `joints` does nothing, which is what keeps derivation opt-in per joint. */
-export function applyStructure(
-  parts: Parts,
-  overlay: StructureOverlay,
-  joints?: readonly JointDef[],
-  geometry?: JointGeometry,
-): Parts {
-  const merged = composeStructure(parts, overlay, joints, geometry);
+/** Spread the composed structure (structure.gen.ts — the authored overlay with JOINTS and FASTENERS already lowered in by derive/structure.ts) over the generated parts. A spread and nothing else: the device lowers nothing. */
+export function applyStructure(parts: Parts, overlay: StructureOverlay): Parts {
   const out: Parts = {};
   for (const [id, p] of Object.entries(parts) as [PartId, PartDef][]) {
-    out[id] = merged[id] ? { ...p, ...merged[id] } : p;
+    out[id] = overlay[id] ? { ...p, ...overlay[id] } : p;
   }
   return out;
 }
@@ -129,11 +96,12 @@ export function buildLiaisons(parts: Parts): LiaisonMap {
 
   for (const p of Object.values(parts)) {
     if (p.type === "structural") {
-      for (const t of toArray(p.directJoins)) addStructural(p.partId, t, "press");
-      for (const t of toArray(p.slideJoins))
-        addStructural(p.partId, t, "slide", p.partId);
-      for (const t of toArray(p.screwJoins))
-        addStructural(p.partId, t, "screw", p.partId);
+      // A press states the pair, not a direction: it lands undirected so either endpoint may be the one that arrives. Slide and screw name their declarer the MOVER, which is what makes the AND frontier directional.
+      for (const [field, kind] of JOIN_ARRAYS) {
+        for (const t of toArray(p[field])) {
+          addStructural(p.partId, t, kind, kind === "press" ? undefined : p.partId);
+        }
+      }
     }
     if (p.type === "fastener" && p.attached?.length === 2) {
       edgeOf(p.attached[0], p.attached[1]);

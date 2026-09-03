@@ -1,4 +1,4 @@
-// Environment-neutral GLB reading for the DERIVATION pipeline — DataView + TextDecoder only, no Node APIs, so the portal can hand a browser File's bytes straight in and the app/test side can hand a fs buffer. This is the analyzer's twin of helper-scripts/read-parts.mjs: read-parts stays the codegen script for bundled furniture; the portal consumes THIS module. One convention parser, one scene walk, exported so scripts and tests converge on it instead of growing more copies.
+// Environment-neutral GLB reading for the DERIVATION pipeline — DataView + TextDecoder only, no Node APIs, so the portal can hand a browser File's bytes straight in and the app/test side can hand a fs buffer. This is the analyzer's twin of helper-scripts/read-parts.mts: read-parts stays the codegen script for bundled furniture; the portal consumes THIS module. One convention parser, one scene walk, exported so scripts and tests converge on it instead of growing more copies.
 import type { Quat, Vec3 } from "@/src/game/core/type";
 
 export interface GlbMesh {
@@ -11,6 +11,10 @@ export interface GlbMesh {
   /** The mesh-name binding — 1 or 2 structural part ids a fastener attaches. Convention data, which the analyzer treats as ground truth to VALIDATE proposals against, never as the only source. */
   attached?: string[];
   pose: { position: Vec3; rotation: Quat };
+  /** World scale composed down the hierarchy (shipped models: [1,1,1]). */
+  scale: Vec3;
+  /** Raw LOCAL bounds of the mesh, unscaled — what read-parts needs for the origin→bounds offsets. */
+  bounds: { min: Vec3; max: Vec3 };
   /** World-space vertices (scene hierarchy composed — shipped models are flat, but a parented export must not silently shift facts). */
   verts: Vec3[];
   /** World-space triangles. */
@@ -88,6 +92,7 @@ export function readGlbMeshes(bytes: Uint8Array): GlbMesh[] {
   const walk = (nis: number[], pt: Vec3, pr: Quat, ps: Vec3): void => {
     for (const ni of nis) {
       const node = json.nodes[ni];
+      if (node.matrix) throw new Error(`node ${node.name} uses a matrix transform — export with TRS`);
       const t: Vec3 = node.translation ?? [0, 0, 0];
       const r: Quat = node.rotation ?? [0, 0, 0, 1];
       const s: Vec3 = node.scale ?? [1, 1, 1];
@@ -98,9 +103,12 @@ export function readGlbMeshes(bytes: Uint8Array): GlbMesh[] {
       if (node.name && node.mesh != null) {
         const verts: Vec3[] = [];
         const tris: [Vec3, Vec3, Vec3][] = [];
+        const min: [number, number, number] = [Infinity, Infinity, Infinity];
+        const max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
         for (const prim of json.meshes[node.mesh].primitives) {
           if (prim.attributes.POSITION == null) continue;
           const pos = (acc(prim.attributes.POSITION) as number[][]).map((v) => {
+            for (let k = 0; k < 3; k++) { if (v[k] < min[k]) min[k] = v[k]; if (v[k] > max[k]) max[k] = v[k]; }
             const q = rotQ(wr, [v[0] * ws[0], v[1] * ws[1], v[2] * ws[2]]);
             return [wt[0] + q[0], wt[1] + q[1], wt[2] + q[2]] as Vec3;
           });
@@ -108,7 +116,7 @@ export function readGlbMeshes(bytes: Uint8Array): GlbMesh[] {
           const idx = prim.indices != null ? (acc(prim.indices) as number[]) : pos.map((_, i) => i);
           for (let k = 0; k + 2 < idx.length; k += 3) tris.push([pos[idx[k]], pos[idx[k + 1]], pos[idx[k + 2]]]);
         }
-        if (tris.length) out.push({ meshName: node.name, ...parseMeshName(node.name), pose: { position: wt, rotation: wr }, verts, tris });
+        if (tris.length) out.push({ meshName: node.name, ...parseMeshName(node.name), pose: { position: wt, rotation: wr }, scale: ws, bounds: { min, max }, verts, tris });
       }
       walk(node.children ?? [], wt, wr, ws);
     }
@@ -116,3 +124,6 @@ export function readGlbMeshes(bytes: Uint8Array): GlbMesh[] {
   walk(json.scenes[json.scene ?? 0].nodes, [0, 0, 0], [0, 0, 0, 1], [1, 1, 1]);
   return out;
 }
+
+/** Rotate a vector by an xyzw quaternion — exported because every script used to carry its own copy. */
+export const rotateByQuat = rotQ;

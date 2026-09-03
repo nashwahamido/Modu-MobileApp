@@ -1,4 +1,4 @@
-import { applyStructure, buildLiaisons } from "@/src/game/core/model/liaisons";
+import { applyStructure } from "@/src/game/core/model/liaisons";
 import { buildComponents } from "@/src/game/core/model/components";
 import { buildInstructions } from "@/src/game/core/presentation/instructions";
 import { Furniture, PartDef } from "@/src/game/core/type";
@@ -8,6 +8,7 @@ import { HARDWARE } from "@/src/game/content/hardware";
 import { toolsUsed } from "@/src/game/content/tools";
 import { BEATS, CLUSTERS, COMPONENTS, GATES, LABELS, PUSH_OPEN } from "./authored";
 import { STRUCTURE_COMPOSED } from "./structure.gen";
+import { LIAISONS } from "./liaisons.gen";
 import { ACTIONS, EKET_META } from "./meta";
 import { PARTS } from "./parts.gen";
 import { SWEEP } from "./sweep.gen";
@@ -15,7 +16,6 @@ import { clusterThumbs, thumbs } from "./thumbs.gen";
 import { CLUSTER_VARIANT_THUMBS } from "./clusterVariants";
 
 const PARTS_WITH_STRUCTURE = applyStructure(PARTS, STRUCTURE_COMPOSED);
-const LIAISONS = buildLiaisons(PARTS_WITH_STRUCTURE);
 const COMPONENTS_IDX = buildComponents(COMPONENTS, PARTS_WITH_STRUCTURE);
 const LABELS_ALL = composeLabels(LABELS, PARTS_WITH_STRUCTURE, HARDWARE);
 // the STRUCTURED parts, not the raw generated ones: step text keys off authored fields (a staged carrier's stageOffset picks the "pick the sub-assembly back up" wording), which only exist after applyStructure

@@ -10,9 +10,9 @@ import { registerPlaceables, roomItemDefs } from "@/src/room/core/placeableItems
 import { ROOM_LAYOUT_VERSION } from "../core/types";
 import { STARTER_ROOM_ITEM_IDS, createStarterRoomPlacements } from "./initialLayout";
 
-// window-wood-classic is copied from 010; sofa-modular's extent and mask are the ones 015 measured (8x6 quarter-cells)
+// window-wood-classic is copied from 010; sofa-modular's extent and mask are what 015 measured (8x6 quarter-cells)
 // painting-nature is portal-published with no row here, so its size stands in for a small hung frame
-// so this checks the AUTHORED CELLS are legal for pieces of about this size, not that the shipped art is exactly this big
+// so this checks the AUTHORED CELLS are legal for pieces of about this size, not that the art is exactly this big
 const starterRows = [
   { id: "window-wood-classic", source: "bought" as const, category: "win" as const, size: { x: 1.239, y: 1.231, z: 0.349 }, baseOffsetY: 0, mount: "wall" as const, opensWall: true },
   { id: "painting-nature", source: "bought" as const, category: "deco" as const, size: { x: 0.8, y: 0.6, z: 0.05 }, baseOffsetY: 0, mount: "wall" as const },
@@ -46,11 +46,11 @@ test("starter inventory covers every item placed in the starter room", () => {
 });
 
 // provisioning happens in the DATABASE, so a new account gets 028's trigger rows — the TS copy is for the fixture
-// nothing but this test keeps the two agreeing, and the drift is silent: bump ROOM_LAYOUT_VERSION and the migration's
-// hardcoded `'version', 2` becomes an unknown version, an EMPTY room for every new player with no error anywhere
+// nothing but this test keeps the two agreeing, and the drift is silent
+// bump ROOM_LAYOUT_VERSION and the migration's hardcoded `'version', 2` is an empty room for every new player
 const MIGRATION = resolve(dirname(fileURLToPath(import.meta.url)), "../../../supabase/migrations/028_initial_room_layout.sql");
 
-// a parser, not a regex per field: a regex matches what it was told about and stays quiet about a field added on one side
+// a parser, not a regex per field — a regex stays quiet about a field added on one side
 function parseJsonbLiteral(sql: string, start: number): { value: unknown; end: number } {
   let i = start;
   const skipSpace = () => { while (i < sql.length && /\s/.test(sql[i]!)) i += 1; };
@@ -112,7 +112,7 @@ function migrationSql(): string {
   return readFileSync(MIGRATION, "utf8");
 }
 
-// the body between the initial_room_layout() header and its closing $$, so a later function is never what gets parsed
+// the body between the initial_room_layout() header and its closing $$, so a later function is never parsed
 function initialRoomLayoutBody(sql: string): string {
   const header = sql.indexOf("create or replace function public.initial_room_layout()");
   assert.notEqual(header, -1, "migration 028 no longer defines initial_room_layout()");
@@ -131,7 +131,7 @@ test("the migration provisions exactly the layout this module describes", () => 
 
   assert.deepEqual(value, {
     version: ROOM_LAYOUT_VERSION,
-    // through JSON, so an optional TS field left undefined is absent as it is in jsonb — deepEqual counts the two apart
+    // through JSON, so an optional TS field left undefined is absent as it is in jsonb
     placements: JSON.parse(JSON.stringify(createStarterRoomPlacements())),
   });
 });

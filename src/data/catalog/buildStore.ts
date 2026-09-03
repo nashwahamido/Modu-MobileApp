@@ -1,14 +1,12 @@
-// the build catalogue
-// the DB is the single source, but BuildComplete, LoadingOverlay and the build map render mid-build
-// cache-then-network: hydrate() replays the last fetch with no session, so a returning player sees it instantly and offline
-// refresh() replaces that once signed in
+// the build catalogue — DB-authored, but BuildComplete, LoadingOverlay and the map need it mid-build
+// cache-then-network: hydrate() replays the last fetch with no session, refresh() replaces it once signed in
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 
 import type { FurnitureId } from "@/src/game/core/type";
 import type { BuildCatalogRow, Repos } from "../core/repos";
 
-// version: a shape change must not read rows written by an older build
+// versioned: a shape change must not read rows written by an older build
 const CACHE_KEY = "modu.catalog.builds.v2";
 
 // cached = from AsyncStorage
@@ -30,7 +28,7 @@ export const useCatalogStore = create<CatalogState>()((set, get) => ({
   status: "empty",
 
   async hydrate() {
-    // never clobber a live fetch that won the race — the network result is strictly better than the cache
+    // never clobber a live fetch that won the race
     if (get().status === "live") return;
     try {
       const raw = await AsyncStorage.getItem(CACHE_KEY);
@@ -55,7 +53,7 @@ export const useCatalogStore = create<CatalogState>()((set, get) => ({
   },
 }));
 
-// synchronous single-row read.undefined until the catalogue loads
+// synchronous single-row read — undefined until the catalogue loads
 export function useCatalogRow(
   id: FurnitureId | null | undefined,
 ): BuildCatalogRow | undefined {

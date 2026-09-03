@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { PartDef, PartId } from "@/src/game/core/type";
-import { applyStructure, buildLiaisons, type StructureOverlay } from "./liaisons";
+import { applyStructure, buildLiaisons, type StructureOverlay } from "../model/liaisons";
+import { composeStructure } from "./structure";
 import { jointIssues, lowerJoints, mergeOverlays, PLAYABLE_JOINT_KINDS, type JointDef } from "./joints";
 
 const part = (partId: string, extra: object = {}): PartDef =>
@@ -22,12 +23,12 @@ test("authoring via JOINTS produces exactly the Γ the flat arrays produce", () 
     { kind: "screw", a: "pole" as PartId, b: "seat" as PartId, mover: "pole" as PartId },
   ];
   const flat: StructureOverlay = {
-    sideL: { directJoins: ["top"] },
+    sideL: { pressJoins: ["top"] },
     back: { slideJoins: ["sideL"], placeDir: [0, 1, 0], parkBackoff: 0.1 },
     pole: { screwJoins: ["seat"] },
   } as StructureOverlay;
 
-  const viaJoints = applyStructure(PARTS, {} as StructureOverlay, joints);
+  const viaJoints = applyStructure(PARTS, composeStructure(PARTS, {} as StructureOverlay, { joints }));
   const viaFlat = applyStructure(PARTS, flat);
   assert.deepEqual(buildLiaisons(viaJoints), buildLiaisons(viaFlat), "Γ diverged between the two authoring routes");
   assert.deepEqual(viaJoints, viaFlat, "lowered parts diverged from the hand-authored flat parts");
@@ -38,16 +39,16 @@ test("hook-and-slot lowers both legs, and `dirOther` gives the partner its own s
     { kind: "hookAndSlot", a: "sideL" as PartId, b: "top" as PartId, mover: "top" as PartId, approach: { dir: [0, 0, 1], back: 0.03 }, lock: { dir: [1, 0, 0], travel: 0.015, dirOther: [-1, 0, 0] } },
   ];
   const o = lowerJoints(joints) as Record<string, Record<string, unknown>>;
-  assert.deepEqual(o.top, { directJoins: ["sideL"], placeDir: [0, 0, 1], parkBackoff: 0.03, lockDir: [1, 0, 0], lockTravel: 0.015 });
+  assert.deepEqual(o.top, { pressJoins: ["sideL"], placeDir: [0, 0, 1], parkBackoff: 0.03, lockDir: [1, 0, 0], lockTravel: 0.015 });
   assert.deepEqual(o.sideL, { lockDir: [-1, 0, 0], lockTravel: 0.015 }, "the partner carries the mirrored lock leg, derived from ONE declaration");
 });
 
 // A snap is a press with the drive gesture removed: the parts click together in the placement motion itself (EKET's suspension cover pushing over its bracket). The EDGE is still a press — `dropOn` says how the placement FEELS, not what kind of join it is — so Γ must be unable to tell a snap from a plain press.
 test("a snap lowers to a press edge plus dropOn on the mover, matching the flat authoring route", () => {
-  const viaJoints = applyStructure(PARTS, {} as StructureOverlay, [
+  const viaJoints = applyStructure(PARTS, composeStructure(PARTS, {} as StructureOverlay, { joints: [
     { kind: "snap", a: "sideL" as PartId, b: "top" as PartId, mover: "top" as PartId },
-  ]);
-  const viaFlat = applyStructure(PARTS, { top: { directJoins: ["sideL"], dropOn: true } } as StructureOverlay);
+  ] }));
+  const viaFlat = applyStructure(PARTS, { top: { pressJoins: ["sideL"], dropOn: true } } as StructureOverlay);
   assert.ok(PLAYABLE_JOINT_KINDS.has("snap"), "a snap is a zero-length linear placement — nothing about it needs a new motion primitive");
   assert.deepEqual(viaJoints, viaFlat, "lowered parts diverged from the hand-authored flat parts");
   const edge = Object.values(buildLiaisons(viaJoints)).find((l) => l.a === "sideL" && l.b === "top");
@@ -143,6 +144,6 @@ test("the flat overlay wins over a lowered joint scalar, and join arrays union �
 
 test("furniture that authors no joints is untouched by the seam", () => {
   const flat = { sideL: { seed: true } } as StructureOverlay;
-  assert.deepEqual(applyStructure(PARTS, flat, []), applyStructure(PARTS, flat));
-  assert.deepEqual(applyStructure(PARTS, flat, undefined), applyStructure(PARTS, flat));
+  assert.deepEqual(applyStructure(PARTS, composeStructure(PARTS, flat, { joints: [] })), applyStructure(PARTS, flat));
+  assert.deepEqual(applyStructure(PARTS, composeStructure(PARTS, flat, {})), applyStructure(PARTS, flat));
 });

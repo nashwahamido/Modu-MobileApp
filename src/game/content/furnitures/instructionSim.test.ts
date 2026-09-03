@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { composeFurnitureActions, FastenerRule } from "@/src/game/core/composition/composeActions";
+import { composeFurnitureActions } from "@/src/game/core/composition/composeActions";
 import { applyStructure, buildLiaisons, StructureOverlay } from "@/src/game/core/model/liaisons";
 import { buildComponents, isNonLeadBody, memberPlaceIdsForLead } from "@/src/game/core/model/components";
 import { availableActions, availableInMode } from "@/src/game/core/evaluation/availability";
@@ -23,6 +23,7 @@ import {
   LabelMap,
   PartDef,
   PartId,
+  FastenerMap,
 } from "@/src/game/core/type";
 
 import * as LACK from "./LACK/authored";
@@ -37,7 +38,7 @@ import { COMPOSED } from "@/src/game/content/furnitures/composed";
 
 interface AuthoredExports {
   AUTHORED_ACTIONS: readonly DraftAction[];
-  FASTENER_RULES: readonly FastenerRule[];
+  FASTENERS: FastenerMap;
   STRUCTURE: StructureOverlay;
   LABELS: LabelMap;
   CLUSTERS?: Record<ClusterId, ClusterDef>;
@@ -49,7 +50,7 @@ function fixture(id: string, m: AuthoredExports, raw: Record<PartId, PartDef>, c
   const parts = applyStructure(raw, composed);
   const actions = composeFurnitureActions(
     m.AUTHORED_ACTIONS,
-    m.FASTENER_RULES,
+    m.FASTENERS,
     parts,
     HARDWARE,
     m.CLUSTERS,

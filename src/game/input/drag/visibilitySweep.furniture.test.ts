@@ -9,6 +9,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { boxesByName } from "@/src/game/core/derive/boxes";
+import { readGlbMeshes } from "@/src/game/core/derive/glb";
 import { applyStructure, buildLiaisons } from "@/src/game/core/model/liaisons";
 import { deriveJointFrames, partAnchorOffsets } from "@/src/game/core/model/jointFrames";
 import { composeFurnitureActions } from "@/src/game/core/composition/composeActions";
@@ -28,75 +30,7 @@ const FURNITURES = fs
   .map((d) => d.name);
 
 // GLB world-box parser — twin of the one in jointFrames.furniture.test.ts (same flat-hierarchy convention, same self-detection argument); duplicated because importing a test file would run its tests.
-function parseGlb(file: string) {
-  const b = fs.readFileSync(file);
-  const jsonLen = b.readUInt32LE(12);
-  const json = JSON.parse(b.subarray(20, 20 + jsonLen).toString("utf8"));
-  const off = 20 + jsonLen;
-  return { json, bin: b.subarray(off + 8, off + 8 + b.readUInt32LE(off)) };
-}
-function readPositions(json: any, bin: Buffer, ai: number): Vec3[] {
-  const acc = json.accessors[ai];
-  const bv = json.bufferViews[acc.bufferView];
-  const base = (bv.byteOffset ?? 0) + (acc.byteOffset ?? 0);
-  const stride = bv.byteStride ?? 12;
-  const out: Vec3[] = new Array(acc.count);
-  for (let i = 0; i < acc.count; i++) {
-    const o = base + i * stride;
-    out[i] = [bin.readFloatLE(o), bin.readFloatLE(o + 4), bin.readFloatLE(o + 8)];
-  }
-  return out;
-}
-const rotQ = ([x, y, z, w]: number[], [vx, vy, vz]: Vec3): Vec3 => {
-  const tx = 2 * (y * vz - z * vy);
-  const ty = 2 * (z * vx - x * vz);
-  const tz = 2 * (x * vy - y * vx);
-  return [vx + w * tx + (y * tz - z * ty), vy + w * ty + (z * tx - x * tz), vz + w * tz + (x * ty - y * tx)];
-};
-function glbBoxes(file: string): Record<string, PartBox> {
-  const { json, bin } = parseGlb(file);
-  const out: Record<string, PartBox> = {};
-  for (const n of json.nodes ?? []) {
-    if (!n.name || n.mesh == null) continue;
-    const t = n.translation ?? [0, 0, 0];
-    const q = n.rotation ?? [0, 0, 0, 1];
-    const s = n.scale ?? [1, 1, 1];
-    const min: number[] = [Infinity, Infinity, Infinity];
-    const max: number[] = [-Infinity, -Infinity, -Infinity];
-    const lmin: number[] = [Infinity, Infinity, Infinity];
-    const lmax: number[] = [-Infinity, -Infinity, -Infinity];
-    let any = false;
-    for (const prim of json.meshes[n.mesh].primitives) {
-      if (prim.attributes.POSITION == null) continue;
-      for (const v of readPositions(json, bin, prim.attributes.POSITION)) {
-        const r = rotQ(q, [v[0] * s[0], v[1] * s[1], v[2] * s[2]]);
-        const w: Vec3 = [r[0] + t[0], r[1] + t[1], r[2] + t[2]];
-        any = true;
-        for (let k = 0; k < 3; k++) {
-          if (w[k] < min[k]) min[k] = w[k];
-          if (w[k] > max[k]) max[k] = w[k];
-          if (v[k] < lmin[k]) lmin[k] = v[k];
-          if (v[k] > lmax[k]) lmax[k] = v[k];
-        }
-      }
-    }
-    if (!any) continue;
-    // The oriented twin of scene/partBoxes.worldBoxFromObjectBox: the object-space box carried through the node's TRS whole — axes are the rotated unit basis, half-extents scaled, centre pushed through.
-    const lc: Vec3 = [((lmin[0] + lmax[0]) / 2) * s[0], ((lmin[1] + lmax[1]) / 2) * s[1], ((lmin[2] + lmax[2]) / 2) * s[2]];
-    const rc = rotQ(q, lc);
-    const axes = [rotQ(q, [1, 0, 0]), rotQ(q, [0, 1, 0]), rotQ(q, [0, 0, 1])] as [Vec3, Vec3, Vec3];
-    out[n.name] = {
-      min: [min[0], min[1], min[2]],
-      max: [max[0], max[1], max[2]],
-      obb: {
-        center: [rc[0] + t[0], rc[1] + t[1], rc[2] + t[2]],
-        axes,
-        half: [((lmax[0] - lmin[0]) / 2) * s[0], ((lmax[1] - lmin[1]) / 2) * s[1], ((lmax[2] - lmin[2]) / 2) * s[2]],
-      },
-    };
-  }
-  return out;
-}
+const glbBoxes = (file: string): Record<string, PartBox> => boxesByName(readGlbMeshes(fs.readFileSync(file)));
 
 /** The orbit sphere the player can actually reach: 8 azimuths × 3 elevations × 3 radii around the assembly's centre, floored above the bench so no eye samples from underground. */
 function orbitEyes(center: Vec3): Vec3[] {
@@ -130,7 +64,7 @@ for (const F of FURNITURES) {
     const anchors = partAnchorOffsets(parts, liaisons, frames);
     const actions = composeFurnitureActions(
       authored.AUTHORED_ACTIONS ?? [],
-      authored.FASTENER_RULES ?? [],
+      authored.FASTENERS,
       parts,
       authored.HARDWARE ?? {},
       authored.CLUSTERS,

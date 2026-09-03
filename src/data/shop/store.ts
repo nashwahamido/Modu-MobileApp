@@ -1,7 +1,7 @@
 // the purchasable catalogue and what this player owns of it — read once, shared by both surfaces
-// a store, not a fetch per overlay: both popups need the same REFERENCE data, so opening shop-then-inventory paid for it twice
-// and a purchase changes ownership BOTH render — the shop's own local Set was invisible to the inventory, so markOwned() owns it
-// the owned set is per user and the catalogue is not, but they live together because they are always read together
+// a store, not a fetch per overlay: shop-then-inventory paid for the same reference data twice
+// a purchase changes ownership both render, so markOwned() owns it — the shop's local Set was invisible to the inventory
+// the owned set is per user and the catalogue is not, but they live together because they are read together
 import { create } from "zustand";
 
 import type { Repos } from "../core/repos";
@@ -15,7 +15,7 @@ export type ShopStatus = "empty" | "loading" | "ready" | "error";
 interface ShopState {
   items: ShopItem[];
   owned: Set<ShopItemId>;
-  // who `owned` belongs to. a mismatch is what makes load() refetch after an account switch
+  // who `owned` belongs to — a mismatch is what makes load() refetch after an account switch
   ownerId: UserId | null;
   status: ShopStatus;
   // fetch unless this user's data is loaded — cheap to call on every popup open
@@ -42,7 +42,7 @@ async function fetchInto(
     if (get().ownerId !== me) return;
     set({ items, owned: new Set(ownedIds), status: "ready" });
   } catch (err) {
-    // the repos THROW on any Postgrest error, so this is the ordinary failure path
+    // the repos throw on any Postgrest error, so this is the ordinary failure path
     // keep what we had — a stale catalogue beats an empty popup — and report error only with nothing to show
     console.warn("[shop] could not load the catalogue:", (err as Error).message);
     if (get().ownerId !== me) return;
@@ -69,7 +69,7 @@ export const useShopStore = create<ShopState>()((set, get) => ({
   markOwned(itemId) {
     const { owned } = get();
     if (owned.has(itemId)) return;
-    // a new Set, not a mutation: zustand compares by reference, so mutating leaves subscribers on the old ownership
+    // a new Set, not a mutation: zustand compares by reference, so mutating leaves subscribers stale
     set({ owned: new Set(owned).add(itemId) });
   },
 }));

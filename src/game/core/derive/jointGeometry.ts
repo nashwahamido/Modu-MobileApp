@@ -1,6 +1,7 @@
-// Travel vectors derived from the contact geometry, so a direction is a fact about the mesh instead of a hand-typed vector a re-export silently invalidates. The rule is one sentence: the join KIND — the only thing a human still states — selects which axis of the contact slab the part travels along, ACROSS it for a press, ALONG it for a slide. Everything here is pure and offline-friendly; helper-scripts/derive-joints.mts writes the result and derivedJoints.furniture.test.ts recomputes it, the same split sweep.ts and derive-sweep.mts already use.
+// Travel vectors derived from the contact geometry, so a direction is a fact about the mesh instead of a hand-typed vector a re-export silently invalidates. The rule is one sentence: the join KIND — the only thing a human still states — selects which axis of the contact slab the part travels along, ACROSS it for a press, ALONG it for a slide. Everything here is pure and offline-friendly; helper-scripts/derive-structure.mts writes the result and derivedJoints.furniture.test.ts recomputes it, the same split sweep.ts and derive-sweep.mts already use.
 // WHAT IT NEVER DOES: emit a join array. Derivation answers "which way", never "who joins whom", so a wrong derivation can misdirect a part but can never fabricate a Γ edge or move the build order.
 import { liaisonId } from "@/src/game/core/ids";
+import { JOIN_ARRAYS, KIND_FACTS } from "@/src/game/core/type";
 import type {
   JoinKind,
   JointGeometry,
@@ -13,7 +14,7 @@ import type {
   Vec3,
 } from "@/src/game/core/type";
 import type { ComponentIndex } from "../model/components";
-import type { JointDef } from "../model/joints";
+import type { JointDef } from "./joints";
 import { boxCenter, boxOverlap, CONTACT_EXPANSION_M, deriveJointFrames } from "../model/jointFrames";
 import { isConnector } from "../model/liaisons";
 
@@ -104,8 +105,10 @@ function exitClear(
   return earlier.every((b) => partners.has(b) && flanking.has(b));
 }
 
-/** The kinds that travel ACROSS the contact — the mover meets a face and comes at it perpendicular. A `snap` is here too: dropOn kills the PARK, not the direction, so a snapped part still arrives along an axis (BEKVAM's rails drop flush and still travel −X). */
-const ACROSS: ReadonlySet<JoinKind> = new Set<JoinKind>(["press", "screw", "snap"]);
+/** The kinds that travel ACROSS the contact — the mover meets a face and comes at it perpendicular. A `snap` is here too: dropOn kills the PARK, not the direction, so a snapped part still arrives along an axis (BEKVAM's rails drop flush and still travel −X). So is `hookAndSlot`: its press leg is a press like any other and only the LOCK leg runs across it, so without it a keyhole fell through to the slab-long SHEAR branch and was handed the seam's long axis. Latent until now only because `approach` is the one non-optional variant field and the authored dir wins in joints.ts — the derivation was wrong, nothing read it. Membership is NOT the same question as "does this kind park": snap is here and never parks. */
+const ACROSS: ReadonlySet<JoinKind> = new Set(
+  (Object.keys(KIND_FACTS) as JoinKind[]).filter((k) => KIND_FACTS[k].travel === "normal"),
+);
 
 /** Read today's flat authoring as joint statements, so the derivation can be measured against the whole corpus before a single furniture migrates. A part's OWN join arrays name it the mover; a part with no arrays but with liaisons is the Γ-default category — its edges come from hardware, and `snap` and `press` select the same axis, so the unstated kind costs the measurement nothing. */
 export function statementsFromFlat(
@@ -113,14 +116,14 @@ export function statementsFromFlat(
   liaisons: LiaisonMap,
   components?: ComponentIndex,
 ): JointStatement[] {
-  // Bodies of the SAME component are never a joint here: a component is one tray card, one drag, one placement gesture, so the contact between EKET's runner frame and the middle body it telescopes over is internal to a part the player handles whole — not a face anything approaches. Their directJoins stay (those edges are the non-lead bodies' only Γ reachability), which is exactly why the exclusion belongs here and not in the authoring.
+  // Bodies of the SAME component are never a joint here: a component is one tray card, one drag, one placement gesture, so the contact between EKET's runner frame and the middle body it telescopes over is internal to a part the player handles whole — not a face anything approaches. Their pressJoins stay (those edges are the non-lead bodies' only Γ reachability), which is exactly why the exclusion belongs here and not in the authoring.
   const together = (a: PartId, b: PartId): boolean =>
     !!components && !!components.byBody[a] && components.byBody[a] === components.byBody[b];
   const out: JointStatement[] = [];
   for (const p of Object.values(parts)) {
     if (p.type !== "structural") continue;
     let any = false;
-    for (const [field, kind] of [["directJoins", "press"], ["slideJoins", "slide"], ["screwJoins", "screw"]] as const) {
+    for (const [field, kind] of JOIN_ARRAYS) {
       for (const t of p[field] ?? []) {
         if (together(p.partId, t)) continue;
         out.push({ partId: p.partId, partner: t, kind });

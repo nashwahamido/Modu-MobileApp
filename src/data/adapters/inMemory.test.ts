@@ -1,4 +1,4 @@
-// behavioural tests for the repo seam — no React Native imports, so unlike the zustand stores it runs under node:test
+// behavioural tests for the repo seam — no RN imports, so unlike the zustand stores this runs under node:test
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -14,13 +14,13 @@ test("findByUsername returns the matching profile", async () => {
 });
 
 test("findByUsername is EXACT — a prefix matches nothing", async () => {
-  // deliberate: the lookup rides the unique index, so the client must not pretend to a fuzziness the query lacks
+  // the lookup rides the unique index, so the client must not pretend to a fuzziness the query lacks
   const repos = createInMemoryRepos();
   assert.equal(await repos.profiles.findByUsername("Astr"), null);
 });
 
 test("findByUsername is case-sensitive, matching the DB's unique constraint", async () => {
-  // Postgres text equality is case-sensitive, so the adapter agrees with the database rather than being kinder than it
+  // Postgres text equality is case-sensitive, so the adapter agrees with the DB rather than being kinder
   const repos = createInMemoryRepos();
   assert.equal(await repos.profiles.findByUsername("astrid"), null);
 });
@@ -40,11 +40,11 @@ test("the demo player starts with the starter room and owns its furniture", asyn
 });
 
 // an id in no fixture — the request repos key on ids alone, so a test brings its own participant
-// which keeps these readable on their own, and seed.ts free of rows that exist only to be tested against
+// which keeps these readable alone, and seed.ts free of rows that exist only to be tested against
 const OUTSIDER = "outsider-under-test";
 
 test("accept writes BOTH directions — a friendship is never one-sided", async () => {
-  // the regression the feature exists for: an accept writing only one edge leaves the players disagreeing
+  // the regression this exists for: an accept writing one edge leaves the players disagreeing
   const repos = createInMemoryRepos();
   await repos.friendRequests.send(OUTSIDER, DEMO_ME);
   await repos.friendRequests.accept(DEMO_ME, OUTSIDER);
@@ -69,7 +69,7 @@ test("accept with no pending request throws rather than creating an edge", async
 });
 
 test("sending twice leaves one request", async () => {
-  // (from,to) is the primary key, so sending again is the same intent and not a second request
+  // (from,to) is the primary key, so sending again is the same intent, not a second request
   const repos = createInMemoryRepos();
   await repos.friendRequests.send(DEMO_ME, OUTSIDER);
   await repos.friendRequests.send(DEMO_ME, OUTSIDER);
@@ -90,7 +90,7 @@ test("withdraw removes the request from both parties' views", async () => {
 });
 
 // into the same inventory a purchase writes, since that is the set the popup reads
-// a grant returning the id without adding it passes every assertion and still leaves the player empty-handed
+// a grant returning the id without adding it passes every assertion and leaves the player empty-handed
 test("reward() grants the furniture's reward item into the inventory", async () => {
   const repos = createInMemoryRepos();
   const before = await repos.store.listOwned(DEMO_ME);
@@ -113,8 +113,8 @@ test("reward() replayed grants no second item and no second payment", async () =
   assert.equal(second.alreadyRewarded, true);
   assert.equal(second.coins, first.coins);
   assert.equal(second.xp, first.xp);
-  // the replay STILL reports the item id, since markOwned acts on it and it must name something genuinely owned
-  // the self-heal contract: the insert sits ABOVE the already-rewarded return, so an early finisher is made whole
+  // the replay still reports the item id, since markOwned acts on it and it must name something owned
+  // the self-heal contract: the insert sits above the already-rewarded return, so an early finisher is made whole
   assert.equal(second.rewardItemId, "neiden-bedframe");
   const owned = await repos.store.listOwned(DEMO_ME);
   assert.equal(owned.includes("neiden-bedframe"), true);
@@ -124,7 +124,7 @@ test("reward() replayed grants no second item and no second payment", async () =
 test("reward() grants no item for a furniture with none configured", async () => {
   const repos = createInMemoryRepos();
   const granted = await repos.builds.reward(DEMO_ME, asFurnitureId("eket-cabinet"));
-  // key ABSENT, not present-and-undefined — assert.equal passes for both, so it would miss a switch to `rewardItemId: item?.id`
+  // key ABSENT, not present-and-undefined — assert.equal passes for both, so it would miss `rewardItemId: item?.id`
   assert.equal("rewardItemId" in granted, false);
 });
 

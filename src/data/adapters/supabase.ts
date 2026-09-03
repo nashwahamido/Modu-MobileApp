@@ -58,11 +58,11 @@ function check(error: PostgrestError | null): void {
   if (error) throw error;
 }
 
-// the reference tables for user profile - level titl +avatar
+// the reference tables behind a profile — level titles and avatars
 type Refs = { levels: LevelRow[]; avatars: AvatarRef[] };
 
-// caches the PROMISE so concurrent callers share one round trip, and DROPS it on rejection
-// without the reset one blip is cached as a permanent failure, and getRefs() feeds every profile read
+// caches the promise so concurrent callers share one round trip, and drops it on rejection
+// without the reset one blip caches as a permanent failure, and getRefs() feeds every profile read
 function cachedOnce<T>(load: () => Promise<T>): () => Promise<T> {
   let cache: Promise<T> | null = null;
   return () => {
@@ -252,7 +252,7 @@ const catalogRepo: CatalogRepo = {
       toPlaceableRoomRow,
     );
 
-    // DEV Preview
+    // dev preview: testing drafts
     if (!WORKSHOP_DRAFTS_MERGE_ENABLED) return live;
     try {
       const { data: draftRows, error: draftError } = await supabase
@@ -377,7 +377,7 @@ const friendRequestsRepo: FriendRequestsRepo = {
       .from("friend_requests")
       .select("from_id, to_id, created_at")
       .eq("to_id", userId)
-      .order("created_at", { ascending: false }); //newest first
+      .order("created_at", { ascending: false }); // newest first
     check(error);
     return (data as FriendRequestRow[]).map(toRequest);
   },
@@ -523,7 +523,7 @@ const buildRepo: BuildProgressRepo = {
     return row ? toBuildRewardAmount(row) : { coins: 0, xp: 0 };
   },
   async syncCounts(furnitureId, counts) {
-    // push the recipe's counts so item_build's generated reward knows the local model; the per-step rates stay DB-authored
+    // push the recipe's counts so item_build's generated reward knows the local model; rates stay DB-authored
     const { error } = await supabase.rpc("sync_furniture_counts", {
       p_furniture_id: furnitureId,
       p_step_count: counts.stepCount,
@@ -623,7 +623,7 @@ const getShopItems = cachedOnce(async (): Promise<ShopItem[]> => {
   return [...live, ...(await getWorkshopDrafts())];
 });
 
-// DEV ONLY: every testing draft as a ShopItem
+// dev only: every testing draft as a ShopItem
 const getWorkshopDrafts = cachedOnce(async (): Promise<ShopItem[]> => {
   if (!WORKSHOP_DRAFTS_MERGE_ENABLED) return [];
   try {
@@ -700,7 +700,7 @@ const variantsRepo: VariantsRepo = {
       }),
     );
 
-    // DEV ONLY
+    // dev only: testing drafts
     if (!WORKSHOP_DRAFTS_MERGE_ENABLED) return live;
     try {
       const { data: draftRows, error: draftError } = await supabase

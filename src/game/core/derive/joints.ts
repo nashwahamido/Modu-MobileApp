@@ -1,8 +1,8 @@
 // Joint entities — the v2 authoring shape from docs/superpowers/specs/2026-08-08-joint-model-v2.md, landed as a LOWERING SEAM only: a furniture may author JOINTS instead of the three flat arrays, and this module rewrites them into exactly the per-part fields the engine already reads. Evaluation, input and presentation are untouched, so the flat form stays the single runtime truth and nothing on device changes.
 // Why the seam exists before any furniture needs it: a joint is a PAIR fact stored per-part today (the both-sides lockDir workaround), and every new kind widens the flat sprawl. The union makes each kind carry exactly its own payload, so adding one is a variant plus its touchpoints rather than another optional field on every part.
 // ROTATION: `hinge` is deliberately representable here and deliberately NOT playable. The engine's whole motion primitive is linear — ParkInfo is {axis, offset} eased to zero, and even `screw` is a linear travel with a cosmetic whole-turn spin — so a pivot sweep cannot be faked by a lowering. Authoring one is therefore a clean, named error instead of a part that silently drops flush. To enable it later: add "hinge" to PLAYABLE_JOINT_KINDS and JoinKind, give ParkInfo a rotational variant (pivot + axis + sweep), teach placeEngagement to return it, and add the control that drives it — the authoring shape, the wire format and the validator message all already exist.
-import type { JoinKind, JointGeometry, PartId, Vec3 } from "@/src/game/core/type";
-import type { StructureOverlay } from "./liaisons";
+import { KIND_FACTS, type JoinKind, type JointGeometry, type PartId, type Vec3 } from "@/src/game/core/type";
+import type { StructureOverlay } from "../model/liaisons";
 
 /** What lowering needs to know about a part: its category, and the endpoints a fastener binds. Narrower than PartDef so `jointIssues` stays usable from the recipe path, where parts are still being assembled. */
 type PartLike = { type: string; attached?: readonly PartId[] };
@@ -38,10 +38,12 @@ export type JointDef =
   | (JointBase & { kind: "hinge"; mover: PartId; pivot: Vec3; axis: Vec3; sweepDeg: number });
 
 /** The kinds the engine can actually drive today. A kind outside this set is a valid AUTHORING statement the runtime cannot honour yet, and lowering refuses it by name rather than degrading it into something that looks placeable. */
-export const PLAYABLE_JOINT_KINDS: ReadonlySet<JoinKind> = new Set<JoinKind>(["press", "slide", "screw", "hookAndSlot", "snap"]);
+export const PLAYABLE_JOINT_KINDS: ReadonlySet<JoinKind> = new Set(
+  (Object.keys(KIND_FACTS) as JoinKind[]).filter((k) => KIND_FACTS[k].playable),
+);
 
 type Mutable = {
-  directJoins?: PartId[];
+  pressJoins?: PartId[];
   slideJoins?: PartId[];
   screwJoins?: PartId[];
   placeDir?: Vec3;
@@ -109,7 +111,7 @@ export function lowerJoints(
 
   const out: Record<PartId, Mutable> = {};
   const at = (id: PartId): Mutable => (out[id] ??= {});
-  const join = (id: PartId, field: "directJoins" | "slideJoins" | "screwJoins", target: PartId): void => {
+  const join = (id: PartId, field: "pressJoins" | "slideJoins" | "screwJoins", target: PartId): void => {
     const list = (at(id)[field] ??= []);
     if (!list.includes(target)) list.push(target);
   };
@@ -142,9 +144,9 @@ export function lowerJoints(
 
     switch (j.kind) {
       case "press": {
-        // A press with no mover is the order-INDEPENDENT case (either side may come second and press onto the other), which is exactly what a bare directJoins entry means today, so it lands on `a` and Γ treats it as an undirected press edge.
+        // A press with no mover is the order-INDEPENDENT case (either side may come second and press onto the other), which is exactly what a bare pressJoins entry means today, so it lands on `a` and Γ treats it as an undirected press edge.
         const carrier = j.mover ?? j.a;
-        if (!hardwareJoins) join(carrier, "directJoins", other(j, carrier));
+        if (!hardwareJoins) join(carrier, "pressJoins", other(j, carrier));
         travel(carrier, j.approach);
         break;
       }
@@ -159,17 +161,17 @@ export function lowerJoints(
         break;
       }
       case "snap": {
-        // `dropOn` only has work to do when something else would push placeEngagement off "drop" — a press edge, a slide/screw edge, or a preload. On a hardware-joined pair no join array is emitted, so there is no press edge to suppress and the flag would be inert; EKET's suspension cover authors one today purely to cancel the edge its own directJoins creates.
+        // `dropOn` only has work to do when something else would push placeEngagement off "drop" — a press edge, a slide/screw edge, or a preload. On a hardware-joined pair no join array is emitted, so there is no press edge to suppress and the flag would be inert; EKET's suspension cover authors one today purely to cancel the edge its own pressJoins creates.
         if (!hardwareJoins) {
-          join(j.mover, "directJoins", other(j, j.mover));
+          join(j.mover, "pressJoins", other(j, j.mover));
           at(j.mover).dropOn = true;
         }
         travel(j.mover, j.approach);
         break;
       }
       case "hookAndSlot": {
-        // The press leg is a directJoins edge exactly like a plain press; the lock leg is the per-part lockDir the two-phase control reads. The OTHER endpoint's shove is not authored: a joint states the pair once, and per-part vectors for both sides are what the geometry generator emits — the same argument that retired `approachOther`.
-        if (!hardwareJoins) join(j.mover, "directJoins", other(j, j.mover));
+        // The press leg is a pressJoins edge exactly like a plain press; the lock leg is the per-part lockDir the two-phase control reads. The OTHER endpoint's shove is not authored: a joint states the pair once, and per-part vectors for both sides are what the geometry generator emits — the same argument that retired `approachOther`.
+        if (!hardwareJoins) join(j.mover, "pressJoins", other(j, j.mover));
         travel(j.mover, j.approach);
         at(j.mover).lockDir = j.lock.dir;
         if (j.lock.travel !== undefined) at(j.mover).lockTravel = j.lock.travel;
@@ -195,7 +197,7 @@ export function mergeOverlays(base: StructureOverlay, over: StructureOverlay): S
   for (const [id, entry] of Object.entries(over)) {
     const target = (out[id] ??= {});
     for (const [key, value] of Object.entries(entry as object)) {
-      if (key === "directJoins" || key === "slideJoins" || key === "screwJoins") {
+      if (key === "pressJoins" || key === "slideJoins" || key === "screwJoins") {
         const merged = [...((target[key] as PartId[] | undefined) ?? [])];
         for (const t of (value as PartId[] | undefined) ?? []) if (!merged.includes(t)) merged.push(t);
         target[key] = merged;

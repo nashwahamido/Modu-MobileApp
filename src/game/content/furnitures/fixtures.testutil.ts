@@ -1,5 +1,6 @@
+import type { FastenerMap } from "@/src/game/core/type";
 // Composed furniture for tests: the same pipeline each furniture's index.ts runs, minus the GLB and thumbnail requires. Not named *.test.ts on purpose — `npm test` globs that pattern and would try to execute this as a test file.
-import { composeFurnitureActions, FastenerRule } from "@/src/game/core/composition/composeActions";
+import { composeFurnitureActions } from "@/src/game/core/composition/composeActions";
 import { applyStructure, buildLiaisons, StructureOverlay } from "@/src/game/core/model/liaisons";
 import { buildComponents } from "@/src/game/core/model/components";
 import { HARDWARE } from "@/src/game/content/hardware";
@@ -25,7 +26,7 @@ import { PARTS as DALFRED_PARTS } from "./DALFRED/parts.gen";
 
 export interface AuthoredExports {
   AUTHORED_ACTIONS: readonly DraftAction[];
-  FASTENER_RULES: readonly FastenerRule[];
+  FASTENERS: FastenerMap;
   STRUCTURE: StructureOverlay;
   LABELS: LabelMap;
   CLUSTERS?: Record<ClusterId, ClusterDef>;
@@ -43,7 +44,7 @@ export function fixture(
   const parts = applyStructure(raw, composed);
   const actions = composeFurnitureActions(
     m.AUTHORED_ACTIONS,
-    m.FASTENER_RULES,
+    m.FASTENERS,
     parts,
     HARDWARE,
     m.CLUSTERS,

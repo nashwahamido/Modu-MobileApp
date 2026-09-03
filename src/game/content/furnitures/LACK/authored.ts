@@ -1,10 +1,9 @@
 import {
   action,
-  FastenerRule,
 } from "@/src/game/core/composition/composeActions";
-import { applyStructure, StructureOverlay } from "@/src/game/core/model/liaisons";
+import type { StructureOverlay } from "@/src/game/core/model/liaisons";
+import type { FastenerMap } from "@/src/game/core/type";
 import { groupParts } from "@/src/game/core/scene/targets";
-import { lowerFasteners, withFastenerFacts, type FastenerMap } from "@/src/game/core/model/fasteners";
 import { asGroupId } from "@/src/game/core/ids";
 import {
   ClusterDef,
@@ -29,7 +28,7 @@ export const CLUSTERS = {
 } as Record<ClusterId, ClusterDef>;
 
 
-const STRUCTURE_BASE = {
+export const STRUCTURE = {
   tableTop: { seed: true },
 } as StructureOverlay;
 
@@ -37,11 +36,6 @@ export const FASTENERS: FastenerMap = {
   bolt115980: { home: "liaison", role: "connector", preload: { completesOn: "tighten", counterpartMountsBy: "screw" } },
 } as unknown as FastenerMap;
 
-const LOWERED = lowerFasteners(FASTENERS, applyStructure(P, STRUCTURE_BASE));
-
-export const STRUCTURE: StructureOverlay = withFastenerFacts(STRUCTURE_BASE, LOWERED);
-
-export const FASTENER_RULES: FastenerRule[] = LOWERED.rules;
 
 const LEG_IDS = groupParts(P, asGroupId("leg")).map((p) => p.partId);
 export const AUTHORED_ACTIONS: DraftAction[] = [

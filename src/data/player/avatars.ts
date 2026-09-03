@@ -1,4 +1,4 @@
-// the DB points at an avatar by numeric id (a typo-safe FK); code keeps the ProfileId string, and these map between them
+// the DB points at an avatar by numeric id (a typo-safe FK); code keeps the ProfileId string
 // keep DEFAULT_AVATARS in step with the migration's avatars seed
 import type { ProfileId } from "@/src/game/core/profile";
 
@@ -7,7 +7,7 @@ export interface AvatarRef {
   mode: ProfileId;
 }
 
-// canonical id <-> mode, mirroring the avatars rows the migration seeds
+// canonical id <-> mode
 export const DEFAULT_AVATARS: AvatarRef[] = [
   { id: 1, mode: "control" },
   { id: 2, mode: "visual" },

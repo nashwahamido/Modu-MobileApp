@@ -36,7 +36,7 @@ export function tilePath(source: ItemSource, id: CatalogId): string {
   return `${itemDir(source, id)}/tile${IMAGE_EXT}`;
 }
 
-// the texture files a SURFACE item ships. trim maps are SEPARATE files, and KTX2 rather than JPEG
+// the texture files a surface item ships — trim maps are separate files, and KTX2 not JPEG
 export const SURFACE_MAPS = [
   "texture",
   "normal",
@@ -65,7 +65,7 @@ export function defaultVariation(variants: VariantRef[]): string | null {
 }
 
 // assembly-task assets
-// thumbs are PNG not JPEG: part/cluster thumbs are transparent-film renders
+// PNG not JPEG — part and cluster thumbs are transparent renders
 const assemblyDir = (id: CatalogId): string => `assembly/${id}`;
 
 export const assemblyModelPath = (id: CatalogId): string =>

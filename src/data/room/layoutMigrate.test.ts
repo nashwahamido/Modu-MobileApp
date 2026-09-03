@@ -236,7 +236,7 @@ test("v1 floor placement preserves all fields including optional color", () => {
   assert.equal(item.color, "oak");
 });
 
-// the per-lamp switch was added as an OPTIONAL field with no version bump, on the strength of v2 passing rows through untouched
+// the per-lamp switch was added as an OPTIONAL field with no version bump, since v2 passes rows through untouched
 // if a v3 branch rebuilds rows field by field, every switched-off lamp silently relights — this test fails first
 test("a switched-off lamp stays off across a v2 load", () => {
   const envelope = {
@@ -249,7 +249,7 @@ test("a switched-off lamp stays off across a v2 load", () => {
   const result = migrateRoomPlacements(envelope);
   assert.equal(result.length, 2);
   assert.equal(result[0]!.lightOn, false, "an explicitly switched-off lamp must survive the load");
-  // absent means ON, the reason this field needed no migration — rooms saved before it keep every lamp burning
+  // absent means ON, the reason this field needed no migration — older rooms keep every lamp burning
   assert.equal(result[1]!.lightOn, undefined, "a lamp with no flag must stay unflagged rather than be defaulted to a literal");
 });
 

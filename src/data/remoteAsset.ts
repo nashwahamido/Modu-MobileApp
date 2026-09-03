@@ -1,7 +1,7 @@
-// HEAD-probe a remote asset URL once per session, for two jobs in one request
-// filament's loader has no error state, so a bad URL strands useModel/useBuffer in `loading` forever
-// and the ETag becomes a ?v= cache-buster, since storage's max-age=3600 would otherwise hide a re-upload for an hour
-// null = unreachable, the caller's cue to fall back to its default. a 200 with an unreadable ETag resolves on the bare URL
+// HEAD-probe a remote asset URL once per session — two jobs in one request
+// Filament's loader has no error state, so a bad URL strands useModel/useBuffer in `loading` forever
+// and the ETag becomes a ?v= cache-buster, since max-age=3600 would hide a re-upload for an hour
+// null = unreachable, the cue to fall back to a default; an unreadable ETag resolves on the bare URL
 const resolved = new Map<string, string | null>();
 // in-flight probes, so N callers sharing a URL cause ONE request
 const probes = new Map<string, Promise<string | null>>();
@@ -22,7 +22,7 @@ export function probeRemote(url: string, fetcher: typeof fetch = fetch): Promise
         resolved.set(url, versioned);
         return versioned;
       },
-      // offline or DNS — transient, so leave the URL UNCACHED and let the next probe retry rather than pin it until restart
+      // offline or DNS — transient, so leave it uncached and let the next probe retry
       (): null => null,
     )
     .then((versioned) => {
@@ -34,7 +34,6 @@ export function probeRemote(url: string, fetcher: typeof fetch = fetch): Promise
 }
 
 // undefined = never probed, null = probed and unreachable, string = the versioned URL
-// lets a settled URL render instantly instead of a tick later through an effect
 export function peekProbedRemote(url: string): string | null | undefined {
   return resolved.get(url);
 }

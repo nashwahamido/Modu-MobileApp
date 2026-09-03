@@ -1,4 +1,4 @@
-// the in-memory data connection. used together with seed.ts
+// the in-memory data connection — fixtures live in seed.ts
 import type { FurnitureId } from "@/src/game/core/type";
 import type {
   BuildProgressRepo,
@@ -49,11 +49,11 @@ const delay = (ms: number): Promise<void> =>
     : Promise.resolve();
 
 export interface InMemoryReposOptions {
-  // simulated latency in ms, to show loading states.
+  // simulated latency in ms, to exercise loading states
   latencyMs?: number;
 }
 
-// rewards for rach task
+// per-furniture rewards, mirroring the item_build seed
 const DEFAULT_BUILT_REWARDS: Record<string, { coins: number; xp: number }> = {
   "eket-cabinet": { coins: 441, xp: 882 },
   "bekvam-stool": { coins: 105, xp: 210 },
@@ -61,8 +61,8 @@ const DEFAULT_BUILT_REWARDS: Record<string, { coins: number; xp: number }> = {
   "lack-table": { coins: 42, xp: 84 },
 };
 
-// mirrors item_build.reward_item_id — every id here MUST exist in seedShopItems() or the grant vanishes silently
-// ONE ENTRY, a shape fixture: lack-table -> neiden-bedframe only because DEMO_ME does not own it, so a grant is observable
+// mirrors item_build.reward_item_id — an id missing from seedShopItems() makes the grant vanish silently
+// one entry, a shape fixture: DEMO_ME does not own neiden-bedframe, so the grant is observable
 const DEFAULT_BUILT_REWARD_ITEMS: Record<string, RewardItem> = {
   "lack-table": {
     id: "neiden-bedframe",
@@ -80,7 +80,7 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
     seedRooms().map((r) => [r.ownerId, r] as [UserId, RoomLayout]),
   );
   const friends = new Map<UserId, Friend[]>(Object.entries(seedFriends()));
-  // never seeded: a pending request is session state, and a fixture one is a permanent unearned badge on the tab
+  // never seeded — a fixture request is a permanent unearned badge on the tab
   const requests: FriendRequest[] = [];
   // keyed by "ownerId:furnitureId" — one resumable save per furniture per user
   const buildKey = (ownerId: UserId, furnitureId: string) =>
@@ -90,30 +90,30 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
       (b) => [buildKey(b.ownerId, b.furnitureId), b] as [string, BuildSave],
     ),
   );
-  // the source-of-truth sets behind the derived counts: finished furniture, and likers per room
+  // the source-of-truth sets behind the derived counts: finished furniture, likers per room
   const completed = new Map<UserId, Set<FurnitureId>>(
     Object.entries(seedCompleted()).map(
       ([id, list]) => [id, new Set(list)] as [UserId, Set<FurnitureId>],
     ),
   );
-  // mirrors the ledger's one-per-build unique index, so a repeat reward() is an idempotent no-op like the RPC
+  // mirrors the ledger's unique index, so a repeat reward() is an idempotent no-op like the RPC
   const rewarded = new Map<UserId, Set<FurnitureId>>();
   const roomLikes = new Map<UserId, Set<UserId>>(
     Object.entries(seedRoomLikes()).map(
       ([id, list]) => [id, new Set(list)] as [UserId, Set<UserId>],
     ),
   );
-  // owned shop items per user — their inventory, and the source of the shop's "owned" ticks
+  // owned shop items per user — the inventory, and the shop's "owned" ticks
   const inventory = new Map<UserId, Set<ShopItemId>>(
     Object.entries(seedInventory()).map(
       ([id, list]) => [id, new Set(list)] as [UserId, Set<ShopItemId>],
     ),
   );
 
-  // the dev stand-in for the levels table. tune levelling in the migration, not here
+  // the dev stand-in for the levels table — tune levelling in the migration, not here
   const levels = seedLevelRows();
 
-  // fills the derived fields the Supabase adapter reads back from the reference tables and cached counters
+  // fills the derived fields the Supabase adapter reads back from reference tables and counters
   const withDerived = (p: Profile): Profile => {
     const span = levelSpan(p.level, p.xp, levels);
     return {
@@ -186,7 +186,7 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
     },
   };
 
-  // one directed edge, deduped — behind friendsRepo.add and behind BOTH writes an accept performs
+  // one directed edge, deduped — behind friendsRepo.add and behind both writes an accept performs
   const addEdge = (userId: UserId, friendId: UserId) => {
     const list = friends.get(userId) ?? [];
     if (!list.some((f) => f.userId === friendId)) {
@@ -224,7 +224,7 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
     },
     async send(fromId, toId) {
       await delay(latency);
-      // friend_requests_not_self in the migration, mirrored here so fixtures fail the way the DB would
+      // friend_requests_not_self, mirrored here so fixtures fail the way the DB would
       if (fromId === toId)
         throw new Error("cannot send a friend request to yourself");
       if (requests.some((r) => r.fromId === fromId && r.toId === toId)) return;
@@ -232,7 +232,7 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
     },
     async accept(recipientId, requesterId) {
       await delay(latency);
-      // mirrors accept_friend_request: removing the request IS the authorisation check, and both edges go together
+      // mirrors accept_friend_request: removing the request IS the check, and both edges go together
       const index = requests.findIndex(
         (r) => r.fromId === requesterId && r.toId === recipientId,
       );
@@ -282,21 +282,21 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
       await delay(latency);
       const profile = profiles.get(ownerId);
       if (!profile) throw new Error(`No profile for ${ownerId}`);
-      // the server-authoritative amount, mirrored from the item_build seed, 0 when not configured
+      // the server-authoritative amount, mirrored from the item_build seed, 0 when unconfigured
       const { coins, xp } = DEFAULT_BUILT_REWARDS[furnitureId] ?? {
         coins: 0,
         xp: 0,
       };
       const rewardItem = DEFAULT_BUILT_REWARD_ITEMS[furnitureId];
       const set = rewarded.get(ownerId) ?? new Set<FurnitureId>();
-      // into the inventory a purchase writes to, and BEFORE the already-rewarded return, so the id always names something owned
+      // into the same inventory a purchase writes to, and above the already-rewarded return, so the id names something owned
       // a Set, so a repeat is a no-op — the fixture's mirror of the RPC's `on conflict do nothing`
       if (rewardItem) {
         const owned = inventory.get(ownerId) ?? new Set<ShopItemId>();
         owned.add(rewardItem.id);
         inventory.set(ownerId, owned);
       }
-      // only the CURRENCY is gated here — ownership was settled above, so a repeat returns the totals unchanged
+      // only the currency is gated — ownership settled above, so a repeat returns the totals unchanged
       if (set.has(furnitureId)) {
         return {
           coins: profile.coins,
@@ -307,7 +307,7 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
       }
       set.add(furnitureId);
       rewarded.set(ownerId, set);
-      // level is DERIVED from the new xp total, not incremented — mirrors reward_build in the migration
+      // level is derived from the new xp total, not incremented — mirrors reward_build
       const nextXp = profile.xp + xp;
       const next = {
         ...profile,
@@ -326,14 +326,14 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
     async buildReward(furnitureId) {
       await delay(latency);
       const item = DEFAULT_BUILT_REWARD_ITEMS[furnitureId];
-      // spread, not an explicit undefined, matching toBuildRewardAmount — no reward item means NO item key
+      // spread, not an explicit undefined, matching toBuildRewardAmount — no item means no item key
       return {
         ...(DEFAULT_BUILT_REWARDS[furnitureId] ?? { coins: 0, xp: 0 }),
         ...(item ? { item } : {}),
       };
     },
     async syncCounts() {
-      // a no-op: the fixtures use flat rewards, so there is no catalog row to mirror counts into
+      // a no-op: the fixtures use flat rewards, so there is no catalog row to mirror into
       await delay(latency);
     },
     async listCompleted(ownerId) {
@@ -342,7 +342,7 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
     },
     async listCompletedItems(ownerId) {
       await delay(latency);
-      // mirrors the Supabase join: a completed id with no catalog row is dropped, not rendered nameless
+      // mirrors the Supabase join — a completed id with no catalog row is dropped, not rendered nameless
       const catalog = seedBuiltItems();
       return [...(completed.get(ownerId) ?? [])].flatMap((id) => {
         const row = catalog[id];
@@ -372,7 +372,7 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
     },
   };
 
-  // read once into a local rather than per request — purchase() and listItems() must agree on ONE set of rows
+  // read once into a local — purchase() and listItems() must agree on one set of rows
   const shopItems = seedShopItems();
 
   const storeRepo: StoreRepo = {
@@ -380,7 +380,7 @@ export function createInMemoryRepos(options: InMemoryReposOptions = {}): Repos {
       await delay(latency);
       return clone(shopItems);
     },
-    // purchased UNION granted, like the Supabase adapter — which makes the default surfaces ordinary inventory items
+    // purchased UNION granted, like the Supabase adapter, so default surfaces are ordinary inventory
     async listOwned(userId) {
       await delay(latency);
       const granted = shopItems.filter((i) => i.granted).map((i) => i.id);

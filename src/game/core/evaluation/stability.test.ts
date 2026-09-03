@@ -10,7 +10,7 @@ const A = asPartId("hostA");
 const B = asPartId("hostB");
 const PIN = asPartId("gizmo_1");
 
-// Two structural hosts + one two-attached connector between them, preload per test. Minimal on purpose: preloadConnectorLocks reads type/role/preload/attached/cluster off the parts and place/insert/tighten off the actions, nothing else. The group name "gizmo" matches no prefix in fastener-roles.json, so these parts are connectors ONLY because the role says so — which is the migration's point.
+// Two structural hosts + one two-attached connector between them, preload per test. Minimal on purpose: preloadConnectorLocks reads type/role/preload/attached/cluster off the parts and place/insert/tighten off the actions, nothing else. The group name "gizmo" matches no prefix in helper-scripts/fastener-roles.json, so these parts are connectors ONLY because the role says so — which is the migration's point.
 const furn = (
   completesOn: FastenerPreload["completesOn"],
   counterpartMountsBy: FastenerPreload["counterpartMountsBy"] = "press",

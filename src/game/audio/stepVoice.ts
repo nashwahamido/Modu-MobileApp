@@ -244,6 +244,19 @@ function lineTextFor(furniture: Furniture, level: TextLevel): Map<string, string
   return byAction;
 }
 
+const wordsOf = (line: string): Set<string> =>
+  new Set(line.toLowerCase().split(/[^a-z0-9']+/).filter(Boolean));
+
+/** Do a recorded line and a step's line name the SAME move? Wording drifts after a clip is cut — the keyhole prompt lost its lock clause, DALFRED's combine lost "clockwise until it sits tight", the rod's dowel lost "Stabiliser" — and re-recording every trim is not the bar; speaking the step is. One line's words containing the other's is the evidence, because a trim only ever REMOVES words: two genuinely different steps each carry a word the other lacks (a label, a verb, a side), so neither contains the other. */
+export function speaksSameStep(recorded: string, step: string): boolean {
+  const a = wordsOf(recorded);
+  const b = wordsOf(step);
+  const [fewer, more] = a.size <= b.size ? [a, b] : [b, a];
+  if (fewer.size === 0) return false;
+  for (const word of fewer) if (!more.has(word)) return false;
+  return true;
+}
+
 export function stepVoicePath(
   furniture: Furniture,
   actionId: ActionId,
@@ -253,7 +266,12 @@ export function stepVoicePath(
   if (!block) return null;
   const text = lineTextFor(furniture, level).get(actionId);
   if (text === undefined) return null;
-  const index = block.lines.indexOf(text);
-  if (index < 0) return null;
+  let index = block.lines.indexOf(text);
+  if (index < 0) {
+    // An opening that fits two clips is evidence of nothing, so it resolves to neither — silence beats speaking the wrong step.
+    const near = block.lines.flatMap((line, i) => (speaksSameStep(line, text) ? [i] : []));
+    if (near.length !== 1) return null;
+    index = near[0];
+  }
   return `${block.folder}/${block.prefix}-${block.firstLine + index}.mp3`;
 }

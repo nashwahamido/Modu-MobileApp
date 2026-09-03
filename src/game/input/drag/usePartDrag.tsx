@@ -1164,7 +1164,7 @@ export function usePartDrag({
             return;
           }
           if (park) {
-            // snap the carry to the park pose and hand off to the drive gesture (SlideControl glide or ScrewControl dial, per the cluster's authored driveMotion) for park -> 0
+            // snap the carry to the park pose and hand off to the drive gesture (SlideControl glide or ScrewControl dial, per the cluster's authored combine kind) for park -> 0
             carryShared.value = { x: park.offset[0], y: park.offset[1], z: park.offset[2] };
             sink.set([...park.offset] as Float3);
             store.parkDrive(

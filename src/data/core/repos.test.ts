@@ -4,7 +4,7 @@ import test from "node:test";
 import { defaultVariation } from "../catalog/assets";
 import { toBuildRewardAmount, toPlaceableRoomRow, workshopDraftsToItemVariants, workshopDraftToPlaceableRoomRow, workshopModelDraftsToPlaceableRoomRows, type BuildRewardRow, type PlaceableRoomRowInput, type WorkshopDraftRow } from "./repos";
 
-// a full, valid row — tests override only what they care about, so a dropped field is a narrow failure rather than a crash
+// a full, valid row — tests override only what they care about, so a dropped field fails narrowly
 const baseRow: PlaceableRoomRowInput = {
   id: "lack-table",
   source: "built",
@@ -32,7 +32,7 @@ const baseRow: PlaceableRoomRowInput = {
 
 // the regression this file exists for: toShopItem silently dropped `granted` for the whole life of 018
 // the fixture implemented it correctly, so the suite stayed green while the Supabase path was broken
-// mount/onTop/opensWall are the same risk — all optional, so a hand-written literal can drop any of them with no type error
+// mount/onTop/opensWall are the same risk — all optional, so a literal can drop any of them with no type error
 test("toPlaceableRoomRow carries mount, onTop and opensWall through", () => {
   const row = toPlaceableRoomRow({ ...baseRow, id: "window-sash", category_id: "win", mount: "wall", on_top: false, opens_wall: true });
   assert.equal(row.mount, "wall");
@@ -40,8 +40,8 @@ test("toPlaceableRoomRow carries mount, onTop and opensWall through", () => {
   assert.equal(row.opensWall, true);
 });
 
-// this used to assert the OPPOSITE, a null mount surviving as null, because "tops only" was a real item under 021
-// 024 withdrew that: a null now means only an uncaught-up database, so it takes the same category fallback an absent column does
+// this used to assert the OPPOSITE, a null mount surviving as null, because "tops only" was real under 021
+// 024 withdrew that: a null now means an uncaught-up database, and takes the category fallback an absent column does
 test("toPlaceableRoomRow falls back to floor for a null mount, since null now means 'not migrated'", () => {
   const row = toPlaceableRoomRow({ ...baseRow, mount: null, on_top: true });
   assert.equal(row.mount, "floor");
@@ -86,7 +86,7 @@ test("toPlaceableRoomRow leaves lights undefined for a non-lamp row, and maps a 
     bulb: { x: 0, y: 0.44, z: 0 },
     aim: undefined,
   }]);
-  // the obvious on_top seed from 021: an ASTRID table lamp stands on a desk, not just the floor
+  // the obvious on_top seed from 021 — an ASTRID table lamp stands on a desk, not just the floor
   assert.equal(lamp.onTop, true);
 });
 
@@ -99,8 +99,8 @@ test("toPlaceableRoomRow omits footprintMask/topSurface when absent, includes th
   assert.equal(withBoth.topSurface, true);
 });
 
-// listPlaceables selects `*`, so a missing column is absent rather than a 42703 that would empty the room entirely
-// these pin the mapper's half of that bargain: absent must degrade to pre-021 behaviour, not to "placeable nowhere"
+// listPlaceables selects `*`, so a missing column is absent rather than a 42703 that would empty the room
+// these pin the mapper's half: absent must degrade to pre-021 behaviour, not to "placeable nowhere"
 const withoutCapabilityColumns = (over: Partial<PlaceableRoomRowInput> = {}): PlaceableRoomRowInput => {
   const row = { ...baseRow, ...over };
   delete row.mount;
@@ -120,7 +120,7 @@ test("a pre-021 row (columns absent) falls back to the category rule rather than
   assert.equal(window.opensWall, true, "a window must still cut its hole against a database without 021");
 });
 
-// the window half of that fallback, unchanged by 024 — 'win' infers 'wall', so a pre-021 database does not floor every window
+// the window half of that fallback, unchanged by 024 — 'win' infers 'wall', so no pre-021 window is floored
 test("an unmigrated window row still infers a wall mount, not floor", () => {
   const win = toPlaceableRoomRow({ ...baseRow, category_id: "win", mount: null });
   assert.equal(win.mount, "wall");
@@ -173,7 +173,7 @@ test("workshopDraftToPlaceableRoomRow folds a pre-026 draft's single `light` jso
   }]);
 });
 
-// a surface draft has NO room model — it tiles the shell — and its null size columns would derive a footprint from nothing
+// a surface draft has NO room model — it tiles the shell — and its null size columns derive a footprint from nothing
 test("workshopModelDraftsToPlaceableRoomRows excludes a surface draft (null size) from the room's placeable catalogue", () => {
   const surfaceDraft: WorkshopDraftRow = { ...baseDraft, id: "prototype-wallpaper", category_id: "wall", size_x: null, size_y: null, size_z: null, mount: "wall" };
   const rows = workshopModelDraftsToPlaceableRoomRows([baseDraft, surfaceDraft]);
@@ -181,8 +181,8 @@ test("workshopModelDraftsToPlaceableRoomRows excludes a surface draft (null size
 });
 
 // --------------- contact_size_x/z (migration 023)
-// the same risk as `granted`: two optional columns a literal can drop with no type error, on the side the fixture does not exercise
-// a dropped pair is invisible — every item just keeps claiming its full top footprint, as it did before the column existed
+// the same risk as `granted`: two optional columns a literal can drop, on the side the fixture does not exercise
+// a dropped pair is invisible — every item keeps claiming its full top footprint, as before the column existed
 
 test("toPlaceableRoomRow carries a contact size through as a pair", () => {
   const row = toPlaceableRoomRow({ ...baseRow, id: "laptop", contact_size_x: 0.236, contact_size_z: 0.356 });
@@ -194,20 +194,20 @@ test("toPlaceableRoomRow leaves contactSize absent when the columns are null —
   assert.equal(row.contactSize, undefined);
 });
 
-// pre-023 the columns arrive absent rather than failing the fetch, and absent must read as null does, falling back to `size`
+// pre-023 the columns arrive absent rather than failing the fetch, and absent must read as null does
 test("toPlaceableRoomRow treats absent contact columns as no contact size, not as zero", () => {
   assert.equal(toPlaceableRoomRow({ ...baseRow }).contactSize, undefined);
 });
 
-// a half-set pair means a hand-edited row — taking the one axis present gives a zero-width footprint, an item occupying nothing
+// a half-set pair means a hand-edited row — one axis alone gives a zero-width footprint, an item occupying nothing
 test("toPlaceableRoomRow rejects a half-set contact pair rather than inventing the missing axis", () => {
   assert.equal(toPlaceableRoomRow({ ...baseRow, contact_size_x: 0.236 }).contactSize, undefined);
   assert.equal(toPlaceableRoomRow({ ...baseRow, contact_size_z: 0.356 }).contactSize, undefined);
 });
 
 // --------------- workshop draft variants
-// item_variants is written only by the publish RPC, so a draft has no rows there and the app saw an empty variant list
-// an empty list resolves to the 'default' segment, so a draft with NAMED variations 404s on default.glb and default.png, silently
+// item_variants is written only by the publish RPC, so a draft has no rows there and the app saw an empty list
+// an empty list resolves to the 'default' segment, so named variations 404 on default.glb and default.png, silently
 
 test("workshopDraftsToItemVariants turns a draft's variants array into ItemVariant rows", () => {
   const rows = workshopDraftsToItemVariants([
@@ -228,7 +228,7 @@ test("workshopDraftsToItemVariants turns a draft's variants array into ItemVaria
   ]);
 });
 
-// the whole point: defaultVariation must resolve to the NAMED default, so paths become white.glb, not the absent default.*
+// the whole point: defaultVariation must resolve to the NAMED default, so paths become white.glb
 test("the mapped rows resolve to the named default variation, not the 'default' segment", () => {
   const rows = workshopDraftsToItemVariants([
     { ...baseDraft, id: "yyyy", variants: [{ variation: "grey", is_default: false }, { variation: "white", is_default: true }] },
@@ -236,26 +236,26 @@ test("the mapped rows resolve to the named default variation, not the 'default' 
   assert.equal(defaultVariation(rows.map((r) => ({ variation: r.variation, isDefault: r.isDefault }))), "white");
 });
 
-// a surface draft carries zero variants by constraint, and a pre-column model draft arrives absent under `*` — neither may throw
+// a surface draft carries zero variants by constraint, a pre-column draft arrives absent under `*` — neither may throw
 test("workshopDraftsToItemVariants yields nothing for an empty, absent or null variants field", () => {
   assert.deepEqual(workshopDraftsToItemVariants([{ ...baseDraft, id: "a", variants: [] }]), []);
   assert.deepEqual(workshopDraftsToItemVariants([{ ...baseDraft, id: "b" }]), []);
   assert.deepEqual(workshopDraftsToItemVariants([{ ...baseDraft, id: "c", variants: null }]), []);
 });
 
-// an unnamed single variant already worked by accident, null landing on 'default' — it must keep working, not become the string
+// an unnamed single variant already worked by accident, null landing on 'default' — it must keep working
 test("workshopDraftsToItemVariants preserves a null variation rather than stringifying it", () => {
   const rows = workshopDraftsToItemVariants([{ ...baseDraft, id: "d", variants: [{ variation: null, is_default: true }] }]);
   assert.deepEqual(rows, [{ itemId: "d", variation: null, isDefault: true }]);
 });
 
-// is_default is absent on an older row and must read as false, or the picker's default-first sort compares a non-boolean
+// is_default is absent on an older row and must read as false, or the picker's sort compares a non-boolean
 test("workshopDraftsToItemVariants defaults a missing is_default to false", () => {
   const rows = workshopDraftsToItemVariants([{ ...baseDraft, id: "e", variants: [{ variation: "oak" }] }]);
   assert.deepEqual(rows, [{ itemId: "e", variation: "oak", isDefault: false }]);
 });
 
-// the reward mapper gets the same treatment for the same reason: `item` is OPTIONAL, so a literal can drop it with no type error
+// the reward mapper gets the same treatment: `item` is optional, so a literal can drop it with no type error
 test("toBuildRewardAmount leaves item undefined when the furniture has no reward item — the state every row ships in", () => {
   const reward = toBuildRewardAmount({ coin_reward: 42, xp_reward: 84 });
   assert.deepEqual(reward, { coins: 42, xp: 84 });
@@ -278,7 +278,7 @@ test("toBuildRewardAmount reads an empty embed array as no item", () => {
   assert.equal(toBuildRewardAmount({ coin_reward: 42, xp_reward: 84, item_buy: [] }).item, undefined);
 });
 
-// no catalog row reads as zero, matching reward_build's coalesce — the screen shows "+ 0 coins", not "+ NaN coins"
+// no catalog row reads as zero, matching reward_build's coalesce — "+ 0 coins", not "+ NaN coins"
 test("toBuildRewardAmount reads null currency as zero, mirroring reward_build's coalesce", () => {
   assert.deepEqual(toBuildRewardAmount({ coin_reward: null, xp_reward: null }), { coins: 0, xp: 0 });
 });

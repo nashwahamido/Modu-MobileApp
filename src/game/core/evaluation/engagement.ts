@@ -207,7 +207,7 @@ function travelAxis(part: PartDef, targets: PartDef[], f?: Furniture, done?: Rea
 function partnersIn(f: Furniture, partId: PartId): Set<PartId> {
   const partners = new Set<PartId>();
   for (const q of Object.values(f.parts)) {
-    for (const field of ["directJoins", "slideJoins", "screwJoins"] as const) {
+    for (const field of ["pressJoins", "slideJoins", "screwJoins"] as const) {
       if (q.partId === partId) for (const t of q[field] ?? []) partners.add(t);
       else if (q[field]?.includes(partId)) partners.add(q.partId);
     }
@@ -324,7 +324,7 @@ export function pressParkInfo(
   return withLock(part, parkInfo(travelAxis(part, partners, f, done), part.parkBackoff ?? PRESS_BACKOFF_M));
 }
 
-/** SIGNED engage axis: from the fastener's seat toward the side it backs out of. The baked `engageDir` assumes it drives into `attached[0]`, so the reverse path flips it. */
+// SIGNED engage axis: from the fastener's seat toward the side it backs out of. The baked `engageDir` assumes it drives into `attached[0]`, so the reverse path flips it. 
 export function engageAxis(part: PartDef, done: ReadonlySet<ActionId>): Vec3 {
   const e = part.engageDir ?? [0, 0, 0];
   if (isConnector(part)) {

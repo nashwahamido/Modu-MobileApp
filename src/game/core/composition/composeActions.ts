@@ -18,6 +18,8 @@ import {
   ClusterId,
   DraftAction,
   DriveMotion,
+  FastenerEntry,
+  FastenerMap,
   GroupId,
   PartDef,
   PartId,
@@ -31,8 +33,7 @@ import { groupParts } from "../scene/targets";
 type Parts = Record<PartId, PartDef>;
 
 interface ActionInput {
-  /** Only for part-less beats. Part-tied ids are derived from (type, partId). */
-  actionId?: string;
+  actionId?: string; // part-less beats only — part-tied ids derive from (type, partId)
   type: ActionType;
   stage: number;
   partId?: string;
@@ -41,11 +42,11 @@ interface ActionInput {
   motion?: DriveMotion;
   requires?: readonly string[];
   requiresAny?: readonly string[];
-  /** Named exceptional rule, resolved via Furniture.gates at evaluation time. */
+  // for an exceptional rule, resolved via Furniture.gates at evaluation
   gate?: string;
 }
 
-/** Build one DraftAction from plain strings, branding every id field. */
+// build one DraftAction from plain strings
 export const action = (a: ActionInput): DraftAction => {
   const derived =
     a.partId && isPartTiedType(a.type)
@@ -78,12 +79,9 @@ export const action = (a: ActionInput): DraftAction => {
 interface FastenerPairOptions {
   insertRequiresAny?: readonly ActionId[];
   tightenRequires?: readonly ActionId[];
-  /** Tool stamped on the INSERT action too. Screws/bolts are positioned by  hand and only the tighten is tool-driven — but a CAM bolt's insert IS the  tool moment (screwing the bolt into its panel; the later tighten is the  cam-disc turn), so cam fasteners pass the tool here as well. */
   insertTool?: ToolId;
-  /** How the tighten LOOKS (presentation axis; resolved by expandFastenerRules  from HARDWARE.motion ?? the kind default). */
-  motion?: DriveMotion;
-  /** Opt-in 3-phase lifecycle (part.insertStage set): split the drag-to-loose  insert into placeFastener (drag → stage, fully out) + insertFastener (PRESS →  loose). Absent ⇒ classic 2-phase. */
-  threePhase?: boolean;
+  motion?: DriveMotion; // how the tighten LOOKS — from HARDWARE.motion ?? the kind default
+  threePhase?: boolean; // opt-in 3-phase lifecycle
 }
 
 const pair = (
@@ -104,7 +102,8 @@ const pair = (
     requires: [insert, ...(options.tightenRequires ?? [])],
   };
   if (options.threePhase) {
-    // 3-phase: the drag from the tray is a placeFastener (lands at the STAGE pose, fully out); a separate insertFastener is the PRESS that drives stage → loose; tighten drives loose → flush. The carrier/OR prereqs gate bringing it out (place); insert only needs the place; downstream refs to insertId (rod slide-in, tighten) still mean "pressed in".
+    // place = the drag from the tray, insert = the PRESS (stage → loose), tighten = loose → flush
+    // the OR prereqs gate the place alone; downstream refs to insertId still mean "pressed in"
     const place = placeFastenerId(partId);
     return [
       {
@@ -118,7 +117,13 @@ const pair = (
           ? { requiresAny: options.insertRequiresAny }
           : {}),
       },
-      { actionId: insert, type: "insertFastener", stage, partId, requires: [place] },
+      {
+        actionId: insert,
+        type: "insertFastener",
+        stage,
+        partId,
+        requires: [place],
+      },
       tighten,
     ];
   }
@@ -138,22 +143,27 @@ const pair = (
   ];
 };
 
-export type FastenerRule = {
-  group: GroupId;
-  /** RARE per-build override. Tool normally comes from the global hardware  catalogue (data/hardware.ts) — resolution chain:  rule.tool → HARDWARE[group].tool → part.tool → none (bare hands). */
-  tool?: ToolId;
-  /** Optional override for AND prereqs before insertion. Defaults from fastenerKind. */
-  requires?: (p: PartDef) => readonly ActionId[];
-  /** Optional override for OR prereqs before insertion. Defaults from fastenerKind. */
-  insertRequiresAny?: (p: PartDef) => readonly ActionId[];
-  /** Extra AND prereqs before tightening, beyond the insert action itself. */
-  tightenRequires?: (p: PartDef) => readonly ActionId[];
-};
-
 const attachedSnaps = (p: PartDef): ActionId[] =>
   (p.attached ?? []).map((part) => placeId(part));
 
-/** Hardware fitted into a STAGED carrier ignores the kind-based defaults entirely: it goes in as soon as the carrier is out (its other endpoints are what the finished sub-assembly will later join, and needn't exist yet), and it tightens only once the carrier has been SEATED — the rod's dowels press in at staging and rotate home after the bridge drops. */
+const dist = (a: PartDef, b: PartDef): number => {
+  const [x1, y1, z1] = a.pose.position;
+  const [x2, y2, z2] = b.pose.position;
+  return Math.hypot(x1 - x2, y1 - y2, z1 - z2);
+};
+
+/** Instance matching for an extra: the nearest primary-group instance whose binding covers every one of the extra's own hosts (same liaison + nearest — stricter than a group-wide nearest). Shared with the generation-time validator so the two can never pair differently. */
+export function primaryFor(extra: PartDef, primaries: readonly PartDef[]): PartDef | undefined {
+  const hosts = extra.attached ?? [];
+  let best: PartDef | undefined;
+  for (const c of primaries) {
+    if (!hosts.every((h) => c.attached?.includes(h))) continue;
+    if (!best || dist(extra, c) < dist(extra, best)) best = c;
+  }
+  return best;
+}
+
+// hardware fitted into a STAGED carrier ignores the role-based defaults entirely
 function defaultInsertRequires(p: PartDef, parts: Parts): readonly ActionId[] {
   const carrier = stagedCarrierOf(p, parts);
   if (carrier) return [stageId(carrier)];
@@ -165,16 +175,25 @@ function defaultInsertRequiresAny(p: PartDef, parts: Parts): readonly ActionId[]
   return isConnector(p) ? attachedSnaps(p) : [];
 }
 
-// The `kind === "cam"` branch here — a connector whose TIGHTEN waited for both endpoints — was DELETED with the enum on 2026-09-01, and it was not merely unused: combined with the preload lock it was unreachable. stability holds place(missing) until a completesOn-tighten connector is TIGHTENED, while this made that tighten wait for place(missing) — a deadlock the corpus never hit only because no fastener ever lowered to "cam". The fitting it was modelling is a bolt plus a separate disc: a connector plus an extra, which sequences through the extra's own rule.
+// no "cam" branch here on purpose: a tighten waiting on both endpoints deadlocks against the preload lock
+// a bolt-plus-disc fitting is a connector plus an extra, and sequences through the extra's own requires
 function defaultTightenRequires(p: PartDef, parts: Parts): readonly ActionId[] {
   const carrier = stagedCarrierOf(p, parts);
   if (carrier) return [placeId(carrier)];
   return [];
 }
 
-/** Each fastener instance's resolved prereqs, kept for the stage derivation below before any action is built. */
+/** Extra sequencing: own host places, then the inherited liaison's remaining endpoints (the securer gate — load-bearing when the primary is a connector, whose own tighten precedes the later endpoint), then the primary's completion. */
+function extraRequires(p: PartDef, primary: PartDef): readonly ActionId[] {
+  const hosts = p.attached ?? [];
+  const remaining = (primary.attached ?? []).filter((id) => !hosts.includes(id));
+  return [...hosts.map(placeId), ...remaining.map(placeId), tightenId(primary.partId)];
+}
+
+/** a fastener's resolved prereqs, kept for the stage derivation before any action is built */
 interface FastenerInstance {
-  rule: FastenerRule;
+  group: GroupId;
+  tool?: ToolId;
   part: PartDef;
   requires: readonly ActionId[];
   requiresAny: readonly ActionId[];
@@ -182,15 +201,15 @@ interface FastenerInstance {
 }
 
 /**
- * A fastener's stage FOLLOWS the joint it closes: the max stage over the placements its own prereqs name, and recursively over any fastener it waits on (EKET's back pins wait on the cams). The OR side takes the MIN, because a preload connector goes in as soon as its first host is down and belongs in that host's chunk, not its partner's.
- *
- * Authored per-group stages did the same job by hand and could drift from the parts: BEKVAM's third step screw sat a stage above the two stage-1 parts it joins purely so it stayed with its group, and EKET's rear cams+pins sat a stage above the back panel they bite into. Both now land with their joints. Legality is untouched either way — `requires` already held them behind their hosts; stage is the tray's chunking, and the chunk a fastener belongs in is the one where its joint closes.
+ * a fastener's stage FOLLOWS the joint it closes: the max stage over the placements its prereqs name
+ * the OR side takes the MIN — a preload connector goes in once its first host is down
+ * legality is untouched: `requires` already holds them, and stage is only the tray's chunking
  */
 function deriveFastenerStages(
   instances: readonly FastenerInstance[],
   placementStage: ReadonlyMap<PartId, number>,
 ): Map<PartId, number> {
-  // Both ids for a structural part answer with that part's authored stage: a staged carrier's hardware names the take-out beat, which is the same chunk as the placement it was split from.
+  // both ids answer with the part's authored stage — a carrier's hardware names the take-out beat
   const byPlacementAction = new Map<ActionId, number>();
   for (const [partId, stage] of placementStage) {
     byPlacementAction.set(placeId(partId), stage);
@@ -198,7 +217,11 @@ function deriveFastenerStages(
   }
   const byFastenerAction = new Map<ActionId, PartId>();
   for (const i of instances) {
-    for (const id of [insertId(i.part.partId), tightenId(i.part.partId), placeFastenerId(i.part.partId)]) {
+    for (const id of [
+      insertId(i.part.partId),
+      tightenId(i.part.partId),
+      placeFastenerId(i.part.partId),
+    ]) {
       byFastenerAction.set(id, i.part.partId);
     }
   }
@@ -209,7 +232,7 @@ function deriveFastenerStages(
   const stageOfFastener = (partId: PartId): number => {
     const cached = out.get(partId);
     if (cached !== undefined) return cached;
-    // A prereq cycle is an authoring bug the validator reports; bail to stage 1 rather than blowing the stack here.
+    // a prereq cycle is an authoring bug the validator reports — bail rather than blow the stack
     if (resolving.has(partId)) return 1;
     resolving.add(partId);
     const inst = byPart.get(partId);
@@ -219,8 +242,13 @@ function deriveFastenerStages(
       const fastener = byFastenerAction.get(id);
       return fastener ? stageOfFastener(fastener) : 1;
     };
-    const and = [...(inst?.requires ?? []), ...(inst?.tightenRequires ?? [])].map(stageOfPrereq);
-    const or = inst?.requiresAny.length ? [Math.min(...inst.requiresAny.map(stageOfPrereq))] : [];
+    const and = [
+      ...(inst?.requires ?? []),
+      ...(inst?.tightenRequires ?? []),
+    ].map(stageOfPrereq);
+    const or = inst?.requiresAny.length
+      ? [Math.min(...inst.requiresAny.map(stageOfPrereq))]
+      : [];
     const value = Math.max(1, ...and, ...or);
     resolving.delete(partId);
     out.set(partId, value);
@@ -230,43 +258,47 @@ function deriveFastenerStages(
   return out;
 }
 
-/** Expand each authored rule into insert+tighten pairs for every fastener in  the group. `hardware` is the global catalogue (data/hardware.ts), passed in  by the data layer so core stays free of data imports. Tool resolution:  rule.tool (rare override) → hardware[group].tool → part.tool → none. `placementStage` carries the authored stage of every structural placement, which is where each fastener's own stage comes from — see deriveFastenerStages. */
-export function expandFastenerRules(
-  rules: readonly FastenerRule[],
+/**
+ * expand each FASTENERS def into insert+tighten pairs for every instance of its group, in def order (action order follows it)
+ * the def says what KIND of thing the group is; the instance's `attached` (and its lowered role, already on the part) says where — sequencing is derived from the two
+ * `hardware` is passed in by the data layer, so core stays free of data imports
+ * tool: def.tool → hardware[group].tool → part.tool → none. stages come from `placementStage`
+ */
+export function expandFasteners(
+  fasteners: FastenerMap,
   parts: Record<PartId, PartDef>,
   hardware: Partial<Record<GroupId, { tool: ToolId; motion?: DriveMotion }>> = {},
   placementStage: ReadonlyMap<PartId, number> = new Map(),
 ): DraftAction[] {
-  const instances: FastenerInstance[] = rules.flatMap((r) =>
-    groupParts(parts, r.group).map((part) => ({
-      rule: r,
+  const instances: FastenerInstance[] = (Object.entries(fasteners) as [GroupId, FastenerEntry][]).flatMap(([group, d]) => {
+    const primaries = typeof d.home === "object" ? groupParts(parts, d.home.extraOf) : null;
+    return groupParts(parts, group).map((part) => ({
+      group,
+      tool: d.tool,
       part,
-      requires: r.requires?.(part) ?? defaultInsertRequires(part, parts),
-      requiresAny: r.insertRequiresAny?.(part) ?? defaultInsertRequiresAny(part, parts),
-      tightenRequires: r.tightenRequires?.(part) ?? defaultTightenRequires(part, parts),
-    })),
-  );
+      requires: primaries ? extraRequires(part, primaryFor(part, primaries)!) : defaultInsertRequires(part, parts),
+      requiresAny: primaries ? [] : defaultInsertRequiresAny(part, parts),
+      tightenRequires: primaries ? [] : defaultTightenRequires(part, parts),
+    }));
+  });
   const stages = deriveFastenerStages(instances, placementStage);
 
-  return instances.flatMap(({ rule: r, part: p, requires, requiresAny, tightenRequires }) => {
-    const tool = r.tool ?? hardware[r.group]?.tool ?? p.tool;
+  return instances.flatMap(({ group, tool: defTool, part: p, requires, requiresAny, tightenRequires }) => {
+    const tool = defTool ?? hardware[group]?.tool ?? p.tool;
     return pair(p.partId, tool, requires, stages.get(p.partId) ?? 1, {
       insertRequiresAny: requiresAny,
       tightenRequires,
-      // FEEL, not sequencing, and the only default the role model needs to supply: a fastener that is HOME once pressed in is tapped, everything else is turned. That is what `kind === "pin" ? "strike" : "spin"` picked out, since pin was the sole completesOn-insert kind. The retired third branch (cam → "turn", with a tool at insert) is unreachable as a default now; hardware.ts already overrides motion per group, which is where EKET's cams get their "turn" from today.
-      motion: hardware[r.group]?.motion ?? (preloadOf(p)?.completesOn === "insert" ? "strike" : "spin"),
+      // FEEL, not sequencing: HOME once pressed in is tapped, everything else turned
+      // hardware.ts overrides motion per group, which is where EKET's cams get "turn"
+      motion:
+        hardware[group]?.motion ??
+        (preloadOf(p)?.completesOn === "insert" ? "strike" : "spin"),
       threePhase: !!p.insertStage,
     });
   });
 }
 
-/**
- * Split every STAGED part's single placement into the two gestures the player actually performs: `stage_X` takes it out of the tray to its sub-assembly rest pose, `place_X` carries the finished sub-assembly home. Authors never write the stage beat — `stageOffset` on the part is the whole switch.
- *
- * The carrier's authored prereqs move to the STAGE beat (they are what must be true before it can come out at all) and `place_X` is left requiring the stage beat plus every insert of hardware fitted into it: you finish the sub-assembly before installing it. A `gate` stays on the placement, where the exceptional rule was authored to apply.
- *
- * Runs after expandFastenerRules — it reads the expanded insert ids — and before withOrder, so strict mode's `order` numbering follows the spliced sequence.
- */
+// split a STAGED part's placement in two: `stage_X` takes it out to its rest pose, `place_X` carries it home.
 export function withStaging(
   drafts: readonly DraftAction[],
   parts: Parts,
@@ -298,22 +330,33 @@ export function withStaging(
       requires: seat.requires,
       ...(seat.requiresAny?.length ? { requiresAny: seat.requiresAny } : {}),
     });
-    // Relocate the carrier's hardware actions out of the fastener appendix into the stage→place window: drops/inserts BEFORE the placement (fit the hardware while the part rests staged), tightens right AFTER it (their requires demand the placement anyway). Legality never depended on array position — this makes ORDER tell the same story the requires graph already enforces, so strict mode and step hints walk take-out → fit → carry-in per carrier instead of staging every carrier back to back.
+    // move the carrier's hardware into the stage→place window: inserts before the placement, tightens after
+    // legality never depended on array position — this makes ORDER tell the story `requires` already enforces
     const hw = new Set(hardwareOn(parts, carrier));
     const fitting: DraftAction[] = [];
     const tightens: DraftAction[] = [];
     for (let i = out.length - 1; i >= 0; i--) {
       const d = out[i];
-      if (d.partId && hw.has(d.partId) && (d.type === "placeFastener" || d.type === "insertFastener" || d.type === "tightenFastener")) {
+      if (
+        d.partId &&
+        hw.has(d.partId) &&
+        (d.type === "placeFastener" ||
+          d.type === "insertFastener" ||
+          d.type === "tightenFastener")
+      ) {
         (d.type === "tightenFastener" ? tightens : fitting).unshift(d);
         out.splice(i, 1);
       }
     }
-    const placeAt = out.findIndex((d) => d.type === "placePart" && d.partId === carrier);
+    const placeAt = out.findIndex(
+      (d) => d.type === "placePart" && d.partId === carrier,
+    );
     out.splice(placeAt + 1, 0, ...tightens);
     out.splice(placeAt, 0, ...fitting);
   }
-  // Serialize IDENTICAL staged carriers (same group): each later instance's take-out requires the previous instance's hardware fully tightened (which transitively requires its placement). Derived from the parts alone — never authored, never asked in a wizard — because instances of one group are interchangeable, so forcing completion order costs the player nothing, while allowing it would leave a half-built sub-assembly dangling in the staging area once the next one comes out. Ordering above made strict mode TELL this story; this makes every mode ENFORCE it.
+  // serialize IDENTICAL carriers: each take-out requires the previous instance's hardware tightened
+  // derived from the parts, never authored — instances of one group are interchangeable, so this costs nothing
+  // without it a half-built sub-assembly dangles in the staging area once the next one comes out
   const carriersByGroup = new Map<string, PartId[]>();
   for (const c of carriers) {
     const g = parts[c].group as string;
@@ -323,23 +366,31 @@ export function withStaging(
   }
   for (const group of carriersByGroup.values()) {
     if (group.length < 2) continue;
-    const stageIndex = (c: PartId) => out.findIndex((d) => d.actionId === stageId(c));
+    const stageIndex = (c: PartId) =>
+      out.findIndex((d) => d.actionId === stageId(c));
     const ordered = [...group].sort((a, b) => stageIndex(a) - stageIndex(b));
     for (let k = 1; k < ordered.length; k++) {
       const prevSettled = hardwareOn(parts, ordered[k - 1]).map(tightenId);
       const idx = stageIndex(ordered[k]);
-      out[idx] = { ...out[idx], requires: [...new Set([...out[idx].requires, ...prevSettled])] };
+      out[idx] = {
+        ...out[idx],
+        requires: [...new Set([...out[idx].requires, ...prevSettled])],
+      };
     }
   }
   return out;
 }
 
 /**
- * Pull every cluster's OWN fasteners ahead of the first combine. The fastener appendix lands after every authored action, combines included, so a sub-assembly's hardware was asked for AFTER the sub-assembly had been joined into the furniture — and once anything is combined, the next focused cluster renders at its baked pose inside it. EKET asked for the drawer-back screws with the drawer already inside the finished cabinet (box-blocked from 72/72 sweep cameras, topPanel alone hiding 46; measured 6mm and passing with the drawer still loose); DALFRED asked for the pole's end cap after the pole was threaded down over the support pin (50mm behind it). The authored stage said otherwise in both cases and never got a say against array position.
+ * pull every cluster's OWN fasteners ahead of the first combine
+ * the appendix lands after every authored action, so hardware was asked for with its cluster already combined in
+ * and hidden inside it — EKET's drawer screws, DALFRED's end cap. see fastenerOrder.test.ts for the measurements
  *
- * A fastener is a cluster's own when every part it attaches to sits in ONE cluster; one that bridges clusters realizes the combine joint and stays where it is, as does anything that explicitly requires a combine. Only actions sequenced after the first combine move, so hardware withStaging already placed inside a take-out → fit → carry-in window keeps that story.
+ * a fastener is a cluster's own when every part it attaches to sits in ONE cluster
+ * one that bridges clusters realizes the combine joint and stays put, as does anything requiring a combine
  *
- * Each moved action lands at its EARLIEST legal point — right after the last action it requires — not after its cluster's last pre-combine placement. The cluster-block anchor repeated the array-position failure this pass exists to fix, one level down: EKET's runner screws are authored stage 1 ("rails onto flat sides first", manual steps 2-3) but were asked for with all 29 cabinet parts standing, and the rear pair (nearest the back panel) measured ZERO clear viewpoints in that state, against 180-379 of 576 at the earliest legal moment — no camera angle could ever snap them. Requires-anchoring is the manual's own story: screw each joint as it closes. A require that is itself a moved action resolves to that action's anchor; original relative order breaks the tie, so insert still precedes tighten and an extra still follows its primary.
+ * each moved action lands at its EARLIEST legal point — right after the last action it requires
+ * anchoring on the cluster block instead repeats the same array-position failure one level down
  */
 export function withFastenersBeforeCombines(
   drafts: readonly DraftAction[],
@@ -348,9 +399,16 @@ export function withFastenersBeforeCombines(
   const out = [...drafts];
   const firstCombine = out.findIndex((d) => d.type === "combineClusters");
   if (firstCombine < 0) return out;
-  const combineIds = new Set(out.filter((d) => d.type === "combineClusters").map((d) => d.actionId));
+  const combineIds = new Set(
+    out.filter((d) => d.type === "combineClusters").map((d) => d.actionId),
+  );
   const ownCluster = (d: DraftAction): ClusterId | null => {
-    if (d.type !== "placeFastener" && d.type !== "insertFastener" && d.type !== "tightenFastener") return null;
+    if (
+      d.type !== "placeFastener" &&
+      d.type !== "insertFastener" &&
+      d.type !== "tightenFastener"
+    )
+      return null;
     const p = d.partId ? parts[d.partId] : undefined;
     if (!p || p.type !== "fastener") return null;
     const owners = (p.attached ?? []).map((id) => parts[id]?.cluster);
@@ -364,7 +422,10 @@ export function withFastenersBeforeCombines(
     moved.unshift(out[i]);
     out.splice(i, 1);
   }
-  // Anchor each moved action after the LAST action it requires. All anchors are computed against the cleaned list, then spliced highest-first, so every index stays valid; a require that is itself a moved action contributes ITS anchor (already computed — an insert precedes its tighten in appendix order, a primary's tighten precedes its extra), and original order within a shared anchor keeps those chains sequenced. requiresAny is an OR, so its earliest-legal contribution is the FIRST resolved alternative. An action whose requires resolve to nothing keeps the old fallback, just before the first combine.
+  // anchors are computed against the cleaned list, then spliced highest-first, so every index stays valid
+  // a require that is itself moved contributes ITS anchor; ties keep original order, so insert precedes tighten
+  // requiresAny is an OR, so it contributes its FIRST resolved alternative
+  // requires resolving to nothing falls back to just before the first combine
   const cleanedIndex = new Map<ActionId, number>();
   out.forEach((d, i) => cleanedIndex.set(d.actionId, i));
   const firstCombineIdx = out.findIndex((d) => d.type === "combineClusters");
@@ -380,20 +441,29 @@ export function withFastenersBeforeCombines(
       const a = resolve(r);
       if (a !== undefined) at = Math.max(at, a);
     }
-    const anyAts = (d.requiresAny ?? []).map(resolve).filter((a): a is number => a !== undefined);
+    const anyAts = (d.requiresAny ?? [])
+      .map(resolve)
+      .filter((a): a is number => a !== undefined);
     if (anyAts.length) at = Math.max(at, Math.min(...anyAts));
-    anchors.set(d.actionId, at > 0 ? Math.min(at, firstCombineIdx) : firstCombineIdx);
+    anchors.set(
+      d.actionId,
+      at > 0 ? Math.min(at, firstCombineIdx) : firstCombineIdx,
+    );
   }
   const byAnchor = new Map<number, DraftAction[]>();
   for (const d of moved) {
     const at = anchors.get(d.actionId)!;
     (byAnchor.get(at) ?? byAnchor.set(at, []).get(at)!).push(d);
   }
-  for (const [at, list] of [...byAnchor.entries()].sort((a, b) => b[0] - a[0])) out.splice(at, 0, ...list);
+  for (const [at, list] of [...byAnchor.entries()].sort((a, b) => b[0] - a[0]))
+    out.splice(at, 0, ...list);
   return out;
 }
 
-/** Derive each combineClusters action's ordering from the cluster overlay: a cluster's combine requires the combines of every cluster it slideJoins. The overlay is then the single source of truth for combine order, and authors stop hand-writing requires that must be kept in sync with slideJoins. Furniture with no overlay passes straight through. */
+/**
+ * a combine requires the combines of every cluster its own combine seats onto, so the overlay is the one source of combine order
+ * authors stop hand-writing requires that must track the combine graph. no overlay passes straight through
+ */
 export function withClusterCombines(
   drafts: readonly DraftAction[],
   clusters: Record<ClusterId, ClusterDef> | undefined,
@@ -414,7 +484,10 @@ export function withClusterCombines(
   });
 }
 
-/** Stamp the canonical `order` (used by guide mode) onto authored/expanded  drafts, by their final position in the composed action list. When `parts`  is given, also resolve each action's missing tool from its part's default  (action.tool → part.tool → none): DALFRED's pole authors `tool: "mallet"`  ONCE in STRUCTURE and every action touching it inherits it. */
+/**
+ * stamp the canonical `order` (guide mode) by each draft's final position in the composed list
+ * with `parts`, also resolve a missing tool: action.tool → part.tool → none, so DALFRED's pole authors "mallet" once
+ */
 export const withOrder = (
   drafts: readonly DraftAction[],
   parts?: Record<PartId, PartDef>,
@@ -425,24 +498,32 @@ export const withOrder = (
     return { ...a, ...(partTool ? { tool: partTool } : {}), order: i };
   });
 
-/** The ONE way to turn a furniture's authored drafts + fastener rules into its final action list: expand the rules, split staged parts into take-out + fit-in, pull each cluster's own fasteners ahead of the combines, then stamp `order`. Every consumer (each furniture's meta.ts, the validator and engine-test harnesses, the availability tests) must go through here — the passes are order-sensitive, and hand-rolled copies of this chain have twice silently dropped a later pass. */
+/**
+ * the ONE way to turn drafts + FASTENERS defs into a final action list
+ * expand, split staged parts, pull cluster fasteners ahead of the combines, stamp `order`
+ * the passes are order-sensitive, and hand-rolled copies have twice silently dropped a later one
+ */
 export function composeFurnitureActions(
   authored: readonly DraftAction[],
-  rules: readonly FastenerRule[],
+  fasteners: FastenerMap,
   parts: Parts,
   hardware: Partial<Record<GroupId, { tool: ToolId; motion?: DriveMotion }>> = {},
   clusters?: Record<ClusterId, ClusterDef>,
 ): AssemblyAction[] {
-  // Every structural placement's authored stage, which is what each fastener's own stage is derived from.
+  // every structural placement's authored stage — where each fastener's stage comes from
   const placementStage = new Map<PartId, number>();
   for (const a of authored) {
-    if (a.type === "placePart" && a.partId) placementStage.set(a.partId, a.stage);
+    if (a.type === "placePart" && a.partId)
+      placementStage.set(a.partId, a.stage);
   }
   return withOrder(
     withClusterCombines(
       withFastenersBeforeCombines(
         withStaging(
-          [...authored, ...expandFastenerRules(rules, parts, hardware, placementStage)],
+          [
+            ...authored,
+            ...expandFasteners(fasteners, parts, hardware, placementStage),
+          ],
           parts,
         ),
         parts,
@@ -453,7 +534,10 @@ export function composeFurnitureActions(
   );
 }
 
-/** The tighten-action ids for every fastener in a group, e.g. "tighten_<partId>"  for each screw105251. Lets an authored step say "after EVERY leg screw is  driven" declaratively, without filtering the expanded action list. */
+/**
+ * the tighten ids for a whole group, so an authored step can say "after EVERY leg screw is driven"
+ * declaratively, without filtering the expanded action list
+ */
 export function tightenActionIds(
   parts: Record<PartId, PartDef>,
   group: GroupId,

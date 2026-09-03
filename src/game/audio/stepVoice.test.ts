@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
-import { SCRIPT_BLOCKS, stepVoicePath } from "./stepVoice";
+import { SCRIPT_BLOCKS, speaksSameStep, stepVoicePath } from "./stepVoice";
 import { composeFurnitureActions } from "@/src/game/core/composition/composeActions";
 import { composeLabels } from "@/src/game/core/composition/composeLabels";
 import { applyStructure, type StructureOverlay } from "@/src/game/core/model/liaisons";
@@ -20,7 +20,7 @@ import { COMPOSED } from "@/src/game/content/furnitures/composed";
 
 type AuthoredLike = {
   AUTHORED_ACTIONS: never;
-  FASTENER_RULES: never;
+  FASTENERS: never;
   STRUCTURE: never;
   LABELS: never;
   CLUSTERS?: never;
@@ -124,7 +124,7 @@ const fixture = (id: string, m: AuthoredLike, raw: Record<string, PartDef>, comp
   return {
     meta: { id },
     parts,
-    actions: composeFurnitureActions(m.AUTHORED_ACTIONS, m.FASTENER_RULES, parts, HARDWARE, m.CLUSTERS),
+    actions: composeFurnitureActions(m.AUTHORED_ACTIONS, m.FASTENERS, parts, HARDWARE, m.CLUSTERS),
     clusters: m.CLUSTERS,
     instructions: m.BEATS,
     labels: composeLabels(m.LABELS, parts, HARDWARE),
@@ -136,7 +136,9 @@ const MODELS: { id: string; f: Furniture; counts: Record<TextLevel, number> }[] 
   { id: "lack-table", f: fixture("lack-table", LACK as never, LACK_PARTS as never, COMPOSED.LACK), counts: { standard: 4, simple: 4 } },
   { id: "dalfred-stool", f: fixture("dalfred-stool", DALFRED as never, DALFRED_PARTS as never, COMPOSED.DALFRED), counts: { standard: 20, simple: 14 } },
   { id: "bekvam-stool", f: fixture("bekvam-stool", BEKVAM as never, BEKVAM_PARTS as never, COMPOSED.BEKVAM), counts: { standard: 14, simple: 9 } },
-  { id: "eket-cabinet", f: fixture("eket-cabinet", EKET as never, EKET_PARTS as never, COMPOSED.EKET), counts: { standard: 44, simple: 35 } },
+  // eket simple 35 → 34 on 2026-09-02: dropping the two suspBracket tightens (a drive gesture on a structural part, where a missing engageDir meant nothing moved) orphaned one clip. The file stays in the bucket; this number tracks the clips the build USES, so the pin still catches a step that grows without audio.
+  // eket standard 44 → 43: the same two tightens orphan "Tighten the Suspension bracket with the screwdriver." here, and only the simple count was updated at the time.
+  { id: "eket-cabinet", f: fixture("eket-cabinet", EKET as never, EKET_PARTS as never, COMPOSED.EKET), counts: { standard: 43, simple: 34 } },
 ];
 
 for (const { id, f, counts } of MODELS) {
@@ -158,9 +160,9 @@ for (const { id, f, counts } of MODELS) {
         const path = stepVoicePath(f, action.actionId, level);
         assert.ok(path, `${id} ${level} ${action.actionId} has no clip for: ${text}`);
         const n = Number(path.slice(path.lastIndexOf("-") + 1, -4));
-        assert.equal(
-          block.get(n),
-          text,
+        // Same STEP, not the same sentence: a line trimmed after its clip was cut still speaks that step, while a scrambled middle still lands on a clip that opens differently and fails here.
+        assert.ok(
+          speaksSameStep(block.get(n) ?? "", text),
           `${id} ${level} ${action.actionId}: clip ${n} says ${JSON.stringify(block.get(n))} but the step says ${JSON.stringify(text)}`,
         );
         used.add(n);

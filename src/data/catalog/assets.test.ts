@@ -7,7 +7,7 @@ test("a surface's catalogue picture is its own tile image, not a per-variation r
   assert.equal(tilePath("bought", "linen-wallpaper"), "room/bought/linen-wallpaper/tile.png");
 });
 
-// the bug this pins: a one-look model item resolves to a NULL default exactly as a surface does
+// the bug this pins: a one-look model item resolves to a null default exactly as a surface does
 // so anything routing on nullness sends the windows to a tile.png nobody uploaded
 test("a one-look model-item still shows its default render, so nullness alone cannot pick the path", () => {
   assert.equal(thumbPath("bought", "window-wood-classic", null), "room/bought/window-wood-classic/default.png");
@@ -52,7 +52,7 @@ test("workshop assembly drafts stage under the workshop prefix, published assets
   assert.equal(workshopAssemblyDir("draft-1"), "room/workshop-assembly/draft-1");
 });
 
-// the regression filterKnownSourceRows exists for: a dev build caches a "workshop" row, and a release build replays it
+// the regression filterKnownSourceRows exists for: a dev build caches a "workshop" row, a release build replays it
 // resolving a room/workshop/<id>/ path nothing in its pipeline serves
 test("filterKnownSourceRows drops a workshop-sourced row when this build's gate is closed", () => {
   const rows = [{ source: "built" }, { source: "bought" }, { source: "workshop" }];

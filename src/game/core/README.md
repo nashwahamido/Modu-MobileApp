@@ -16,7 +16,7 @@ questions: what a furniture IS, what the player may do next, and what survives w
 | folder | what lives here |
 | --- | --- |
 | `composition/` | Turning an authored recipe into a `Furniture`: `composeActions`, `sequence`, `composeLabels`, `metaCounts`, `validateFurniture`. |
-| `derive/` | BUILD-TIME derivation from the GLB: `analyze`, `glb`, `jointGeometry`. Runs in helper scripts, never on device. |
+| `derive/` | BUILD-TIME work: the GLB readers (`glb`, `boxes`, `fastenerGeometry` — the one `engageDir` deriver — `jointGeometry`), `analyze` (what a GLB's names and meshes PROPOSE about its hardware; the drafter `extract-structure.mts` runs on it), and the authoring seams (`joints`, `fasteners`, `structure`) that lower entities into `structure.gen.ts`. `pipeline` is the passes themselves — `partsForSweep`, `sweepFurniture`, `deriveFurnitureGeometry` — so a helper script and the pin test that recomputes its output call ONE function instead of each keeping a copy of the setup. Runs in helper scripts, never on device. |
 | `evaluation/` | What is legal right now: `availability`, `blockReason`, `clusters`, `clusterCombine`, `engagement`, `stability`, `trayCard`. |
 | `geometry/` | The maths a gesture needs: `fit`, `math`, `obb`, `fastenerPose`, `staging`. |
 | `model/` | Derived structure over the parts — see below. |
@@ -25,26 +25,27 @@ questions: what a furniture IS, what the player may do next, and what survives w
 
 ## `model/` — the structure a build is reasoned over
 
-Nine files, and they fall into four jobs.
+Seven files, and they fall into three jobs.
 
 **The hub.** `liaisons.ts` does two things and is the most depended-on file in `core` (23 runtime
-importers). `applyStructure` lays the authored overlay over the generated mesh facts to produce the
+importers). `applyStructure` lays the composed `structure.gen.ts` over the generated mesh facts to produce the
 `PartDef`s everything else reads; `buildLiaisons` derives **Γ**, the joint graph. The frontier helpers
 legality asks — `isSlider`, `andFrontierTargets`, `crossClusterThreads`, `isReachable` — live here too.
 
-**Authoring seams.** How a human states something, lowered to what the runtime consumes. `joints.ts`
-holds the `JOINTS` shape and `lowerJoints`, which rewrites joint entities into the flat per-part fields
-the engine already reads. `fasteners.ts` is the same idea for hardware: a def declares a group's HOME
-(liaison + role, part, or extra-of), lowered onto every instance as `fastenerRole` + a connector's
-`preload`. Both are seams on purpose — the flat form stays the single runtime truth, so a furniture may
-use either form, or both mid-migration, and nothing downstream learns the difference.
+**Authoring seams — now in `derive/`.** How a human states something, lowered to what the runtime consumes,
+at GENERATION time. `derive/joints.ts` holds the `JOINTS` shape and `lowerJoints`, which rewrites joint entities
+into the flat per-part fields the engine reads. `derive/fasteners.ts` validates a furniture's `FASTENERS` defs
+(the shape lives in `type.ts`) and lands each def's facts on every instance: its ROLE (`fastenerRole` + a
+connector's `preload`) and its `lifecycle`'s drive distances (`insertStage` / `insertRetract` / `insertProud`),
+so how a group is driven is stated once, on the def, with a per-instance field in `STRUCTURE` as the override. `derive/structure.ts` composes both into `structure.gen.ts`, and `applyStructure` in `liaisons.ts`
+is a plain spread of that file — the device lowers nothing. The defs themselves are still read on device, by
+`composition/composeActions.ts`, which expands them into insert/tighten actions from the roles on the parts.
 
 The role IS the runtime vocabulary as of 2026-09-01. It replaced a four-name `FastenerKind` enum
 (`secured`/`threaded`/`pin`/`cam`) that answered a different question — how the hardware is DRIVEN — and
-so had to be decoded back at every call site: `!== "secured"` meant "is a connector", `"threaded" ||
-"cam"` meant "completes on tighten", `"threaded"` vs `"pin"` meant the counterpart screws on vs presses
-on. `fastener-roles.json` maps a group's leading word to a def PREFILL, and that is all a name does now:
-lowering writes a role onto every fastener instance, so no shipped furniture's behaviour rests on one.
+so had to be decoded back at every call site. `helper-scripts/fastener-roles.json` maps a group's leading
+word to a def PREFILL for the scripts and the analyzer, and that is all a name does now: lowering writes a
+role onto every instance, `validateFurniture` rejects a fastener without one, and nothing at runtime reads a name.
 
 **Geometry over the parts.** `jointFrames.ts` finds where two parts actually MEET — a contact anchor and
 facing per liaison, from the boxes at baked pose. It is why the drag holds a part by its joint and aims
@@ -69,8 +70,8 @@ A joint has three separable facts, and only one of them is a human's to state.
   parts, and written to each furniture's `joints.gen.ts`. Authored only as an override when the mesh
   cannot answer.
 
-`structure.gen.ts` is the composed result — the authored `STRUCTURE` with `JOINTS` already lowered into
-it, which is what `applyStructure` spreads over the mesh facts. Review THAT to see a joint's
+`structure.gen.ts` is the composed result — the authored `STRUCTURE` with `JOINTS` lowered into it and every
+fastener's role from `FASTENERS` landed on it, which is what `applyStructure` spreads over the mesh facts. Review THAT to see a joint's
 consequences; it is the one artifact that used to exist only in memory at load time.
 
 Regenerate both after any model re-export or authoring change, in this order — the joint derivation
@@ -78,7 +79,7 @@ consumes the sweep's blocker data:
 
 ```
 npx tsx src/game/helper-scripts/derive-sweep.mts
-npx tsx src/game/helper-scripts/derive-joints.mts --write
+npx tsx src/game/helper-scripts/derive-structure.mts --write
 ```
 
 `derivedJoints.furniture.test.ts` fails, named, when either generated file is stale.

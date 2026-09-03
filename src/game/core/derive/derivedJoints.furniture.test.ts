@@ -1,5 +1,5 @@
 // Derived joint geometry pins (2026-09-01) — the travel vectors core/derive/jointGeometry.ts computes from the contact slabs, scored against the whole shipped corpus.
-// Pin 1: the checked-in joints.gen.ts files match a fresh computation from the GLBs — a model re-export or STRUCTURE change without `npx tsx src/game/helper-scripts/derive-joints.mts --write` fails here, named.
+// Pin 1: the checked-in joints.gen.ts files match a fresh computation from the GLBs — a model re-export or STRUCTURE change without `npx tsx src/game/helper-scripts/derive-structure.mts --write` fails here, named.
 // Pin 2, the one that earns the feature: a derived vector NEVER contradicts a placeDir the corpus authors by hand. Those 33 values are device-verified, so a derivation that disagrees with one is wrong about a fact somebody already checked on a phone — it fails here rather than misdirecting a drag. A disagreement that is genuinely correct goes in KNOWN_DIVERGENT with its reason; the map is empty today because nothing disagrees.
 // Pin 3: the counts. UNVALIDATED is the uncomfortable one and is meant to be: those parts author no placeDir, so pin 2 cannot see them and nothing has confirmed the direction they were handed. They are inert until a JOINTS entry names their part — the count is here so that stops being invisible.
 import { test } from "node:test";
@@ -7,40 +7,46 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-import { composeFurnitureActions } from "@/src/game/core/composition/composeActions";
 import { HARDWARE } from "@/src/game/content/hardware";
-import { buildComponents } from "../model/components";
-import { deriveJointGeometry, statementsFor } from "./jointGeometry";
-import { applyStructure, buildLiaisons, composeStructure, isConnector } from "../model/liaisons";
-import type { PartBox, PartDef, PartId, SweepMap, Vec3 } from "@/src/game/core/type";
+import { boxesByName } from "./boxes";
+import { readGlbMeshes } from "./glb";
+import { authoredPlaceDir, deriveFurnitureGeometry, type AuthoredModule } from "./pipeline";
+import { applyStructure, buildLiaisons, isConnector } from "../model/liaisons";
+import { composeStructure } from "./structure";
+import type { LiaisonMap, PartBox, PartDef, PartId, SweepMap, Vec3 } from "@/src/game/core/type";
 
 import * as LACK from "@/src/game/content/furnitures/LACK/authored";
 import { PARTS as LACK_PARTS } from "@/src/game/content/furnitures/LACK/parts.gen";
 import { SWEEP as LACK_SWEEP } from "@/src/game/content/furnitures/LACK/sweep.gen";
 import { JOINT_GEOMETRY as LACK_GEN } from "@/src/game/content/furnitures/LACK/joints.gen";
 import { STRUCTURE_COMPOSED as LACK_COMPOSED } from "@/src/game/content/furnitures/LACK/structure.gen";
+import { LIAISONS as LACK_GAMMA } from "@/src/game/content/furnitures/LACK/liaisons.gen";
 import * as BEKVAM from "@/src/game/content/furnitures/BEKVAM/authored";
 import { PARTS as BEKVAM_PARTS } from "@/src/game/content/furnitures/BEKVAM/parts.gen";
 import { SWEEP as BEKVAM_SWEEP } from "@/src/game/content/furnitures/BEKVAM/sweep.gen";
 import { JOINT_GEOMETRY as BEKVAM_GEN } from "@/src/game/content/furnitures/BEKVAM/joints.gen";
 import { STRUCTURE_COMPOSED as BEKVAM_COMPOSED } from "@/src/game/content/furnitures/BEKVAM/structure.gen";
+import { LIAISONS as BEKVAM_GAMMA } from "@/src/game/content/furnitures/BEKVAM/liaisons.gen";
 import * as DALFRED from "@/src/game/content/furnitures/DALFRED/authored";
 import { PARTS as DALFRED_PARTS } from "@/src/game/content/furnitures/DALFRED/parts.gen";
 import { SWEEP as DALFRED_SWEEP } from "@/src/game/content/furnitures/DALFRED/sweep.gen";
 import { JOINT_GEOMETRY as DALFRED_GEN } from "@/src/game/content/furnitures/DALFRED/joints.gen";
 import { STRUCTURE_COMPOSED as DALFRED_COMPOSED } from "@/src/game/content/furnitures/DALFRED/structure.gen";
+import { LIAISONS as DALFRED_GAMMA } from "@/src/game/content/furnitures/DALFRED/liaisons.gen";
 import * as EKET from "@/src/game/content/furnitures/EKET/authored";
 import { PARTS as EKET_PARTS } from "@/src/game/content/furnitures/EKET/parts.gen";
 import { SWEEP as EKET_SWEEP } from "@/src/game/content/furnitures/EKET/sweep.gen";
 import { JOINT_GEOMETRY as EKET_GEN } from "@/src/game/content/furnitures/EKET/joints.gen";
 import { STRUCTURE_COMPOSED as EKET_COMPOSED } from "@/src/game/content/furnitures/EKET/structure.gen";
+import { LIAISONS as EKET_GAMMA } from "@/src/game/content/furnitures/EKET/liaisons.gen";
 
 /** Measured corpus state — a changed count means the geometry, the authoring or the rule moved: re-measure and understand WHY before touching these. */
-const DERIVED = 47;
-const MATCHED = 17;
-const UNDETERMINED = 10;
+// Re-measured 2026-09-02, `hookAndSlot` added to ACROSS: four keyholes (sidePanelL, sidePanelR, drawerFront_1, drawerFront_2) left the slab-long SHEAR branch for the contact normal and each landed EXACTLY on its device-verified authored value, so MATCHED and DERIVED rose by four and UNDETERMINED fell by four. That the normal reproduces four values somebody checked on a phone, which the shear branch could not, is the evidence the classification was wrong.
+const DERIVED = 49;
+const MATCHED = 12;
+const UNDETERMINED = 12;
 /** Derived vectors on parts that author none, so pin 2 cannot check them. Two populations: parts nothing has ever confirmed, and parts MIGRATED to JOINTS — those gave up their authored value on purpose and are guarded by jointsMigration.furniture.test.ts instead, which pins the exact pre-migration parts. A migration therefore moves a part from MATCHED to here, and both counts move together. */
-const UNVALIDATED = 30;
+const UNVALIDATED = 37;
 /** A derived vector that legitimately disagrees with an authored one: partId → why. Empty is the healthy state. */
 const KNOWN_DIVERGENT = new Map<string, string>();
 /** Derived vectors the JOINING HARDWARE contradicts — open BUGS, not accepted exceptions. Each is a vector the contact slab got wrong and nothing else could catch, since neither part authors a placeDir for the honesty guard to check. Listed so the pin stays green while no NEW one can appear unnoticed; the entry is deleted when the rule stops producing it, and the pin fails if a listed one starts agreeing. */
@@ -48,100 +54,20 @@ const KNOWN_WRONG_AXIS = new Map<string, string>();
 /** Derived vectors a joint-defining connector can adjudicate — the only independent check that reaches the UNVALIDATED ones. Ten of forty-three: most joints are made by securers, whose drive axis says nothing about how the parts came together. */
 const CONNECTOR_SCORED = 11;
 
-// World-box parser — twin of the copies in visibilitySweep.furniture.test.ts and derive-joints.mts (same flat-hierarchy convention), duplicated because importing either would run its tests or its main.
-const rotQ = ([x, y, z, w]: number[], [vx, vy, vz]: Vec3): Vec3 => {
-  const tx = 2 * (y * vz - z * vy);
-  const ty = 2 * (z * vx - x * vz);
-  const tz = 2 * (x * vy - y * vx);
-  return [vx + w * tx + (y * tz - z * ty), vy + w * ty + (z * tx - x * tz), vz + w * tz + (x * ty - y * tx)];
-};
-function parseGlb(file: string) {
-  const b = fs.readFileSync(file);
-  const jsonLen = b.readUInt32LE(12);
-  const json = JSON.parse(b.subarray(20, 20 + jsonLen).toString("utf8"));
-  const off = 20 + jsonLen;
-  return { json, bin: b.subarray(off + 8, off + 8 + b.readUInt32LE(off)) };
-}
-function readPositions(json: any, bin: Buffer, ai: number): Vec3[] {
-  const acc = json.accessors[ai];
-  const bv = json.bufferViews[acc.bufferView];
-  const base = (bv.byteOffset ?? 0) + (acc.byteOffset ?? 0);
-  const stride = bv.byteStride ?? 12;
-  const out: Vec3[] = new Array(acc.count);
-  for (let i = 0; i < acc.count; i++) {
-    const o = base + i * stride;
-    out[i] = [bin.readFloatLE(o), bin.readFloatLE(o + 4), bin.readFloatLE(o + 8)];
-  }
-  return out;
-}
-function glbBoxes(file: string): Record<string, PartBox> {
-  const { json, bin } = parseGlb(file);
-  const out: Record<string, PartBox> = {};
-  for (const n of json.nodes ?? []) {
-    if (!n.name || n.mesh == null) continue;
-    const t = n.translation ?? [0, 0, 0];
-    const q = n.rotation ?? [0, 0, 0, 1];
-    const s = n.scale ?? [1, 1, 1];
-    const min = [Infinity, Infinity, Infinity];
-    const max = [-Infinity, -Infinity, -Infinity];
-    const lmin = [Infinity, Infinity, Infinity];
-    const lmax = [-Infinity, -Infinity, -Infinity];
-    let any = false;
-    for (const prim of json.meshes[n.mesh].primitives) {
-      if (prim.attributes.POSITION == null) continue;
-      for (const v of readPositions(json, bin, prim.attributes.POSITION)) {
-        const r = rotQ(q, [v[0] * s[0], v[1] * s[1], v[2] * s[2]]);
-        const w: Vec3 = [r[0] + t[0], r[1] + t[1], r[2] + t[2]];
-        any = true;
-        for (let k = 0; k < 3; k++) {
-          if (w[k] < min[k]) min[k] = w[k];
-          if (w[k] > max[k]) max[k] = w[k];
-          if (v[k] < lmin[k]) lmin[k] = v[k];
-          if (v[k] > lmax[k]) lmax[k] = v[k];
-        }
-      }
-    }
-    if (!any) continue;
-    const lc: Vec3 = [((lmin[0] + lmax[0]) / 2) * s[0], ((lmin[1] + lmax[1]) / 2) * s[1], ((lmin[2] + lmax[2]) / 2) * s[2]];
-    const rc = rotQ(q, lc);
-    out[n.name] = {
-      min: [min[0], min[1], min[2]],
-      max: [max[0], max[1], max[2]],
-      obb: {
-        center: [rc[0] + t[0], rc[1] + t[1], rc[2] + t[2]],
-        axes: [rotQ(q, [1, 0, 0]), rotQ(q, [0, 1, 0]), rotQ(q, [0, 0, 1])],
-        half: [((lmax[0] - lmin[0]) / 2) * s[0], ((lmax[1] - lmin[1]) / 2) * s[1], ((lmax[2] - lmin[2]) / 2) * s[2]],
-      },
-    };
-  }
-  return out;
-}
+const glbBoxes = (file: string): Record<string, PartBox> => boxesByName(readGlbMeshes(fs.readFileSync(file)));
 
-type Mod = { STRUCTURE: never; AUTHORED_ACTIONS: never; FASTENER_RULES: never; CLUSTERS: never; COMPONENTS?: never; JOINTS?: never };
+type Mod = AuthoredModule;
 const CORPUS = [
-  ["LACK", LACK as unknown as Mod, LACK_PARTS, LACK_SWEEP, LACK_GEN, LACK_COMPOSED],
-  ["BEKVAM", BEKVAM as unknown as Mod, BEKVAM_PARTS, BEKVAM_SWEEP, BEKVAM_GEN, BEKVAM_COMPOSED],
-  ["DALFRED", DALFRED as unknown as Mod, DALFRED_PARTS, DALFRED_SWEEP, DALFRED_GEN, DALFRED_COMPOSED],
-  ["EKET", EKET as unknown as Mod, EKET_PARTS, EKET_SWEEP, EKET_GEN, EKET_COMPOSED],
+  ["LACK", LACK as unknown as Mod, LACK_PARTS, LACK_SWEEP, LACK_GEN, LACK_COMPOSED, LACK_GAMMA],
+  ["BEKVAM", BEKVAM as unknown as Mod, BEKVAM_PARTS, BEKVAM_SWEEP, BEKVAM_GEN, BEKVAM_COMPOSED, BEKVAM_GAMMA],
+  ["DALFRED", DALFRED as unknown as Mod, DALFRED_PARTS, DALFRED_SWEEP, DALFRED_GEN, DALFRED_COMPOSED, DALFRED_GAMMA],
+  ["EKET", EKET as unknown as Mod, EKET_PARTS, EKET_SWEEP, EKET_GEN, EKET_COMPOSED, EKET_GAMMA],
 ] as const;
 
-/** Recompute one furniture's geometry exactly as derive-joints.mts does — the pin is only worth anything if the two agree on every input. */
+/** Recompute one furniture's geometry by calling the SAME function derive-structure.mts calls. This used to be a hand-kept copy of the script's setup, which made the pin worth exactly as much as somebody's memory to update both — the sweep pin and its own script had already drifted on how they compose the parts. Everything specific to a pin stays here; nothing about the derivation does. */
 function recompute(id: string, mod: Mod, raw: unknown, sweep: unknown) {
-  // Lower the joints for TOPOLOGY first, with no geometry: a migrated part's edges live in JOINTS now, and without them Γ has no liaison for the pair and every derivation abstains with "no contact frame". Passing no geometry is what keeps this from being circular — the join arrays are all Γ needs, and the vectors are what this pass is about to compute.
-  const parts = applyStructure(raw as Record<PartId, PartDef>, mod.STRUCTURE, mod.JOINTS) as Record<PartId, PartDef>;
-  const liaisons = buildLiaisons(parts);
   const named = glbBoxes(path.join(process.cwd(), "src", "assets", "models", "furnitures", id, `${id}.glb`));
-  const boxes: Record<PartId, PartBox> = {};
-  for (const p of Object.values(parts)) {
-    const b = named[p.meshName as string] ?? named[p.partId as string];
-    if (b) boxes[p.partId] = b;
-  }
-  const placeOrder = new Map<PartId, number>();
-  composeFurnitureActions(mod.AUTHORED_ACTIONS, mod.FASTENER_RULES, parts, HARDWARE, mod.CLUSTERS).forEach((a, i) => {
-    if (a.type === "placePart" && a.partId) placeOrder.set(a.partId, i);
-  });
-  const statements = statementsFor(parts, liaisons, buildComponents(mod.COMPONENTS, parts), mod.JOINTS);
-  return { parts, ...deriveJointGeometry(parts, liaisons, boxes, sweep as SweepMap, statements, placeOrder) };
+  return deriveFurnitureGeometry(raw as Record<PartId, PartDef>, mod, named, sweep as SweepMap, HARDWARE);
 }
 
 test("the checked-in joints.gen.ts files match a fresh computation from the GLBs", () => {
@@ -150,7 +76,7 @@ test("the checked-in joints.gen.ts files match a fresh computation from the GLBs
     assert.deepEqual(
       geometry,
       gen,
-      `${id}: joints.gen.ts is STALE — regenerate with \`npx tsx src/game/helper-scripts/derive-joints.mts --write\``,
+      `${id}: joints.gen.ts is STALE — regenerate with \`npx tsx src/game/helper-scripts/derive-structure.mts --write\``,
     );
   }
 });
@@ -163,7 +89,7 @@ test("no derived vector contradicts a placeDir the corpus authors by hand", () =
   for (const [id, mod, raw, sweep] of CORPUS) {
     const { parts, geometry } = recompute(id, mod, raw, sweep);
     for (const p of Object.values(parts)) {
-      const authored = (p as PartDef & { placeDir?: Vec3 }).placeDir;
+      const authored = authoredPlaceDir(p);
       const derived = geometry[p.partId]?.placeDir;
       if (!authored) {
         if (derived) unvalidated++;
@@ -239,12 +165,31 @@ test("the derived total is pinned, and derivation never emits a join array", () 
 
 // structure.gen.ts is the one artifact a reviewer can read to see what a joint actually DID — the join array it emitted or withheld, the dropOn it added or did not, the travel it took from joints.gen. That is only worth anything if the file matches what applyStructure will compute at load time, which is why both go through composeStructure rather than each having its own opinion.
 test("the checked-in structure.gen.ts files match a fresh composition", () => {
-  for (const [id, mod, raw, sweep, gen, composed] of CORPUS) {
-    const { parts } = recompute(id, mod, raw, sweep);
+  for (const [id, mod, raw, , gen, composed] of CORPUS) {
+    // RAW parts, because that is what applyStructure hands composeStructure at load time. The difference is not academic: the bridged-pair rule looks for a fastener that already names both endpoints, and a RE-TYPED one (EKET's suspCap) only becomes a fastener once the overlay is applied — composing against the re-typed parts would suppress a join array the device emits.
     assert.deepEqual(
-      JSON.parse(JSON.stringify(composeStructure(parts, mod.STRUCTURE, mod.JOINTS, gen))),
+      JSON.parse(JSON.stringify(composeStructure(raw as never, mod.STRUCTURE, { joints: mod.JOINTS, geometry: gen, fasteners: mod.FASTENERS }))),
       JSON.parse(JSON.stringify(composed)),
-      `${id}: structure.gen.ts is STALE — regenerate with \`npx tsx src/game/helper-scripts/derive-joints.mts --write\``,
+      `${id}: structure.gen.ts is STALE — regenerate with \`npx tsx src/game/helper-scripts/derive-structure.mts --write\``,
+    );
+  }
+});
+
+// Γ used to be derived on the device at import time, so it could not go stale and could not be reviewed either. Frozen into liaisons.gen.ts it can be read — and can now drift, which is what this pin is for: parts.gen or structure.gen regenerating without it would hand the game an edge set that no longer matches the corpus.
+// COMPOSED parts, exactly as each index.ts builds them: the snap heuristic guards on placeDir, which only exists after applyStructure, so raw parts would name edges the device leaves unnamed.
+test("the checked-in liaisons.gen.ts files match a fresh derivation from the composed parts", () => {
+  for (const [id, , raw, , , composed, gamma] of CORPUS) {
+    const fresh = buildLiaisons(applyStructure(raw as Record<PartId, PartDef>, composed));
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(fresh)),
+      JSON.parse(JSON.stringify(gamma as LiaisonMap)),
+      `${id}: liaisons.gen.ts is STALE — regenerate with \`npx tsx src/game/helper-scripts/derive-structure.mts --write\``,
+    );
+    // ORDER, separately: deepEqual does not see it, and consumers iterate Object.values(liaisons). Freezing Γ took its iteration order out of buildLiaisons' traversal and put it in a file, so the file has to keep the order the traversal produced or the graph is the same and the walk is not.
+    assert.deepEqual(
+      Object.keys(gamma as LiaisonMap),
+      Object.keys(fresh),
+      `${id}: liaisons.gen.ts holds the right edges in the WRONG ORDER — emit them in buildLiaisons' own insertion order`,
     );
   }
 });

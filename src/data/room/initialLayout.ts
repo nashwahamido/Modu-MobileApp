@@ -3,7 +3,7 @@ import { ROOM_LAYOUT_VERSION } from "../core/types";
 
 export const STARTER_ROOM_ITEM_IDS = ["window-wood-classic", "painting-nature", "sofa-modular"] as const;
 
-// instance ids are the editor's own `<itemId>#<n>` form — nothing derives meaning from them, they need only be unique
+// instance ids are the editor's own `<itemId>#<n>` form — nothing derives meaning from them
 export function createStarterRoomPlacements(): PlacedFurniture[] {
   return [
     {

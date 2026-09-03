@@ -148,7 +148,7 @@ export function seedFriends(): Record<UserId, Friend[]> {
   };
 }
 
-// no saves - only during session
+// none — a resumable save is session state
 export function seedBuilds(): BuildSave[] {
   return [];
 }
@@ -339,7 +339,7 @@ export function seedShopItems(): ShopItem[] {
 }
 
 // the ticks in the shop grid, and the contents of each user's inventory
-// ids MUST exist in seedShopItems above — the inventory filters to owned ids, so one with no row is silently dropped
+// ids MUST exist in seedShopItems above — the inventory filters to owned ids, so a stray id vanishes
 export function seedInventory(): Record<UserId, ShopItemId[]> {
   return {
     [DEMO_ME]: [...STARTER_ROOM_ITEM_IDS],
@@ -382,7 +382,7 @@ export function seedItemVariants(): ItemVariant[] {
   ];
 }
 
-//room placements
+// room placements
 export function seedPlaceableItems(): PlaceableRoomRow[] {
   return [
     {

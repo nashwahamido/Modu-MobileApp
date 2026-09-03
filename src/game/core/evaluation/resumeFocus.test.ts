@@ -17,7 +17,7 @@ const parts = applyStructure(PARTS, EKET_COMPOSED);
 const f = {
   meta: { id: "eket-cabinet" },
   parts,
-  actions: composeFurnitureActions(EKET.AUTHORED_ACTIONS, EKET.FASTENER_RULES, parts, HARDWARE, EKET.CLUSTERS),
+  actions: composeFurnitureActions(EKET.AUTHORED_ACTIONS, EKET.FASTENERS, parts, HARDWARE, EKET.CLUSTERS),
   gates: EKET.GATES,
   liaisons: buildLiaisons(parts),
   components: buildComponents(EKET.COMPONENTS, parts),

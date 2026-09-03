@@ -1,20 +1,13 @@
-// levelling resolution, mirroring public.levels — one row per level, with the title on tier-start rows only
-// that TABLE is the one place to tune levelling; this module holds only the logic
-// level and title are both DERIVED per read, never stored on a user
 export interface LevelRow {
   level: number;
-  // cumulative xp to REACH this level
   xpRequired: number;
-  // set only where a tier begins; null rows inherit the nearest title below, so a rank is authored once
   title: string | null;
 }
 
-// sorted ascending by level, so callers never depend on the order the table came back in
 function sorted(rows: LevelRow[]): LevelRow[] {
   return [...rows].sort((a, b) => a.level - b.level);
 }
 
-// the highest row still <= xp, never below the curve's floor — mirrors level_for_xp() in the migration
 export function levelForXp(xp: number, rows: LevelRow[]): number {
   const asc = sorted(rows);
   if (asc.length === 0) return 1;
@@ -26,8 +19,6 @@ export function levelForXp(xp: number, rows: LevelRow[]): number {
 }
 
 // a level title as a LABEL: "a steady hand" -> "A Steady Hand"
-// authored as prose fragments ("you are a steady hand"), but on a badge a lowercase fragment reads as unfinished
-// here rather than in a screen because two want it — the profile badge and the level-up card
 export function titleCase(s: string): string {
   return s.replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -36,19 +27,26 @@ export function titleCase(s: string): string {
 export function titleForLevel(level: number, rows: LevelRow[]): string | null {
   let best: LevelRow | null = null;
   for (const row of rows) {
-    if (row.level <= level && row.title !== null && (best === null || row.level > best.level)) best = row;
+    if (
+      row.level <= level &&
+      row.title !== null &&
+      (best === null || row.level > best.level)
+    )
+      best = row;
   }
   return best ? best.title : null;
 }
 
-// takes the level explicitly rather than re-deriving it, so the UI shows the number the shop gates purchases on
 export interface LevelSpan {
   xpIntoLevel: number;
-  // the span of this level, or null at the top of the curve — where a bar should read full, not 0%
   xpForNextLevel: number | null;
 }
 
-export function levelSpan(level: number, xp: number, rows: LevelRow[]): LevelSpan {
+export function levelSpan(
+  level: number,
+  xp: number,
+  rows: LevelRow[],
+): LevelSpan {
   const asc = sorted(rows);
   const current = asc.find((r) => r.level === level);
   const next = asc.find((r) => r.level === level + 1);
@@ -59,7 +57,7 @@ export function levelSpan(level: number, xp: number, rows: LevelRow[]): LevelSpa
   };
 }
 
-// the 0..1 bar fill. full at the top of the curve, where there is no next level to climb to
+// the 0..1 bar fill
 export function levelProgressFraction(span: LevelSpan): number {
   if (span.xpForNextLevel === null || span.xpForNextLevel <= 0) return 1;
   return Math.max(0, Math.min(1, span.xpIntoLevel / span.xpForNextLevel));

@@ -1,12 +1,11 @@
 import {
   action,
-  FastenerRule,
   tightenActionIds,
 } from "@/src/game/core/composition/composeActions";
-import { applyStructure, StructureOverlay } from "@/src/game/core/model/liaisons";
-import type { JointDef } from "@/src/game/core/model/joints";
+import type { StructureOverlay } from "@/src/game/core/model/liaisons";
+import type { FastenerMap } from "@/src/game/core/type";
+import type { JointDef } from "@/src/game/core/derive/joints";
 import { groupParts } from "@/src/game/core/scene/targets";
-import { lowerFasteners, withFastenerFacts, type FastenerMap } from "@/src/game/core/model/fasteners";
 import { asGroupId, asPartId } from "@/src/game/core/ids";
 import {
   ClusterDef,
@@ -36,14 +35,11 @@ export const CLUSTERS = {
   seat: {
     id: "seat",
     label: "Seat",
-    slideJoins: ["base"],
-    placeDir: [0, -1, 0] as const,
-    parkBackoff: 0.15,
-    driveMotion: "screw",
+    combine: { kind: "screw", onto: ["base"], dir: [0, -1, 0] as const, back: 0.15 },
   },
 } as Record<ClusterId, ClusterDef>;
 
-const STRUCTURE_BASE: StructureOverlay = {
+export const STRUCTURE: StructureOverlay = {
   leg_1: { seed: true, unstable: true },
   leg_2: { seed: true, unstable: true },
   leg_3: { seed: true, unstable: true },
@@ -64,7 +60,7 @@ const STRUCTURE_BASE: StructureOverlay = {
   seat: { seed: true },
   seatPlate: { seed: true, unstable: true },
   pole: {
-    directJoins: [asPartId("seatPlate")],
+    pressJoins: [asPartId("seatPlate")],
     screwJoins: [asPartId("supportPin")],
     tool: "mallet",
   },
@@ -84,11 +80,6 @@ export const FASTENERS: FastenerMap = {
   cap107675: { home: "part" },
 } as unknown as FastenerMap;
 
-const LOWERED = lowerFasteners(FASTENERS, applyStructure(P, STRUCTURE_BASE));
-
-export const STRUCTURE: StructureOverlay = withFastenerFacts(STRUCTURE_BASE, LOWERED);
-
-export const FASTENER_RULES: FastenerRule[] = LOWERED.rules;
 
 const LEG_IDS = groupParts(P, asGroupId("leg")).map((p) => p.partId);
 export const AUTHORED_ACTIONS: DraftAction[] = [

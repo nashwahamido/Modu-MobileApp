@@ -1,15 +1,15 @@
-// item_variants held in memory so a colour list reads SYNCHRONOUSLY — a tile renders in a map(), the bar per ghost move
-// cache-then-network like buildStore: hydrate() replays the cache with no session, refresh() replaces it once signed in
+// item_variants held in memory so a colour list reads synchronously — a tile renders in a map(), the bar per ghost move
+// cache-then-network like buildStore: hydrate() replays the cache, refresh() replaces it once signed in
 import { create } from "zustand";
 
 import { defaultVariation } from "./assets";
 import type { ItemVariant, Repos } from "../core/repos";
 import type { CatalogId } from "../core/types";
 
-// versioned like the build catalogue's: a shape change must not read rows written by an older build
+// versioned like the build catalogue's: a shape change must not read older rows
 const CACHE_KEY = "modu.catalog.variants.v1";
 
-// node tests cannot parse RN's runtime entrypoint, so resolve the native cache only when hydrate/refresh does device I/O
+// node tests cannot parse RN's entrypoint, so resolve the native cache only when doing device I/O
 const variantStorage = () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   return require("@react-native-async-storage/async-storage")
@@ -19,7 +19,7 @@ const variantStorage = () => {
 export type VariantStatus = "empty" | "cached" | "live" | "error";
 
 interface VariantState {
-  // grouped by item id, each list in DB order with the default FIRST — the order the picker shows
+  // grouped by item id, each list in DB order with the default first — the order the picker shows
   byItem: Record<string, ItemVariant[]>;
   status: VariantStatus;
   hydrate: () => Promise<void>;
@@ -56,7 +56,7 @@ export const useVariantStore = create<VariantState>()((set, get) => ({
   async refresh(repos) {
     try {
       const rows = await repos.variants.list();
-      // an empty table is a real answer — adopt it, or an emptied item_variants could never invalidate last session's lists
+      // an empty table is a real answer — adopt it, or an emptied item_variants never invalidates last session
       set({ byItem: group(rows), status: "live" });
       await variantStorage().setItem(CACHE_KEY, JSON.stringify(rows));
     } catch (err) {
@@ -69,7 +69,7 @@ export const useVariantStore = create<VariantState>()((set, get) => ({
 // stable identity: a fresh [] per call would make the selector return a new value every render
 const EMPTY: ItemVariant[] = [];
 
-// default first. empty until the table loads AND for an item with no colour axis — both read as one look at 'default'
+// default first. empty until the table loads AND for an item with no colour axis — both read as 'default'
 export function useItemVariants(itemId: CatalogId | null | undefined): ItemVariant[] {
   return useVariantStore((s) => (itemId ? (s.byItem[itemId] ?? EMPTY) : EMPTY));
 }
@@ -79,7 +79,7 @@ export function variantsOf(itemId: CatalogId): ItemVariant[] {
   return useVariantStore.getState().byItem[itemId] ?? EMPTY;
 }
 
-// null = a single model at 'default', which an UNLOADED table also yields — a caller that cares re-asks once rows land
+// null = a single model at 'default', which an unloaded table also yields — a caller that cares re-asks
 export function defaultVariationOf(itemId: CatalogId): string | null {
   return defaultVariation(variantsOf(itemId));
 }
