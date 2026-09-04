@@ -13,12 +13,13 @@ import { HARDWARE } from "@/src/game/content/hardware";
 import * as EKET from "@/src/game/content/furnitures/EKET/authored";
 import { PARTS } from "@/src/game/content/furnitures/EKET/parts.gen";
 import type { ActionId, ClusterId, Furniture } from "@/src/game/core/type";
+import { STRUCTURE_COMPOSED as EKET_COMPOSED } from "@/src/game/content/furnitures/EKET/structure.gen";
 
-const parts = applyStructure(PARTS, EKET.STRUCTURE);
+const parts = applyStructure(PARTS, EKET_COMPOSED);
 const f = {
   meta: { id: "eket-cabinet" },
   parts,
-  actions: composeFurnitureActions(EKET.AUTHORED_ACTIONS, EKET.FASTENER_RULES, parts, HARDWARE, EKET.CLUSTERS),
+  actions: composeFurnitureActions(EKET.AUTHORED_ACTIONS, EKET.FASTENERS, parts, HARDWARE, EKET.CLUSTERS),
   gates: EKET.GATES,
   liaisons: buildLiaisons(parts),
   components: buildComponents(EKET.COMPONENTS, parts),

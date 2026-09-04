@@ -1,6 +1,6 @@
 import { insertId, placeId, tightenId } from "@/src/game/core/ids";
 import { actionCluster } from "./clusters";
-import { fastenerKindOf, isConnector } from "../model/liaisons";
+import { isConnector, preloadOf } from "../model/liaisons";
 import { isStaged } from "../model/staging";
 import {
   ActionId,
@@ -156,12 +156,11 @@ function preloadConnectorLocks(
 
     const inserted = done.has(insertId(part.partId));
     const tightened = done.has(tightenId(part.partId));
-    const kind = fastenerKindOf(part);
     if (!inserted) {
       group.ownSteps.add(insertId(part.partId));
       group.allReady = false;
-    } else if (kind === "threaded" || kind === "cam") {
-      // Both are the completesOn-TIGHTEN kinds (fastener-model-v2 preload: a bolt frees the cluster only when driven home; "cam" is the {tighten, press} cell a Minifix bolt lowers to). "cam" had zero users when added here 2026-08-24 — the seam could SAY the cell but this lock released on insert, contradicting the declared preload.
+    } else if (preloadOf(part)?.completesOn === "tighten") {
+      // The declared preload, read as itself. This branch used to spell the same condition as `kind === "threaded" || kind === "cam"` — the two of four drive-names that happened to mean completesOn-tighten, a coincidence a reader had to reconstruct from the enum's definition. It shipped releasing on insert for two months precisely because that reconstruction was easy to get wrong.
       if (!tightened) {
         group.ownSteps.add(tightenId(part.partId));
         group.allReady = false;

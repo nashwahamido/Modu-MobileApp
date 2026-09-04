@@ -1,4 +1,4 @@
-// The GLOBAL hardware catalogue — one entry per IKEA article number.
+// The GLOBAL hardware catalogue — one entry per IKEA serial number.
 import { DriveMotion, GroupId, LabelSet, ToolId } from "@/src/game/core/type";
 
 export interface HardwareInfo {
@@ -48,7 +48,6 @@ const HARDWARE_RAW = {
   screw110519: {
     tool: "screwdriver",
     label: { standard: "Back screw", simple: "Screw" },
-    // A DRAWER's back panel into that drawer's own two side panels, four per drawer — NOT the cabinet's back panel, which is held by cams and pins and never sees this screw. Worth stating in the negative: "back panel screw" read as the cabinet's back to someone tracing an unassemblable socket, and the label alone cannot settle it because both furnitures have a part called a back.
     note: "drawer back panel into the drawer sides",
   },
   screw115339: {
@@ -66,10 +65,10 @@ const HARDWARE_RAW = {
     label: { standard: "Guide screw", simple: "Screw" },
     note: "centre guide screw",
   },
-  // ── EKET cabinet w/2 drawers (AA-1914748 / AA-2345060) ──
+
+  //eket
   cam139434: {
     tool: "hand",
-    // single-press seat (user-verified): one push and the lock is home — TapControl's one-shot variant, no multi-tap strike
     motion: "press",
     label: { standard: "Cam lock", simple: "Lock" },
     note: "back-panel cam lock —  pin (139435)",

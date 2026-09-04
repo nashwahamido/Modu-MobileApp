@@ -3,7 +3,7 @@ import { actionCluster, focusableClusterIds, requiresClusterFocus } from "@/src/
 import {
   buildLiaisons,
   crossClusterThreads,
-  fastenerKindOf,
+  preloadOf,
   isConnector,
 } from "@/src/game/core/model/liaisons";
 import { geometryWarnings } from "@/src/game/core/model/geometryCheck";
@@ -11,14 +11,17 @@ import { sequenceIssues } from "@/src/game/core/composition/sequence";
 import { actionIdFor, isPartTiedType, placeId, stageId } from "@/src/game/core/ids";
 import { memberPlaceIdsForLead } from "@/src/game/core/model/components";
 import { hardwareOn, isStaged } from "@/src/game/core/model/staging";
-import { ActionId, ClusterDef, ClusterId, Furniture, PartId, PRESS_LIKE, PushOpenSpec } from "@/src/game/core/type";
+import { ActionId, ClusterDef, ClusterId, Furniture, JOIN_ARRAYS, JoinArray, JoinKind, PartId, PRESS_LIKE, PushOpenSpec } from "@/src/game/core/type";
 
 export interface ValidationIssue {
   level: "error" | "warn";
   message: string;
 }
 
-/** Build-time checks on the cluster combine overlay, so a mis-authored cluster fails here rather than deadlocking on device. Silent for furniture that authors no overlay at all — seed and slideJoins are both optional. */
+/**
+ * build-time checks on the cluster combine overlay, so a mis-authored cluster fails here rather than deadlocking on device
+ * silent for furniture that authors no overlay at all — seed and combine are both optional
+ */
 export function clusterOverlayIssues(
   clusters: Record<ClusterId, ClusterDef> | undefined,
   pushOpen: PushOpenSpec | undefined,
@@ -27,7 +30,7 @@ export function clusterOverlayIssues(
   if (!clusters) return out;
   const ids = Object.keys(clusters) as ClusterId[];
   const err = (m: string) => out.push({ level: "error", message: m });
-  const authored = ids.filter((id) => clusters[id].seed || clusters[id].slideJoins?.length);
+  const authored = ids.filter((id) => clusters[id].seed || clusters[id].combine);
   if (authored.length === 0) return out;
 
   const seeds = ids.filter((id) => clusters[id].seed);
@@ -36,34 +39,36 @@ export function clusterOverlayIssues(
   }
   for (const id of ids) {
     const c = clusters[id];
-    if (c.seed && c.slideJoins?.length) {
-      err(`cluster "${id}" is a seed and also slideJoins — the root joins nothing`);
+    if (c.seed && c.combine) {
+      err(`cluster "${id}" is a seed and also authors a combine — the root joins nothing`);
     }
-    for (const t of c.slideJoins ?? []) {
-      if (!clusters[t]) err(`cluster "${id}" slideJoins unknown cluster "${t}"`);
+    if (!c.combine) continue;
+    if (!c.combine.onto?.length) {
+      err(`cluster "${id}" authors a combine onto nothing — a cluster that joins nothing is the seed`);
     }
-    if (c.slideJoins?.length) {
-      const d = c.placeDir;
-      if (!d || Math.hypot(d[0], d[1], d[2]) < 1e-6) {
-        err(`cluster "${id}" slideJoins but has no non-zero placeDir — its travel axis is not derivable from poses`);
-      }
+    for (const t of c.combine.onto ?? []) {
+      if (!clusters[t]) err(`cluster "${id}" combines onto unknown cluster "${t}"`);
+    }
+    const d = c.combine.dir;
+    if (!d || Math.hypot(d[0], d[1], d[2]) < 1e-6) {
+      err(`cluster "${id}" combines but has no non-zero dir — its travel axis is not derivable from poses`);
     }
   }
 
-  // cycle detection over slideJoins
+  // cycle detection over the combine graph
   const state = new Map<ClusterId, 0 | 1 | 2>();
   const walk = (id: ClusterId): boolean => {
     const s = state.get(id) ?? 0;
     if (s === 1) return true;
     if (s === 2) return false;
     state.set(id, 1);
-    for (const t of clusters[id]?.slideJoins ?? []) {
+    for (const t of clusters[id]?.combine?.onto ?? []) {
       if (clusters[t] && walk(t)) return true;
     }
     state.set(id, 2);
     return false;
   };
-  if (ids.some((id) => walk(id))) err("cluster overlay has a cycle in slideJoins");
+  if (ids.some((id) => walk(id))) err("cluster overlay has a cycle in its combines");
 
   return out;
 }
@@ -110,12 +115,12 @@ export function validateFurniture(f: Furniture): ValidationIssue[] {
   if (f.components) { for (const [compId, bodies] of Object.entries(f.components.bodies)) { for (const body of bodies) { const need = placeId(body); if (!f.actions.some((a) => a.actionId === need)) err(`component "${compId}" body "${body}" has no placePart action "${need}"`); } } }
 
   {
-    const KIND = { directJoins: "press", slideJoins: "slide", screwJoins: "screw" } as const;
-    const pairKinds = new Map<string, { field: keyof typeof KIND; from: string }>();
+    const KIND = Object.fromEntries(JOIN_ARRAYS) as Record<JoinArray, JoinKind>;
+    const pairKinds = new Map<string, { field: JoinArray; from: string }>();
     for (const p of Object.values(f.parts)) {
       if (p.type !== "structural") continue;
       const seen = new Map<string, string>();
-      for (const field of ["directJoins", "slideJoins", "screwJoins"] as const) {
+      for (const [field] of JOIN_ARRAYS) {
         for (const t of p[field] ?? []) {
           const prev = seen.get(t);
           if (prev && prev !== field) {
@@ -133,7 +138,7 @@ export function validateFurniture(f: Furniture): ValidationIssue[] {
                 `joint "${key}" is authored twice with different kinds — ` +
                   `${KIND[other.field]} (from "${other.from}") vs ${KIND[field]} (from "${p.partId}")`,
               );
-            } else if (field !== "directJoins") {
+            } else if (field !== "pressJoins") {
               err(
                 `joint "${key}": both endpoints claim to be the ` +
                   `${field === "slideJoins" ? "slider" : "screw-in part"} — ` +
@@ -149,21 +154,32 @@ export function validateFurniture(f: Furniture): ValidationIssue[] {
   }
 
   {
-    const connectorKind = new Map<string, { kind: string; from: string }>();
+    // two connectors on one joint must agree about it, and the preload record IS what they agree about
+    // same completesOn, or the lock has two answers about when the cluster frees
+    // same counterpartMountsBy, or the later part both drops on and dials on
+    const connectorPreload = new Map<string, { spec: string; from: string }>();
     for (const p of Object.values(f.parts)) {
       if (!isConnector(p)) continue;
       const key = [...p.attached!].sort().join("__");
-      const kind = fastenerKindOf(p);
-      const prev = connectorKind.get(key);
-      if (prev && prev.kind !== kind) {
+      const pre = preloadOf(p);
+      const spec = pre ? `${pre.completesOn}/${pre.counterpartMountsBy}` : "(no preload)";
+      const prev = connectorPreload.get(key);
+      if (prev && prev.spec !== spec) {
         err(
           `joint "${key}" is defined by two connectors that disagree — ` +
-            `${prev.kind} ("${prev.from}") vs ${kind} ("${p.partId}")`,
+            `${prev.spec} ("${prev.from}") vs ${spec} ("${p.partId}")`,
         );
       } else if (!prev) {
-        connectorKind.set(key, { kind, from: p.partId });
+        connectorPreload.set(key, { spec, from: p.partId });
       }
     }
+  }
+
+  // Role is a lowered fact, not a runtime inference: evaluation reads it off the part and there is no name-prefix fallback any more.
+  for (const p of Object.values(f.parts)) {
+    if (p.type !== "fastener") continue;
+    if (!p.fastenerRole) err(`fastener "${p.partId}" (group "${p.group}") has no fastenerRole — every hardware group needs a FASTENERS def, and lowering writes its role onto each instance`);
+    else if (p.fastenerRole === "connector" && !p.preload) err(`connector "${p.partId}" has no preload — a connector's def always carries one`);
   }
 
   for (const p of Object.values(f.parts)) {
@@ -197,7 +213,7 @@ export function validateFurniture(f: Furniture): ValidationIssue[] {
       if (p.type !== "fastener" || installed.has(p.partId)) continue;
       err(
         `fastener "${p.partId}" (group "${p.group}") has no install action — ` +
-          `nothing inserts/tightens/places it; add its group to FASTENER_RULES`,
+          `nothing inserts/tightens/places it; give its group a FASTENERS def`,
       );
     }
   }
@@ -205,7 +221,7 @@ export function validateFurniture(f: Furniture): ValidationIssue[] {
   {
     const threadedPairs = new Set<string>();
     for (const p of Object.values(f.parts)) {
-      if (isConnector(p) && fastenerKindOf(p) === "threaded") {
+      if (isConnector(p) && preloadOf(p)?.counterpartMountsBy === "screw") {
         threadedPairs.add([...p.attached!].sort().join("__"));
       }
     }
@@ -223,7 +239,7 @@ export function validateFurniture(f: Furniture): ValidationIssue[] {
     }
   }
 
-  // staged sub-assemblies: a mis-authored stageOffset must fail here rather than deadlock or read as a pointless extra tap on device
+  // staged sub-assemblies: a mis-authored stageOffset must fail here, not deadlock or read as a pointless extra tap on device
   for (const p of Object.values(f.parts)) {
     if (!isStaged(p)) continue;
     if (p.type !== "structural") {
@@ -269,7 +285,9 @@ export function validateFurniture(f: Furniture): ValidationIssue[] {
     for (let round = 0; round <= f.actions.length; round++) {
       const avail = availableActions(f, done);
       if (avail.length === 0) break;
-      // the raw sweep drives availableActions directly rather than the store's completeAction, so it never gets the store's cascade — a component lead's non-lead siblings are filtered out of availability by isNonLeadBody and would never be marked done here, making a solvable furniture falsely report "not solvable"; mirror the store's cascade by completing the same member ids alongside the lead.
+      // the raw sweep drives availableActions directly rather than the store's completeAction, so it never gets the store's cascade
+      // a component lead's non-lead siblings are filtered out by isNonLeadBody and would never be marked done here
+      // which makes a solvable furniture falsely report "not solvable" — so mirror the cascade by completing the member ids alongside the lead
       for (const a of avail) { done.add(a.actionId); for (const m of memberPlaceIdsForLead(f.components, a.actionId)) done.add(m); }
     }
     if (done.size !== f.actions.length) {
@@ -282,7 +300,9 @@ export function validateFurniture(f: Furniture): ValidationIssue[] {
           (stuck.length > 8 ? " …" : ""),
       );
     } else {
-      // guide mode only offers actions at their cluster's lowest incomplete stage, so a part whose only Γ reachability path (directJoins/slideJoins/fastener liaisons) runs through a HIGHER-stage part deadlocks the player without tripping the requires-based cross-stage check above — replay the build as a guide player (free to pick any cluster focus each step) and error if it stalls before completion.
+      // guide mode only offers actions at their cluster's lowest incomplete stage
+      // so a part whose only Γ path runs through a HIGHER-stage part deadlocks the player without tripping the requires check above
+      // replay the build as a guide player, free to pick any cluster focus each step, and error if it stalls before completion
       const guideDone = new Set<ActionId>();
       const focusChoices = requiresClusterFocus(f) ? focusableClusterIds(f) : [null];
       while (guideDone.size < f.actions.length) {
@@ -317,14 +337,16 @@ export function validateFurniture(f: Furniture): ValidationIssue[] {
     }
   }
 
-  // a slide mover with no authored placeDir glides along travelAxis()'s centroid heuristic, which cannot know a groove's axis and produced visibly wrong on-device motion for every EKET slider — the engine's own doc calls placeDir "the only reliable source"
+  // a slide mover with no authored placeDir glides along travelAxis()'s centroid heuristic, which cannot know a groove's axis
+  // visibly wrong on-device motion for every EKET slider — the engine's own doc calls placeDir "the only reliable source"
   for (const p of Object.values(f.parts)) {
     if (p.slideJoins?.length && !p.placeDir) {
       warn(`slide mover "${p.partId}" has no placeDir — its glide axis falls back to the centroid heuristic; author placeDir in the STRUCTURE overlay`);
     }
   }
 
-  // keyhole two-phase (lockDir): the lock leg only ever runs inside a press placement, and its whole point is travel ACROSS the press axis — a parallel lockDir collapses back into a longer one-phase press
+  // keyhole two-phase (lockDir): the lock leg runs only inside a press placement, and its point is travel ACROSS the press axis
+  // a parallel lockDir collapses back into a longer one-phase press
   {
     const liaisons = f.liaisons ?? buildLiaisons(f.parts);
     const pressEdges = new Set(
@@ -341,7 +363,7 @@ export function validateFurniture(f: Furniture): ValidationIssue[] {
         continue;
       }
       if (p.type !== "structural" || !pressEdges.has(p.partId)) {
-        warn(`"${p.partId}" authors a lockDir but has no press liaison — the two-phase lock only engages on a press placement (directJoins); drop it or author the press edge`);
+        warn(`"${p.partId}" authors a lockDir but has no press liaison — the two-phase lock only engages on a press placement (pressJoins); drop it or author the press edge`);
       }
       if (p.placeDir) {
         const pl = Math.hypot(p.placeDir[0], p.placeDir[1], p.placeDir[2]);
@@ -356,7 +378,9 @@ export function validateFurniture(f: Furniture): ValidationIssue[] {
     }
   }
 
-  // the inverse trap: a part whose only press path is a preloaded PIN needs no placeDir — pressParkInfo derives the travel from the pin's signed engage axis (flipping with build order), so a baked direction is dead data that can only mislead (it froze BEKVÄM's step to one side when both legs became seeds)
+  // the inverse trap: a part whose only press path is a preloaded PIN needs no placeDir
+  // pressParkInfo derives the travel from the pin's signed engage axis, which flips with build order, so a baked direction can only mislead
+  // it froze BEKVÄM's step to one side when both legs became seeds
   {
     const liaisons = f.liaisons ?? buildLiaisons(f.parts);
     const pressEdges = new Set(
@@ -365,11 +389,11 @@ export function validateFurniture(f: Furniture): ValidationIssue[] {
     for (const p of Object.values(f.parts)) {
       if (p.type !== "structural" || !p.placeDir) continue;
       if (p.slideJoins?.length || pressEdges.has(p.partId)) continue;
-      // staged flows never preload (their pins tighten only after the carrier seats), so a staged endpoint keeps the authored placeDir meaningful
+      // staged flows never preload — their pins tighten only after the carrier seats — so a staged endpoint keeps placeDir meaningful
       const pinned = Object.values(f.parts).some(
         (q) =>
           isConnector(q) &&
-          fastenerKindOf(q) === "pin" &&
+          preloadOf(q)?.counterpartMountsBy === "press" &&
           q.attached!.includes(p.partId) &&
           !q.attached!.some((t) => isStaged(f.parts[t])),
       );
@@ -445,7 +469,7 @@ export function validateFurniture(f: Furniture): ValidationIssue[] {
   return issues;
 }
 
-/** Throws if the furniture has any errors. Call at load time / in the composer. */
+/** throws if the furniture has any errors — call at load time, or in the composer */
 export function assertValidFurniture(f: Furniture): void {
   const errors = validateFurniture(f).filter((i) => i.level === "error");
   if (errors.length) {

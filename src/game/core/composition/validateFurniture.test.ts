@@ -14,44 +14,52 @@ test("two seeds is an error", () => {
   assert.ok(out.some((m) => m.includes("exactly one")));
 });
 
-test("a seed that also slideJoins is an error", () => {
+test("a seed that also authors a combine is an error", () => {
   const out = messages({
-    a: { id: "a", label: "A", seed: true, slideJoins: ["b"], placeDir: [1, 0, 0] },
+    a: { id: "a", label: "A", seed: true, combine: { kind: "slide", onto: ["b"], dir: [1, 0, 0] } },
     b: { id: "b", label: "B" },
   });
-  assert.ok(out.some((m) => m.includes("is a seed and also slideJoins")));
+  assert.ok(out.some((m) => m.includes("is a seed and also authors a combine")));
 });
 
-test("slideJoins naming an unknown cluster is an error", () => {
+test("a combine naming an unknown cluster is an error", () => {
   const out = messages({
     a: { id: "a", label: "A", seed: true },
-    b: { id: "b", label: "B", slideJoins: ["nope"], placeDir: [1, 0, 0] },
+    b: { id: "b", label: "B", combine: { kind: "slide", onto: ["nope"], dir: [1, 0, 0] } },
   });
   assert.ok(out.some((m) => m.includes('unknown cluster "nope"')));
 });
 
-test("a cycle in slideJoins is an error", () => {
+test("a cycle in the combine graph is an error", () => {
   const out = messages({
-    a: { id: "a", label: "A", slideJoins: ["b"], placeDir: [1, 0, 0] },
-    b: { id: "b", label: "B", slideJoins: ["a"], placeDir: [1, 0, 0] },
+    a: { id: "a", label: "A", combine: { kind: "slide", onto: ["b"], dir: [1, 0, 0] } },
+    b: { id: "b", label: "B", combine: { kind: "slide", onto: ["a"], dir: [1, 0, 0] } },
   });
   assert.ok(out.some((m) => m.includes("cycle")));
 });
 
-test("a slide-joined cluster without a usable placeDir is an error", () => {
+test("a combine without a usable dir is an error", () => {
   const out = messages({
     a: { id: "a", label: "A", seed: true },
-    b: { id: "b", label: "B", slideJoins: ["a"] },
+    b: { id: "b", label: "B", combine: { kind: "slide", onto: ["a"] } },
   });
-  assert.ok(out.some((m) => m.includes("placeDir")));
+  assert.ok(out.some((m) => m.includes("no non-zero dir")));
 });
 
-// (the pushLevel-vs-PUSH_OPEN check died with ClusterDef.pushLevel in the testActionIds redesign)
+test("a combine onto nothing is an error", () => {
+  const out = messages({
+    a: { id: "a", label: "A", seed: true },
+    b: { id: "b", label: "B", combine: { kind: "slide", onto: [], dir: [1, 0, 0] } },
+  });
+  assert.ok(out.some((m) => m.includes("onto nothing")));
+});
+
+// the pushLevel-vs-PUSH_OPEN check died with ClusterDef.pushLevel in the testActionIds redesign
 test("a clean overlay yields no issues", () => {
   const out = messages(
     {
       a: { id: "a", label: "A", seed: true },
-      b: { id: "b", label: "B", slideJoins: ["a"], placeDir: [1, 0, 0] },
+      b: { id: "b", label: "B", combine: { kind: "slide", onto: ["a"], dir: [1, 0, 0] } },
     },
     { axis: [-1, 0, 0], distance: 0.1, testActionIds: { "1": "x" }, groups: [{ level: "1", ratio: 1, parts: [] }] },
   );

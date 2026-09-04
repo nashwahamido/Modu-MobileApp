@@ -263,6 +263,7 @@ export const VISUAL_TUTORIAL_STEPS: TutorialStep[] = [
   },
 ];
 
+/** PEBBLE's own run — hand-written, not composed: it teaches Settings once, browses the background panel instead of forcing a change, and says Focus SHOWS more (clearPath starts inside focus mode). Shared step ids are deliberate — tutorial.tsx's tray filter and the voice table key on them. */
 export const CLEAR_PATH_TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: "hold-like-controller",
@@ -339,6 +340,7 @@ export const CLEAR_PATH_TUTORIAL_STEPS: TutorialStep[] = [
   },
 ];
 
+/** FELIX's own run — hand-written for the same reason; it splits the HUD controls around the joystick, which no shared table could express. Momentum is now the only composed profile. Shared step ids are deliberate, as in Pebble's run above. */
 export const CONTROL_TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: "hold-like-controller",
@@ -362,6 +364,7 @@ export const CONTROL_TUTORIAL_STEPS: TutorialStep[] = [
     event: "settings_browsed",
   },
   {
+    // `hud-recenter` + `hud-undo` folded into one read-only card; neither button press is demanded and nothing on screen moves.
     id: "visual-undo-recenter",
     targetId: "undoRecenter",
     message: 'Press "Undo" to go back, or "Recenter" to reset the view.',
@@ -445,6 +448,7 @@ export const MOMENTUM_TUTORIAL_STEPS: TutorialStep[] = [
     event: "settings_browsed",
   },
   {
+    // Same folded card as in Felix's run; it also drops the full-screen undo preview wired to `hud-undo`.
     id: "visual-undo-recenter",
     targetId: "undoRecenter",
     message: 'Press "Undo" to go back, or "Recenter" to reset the view.',

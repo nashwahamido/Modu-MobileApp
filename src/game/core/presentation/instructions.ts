@@ -47,13 +47,13 @@ export function buildInstructions(
     if (a.type === "placePart" && a.partId) placeOrder.set(a.partId, a.order);
   }
 
-  // True when the AUTHORED order makes `id` the keyhole mover — a press partner (directJoins, either direction) places earlier. A lockDir part that seeds first in the linear build just drops, and a free-mode role swap gets its guidance from the live control instead of this static text.
+  // True when the AUTHORED order makes `id` the keyhole mover — a press partner (pressJoins, either direction) places earlier. A lockDir part that seeds first in the linear build just drops, and a free-mode role swap gets its guidance from the live control instead of this static text.
   const keyholeMover = (id: string): boolean => {
     const mine = placeOrder.get(id);
     if (mine === undefined) return false;
-    const partners = new Set<string>(parts[id]?.directJoins ?? []);
+    const partners = new Set<string>(parts[id]?.pressJoins ?? []);
     for (const [qid, q] of Object.entries(parts)) {
-      if (q.directJoins?.includes(id as never)) partners.add(qid);
+      if (q.pressJoins?.includes(id as never)) partners.add(qid);
     }
     return [...partners].some((q) => (placeOrder.get(q) ?? Infinity) < mine);
   };

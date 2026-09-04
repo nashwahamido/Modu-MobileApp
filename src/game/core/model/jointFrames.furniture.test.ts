@@ -3,9 +3,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { boxesByName } from "../derive/boxes";
+import { readGlbMeshes } from "../derive/glb";
 import { applyStructure, buildLiaisons } from "./liaisons";
 import { boxCenter, clampIntoBox, deriveJointFrames, partAnchorOffsets, CONTACT_EXPANSION_M } from "./jointFrames";
 import type { PartBox, Vec3 } from "@/src/game/core/type";
+import { COMPOSED } from "@/src/game/content/furnitures/composed";
 
 const MODELS = path.join(process.cwd(), "src", "assets", "models", "furnitures");
 const CONTENT = path.join(process.cwd(), "src", "game", "content", "furnitures");
@@ -17,62 +20,7 @@ const FURNITURES = fs
   .filter((d) => d.isDirectory() && fs.existsSync(path.join(MODELS, d.name, `${d.name}.glb`)) && fs.existsSync(path.join(CONTENT, d.name, "parts.gen.ts")))
   .map((d) => d.name);
 
-function parseGlb(file: string) {
-  const b = fs.readFileSync(file);
-  const jsonLen = b.readUInt32LE(12);
-  const json = JSON.parse(b.subarray(20, 20 + jsonLen).toString("utf8"));
-  const off = 20 + jsonLen;
-  return { json, bin: b.subarray(off + 8, off + 8 + b.readUInt32LE(off)) };
-}
-
-function readPositions(json: any, bin: Buffer, ai: number): Vec3[] {
-  const acc = json.accessors[ai];
-  const bv = json.bufferViews[acc.bufferView];
-  const base = (bv.byteOffset ?? 0) + (acc.byteOffset ?? 0);
-  const stride = bv.byteStride ?? 12;
-  const out: Vec3[] = new Array(acc.count);
-  for (let i = 0; i < acc.count; i++) {
-    const o = base + i * stride;
-    out[i] = [bin.readFloatLE(o), bin.readFloatLE(o + 4), bin.readFloatLE(o + 8)];
-  }
-  return out;
-}
-
-const rotQ = ([x, y, z, w]: number[], [vx, vy, vz]: Vec3): Vec3 => {
-  const tx = 2 * (y * vz - z * vy);
-  const ty = 2 * (z * vx - x * vz);
-  const tz = 2 * (x * vy - y * vx);
-  return [vx + w * tx + (y * tz - z * ty), vy + w * ty + (z * tx - x * tz), vz + w * tz + (x * ty - y * tx)];
-};
-
-/** World-space bounds per GLB node name — the same quantity the runtime harvest must produce from Filament. Assumes a FLAT node hierarchy (each mesh node's own TRS is its world transform), which holds by this project's export convention; a nested node under a transforming parent is self-detecting rather than silent, because the box computed here would then miss the parent's contribution and its centre would disagree with visualCenterOffset, failing R1 by name. */
-function glbBoxes(file: string): Record<string, PartBox> {
-  const { json, bin } = parseGlb(file);
-  const out: Record<string, PartBox> = {};
-  for (const n of json.nodes ?? []) {
-    if (!n.name || n.mesh == null) continue;
-    const t = n.translation ?? [0, 0, 0];
-    const q = n.rotation ?? [0, 0, 0, 1];
-    const s = n.scale ?? [1, 1, 1];
-    const min: number[] = [Infinity, Infinity, Infinity];
-    const max: number[] = [-Infinity, -Infinity, -Infinity];
-    let any = false;
-    for (const prim of json.meshes[n.mesh].primitives) {
-      if (prim.attributes.POSITION == null) continue;
-      for (const v of readPositions(json, bin, prim.attributes.POSITION)) {
-        const r = rotQ(q, [v[0] * s[0], v[1] * s[1], v[2] * s[2]]);
-        const w: Vec3 = [r[0] + t[0], r[1] + t[1], r[2] + t[2]];
-        any = true;
-        for (let k = 0; k < 3; k++) {
-          if (w[k] < min[k]) min[k] = w[k];
-          if (w[k] > max[k]) max[k] = w[k];
-        }
-      }
-    }
-    if (any) out[n.name] = { min: [min[0], min[1], min[2]], max: [max[0], max[1], max[2]] };
-  }
-  return out;
-}
+const glbBoxes = (file: string): Record<string, PartBox> => boxesByName(readGlbMeshes(fs.readFileSync(file)));
 
 const dist = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
@@ -87,8 +35,7 @@ test("furniture discovery found the measured baseline", () => {
 for (const F of FURNITURES) {
   test(`${F}: joint frames derive automatically`, async () => {
     const { PARTS } = await import(`@/src/game/content/furnitures/${F}/parts.gen`);
-    const { STRUCTURE } = await import(`@/src/game/content/furnitures/${F}/authored`);
-    const parts = applyStructure(PARTS, STRUCTURE);
+    const parts = applyStructure(PARTS, COMPOSED[F]);
     const liaisons = buildLiaisons(parts);
     const named = glbBoxes(path.join(MODELS, F, `${F}.glb`));
 
@@ -133,8 +80,7 @@ for (const F of FURNITURES) {
 
   test(`${F}: the contact expansion is not fitted to this furniture`, async () => {
     const { PARTS } = await import(`@/src/game/content/furnitures/${F}/parts.gen`);
-    const { STRUCTURE } = await import(`@/src/game/content/furnitures/${F}/authored`);
-    const parts = applyStructure(PARTS, STRUCTURE);
+    const parts = applyStructure(PARTS, COMPOSED[F]);
     const liaisons = buildLiaisons(parts);
     const named = glbBoxes(path.join(MODELS, F, `${F}.glb`));
     const boxes: Record<string, PartBox> = {};

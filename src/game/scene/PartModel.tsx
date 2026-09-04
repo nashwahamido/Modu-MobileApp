@@ -20,18 +20,16 @@ import {
   slideParkInfo,
 } from "@/src/game/core/evaluation/engagement";
 import { quatFromAxisAngle, quatMultiply } from "@/src/game/core/geometry/math";
-import { ActionId, ActionType, Furniture, MaterialParams, PartDef, PartId, Quat, Vec3 } from "@/src/game/core/type";
+import { ActionId, ActionType, Furniture, PartDef, PartId, Quat, Vec3 } from "@/src/game/core/type";
 import {
   ORIENTATION_TOTAL_DEG,
   selectFirstDrop,
   useGameStore,
 } from "@/src/game/core/store";
-import { styleFor } from "@/src/game/core/presentation/labels";
 import { buildPartActions, hintSlotFor, type PartActionIds } from "@/src/game/core/scene/targets";
 import type { ClusterDriver, OffsetDriver } from "./offsetDriver";
 import { useShaderOverride, useShaderStyle } from "./shaders";
 import type { PartMode } from "./useSceneState";
-import { usePrefsStore } from "@/src/game/core/prefsStore";
 
 const FIT_GLOW: Record<FitState, [number, number, number]> = {
   idle: [1.0, 0.42, 0.0],
@@ -71,7 +69,7 @@ function demoApproach(
   }
   const centre = visualCentre(def);
   const structural = [
-    ...(def.directJoins ?? []),
+    ...(def.pressJoins ?? []),
     ...(def.slideJoins ?? []),
     ...(def.attached ?? []),
   ];
@@ -102,47 +100,8 @@ function demoApproach(
 
 const EPSILON = 1e-6;
 
-function usePartMaterial(def: PartDef): MaterialParams | undefined {
-  const renderStyle = usePrefsStore((s) => s.renderStyle);
-  const styles = useGameStore((s) => s.furniture?.styles);
-  return useMemo(() => {
-    const style = styleFor(styles, renderStyle);
-    return style?.material?.[def.meshName] ?? style?.material?.[def.group];
-  }, [styles, renderStyle, def.meshName, def.group]);
-}
-
-function applyThemeMaterial(
-  renderableManager: ReturnType<typeof useFilamentContext>["renderableManager"],
-  entity: Entity,
-  params: MaterialParams | undefined,
-) {
-  if (!params) return;
-  const count = renderableManager.getPrimitiveCount(entity);
-  for (let i = 0; i < count; i++) {
-    const mi = renderableManager.getMaterialInstanceAt(entity, i);
-    try {
-      if (params.baseColor) {
-        mi.setFloat4Parameter("baseColorFactor", [
-          params.baseColor[0],
-          params.baseColor[1],
-          params.baseColor[2],
-          1,
-        ]);
-      }
-      if (params.emissive) {
-        mi.setFloat3Parameter("emissiveFactor", [
-          params.emissive[0],
-          params.emissive[1],
-          params.emissive[2],
-        ]);
-      }
-      if (params.metallic != null)
-        mi.setFloatParameter("metallicFactor", params.metallic);
-      if (params.roughness != null)
-        mi.setFloatParameter("roughnessFactor", params.roughness);
-    } catch {}
-  }
-}
+// the zero emissive every part restores to after a hint glow
+const NO_EMISSIVE: [number, number, number] = [0, 0, 0];
 
 function quatToAxisAngle([x, y, z, w]: Quat) {
   const len = Math.hypot(x, y, z, w) || 1;
@@ -487,9 +446,8 @@ function DrivenEntity({
   initial: Vec3;
   rotation?: Quat;
 }) {
-  const { transformManager, renderableManager, scene } = useFilamentContext();
+  const { transformManager, scene } = useFilamentContext();
   const entity = useInstanceEntity(model, def.meshName, 0);
-  const material = usePartMaterial(def);
   const shaderStyle = useShaderStyle();
 
   useEffect(() => {
@@ -517,11 +475,7 @@ function DrivenEntity({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entity]);
 
-  useEffect(() => {
-    if (entity) applyThemeMaterial(renderableManager, entity, material);
-  }, [entity, renderableManager, material]);
-
-  useShaderOverride(entity, def, shaderStyle, material);
+  useShaderOverride(entity, def, shaderStyle);
 
   return null;
 }
@@ -539,9 +493,8 @@ function ClusterDrivenEntity({
   base?: readonly number[];
   hidden?: boolean;
 }) {
-  const { transformManager, renderableManager, scene } = useFilamentContext();
+  const { transformManager, scene } = useFilamentContext();
   const entity = useInstanceEntity(model, def.meshName, 0);
-  const material = usePartMaterial(def);
   const shaderStyle = useShaderStyle();
 
   useEffect(() => {
@@ -567,11 +520,7 @@ function ClusterDrivenEntity({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entity, transformManager, driver, base[0], base[1], base[2]]);
 
-  useEffect(() => {
-    if (entity) applyThemeMaterial(renderableManager, entity, material);
-  }, [entity, renderableManager, material]);
-
-  useShaderOverride(entity, def, shaderStyle, material);
+  useShaderOverride(entity, def, shaderStyle);
 
   return null;
 }
@@ -589,15 +538,10 @@ function StaticEntity({
 }) {
   const { transformManager, renderableManager, scene } = useFilamentContext();
   const entity = useInstanceEntity(model, def.meshName, 0);
-  const material = usePartMaterial(def);
   const shaderStyle = useShaderStyle();
   const hintPartId = useGameStore((s) => s.hintPartId);
   const hintParts = useGameStore((s) => s.hintParts);
   const marked = hintPartId === def.partId || hintParts.includes(def.partId);
-  const restoreEmissive = useMemo<[number, number, number]>(() => {
-    const e = material?.emissive;
-    return e ? [e[0], e[1], e[2]] : [0, 0, 0];
-  }, [material]);
 
   useEffect(() => {
     if (!entity) return;
@@ -622,13 +566,9 @@ function StaticEntity({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entity, transformManager, def, offsetKey, rotationKey]);
 
-  useEffect(() => {
-    if (entity) applyThemeMaterial(renderableManager, entity, material);
-  }, [entity, renderableManager, material]);
+  useShaderOverride(entity, def, shaderStyle);
 
-  useShaderOverride(entity, def, shaderStyle, material);
-
-  useMarkerGlow(entity, renderableManager, marked ? GLOW_MARK : null, marked, restoreEmissive);
+  useMarkerGlow(entity, renderableManager, marked ? GLOW_MARK : null, marked, NO_EMISSIVE);
 
   return null;
 }
