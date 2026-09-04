@@ -12,10 +12,11 @@ const part = (partId: string, extra: object = {}): PartDef =>
 const PARTS = Object.fromEntries(
   ["sideL", "top", "back", "shelf", "pole", "seat", "screwy"].map((id) => [id, part(id)]),
 ) as Record<PartId, PartDef>;
-// Binds shelf↔pole, a pair no other test joins: a fastener's `attached` now decides whether lowering emits a join array, so a fixture fastener sitting on the pair every test uses would silently suppress every array in the file.
+// Binds shelf↔pole, a pair no other test joins: `attached` decides whether lowering emits a join array, so a fixture fastener on the common pair would silently suppress every array in the file.
 (PARTS as Record<string, PartDef>).screwy = part("screwy", { type: "fastener", attached: ["shelf", "pole"] });
 
-// The whole point of the seam: joint ENTITIES and the flat arrays are two ways to say the same thing, and the engine must not be able to tell which was used. Γ is what every downstream pass reads, so equality there is the acceptance criterion.
+// The point of the seam: joint ENTITIES and the flat arrays say the same thing, and the engine must not be able to tell which was used.
+// Γ is what every downstream pass reads, so equality there is the acceptance criterion.
 test("authoring via JOINTS produces exactly the Γ the flat arrays produce", () => {
   const joints: JointDef[] = [
     { kind: "press", a: "sideL" as PartId, b: "top" as PartId },
@@ -43,7 +44,8 @@ test("hook-and-slot lowers both legs, and `dirOther` gives the partner its own s
   assert.deepEqual(o.sideL, { lockDir: [-1, 0, 0], lockTravel: 0.015 }, "the partner carries the mirrored lock leg, derived from ONE declaration");
 });
 
-// A snap is a press with the drive gesture removed: the parts click together in the placement motion itself (EKET's suspension cover pushing over its bracket). The EDGE is still a press — `dropOn` says how the placement FEELS, not what kind of join it is — so Γ must be unable to tell a snap from a plain press.
+// A snap is a press with the drive gesture removed, but the EDGE is still a press — `dropOn` says how the placement FEELS, not what kind of join it is.
+// So Γ must be unable to tell a snap from a plain press.
 test("a snap lowers to a press edge plus dropOn on the mover, matching the flat authoring route", () => {
   const viaJoints = applyStructure(PARTS, composeStructure(PARTS, {} as StructureOverlay, { joints: [
     { kind: "snap", a: "sideL" as PartId, b: "top" as PartId, mover: "top" as PartId },
@@ -55,18 +57,20 @@ test("a snap lowers to a press edge plus dropOn on the mover, matching the flat 
   assert.equal(edge?.kind, "press", "a snap is a press edge in Γ; dropOn is orthogonal to the join kind");
 });
 
-// Where HARDWARE already makes the edge, the joint may not stamp a kind onto it: a press edge would let the part press home the moment its partner is down, BEFORE its own dowel is in, and BEKVAM's whole build order comes from those dowel locks. The kind still picks the travel axis; the edge stays the hardware's.
+// Where HARDWARE already makes the edge, the joint may not stamp a kind on it: a press edge would let the part press home before its own dowel is in, and BEKVAM's build order comes from those dowel locks.
+// The kind still picks the travel axis; the edge stays the hardware's.
 test("a joint whose pair is joined by hardware emits its travel only, never a join array", () => {
   const lowered = lowerJoints(
     [{ kind: "press", a: "shelf" as PartId, b: "pole" as PartId, mover: "shelf" as PartId, approach: { dir: [1, 0, 0] } }],
     PARTS as never,
   ) as Record<string, Record<string, unknown>>;
   assert.deepEqual(lowered.shelf, { placeDir: [1, 0, 0] }, "the screw between them owns the edge; only the direction is the joint's to state");
-  // The edge is the hardware's, and buildLiaisons now NAMES it — a fastener-made joint whose parts state no travel is a snap. What matters here is that the name came from the classification and not from the joint: had the joint emitted its array it would read "press", and a press edge is what would let the part press home before its own fastener is in.
+  // buildLiaisons NAMES the hardware's edge: a fastener-made joint whose parts state no travel is a snap.
+  // The name has to come from that classification, not the joint — had the joint emitted its array it would read "press", which is what lets a part press home before its own fastener is in.
   assert.equal(Object.values(buildLiaisons(applyStructure(PARTS, {} as StructureOverlay))).find((l) => l.a === "pole" && l.b === "shelf")?.kind, "snap", "a hardware-made joint with no travel stated is a snap; the joint contributed nothing to it");
 });
 
-// dropOn exists to cancel a drive gesture something ELSE implies. On a hardware-joined pair no join array is emitted, so there is nothing to cancel and the flag would be dead data.
+// dropOn cancels a drive gesture something ELSE implies. On a hardware-joined pair no join array is emitted, so there is nothing to cancel and the flag would be dead data.
 test("a snap sets dropOn only when the joint itself made the edge", () => {
   const free = lowerJoints([{ kind: "snap", a: "sideL" as PartId, b: "top" as PartId, mover: "top" as PartId }], PARTS as never) as Record<string, Record<string, unknown>>;
   assert.equal(free.top.dropOn, true, "the joint created a press edge, so the flag is what sends placeEngagement back to drop");
@@ -74,7 +78,7 @@ test("a snap sets dropOn only when the joint itself made the edge", () => {
   assert.equal(bridged.shelf?.dropOn, undefined, "no join array was emitted, so the engagement is already a drop and the flag is inert");
 });
 
-// The generated table is the DEFAULT, never an override: it fills the direction a joint does not state, and only for parts a joint names — which is what keeps derivation opt-in per joint rather than per furniture.
+// The generated table is the DEFAULT, never an override: it fills a direction a joint does not state, and only for parts a joint names, so derivation stays opt-in per joint.
 test("derived geometry supplies the travel a joint leaves unstated, and an authored approach beats it", () => {
   const geometry = { top: { placeDir: [0, 0, 1] }, shelf: { placeDir: [9, 9, 9] } } as never;
   const o = lowerJoints(
@@ -106,7 +110,7 @@ test("a joint's anchor lowers onto both endpoints, and two joints claiming diffe
   );
 });
 
-// Rotation is the reason this shape exists tonight: it must be sayable, and it must not silently degrade into something placeable.
+// Rotation must be sayable, and must not silently degrade into something placeable.
 test("a hinge is representable but refused by name, with the reason", () => {
   const hinge: JointDef = { kind: "hinge", a: "sideL" as PartId, b: "top" as PartId, mover: "top" as PartId, pivot: [0, 0, 0], axis: [0, 1, 0], sweepDeg: 90 };
   assert.ok(!PLAYABLE_JOINT_KINDS.has("hinge"), "hinge must stay out of the playable set until a rotational motion primitive exists");

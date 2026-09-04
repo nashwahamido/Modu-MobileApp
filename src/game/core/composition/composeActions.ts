@@ -33,7 +33,7 @@ import { groupParts } from "../scene/targets";
 type Parts = Record<PartId, PartDef>;
 
 interface ActionInput {
-  actionId?: string; // part-less beats only — part-tied ids derive from (type, partId)
+  actionId?: string; // part-less step only — part-tied ids derive from (type, partId)
   type: ActionType;
   stage: number;
   partId?: string;
@@ -80,7 +80,7 @@ interface FastenerPairOptions {
   insertRequiresAny?: readonly ActionId[];
   tightenRequires?: readonly ActionId[];
   insertTool?: ToolId;
-  motion?: DriveMotion; // how the tighten LOOKS — from HARDWARE.motion ?? the kind default
+  motion?: DriveMotion; // how the tighten looks — from HARDWARE.motion ?? the kind default
   threePhase?: boolean; // opt-in 3-phase lifecycle
 }
 
@@ -152,7 +152,7 @@ const dist = (a: PartDef, b: PartDef): number => {
   return Math.hypot(x1 - x2, y1 - y2, z1 - z2);
 };
 
-/** Instance matching for an extra: the nearest primary-group instance whose binding covers every one of the extra's own hosts (same liaison + nearest — stricter than a group-wide nearest). Shared with the generation-time validator so the two can never pair differently. */
+// Instance matching for an extra
 export function primaryFor(extra: PartDef, primaries: readonly PartDef[]): PartDef | undefined {
   const hosts = extra.attached ?? [];
   let best: PartDef | undefined;
@@ -183,14 +183,14 @@ function defaultTightenRequires(p: PartDef, parts: Parts): readonly ActionId[] {
   return [];
 }
 
-/** Extra sequencing: own host places, then the inherited liaison's remaining endpoints (the securer gate — load-bearing when the primary is a connector, whose own tighten precedes the later endpoint), then the primary's completion. */
+// Extra sequencing: own host places, then the inherited liaison's remaining endpoints (the securer gate — load-bearing when the primary is a connector, whose own tighten precedes the later endpoint), then the primary's completion.
 function extraRequires(p: PartDef, primary: PartDef): readonly ActionId[] {
   const hosts = p.attached ?? [];
   const remaining = (primary.attached ?? []).filter((id) => !hosts.includes(id));
   return [...hosts.map(placeId), ...remaining.map(placeId), tightenId(primary.partId)];
 }
 
-/** a fastener's resolved prereqs, kept for the stage derivation before any action is built */
+// a fastener's translated prereqs, kept for the stage derivation before any action is built 
 interface FastenerInstance {
   group: GroupId;
   tool?: ToolId;
@@ -200,16 +200,11 @@ interface FastenerInstance {
   tightenRequires: readonly ActionId[];
 }
 
-/**
- * a fastener's stage FOLLOWS the joint it closes: the max stage over the placements its prereqs name
- * the OR side takes the MIN — a preload connector goes in once its first host is down
- * legality is untouched: `requires` already holds them, and stage is only the tray's chunking
- */
+//a fastener's stage FOLLOWS the joint it closes
 function deriveFastenerStages(
   instances: readonly FastenerInstance[],
   placementStage: ReadonlyMap<PartId, number>,
 ): Map<PartId, number> {
-  // both ids answer with the part's authored stage — a carrier's hardware names the take-out beat
   const byPlacementAction = new Map<ActionId, number>();
   for (const [partId, stage] of placementStage) {
     byPlacementAction.set(placeId(partId), stage);
@@ -258,12 +253,7 @@ function deriveFastenerStages(
   return out;
 }
 
-/**
- * expand each FASTENERS def into insert+tighten pairs for every instance of its group, in def order (action order follows it)
- * the def says what KIND of thing the group is; the instance's `attached` (and its lowered role, already on the part) says where — sequencing is derived from the two
- * `hardware` is passed in by the data layer, so core stays free of data imports
- * tool: def.tool → hardware[group].tool → part.tool → none. stages come from `placementStage`
- */
+// expand each FASTENERS def into insert+tighten pairs for every instance of its groups
 export function expandFasteners(
   fasteners: FastenerMap,
   parts: Record<PartId, PartDef>,
@@ -288,8 +278,7 @@ export function expandFasteners(
     return pair(p.partId, tool, requires, stages.get(p.partId) ?? 1, {
       insertRequiresAny: requiresAny,
       tightenRequires,
-      // FEEL, not sequencing: HOME once pressed in is tapped, everything else turned
-      // hardware.ts overrides motion per group, which is where EKET's cams get "turn"
+      // hardware.ts overrides motion per group
       motion:
         hardware[group]?.motion ??
         (preloadOf(p)?.completesOn === "insert" ? "strike" : "spin"),
@@ -330,8 +319,7 @@ export function withStaging(
       requires: seat.requires,
       ...(seat.requiresAny?.length ? { requiresAny: seat.requiresAny } : {}),
     });
-    // move the carrier's hardware into the stage→place window: inserts before the placement, tightens after
-    // legality never depended on array position — this makes ORDER tell the story `requires` already enforces
+    // move the carrier's hardware into the stage→place window: inserts before the placement, tightens afte
     const hw = new Set(hardwareOn(parts, carrier));
     const fitting: DraftAction[] = [];
     const tightens: DraftAction[] = [];
@@ -355,8 +343,6 @@ export function withStaging(
     out.splice(placeAt, 0, ...fitting);
   }
   // serialize IDENTICAL carriers: each take-out requires the previous instance's hardware tightened
-  // derived from the parts, never authored — instances of one group are interchangeable, so this costs nothing
-  // without it a half-built sub-assembly dangles in the staging area once the next one comes out
   const carriersByGroup = new Map<string, PartId[]>();
   for (const c of carriers) {
     const g = parts[c].group as string;
@@ -381,17 +367,7 @@ export function withStaging(
   return out;
 }
 
-/**
- * pull every cluster's OWN fasteners ahead of the first combine
- * the appendix lands after every authored action, so hardware was asked for with its cluster already combined in
- * and hidden inside it — EKET's drawer screws, DALFRED's end cap. see fastenerOrder.test.ts for the measurements
- *
- * a fastener is a cluster's own when every part it attaches to sits in ONE cluster
- * one that bridges clusters realizes the combine joint and stays put, as does anything requiring a combine
- *
- * each moved action lands at its EARLIEST legal point — right after the last action it requires
- * anchoring on the cluster block instead repeats the same array-position failure one level down
- */
+// pull every cluster's OWN fasteners ahead of the first combine the appendix lands after every authored action, so hardware was asked for with its cluster already combined in and hidden inside it
 export function withFastenersBeforeCombines(
   drafts: readonly DraftAction[],
   parts: Parts,
@@ -422,10 +398,7 @@ export function withFastenersBeforeCombines(
     moved.unshift(out[i]);
     out.splice(i, 1);
   }
-  // anchors are computed against the cleaned list, then spliced highest-first, so every index stays valid
-  // a require that is itself moved contributes ITS anchor; ties keep original order, so insert precedes tighten
-  // requiresAny is an OR, so it contributes its FIRST resolved alternative
-  // requires resolving to nothing falls back to just before the first combine
+  // anchors are computed against the cleaned list, then spliced highest-first
   const cleanedIndex = new Map<ActionId, number>();
   out.forEach((d, i) => cleanedIndex.set(d.actionId, i));
   const firstCombineIdx = out.findIndex((d) => d.type === "combineClusters");
@@ -460,10 +433,7 @@ export function withFastenersBeforeCombines(
   return out;
 }
 
-/**
- * a combine requires the combines of every cluster its own combine seats onto, so the overlay is the one source of combine order
- * authors stop hand-writing requires that must track the combine graph. no overlay passes straight through
- */
+// a combine requires the combines of every cluster its own combine seats onto, so the overlay is the one source of combine order
 export function withClusterCombines(
   drafts: readonly DraftAction[],
   clusters: Record<ClusterId, ClusterDef> | undefined,
@@ -484,10 +454,7 @@ export function withClusterCombines(
   });
 }
 
-/**
- * stamp the canonical `order` (guide mode) by each draft's final position in the composed list
- * with `parts`, also resolve a missing tool: action.tool → part.tool → none, so DALFRED's pole authors "mallet" once
- */
+// stamp the canonical `order` (guide mode) by each draft's final position in the composed list -> might need improvement later
 export const withOrder = (
   drafts: readonly DraftAction[],
   parts?: Record<PartId, PartDef>,
@@ -498,11 +465,7 @@ export const withOrder = (
     return { ...a, ...(partTool ? { tool: partTool } : {}), order: i };
   });
 
-/**
- * the ONE way to turn drafts + FASTENERS defs into a final action list
- * expand, split staged parts, pull cluster fasteners ahead of the combines, stamp `order`
- * the passes are order-sensitive, and hand-rolled copies have twice silently dropped a later one
- */
+// turn drafts + FASTENERS defs into a final action list
 export function composeFurnitureActions(
   authored: readonly DraftAction[],
   fasteners: FastenerMap,
@@ -534,10 +497,7 @@ export function composeFurnitureActions(
   );
 }
 
-/**
- * the tighten ids for a whole group, so an authored step can say "after EVERY leg screw is driven"
- * declaratively, without filtering the expanded action list
- */
+// the tighten ids for a whole group, so an authored step can say "after EVERY leg screw is driven" declaratively, without filtering the expanded action list
 export function tightenActionIds(
   parts: Record<PartId, PartDef>,
   group: GroupId,

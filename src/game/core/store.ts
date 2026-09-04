@@ -400,7 +400,15 @@ export const useGameStore = create<GameState>()((set, get) => ({
     completedCount: get().completed.length,
     totalCount: get().furniture?.actions.length ?? 0,
   }),
-  setMode: (mode) => set({ mode }),
+  setMode: (mode) => {
+    set({ mode });
+    // Guided mode without the step text is a dead mode: the guidance it turns on is the text. So entering it switches instructions on — unless the player has turned that switch themselves, which stays honoured the same way a profile switch honours it.
+    if (mode !== "free" && !get().settings.showInstructions && !touched.has("showInstructions")) {
+      const settings = { ...get().settings, showInstructions: true };
+      set({ settings });
+      void persistSettings(settings);
+    }
+  },
 
   completeAction: (id) => {
     const s = get();

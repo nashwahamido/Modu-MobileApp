@@ -2,18 +2,11 @@ import { availableActions } from "@/src/game/core/evaluation/availability";
 import { ActionId, AssemblyAction, Furniture } from "@/src/game/core/type";
 import type { ValidationIssue } from "./validateFurniture";
 
-/**
- * stable ordering of a batch of concurrently-legal actions: earliest stage, then the author's own `order`, then id
- * so the derived sequence is reproducible and stays close to the author's intent within a layer
- */
+// stable ordering of a batch of concurrently-legal actions: earliest stage, then the author's own `order`, then id
 const batchOrder = (a: AssemblyAction, b: AssemblyAction): number =>
   a.stage - b.stage || a.order - b.order || (a.actionId < b.actionId ? -1 : 1);
 
-/**
- * a valid topological linearization of every action, obtained by running the real legality engine forward
- * `order` is the sequence; `unreached` lists actions that never become legal — a cycle or an over-constrained graph
- * the same condition validateFurniture reports as "not solvable"
- */
+// a topological linearization of every action, obtained by running the real legality engine forward. `order` is the sequence; `unreached` lists actions that never become legal
 export function deriveTopoOrder(f: Furniture): {
   order: ActionId[];
   unreached: ActionId[];
@@ -35,13 +28,7 @@ export function deriveTopoOrder(f: Furniture): {
   return { order, unreached };
 }
 
-/**
- * warn when the AUTHORED array order is not a valid build sequence — some action listed before one it depends on
- * strict mode picks the lowest-`order` LEGAL step so it still completes, but the authored sequence misleads anyone reading top-to-bottom
- * and guide-mode stage grouping is only as trustworthy as the order. advisory: warnings only
- *
- * unsolvable actions are left to validateFurniture's solvability error, so this only considers actions that DO become reachable
- */
+// warn when the AUTHORED array order is not a valid build sequence
 export function sequenceIssues(f: Furniture): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const reachable = new Set(deriveTopoOrder(f).order);

@@ -1,6 +1,7 @@
-// Fastener defs, validated and lowered at GENERATION time — the v2 authoring shape from docs/superpowers/specs/2026-08-22-fastener-model-v2.md (as amended 2026-08-24). A furniture authors FASTENERS (the shape lives in core/type.ts); this module checks every def against its instances' mesh-name bindings with named errors, and lands each def's ROLE facts (`fastenerRole`, a connector's `preload`) on the instances through the structure overlay, so structure.gen.ts carries them and the device reads them as plain part fields. Sequencing is NOT lowered here any more: composition/composeActions.ts expands the same defs into actions at runtime, reading the roles off the parts.
-// Extras (subordinate hardware riding a primary: the EKET plug on its half pin) pair to the NEAREST primary instance whose binding covers their own hosts — `primaryFor` is shared with the expansion so validator and sequencing can never disagree.
-// Staging stays orthogonal (a carrier's stageOffset rewrites the expanded actions in withStaging). `lifecycle` lowers to the per-instance drive distances (`insertStage` / `insertRetract` / `insertProud`) — one fact stated once on the def, so there is no drop-step-versus-insertStage agreement left to validate; an instance that differs from its group still authors the flat field in STRUCTURE, which wins.
+// FASTENERS defs, validated and lowered at GENERATION time: every def checked against its instances' mesh-name bindings, its ROLE facts landed on them through the structure overlay.
+// Sequencing is NOT lowered here — composition/composeActions.ts expands the same defs into actions at runtime, reading the roles off the parts.
+// `primaryFor` is shared with that expansion, so the validator and the sequencing can never pair an extra differently.
+// `lifecycle` lowers to the per-instance drive distances; an instance that differs from its group authors the flat field in STRUCTURE, which wins.
 import type { FastenerDef, FastenerEntry, FastenerMap, FastenerPreload, FastenerRole, GroupId, PartDef, PartId } from "@/src/game/core/type";
 import { primaryFor } from "../composition/composeActions";
 import type { StructureOverlay } from "../model/liaisons";
@@ -13,7 +14,7 @@ export type FastenerFacts = Record<PartId, { fastenerRole: FastenerRole; preload
 const roleOf = (d: FastenerDef): "connector" | "securer" | "extra" | "cap" =>
   d.home === "part" ? "cap" : typeof d.home === "object" ? "extra" : d.role;
 
-/** The facts this def puts on each of its instances: the role (and a connector's preload), then the lifecycle's drive distances. Key order matters only for the generated file's readability. */
+/** What a def puts on each instance: the role, a connector's preload, then the lifecycle's drive distances. Key order is for the generated file's readability only. */
 const factsOf = (d: FastenerDef): FastenerFacts[PartId] => {
   const role = roleOf(d);
   const lc = d.lifecycle;
@@ -26,7 +27,7 @@ const factsOf = (d: FastenerDef): FastenerFacts[PartId] => {
   };
 };
 
-/** Every authoring error in a fastener map, as plain messages — pure and path-free so both `fastenerFacts` (which throws) and a future recipe validator (which maps them to wizard steps) can use the same checks. */
+/** Every authoring error as a plain message — path-free so `fastenerFacts` (which throws) and a recipe validator (which maps them to wizard steps) share the checks. */
 export function fastenerIssues(fasteners: FastenerMap, parts: Parts): string[] {
   const out: string[] = [];
   const defs = Object.entries(fasteners) as [GroupId, FastenerEntry][];
@@ -74,7 +75,7 @@ export function fastenerIssues(fasteners: FastenerMap, parts: Parts): string[] {
         const prev = connectorLiaisons.get(key);
         if (prev && prev !== group) out.push(`${where}: liaison "${key}" already has connector group "${prev}" — one joint has one defining group`);
         else connectorLiaisons.set(key, group);
-        // A connector's joint exists BECAUSE the hardware is driven — an authored structural join on the same pair defines it twice, and the two can contradict (an authored press under counterpartMountsBy: screw). Hardware that merely secures an authored joint is a securer.
+        // A connector's joint exists BECAUSE the hardware is driven, so an authored join on the same pair defines it twice and the two can contradict. Hardware that merely secures an authored joint is a securer.
         const [a, b] = p.attached!;
         for (const field of ["pressJoins", "slideJoins", "screwJoins"] as const) {
           if (parts[a]?.[field]?.includes(b) || parts[b]?.[field]?.includes(a)) {
@@ -103,7 +104,7 @@ export function fastenerIssues(fasteners: FastenerMap, parts: Parts): string[] {
   return out;
 }
 
-/** Every instance's role facts, keyed by part. Throws on any authoring error — the generator refuses to write a structure.gen from a def that does not fit its instances. */
+/** Every instance's role facts, keyed by part. Throws on any authoring error, so no structure.gen is written from a def that does not fit its instances. */
 export function fastenerFacts(fasteners: FastenerMap, parts: Parts): FastenerFacts {
   const issues = fastenerIssues(fasteners, parts);
   if (issues.length) throw new Error(`invalid FASTENERS:\n` + issues.map((m) => "  - " + m).join("\n"));
@@ -115,7 +116,8 @@ export function fastenerFacts(fasteners: FastenerMap, parts: Parts): FastenerFac
   return out;
 }
 
-/** Land the role facts on the overlay, so structure.gen.ts shows them as reviewable text and `applyStructure` carries them onto the parts alongside every other authored field. Authored fields win: a hand-written `fastenerRole` on a part stays, which is the escape hatch for a single instance that differs from its group. */
+/** Land the role facts on the overlay, so `applyStructure` carries them onto the parts like any other authored field.
+ * Authored fields win — a hand-written `fastenerRole` is the escape hatch for one instance that differs from its group. */
 export function withFastenerFacts(overlay: StructureOverlay, facts: FastenerFacts): StructureOverlay {
   const out: StructureOverlay = { ...overlay };
   for (const [id, facts_] of Object.entries(facts) as [PartId, FastenerFacts[PartId]][]) {

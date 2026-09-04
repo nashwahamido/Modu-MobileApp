@@ -1,4 +1,5 @@
-// Pins the ANALYZER — the drafter's engine (extract-structure.mts) — to the shipped corpus, so a new GLB is analyzed by the exact code these numbers were measured on. The convention-authored corpus is the ground truth: extraction must reproduce the identity facts the mesh names declare, the geometry counts must hold, and pairing must find exactly the one true two-piece fitting.
+// Pins the ANALYZER (the drafter's engine) to the shipped corpus, so a new GLB is analyzed by the exact code these numbers were measured on.
+// The convention-authored corpus is ground truth: extraction reproduces the identity facts the mesh names declare, the geometry counts hold, and pairing finds exactly the one true two-piece fitting.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -30,7 +31,7 @@ const CORPUS: [string, Record<PartId, PartDef>, StructureOverlay][] = [
   ["EKET", EKET_PARTS, EKET_STRUCTURE],
 ];
 
-/** The analyzer's overlay stage takes a human's re-typings; here the COMPOSED overlay stands in for them. */
+/** The overlay stage normally takes a human's re-typings; here the COMPOSED overlay stands in. */
 function hintsFrom(structure: StructureOverlay): AnalyzeHints {
   const overlay: NonNullable<AnalyzeHints["overlay"]> = {};
   for (const [id, e] of Object.entries(structure as Record<string, { type?: "structural" | "fastener"; attached?: readonly string[] }>)) {

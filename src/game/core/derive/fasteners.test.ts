@@ -1,4 +1,6 @@
-// The fastener seam's acceptance: the corpus defs below are the shipped ones, stated verbatim, so a drift in any authored.ts FASTENERS shows here — and every shipped instance carries a lowered role (the 2026-09-01 invariant: no runtime decision rests on a mesh name). The composed action list is what every downstream consumer reads, so equality there is the whole claim — including the plug extra reproducing the old hand-written PIN_TO_CAM pairing and its place_backPanel endpoint gate from derivation alone.
+// The fastener seam's acceptance. The corpus defs below are the shipped ones stated verbatim, so a drift in any authored.ts FASTENERS shows here.
+// Every shipped instance must carry a lowered role — the invariant is that no runtime decision rests on a mesh name.
+// The composed action list is what every downstream consumer reads, so equality there is the whole claim, including the plug extra reproducing the old hand-written pairing from derivation alone.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -42,7 +44,7 @@ const FASTENERS: Record<string, Record<string, FastenerEntry>> = {
   EKET: {
     screw110519: securer(),
     screw109041: securer(),
-    // re-typed structural→fastener 2026-08-24; ordered before screw100349 as in authored (the voiceover script pins the cap's line position). EKET's authored module lowers through the seam itself now, so its leg of this test pins fixture↔authored-def agreement.
+    // re-typed structural→fastener; ordered before screw100349 as in authored, since the voiceover script pins the cap's line position
     suspCap: securer(),
     screw100349: securer(),
     // the 3-phase drop and the retracted loose pose are the def's, lowered onto all four instances
@@ -70,7 +72,7 @@ test("the shipped FASTENERS defs are the pinned ones, every instance carries a r
   for (const [id, m, raw] of CORPUS) {
     assert.deepEqual(m.FASTENERS, FASTENERS[id], `${id}: authored FASTENERS drifted from the pinned defs`);
 
-    // The composed structure.gen carries what fastenerFacts lands on each instance — no shipped fastener may be without a role, and preload is present exactly on connectors.
+    // The composed structure.gen carries what fastenerFacts lands on each instance: no shipped fastener without a role, preload on connectors and nothing else.
     const parts = applyStructure(raw, COMPOSED[id]);
     const facts = fastenerFacts(m.FASTENERS, parts);
     const unrolled = Object.values(parts).filter((p) => p.type === "fastener" && !facts[p.partId]);
@@ -82,7 +84,7 @@ test("the shipped FASTENERS defs are the pinned ones, every instance carries a r
       assert.equal(p.fastenerRole === "connector", !!p.preload, `${id}: ${p.partId} — preload is present exactly on connectors`);
     }
 
-    // Expansion from the pinned defs equals expansion from the authored ones — trivially, given the first assertion — and every fastener gets its actions.
+    // Expansion from the pinned defs equals expansion from the authored ones, and every fastener gets its actions.
     const actions = composeFurnitureActions(m.AUTHORED_ACTIONS, FASTENERS[id] as unknown as FastenerMap, parts, HARDWARE, m.CLUSTERS);
     for (const p of Object.values(parts)) {
       if (p.type !== "fastener") continue;
@@ -177,7 +179,7 @@ test("lowering: every instance carries its def's role, whatever its name says", 
     F({ camgizmo: securer(), screwgizmo: securer(), dowelgizmo: connector("tighten", "press") }),
     parts,
   );
-  // The point of writing all three, not just the two that disagree with their prefixes: after lowering, no runtime decision rests on the words "cam", "screw" or "dowel". The dowel def is the {tighten, press} cell that had no sayable kind before the enum retired.
+  // All three, not just the two that disagree with their prefixes: after lowering, no runtime decision rests on the words "cam", "screw" or "dowel".
   assert.deepEqual(partFacts, {
     camgizmo_1: { fastenerRole: "securer" },
     screwgizmo_1: { fastenerRole: "securer" },

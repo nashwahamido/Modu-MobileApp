@@ -1,4 +1,5 @@
-// Environment-neutral GLB reading for the DERIVATION pipeline — DataView + TextDecoder only, no Node APIs, so the portal can hand a browser File's bytes straight in and the app/test side can hand a fs buffer. This is the analyzer's twin of helper-scripts/read-parts.mts: read-parts stays the codegen script for bundled furniture; the portal consumes THIS module. One convention parser, one scene walk, exported so scripts and tests converge on it instead of growing more copies.
+// Environment-neutral GLB reading — DataView + TextDecoder only, no Node APIs, so browser bytes and fs buffers both work.
+// The analyzer's twin of helper-scripts/read-parts.mts: read-parts is the codegen script for bundled furniture, the portal consumes this.
 import type { Quat, Vec3 } from "@/src/game/core/type";
 
 export interface GlbMesh {
@@ -8,14 +9,14 @@ export interface GlbMesh {
   group: string;
   cluster: string;
   index?: number;
-  /** The mesh-name binding — 1 or 2 structural part ids a fastener attaches. Convention data, which the analyzer treats as ground truth to VALIDATE proposals against, never as the only source. */
+  /** The mesh-name binding — 1 or 2 structural part ids a fastener attaches. The analyzer validates proposals against it, never derives from it alone. */
   attached?: string[];
   pose: { position: Vec3; rotation: Quat };
   /** World scale composed down the hierarchy (shipped models: [1,1,1]). */
   scale: Vec3;
   /** Raw LOCAL bounds of the mesh, unscaled — what read-parts needs for the origin→bounds offsets. */
   bounds: { min: Vec3; max: Vec3 };
-  /** World-space vertices (scene hierarchy composed — shipped models are flat, but a parented export must not silently shift facts). */
+  /** World-space vertices, hierarchy composed — shipped models are flat, but a parented export must not shift facts silently. */
   verts: Vec3[];
   /** World-space triangles. */
   tris: [Vec3, Vec3, Vec3][];
@@ -125,5 +126,5 @@ export function readGlbMeshes(bytes: Uint8Array): GlbMesh[] {
   return out;
 }
 
-/** Rotate a vector by an xyzw quaternion — exported because every script used to carry its own copy. */
+/** Rotate a vector by an xyzw quaternion. */
 export const rotateByQuat = rotQ;

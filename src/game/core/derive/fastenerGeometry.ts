@@ -1,8 +1,9 @@
-// The ONE fastener-geometry deriver: shaft axis by vertex PCA, head end by the radial envelope. read-parts.mts writes its result into parts.gen as `engageDir`, the analyzer reports it to the portal, and fastenerGeometry.furniture.test.ts pins it to the corpus (83/83 axes, 71/71 confident signs) — three callers, one function.
+// The ONE fastener-geometry deriver: shaft axis by vertex PCA, head end by the radial envelope.
+// Three callers — read-parts.mts (writes `engageDir`), the analyzer, and the corpus pin test (83/83 axes, 71/71 confident signs).
 import type { Vec3 } from "@/src/game/core/type";
 import type { GlbMesh } from "./glb";
 
-/** A head must be ≥15% wider than the tip to count as seen (measured margins: confident groups ≥1.28, headless ≤1.11). */
+/** A head must be ≥15% wider than the tip to count as seen (measured: confident groups ≥1.28, headless ≤1.11). */
 export const HEAD_RATIO_MIN = 1.15;
 /** Deterministic vertex-sample cap; stride sampling, no randomness. */
 export const SAMPLE_CAP = 1500;
@@ -12,7 +13,7 @@ export interface FastenerGeometry {
   axis: Vec3;
   /** Widest-end ratio from the p90 OUTER radial envelope per end — never the mean, or a screwdriver recess reads as a narrow tip. */
   headRatio: number;
-  /** Signed engagement (points out the head side); null when the hardware is genuinely headless (symmetric dowels, double-ended studs) and the sign must come from elsewhere. */
+  /** Signed engagement, pointing out the head side; null when the hardware is headless (symmetric dowels, double-ended studs) and the sign must come from elsewhere. */
   engage: Vec3 | null;
 }
 
