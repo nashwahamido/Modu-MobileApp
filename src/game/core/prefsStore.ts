@@ -16,10 +16,10 @@ interface PrefsState {
   backdrop: BackdropId; // what sits behind the build
   roomTimeOfDay: TimeOfDayId; // which hour the room's sun is set to; also picks which of roomBackground's three shots shows
   roomBackground: RoomBackgroundId; // the photo outside the room's window
-  roomAvatarVisible: boolean; // is the companion in the room; off UNMOUNTS it, deliberately (README)
-  theme: ThemeId; // display theme: backdrop + thumbnails
-  handedness: Handedness; // which hand drives the build; MIRRORS the HUD. Out of `settings` on purpose (README)
-  assembleDark: boolean; // dark BUILD screens while the rest of the app stays put
+  roomAvatarVisible: boolean;
+  theme: ThemeId;
+  handedness: Handedness; // which hand drives the build; MIRRORS the HUD. Out of `settings` on purpose
+  assembleDark: boolean;
 
   setRenderStyle: (style: RenderStyleId) => void;
   setBackdrop: (backdrop: BackdropId) => void;

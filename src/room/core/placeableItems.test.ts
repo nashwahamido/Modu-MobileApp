@@ -14,7 +14,8 @@ import { ROOM_SHELL, TOP_CELL_SIZE } from "./roomShell";
 
 const CELL = ROOM_SHELL.cellSize;
 
-// The registry is module state; every test starts from the same catalog — the bundled built set plus bought rows shaped like the DB seed: a floor item (malm-chest) and a wall item (a window). mount/opensWall (migration 021) are what route placement now, not category — category rides along only for emitsLight.
+// The registry is module state; every test starts from the same catalog — the built set plus bought rows shaped like the DB seed, one floor item and one wall item.
+// mount/opensWall route placement, not category, which rides along only for emitsLight.
 beforeEach(() => {
   registerPlaceables([
     { id: "malm-chest", source: "bought", category: "fur", size: { x: 0.804, y: 1.004, z: 0.483 }, baseOffsetY: 0, mount: "floor" },
@@ -23,7 +24,8 @@ beforeEach(() => {
 });
 
 test("every item renders at the one world scale — no per-item drift", () => {
-  // The whole point of the factor: pieces keep their true proportions relative to EACH OTHER. With ceil-derived footprints the fitScale guard can never bind, bought rows included — and wall items bypass the guard entirely by design, since their footprint is a hole sized to the NEAREST cell and deliberately allowed to be smaller than the model (see fitScale).
+// The point of the factor: pieces keep their true proportions relative to EACH OTHER, and with ceil-derived footprints the guard can never bind.
+  // Wall items bypass it by design, their footprint being a hole rounded to the NEAREST cell and allowed to be smaller than the model.
   for (const [itemId] of roomItemDefs()) {
     const item = getRoomItem(itemId)!;
     assert.equal(
@@ -49,7 +51,7 @@ test("floor footprints are the ceil of the scaled size — claimed cells always 
 });
 
 test("topFootprint is derived from the measured SIZE at TOP_CELL_SIZE, never by scaling the floor footprint", () => {
-  // 0.26 m: ceil(0.26 / 0.25) = 2 floor cells (footprint). Scaling that by the ×2 pitch ratio would give 4 top cells (0.5 m) — an over-claim. Deriving straight from size instead gives ceil(0.26 / 0.125) = 3 (0.375 m), the tight answer, and 3 is what this test pins down. This is the exact case the task spec calls out as easy to get wrong.
+  // 0.26m is 2 floor cells. Scaling by the ×2 pitch ratio gives 4 top cells (0.5m), an over-claim; deriving from size gives 3 (0.375m), the tight answer this pins.
   registerPlaceables([
     { id: "postcard", source: "bought", category: "fur", size: { x: 0.26, y: 0.02, z: 0.26 }, baseOffsetY: 0, mount: "floor" },
   ]);
@@ -108,7 +110,8 @@ test("asset subtree follows acquisition — the catalog row decides, the built i
 });
 
 test("a built item resolves to storage exactly like a bought one — there is no bundled room model to fall back to", () => {
-  // This USED to return null for a colourless built item, on the rule "no colour picked means load the bundle". The bundle table is empty and staying that way, so the null was not a fallback signal any more, it was the piece rendering nothing at all: startPlacing from the Inventory passes no variation, and defaultVariationOf returns null for anything the variants store has not loaded yet. Built and bought now take the same path, and the item's real default colour is resolved upstream in placement.ts, not here.
+  // This USED to return null for a colourless built item, on the rule "no colour means load the bundle". With the bundle table empty that null stopped being a fallback and became the piece rendering nothing.
+  // Built and bought take the same path now, and the real default colour is resolved upstream in placement.ts.
   assert.equal(getRoomItemStoragePath("eket-cabinet", null), "room/built/eket-cabinet/default.glb");
   assert.equal(getRoomItemStoragePath("eket-cabinet", undefined), "room/built/eket-cabinet/default.glb");
   assert.equal(getRoomItemStoragePath("eket-cabinet", "black"), "room/built/eket-cabinet/black.glb");
@@ -140,7 +143,7 @@ test("onTop puts \"furniture\" in allowedSurfaces, independently of mount — a 
 
 test("a non-opening wall item still derives its footprint by the wall's nearest-cell rule, not the floor's ceil — wallCells now applies to any mount 'wall' row, not only windows", () => {
   registerPlaceables([
-    // A frame: hangs on the wall (mount 'wall') but does not cut a hole (opensWall absent). 1.061 x 1.262, same measurements as window-sash, so the expected 4x5 footprint pins the SAME rounding rule applying to a non-window row.
+    // A frame hangs on the wall but cuts no hole. Same measurements as window-sash, so the expected 4x5 pins the SAME rounding rule applying to a non-window row.
     { id: "wall-frame", source: "bought", category: "deco", size: { x: 1.061, y: 1.262, z: 0.05 }, baseOffsetY: 0, mount: "wall" },
   ]);
   const def = roomItemDefs().get("wall-frame")!;

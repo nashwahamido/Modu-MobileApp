@@ -1,14 +1,15 @@
-// The two rings the drag layer draws over the canvas: the long-press pickup ring that fills at the fingertip, and the dashed set-down marker for a carried cluster. Pure presentation — they read shared values the gesture writes and never write back — so they live apart from the gesture that drives them.
+// The two rings the drag layer draws over the canvas: the long-press pickup ring at the fingertip, and the dashed set-down marker for a carried cluster.
+// Pure presentation — they read shared values the gesture writes and never write back.
 import { StyleSheet } from "react-native";
 import Animated, { useAnimatedStyle, type SharedValue } from "react-native-reanimated";
 
 import { useGameStore } from "@/src/game/core/store";
 
-// Physical dimensions shared by the gesture maths and the stylesheet: the maths divides by them, so changing one moves the pixels AND retunes the gesture together.
+// Shared by the gesture maths and the stylesheet: the maths divides by them, so changing one moves the pixels AND retunes the gesture together.
 export const RING = 64;
 export const TARGET_RING = 92;
 
-/** Long-press progress at the fingertip: grows and thickens as the card gives up its part, invisible until the press actually starts. */
+// Long-press progress at the fingertip: grows and thickens as the card gives up its part, invisible until the press starts.
 export function PickupRing({
   x,
   y,
@@ -30,7 +31,8 @@ export function PickupRing({
   return <Animated.View pointerEvents="none" style={[styles.ring, style]} />;
 }
 
-/** Where to set the carried cluster down: a dashed ring at the seat (park pose for a drawer), the cluster-drag counterpart of the part drag's socket ghost. Turns solid green inside snap range. Hidden once the drive gesture owns the motion. */
+// Where to set the carried cluster down — the cluster counterpart of the part drag's socket ghost.
+// Dashed at the seat (park pose for a drawer), solid green inside snap range, hidden once the drive gesture owns the motion.
 export function ClusterTargetRing({
   x,
   y,

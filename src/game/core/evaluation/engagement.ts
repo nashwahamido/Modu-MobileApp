@@ -36,7 +36,7 @@ export const SCREW_BACKOFF_M = 0.045;
 // Full turns only, so the start and end orientations equal the baked one — no pop.
 export const SCREW_SPIN_DEG = 360;
 
-/** The preloaded connector waiting for `partId` as its LATER endpoint, whose counterpart mounts by `mountsBy`: other end placed, connector driven home. This is what turns the later placement into a screw-on or press-on gesture — and `preload.counterpartMountsBy` is the fact that says which, so it is now read directly. It used to be selected by kind ("threaded" for screw-on, "pin" for press-on), which left the fourth cell {tighten, press} matching NEITHER: a cam-bolt counterpart got no arrival gesture at all, silently, because no kind name covered it. */
+// The preloaded connector waiting for `partId` as its LATER endpoint, whose counterpart mounts by `mountsBy`
 function preloadedConnectorFor(
   f: Furniture,
   partId: string,

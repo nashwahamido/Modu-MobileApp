@@ -1,9 +1,5 @@
 // Default setting values, and the profiles (Helping Modes) that override them.
 
-// A profile is a set of default-value overrides picked during onboarding — the user can still change any individual setting later in the settings panel. Add a profile by adding an entry to PROFILE_DEFAULTS (+ PROFILE_MODE if it pins an assembly mode). (Later, profiles may also drive which settings the quick panel shows; keep that in the UI, keyed on ProfileId.)
-
-// Spec features NOT yet in the engine are tracked in MERGE_PLAN (profile gaps).
-
 import { AccessibilitySettings } from "@/src/game/core/accessibility";
 import { AssemblyMode, FurnitureId } from "@/src/game/core/type";
 import { asFurnitureId } from "@/src/game/core/ids";
@@ -11,10 +7,9 @@ import { asFurnitureId } from "@/src/game/core/ids";
 export const DEFAULT_SETTINGS: AccessibilitySettings = {
   textLevel: "standard",
   audio: false,
-  // On by default: effects are expected in a game, and unlike narration they do not talk over anything. Profiles that need a quiet build turn it off explicitly.
+  // On by default
   soundEffects: true,
-  // On by default: the build is a long, quiet task, and the track is what makes it feel like a place
-  // rather than a form. It sits well under the effects and can be turned down without turning off.
+  // On by default
   music: true,
   musicVolume: 0.5,
   buildMusic: true,

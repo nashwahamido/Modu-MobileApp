@@ -11,10 +11,10 @@ import { PressPad, pressPadStyles, HAND_ICON } from "@/src/game/input/pad/PressP
 import { useMirror } from "@/src/game/ui/system/handedness";
 import { useTrackLength } from "./trackFit";
 
-/** Fallback push-latch ejection when the spec doesn't author popDistance. */
+// Fallback push-latch ejection when the spec doesn't author popDistance.
 const DEFAULT_POP_M = 0.03;
 
-/** One drawer's push-latch test beat, in the same control language as its neighbours: while LATCHED it is a PressControl-style pad — press it and the latch gives, the spring bounces the drawer out (haptics carry both) — then it becomes a SlideControl-style track: drag the thumb down to pull the drawer fully out, back up to push it home, and the latch clicks the step complete. The drawer's ratio groups telescope the runners throughout (carriage 1×, middle rail ½×). Each level is its own beat (spec.testActionIds); runPushOpen stays for furniture that authors the passive `beatActionId` tween instead. */
+// One drawer's push-latch test beat, in the same control language as its neighbours: while LATCHED it is a PressControl-style pad — press it and the latch gives, the spring bounces the drawer out (haptics carry both) — then it becomes a SlideControl-style track: drag the thumb down to pull the drawer fully out, back up to push it home, and the latch clicks the step complete. The drawer's ratio groups telescope the runners throughout (carriage 1×, middle rail ½×). Each level is its own beat (spec.testActionIds); runPushOpen stays for furniture that authors the passive `beatActionId` tween instead.
 export function PushTestControl({
   action,
   spec,
@@ -27,7 +27,7 @@ export function PushTestControl({
   pushDrivers: DriverRegistry;
 }) {
   const m = useMirror();
-  /** Track height in px — also the drag distance for a drawer's full travel, so the thumb follows the finger 1:1. Fitted to the screen: see trackFit. */
+  // Track height in px — also the drag distance for a drawer's full travel, so the thumb follows the finger 1:1. Fitted to the screen: see trackFit.
   const track = useTrackLength();
   const [phase, setPhase] = useState<"latched" | "popped" | "pulled">("latched");
   const [travelUi, setTravelUi] = useState(0);

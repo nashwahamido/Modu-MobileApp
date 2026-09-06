@@ -23,7 +23,7 @@ export function snapshotBuild(ownerId: UserId, state: GameState): BuildSave | nu
 
 // Re-apply a save onto the store. Call AFTER loadFurniture (which resets progress) so this restores on top of the freshly loaded model. Only progress fields are touched — never furniture itself.
 export function applyBuild(save: BuildSave): void {
-  // The save's mode ALWAYS wins here, including over a furniture's `meta.mode` — that field is only ever the mode a build OPENS in, and a save means this build has been opened before. So a furniture default is seen on the first entry and never again, which is the intent: it is a starting nudge, not a property of the furniture.
+  // The save's mode ALWAYS wins here, including over a furniture's `meta.mode`
   useGameStore.setState({
     completed: save.completed,
     tightenDeg: save.tightenDeg,
@@ -31,7 +31,7 @@ export function applyBuild(save: BuildSave): void {
     driveProgress: save.driveProgress,
     mode: save.mode,
   });
-  // The section focus is DERIVED, not persisted (the save schema has no column for it, and it never needs one): a resumed mid-build lands in the cluster where its next available action lives, instead of the section chooser asking a question the save already answers. loadFurniture reset activeCluster to null just before this, so a fresh or combine-stage build keeps the chooser exactly as before.
+  // The section focus is DERIVED, not persisted (the save schema has no column for it, and it never needs one)
   const f = useGameStore.getState().furniture;
   const focus = f ? resumeFocusCluster(f, new Set(save.completed)) : null;
   if (focus) useGameStore.setState({ activeCluster: focus });

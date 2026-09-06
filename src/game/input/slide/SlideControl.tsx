@@ -13,13 +13,13 @@ import { TASK_CONTROL_BOTTOM } from "@/src/game/ui/hud/hudChrome";
 
 interface Props {
   action: AssemblyAction;
-  /** Whatever is being driven — a single held part (OffsetDriver) or a whole telescoping cluster (combine driver) — glided from its parked offset toward the seat as the thumb advances. */
+  // Whatever is being driven — a single held part (OffsetDriver) or a whole telescoping cluster (combine driver) — glided from its parked offset toward the seat as the thumb advances.
   driver?: OffsetSink;
-  /** Slide staging (engagement.slideParkInfo): the backed-off offset the part  parks at; the drive eases it to [0,0,0]. */
+  // Slide staging (engagement.slideParkInfo): the backed-off offset the part  parks at; the drive eases it to [0,0,0].
   park?: ParkInfo | null;
 }
 
-/** Slide control: drag the thumb along the track to GLIDE the parked part into its groove. Linear counterpart of RotateControl's dial — a slider doesn't turn, it travels, so the gesture is a straight drag and the part follows 1:1. Progress is normalized 0..1 (store.advanceDrive); at 1 the placement commits. */
+// Slide control: drag the thumb along the track to GLIDE the parked part into its groove. Linear counterpart of RotateControl's dial — a slider doesn't turn, it travels, so the gesture is a straight drag and the part follows 1:1. Progress is normalized 0..1 (store.advanceDrive); at 1 the placement commits.
 export function SlideControl({ action, driver, park }: Props) {
   const m = useMirror();
   const t = useTheme();

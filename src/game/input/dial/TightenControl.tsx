@@ -10,16 +10,15 @@ import { useMirror } from "@/src/game/ui/system/handedness";
 
 interface Props {
   action: AssemblyAction;
-  /** Drives the fastener's loose offset toward flush as it tightens. */
+  // Drives the fastener's loose offset toward flush as it tightens.
   sinkDriver: OffsetDriver;
 }
 
-/**
- * Circular tighten gesture: drag clockwise; rotation accumulates with haptic ticks per
- * quarter-turn until the fastener sits flush (2 full turns).
- *
- * The gauge itself and the turn gesture are shared with the other three dial controls — see ./DialGauge.
- */
+//
+// Circular tighten gesture: drag clockwise; rotation accumulates with haptic ticks per
+// quarter-turn until the fastener sits flush (2 full turns).
+//
+// The gauge itself and the turn gesture are shared with the other three dial controls — see ./DialGauge.
 export function TightenControl({ action, sinkDriver }: Props) {
   const m = useMirror();
   const deg = useGameStore((s) => s.tightenDeg[action.actionId] ?? 0);

@@ -12,15 +12,15 @@ import { TASK_CONTROL_BOTTOM } from "@/src/game/ui/hud/hudChrome";
 
 interface Props {
   action: AssemblyAction;
-  /** The carrier's stageOffset — where the finished sub-assembly rests, directly off its seat. The slide eases this to [0,0,0]. */
+  // The carrier's stageOffset — where the finished sub-assembly rests, directly off its seat. The slide eases this to [0,0,0].
   offset: Vec3;
-  /** Drives the carrier (rendered "held" once grabbed). */
+  // Drives the carrier (rendered "held" once grabbed).
   heldDriver: OffsetDriver;
-  /** Drives the riding fitted hardware (the dowels) so the whole sub-assembly moves as one. */
+  // Drives the riding fitted hardware (the dowels) so the whole sub-assembly moves as one.
   slideDriver: ClusterDriver;
 }
 
-/** Slide-in seat for a staged sub-assembly (EKET stabiliser rod): the finished rod+dowels rests directly above its seat, so a vertical slider drives it straight DOWN into place — no re-fetching it from the tray. First drag grabs the on-screen part (beginPickup) so the tray card stays a fallback until this is touched; each drag eases the carrier (heldDriver) and its riding dowels (slideDriver mirror) from the stage offset to flush; at the bottom the placement commits. */
+// Slide-in seat for a staged sub-assembly (EKET stabiliser rod): the finished rod+dowels rests directly above its seat, so a vertical slider drives it straight DOWN into place — no re-fetching it from the tray. First drag grabs the on-screen part (beginPickup) so the tray card stays a fallback until this is touched; each drag eases the carrier (heldDriver) and its riding dowels (slideDriver mirror) from the stage offset to flush; at the bottom the placement commits.
 export function SeatSlideControl({ action, offset, heldDriver, slideDriver }: Props) {
   const m = useMirror();
   const t = useTheme();

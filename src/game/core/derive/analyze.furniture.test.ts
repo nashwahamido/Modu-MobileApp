@@ -19,7 +19,7 @@ import { STRUCTURE as EKET_STRUCTURE } from "@/src/game/content/furnitures/EKET/
 import { PARTS as EKET_PARTS } from "@/src/game/content/furnitures/EKET/parts.gen";
 import { COMPOSED } from "@/src/game/content/furnitures/composed";
 
-/** Measured corpus state — a moved number means geometry or authoring changed: re-measure, do not weaken. */
+// Measured corpus state — a moved number means geometry or authoring changed: re-measure, do not weaken.
 const FASTENERS_ANALYZED = 85; // 83 GLB-native + the 2 overlay-retyped suspension caps
 const HEAD_CONFIDENT = 71;
 const HEAD_ABSTAIN = 14; // the 12 genuinely headless + the 2 re-typed caps (discs — correctly no head call)
@@ -31,7 +31,7 @@ const CORPUS: [string, Record<PartId, PartDef>, StructureOverlay][] = [
   ["EKET", EKET_PARTS, EKET_STRUCTURE],
 ];
 
-/** The overlay stage normally takes a human's re-typings; here the COMPOSED overlay stands in. */
+// The overlay stage normally takes a human's re-typings; here the COMPOSED overlay stands in.
 function hintsFrom(structure: StructureOverlay): AnalyzeHints {
   const overlay: NonNullable<AnalyzeHints["overlay"]> = {};
   for (const [id, e] of Object.entries(structure as Record<string, { type?: "structural" | "fastener"; attached?: readonly string[] }>)) {

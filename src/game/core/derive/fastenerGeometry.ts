@@ -1,19 +1,19 @@
-// The ONE fastener-geometry deriver: shaft axis by vertex PCA, head end by the radial envelope.
-// Three callers — read-parts.mts (writes `engageDir`), the analyzer, and the corpus pin test (83/83 axes, 71/71 confident signs).
+// IN: one fastener mesh's vertices. OUT: shaft axis by PCA, head-end ratio, signed engagement.
+// The ONE deriver, for three callers: read-parts.mts (writes `engageDir`), the analyzer, and the corpus pin test (83/83 axes, 71/71 confident signs).
 import type { Vec3 } from "@/src/game/core/type";
 import type { GlbMesh } from "./glb";
 
-/** A head must be ≥15% wider than the tip to count as seen (measured: confident groups ≥1.28, headless ≤1.11). */
+// A head must be ≥15% wider than the tip to count as seen (measured: confident groups ≥1.28, headless ≤1.11).
 export const HEAD_RATIO_MIN = 1.15;
-/** Deterministic vertex-sample cap; stride sampling, no randomness. */
+// Deterministic vertex-sample cap; stride sampling, no randomness.
 export const SAMPLE_CAP = 1500;
 
 export interface FastenerGeometry {
-  /** Unit principal axis of the shaft, unsigned. */
+  // Unit principal axis of the shaft, unsigned.
   axis: Vec3;
-  /** Widest-end ratio from the p90 OUTER radial envelope per end — never the mean, or a screwdriver recess reads as a narrow tip. */
+  // Widest-end ratio from the p90 OUTER radial envelope per end — never the mean, or a screwdriver recess reads as a narrow tip.
   headRatio: number;
-  /** Signed engagement, pointing out the head side; null when the hardware is headless (symmetric dowels, double-ended studs) and the sign must come from elsewhere. */
+  // Signed engagement, pointing out the head side; null when the hardware is headless (symmetric dowels, double-ended studs) and the sign must come from elsewhere.
   engage: Vec3 | null;
 }
 
@@ -25,7 +25,7 @@ const unit = (v: Vec3): Vec3 | null => {
 export const sampleVerts = (verts: readonly Vec3[], cap = SAMPLE_CAP): readonly Vec3[] =>
   verts.length > cap ? verts.filter((_, i) => i % Math.ceil(verts.length / cap) === 0) : verts;
 
-/** Principal axis by power iteration on the vertex covariance — deterministic seed, unsigned result. */
+// Principal axis by power iteration on the vertex covariance — deterministic seed, unsigned result.
 export function pcaAxis(verts: readonly Vec3[]): { axis: Vec3; centroid: Vec3 } {
   const n = verts.length;
   const c: [number, number, number] = [0, 0, 0];

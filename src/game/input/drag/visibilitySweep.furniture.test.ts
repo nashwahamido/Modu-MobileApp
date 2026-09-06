@@ -29,10 +29,10 @@ const FURNITURES = fs
   .filter((d) => d.isDirectory() && fs.existsSync(path.join(MODELS, d.name, `${d.name}.glb`)) && fs.existsSync(path.join(CONTENT, d.name, "parts.gen.ts")))
   .map((d) => d.name);
 
-// GLB world-box parser — twin of the one in jointFrames.furniture.test.ts (same flat-hierarchy convention, same self-detection argument); duplicated because importing a test file would run its tests.
+// GLB world-box parser, a twin of jointFrames.furniture.test.ts's — duplicated because importing a test file would run its tests.
 const glbBoxes = (file: string): Record<string, PartBox> => boxesByName(readGlbMeshes(fs.readFileSync(file)));
 
-/** The orbit sphere the player can actually reach: 8 azimuths × 3 elevations × 3 radii around the assembly's centre, floored above the bench so no eye samples from underground. */
+// The orbit sphere the player can reach: 8 azimuths × 3 elevations × 3 radii around the assembly's centre, floored above the bench so no eye samples from underground.
 function orbitEyes(center: Vec3): Vec3[] {
   const eyes: Vec3[] = [];
   for (const r of [0.65, 1.6, 2.4]) {
@@ -69,7 +69,7 @@ for (const F of FURNITURES) {
       authored.HARDWARE ?? {},
       authored.CLUSTERS,
     );
-    // Enough of a Furniture for the engagement engine: the park the runtime hands the gate is derived from the liaison graph, the cluster overlay and the sweep data, so the replay has to carry all three or it would model a park nobody gets.
+    // Enough of a Furniture for the engagement engine: the runtime's park comes from the liaison graph, the cluster overlay and the sweep data, so the replay carries all three or models a park nobody gets.
     const { SWEEP } = await import(`@/src/game/content/furnitures/${F}/sweep.gen`);
     const furniture = { parts, actions, liaisons, clusters: authored.CLUSTERS, sweep: SWEEP } as unknown as Furniture;
     const all = Object.values(boxes);
@@ -86,7 +86,9 @@ for (const F of FURNITURES) {
     for (const a of actions) {
       if (isPickupType(a.type) && a.partId && parts[a.partId]) {
         const part = parts[a.partId];
-        // The runtime gate asks the renderer which placed parts are on screen and where (scene/partBoxes). Offline there is no renderer, so this replay reconstructs the same set from build state: a placed part stands at its baked pose exactly when it shares the candidate's cluster (both in focus), belongs to a cluster already combined in, or has no cluster at all. Another cluster's work is hidden or parked off-screen while this one has focus and cannot occlude anything. Note what this is NOT: the runtime used to run this same inference on `cluster.seed`, which is an authoring flag about which cluster STARTS the build — BEKVAM and LACK name their one cluster for the UI label and never set it, so every part of those furnitures was disqualified and the gate ran inert for the whole build. Cluster IDENTITY is the honest question; seed never was.
+        // The runtime gate asks the renderer which placed parts are on screen. Offline there is none, so this reconstructs the same set from build state.
+        // A placed part stands at its baked pose exactly when it shares the candidate's cluster, belongs to one already combined in, or has no cluster — another cluster's work is hidden or parked off-screen and cannot occlude.
+        // What this is NOT: the runtime ran the same inference on `cluster.seed`, an authoring flag about which cluster STARTS the build, and BEKVAM and LACK never set it — so every part of those furnitures was disqualified and the gate ran inert. Cluster IDENTITY is the honest question.
         const cl = parts[a.partId]?.cluster;
         const occluders = [...placed]
           .filter((pid) => {
@@ -96,10 +98,11 @@ for (const F of FURNITURES) {
           })
           .map((pid) => ({ ...boxes[pid], pid }))
           .filter((b) => b.min);
-        // Same seat rule as the runtime (targets.seatOffsetFor): joint anchor pushed out to the receiver's surface for structure, shaft mouth for a fastener. The engage axis is signed by what is on the bench, so the replay hands it the placed set as the action ids it would have completed, and the occluders double as the receivers the anchor is pushed out of.
+        // Same seat rule as the runtime: joint anchor pushed out to the receiver's surface for structure, shaft mouth for a fastener.
+        // The engage axis is signed by what is on the bench, so the replay hands it the placed set as completed action ids, and the occluders double as the receivers the anchor is pushed out of.
         const done = new Set([...placed].map((pid) => placeId(pid)));
         const off = seatOffsetFor(part, boxes[part.partId], anchors, done, occluders);
-        // Same staging displacement as the runtime seat (usePartDrag's seatVisual) — this replay must judge the hole where the part is actually delivered, or it re-encodes the bug the runtime just fixed.
+        // Same staging displacement as the runtime seat: the replay must judge the hole where the part is actually delivered, or it re-encodes the bug the runtime just fixed.
         const shift = stagingShiftFor(a, parts) ?? [0, 0, 0];
         const seat: Vec3 = [
           part.pose.position[0] + off[0] + shift[0],
@@ -107,7 +110,7 @@ for (const F of FURNITURES) {
           part.pose.position[2] + off[2] + shift[2],
         ];
         const burial = burialDepthM(seat, occluders);
-        // The runtime's second chance (usePartDrag's clearPoints): a structural part's whole GHOST BODY standing at the pose the release delivers it to, a fastener's park point alone. Either passes when its own sightline is clear.
+        // The runtime's second chance (clearPoints): a structural part's GHOST BODY at the delivered pose, a fastener's park point alone. Either passes when its own sightline is clear.
         const parkShift = parkOffsetFor(furniture, a, done) ?? [0, 0, 0];
         const delivered: Vec3 = [shift[0] + parkShift[0], shift[1] + parkShift[1], shift[2] + parkShift[2]];
         // Same precedence as the runtime for the fastener case: the engagement's park, then the authored back-off.
@@ -125,7 +128,7 @@ for (const F of FURNITURES) {
             : fastenerPark
               ? [[seat[0] + fastenerPark[0], seat[1] + fastenerPark[1], seat[2] + fastenerPark[2]]]
               : [];
-        // Authored exemption (PartDef.noVisibilityGate): the runtime never gates this part, so the sweep has no reachability question to ask — seeding `best` at 0 breaks out on the first camera.
+        // PartDef.noVisibilityGate: the runtime never gates this part, so there is no reachability question — seeding `best` at 0 breaks out on the first camera.
         let best = part.noVisibilityGate ? 0 : Infinity;
         let bestBy: string | null = null;
         for (const eye of eyes) {

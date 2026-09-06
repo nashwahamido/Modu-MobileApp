@@ -50,18 +50,23 @@ test("an empty offering has no next action", () => {
 });
 
 test("EKET reaches the same state 21 times over one build, and the pick is right in every one", () => {
-  // NOT A LACK-SHAPED FIX, and not a tutorial-shaped one. This walks the cabinet the way a player who always reaches for a NEW part does — which is legal, and is exactly what leaves a screw half-driven behind them — and asserts the pick at every state where the authored order puts a fresh part ahead of the pending one. Walking in composed order instead finds nothing: it finishes each continuation the moment it appears, which is the one order in which the bug cannot happen.
   const done = new Set<ActionId>();
   let mismatched = 0;
   for (let step = 0; step < 400; step++) {
     const offered = availableActions(EKET_FIXTURE, done);
     if (!offered.length) break;
     const inScene = new Set(
-      EKET_FIXTURE.actions.filter((a) => a.partId && done.has(a.actionId)).map((a) => a.partId),
+      EKET_FIXTURE.actions
+        .filter((a) => a.partId && done.has(a.actionId))
+        .map((a) => a.partId),
     );
     const continues = offered.find((a) => a.partId && inScene.has(a.partId));
     const starts = offered.find((a) => a.partId && !inScene.has(a.partId));
-    if (continues && starts && offered.indexOf(starts) < offered.indexOf(continues)) {
+    if (
+      continues &&
+      starts &&
+      offered.indexOf(starts) < offered.indexOf(continues)
+    ) {
       mismatched++;
       assert.equal(
         nextAction(EKET_FIXTURE, offered, done)?.actionId,
@@ -71,10 +76,13 @@ test("EKET reaches the same state 21 times over one build, and the pick is right
     }
     done.add((starts ?? offered[0]).actionId);
   }
-  assert.ok(mismatched > 0, "the walk never reached the state this rule is for — the walk, not the rule, is what needs looking at");
+  assert.ok(
+    mismatched > 0,
+    "the walk never reached the state this rule is for — the walk, not the rule, is what needs looking at",
+  );
 });
 
-// THE COMBINE-STAGE BUG. Combines carry the cluster they join (the CLUSTERS overlay), and the combine stage runs UNFOCUSED — so the cluster-less focus filter dropped both combines, the offered list went empty, and the objective bar fell back to "Switch focus" while the combine tray was asking for the real gesture (reported on DALFRED, 2026-08-25). The offered list at the combine stage must name the combine itself.
+// THE COMBINE-STAGE BUG. Combines carry the cluster they join (the CLUSTERS overlay), and the combine stage runs UNFOCUSED — so the cluster-less focus filter dropped both combines, the offered list went empty, and the objective bar fell back to "Switch focus" while the combine tray was asking for the real gesture (happened on DALFRED). The offered list at the combine stage must name the combine itself.
 test("at the combine stage, unfocused focus filtering still offers the combine beat", async () => {
   const { fixture } = await import("@/src/game/content/furnitures/fixtures.testutil");
   const DALFRED = await import("@/src/game/content/furnitures/DALFRED/authored");

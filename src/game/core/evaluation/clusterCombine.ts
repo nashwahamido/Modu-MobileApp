@@ -3,15 +3,15 @@ import type { ParkInfo } from "./engagement";
 
 type Clusters = Record<ClusterId, ClusterDef> | undefined;
 
-/** How far a combining cluster (or a sliding part) parks off its seat before the drive gesture, in meters; a slide travels further than a press (PRESS_BACKOFF_M, in engagement). Lives here, the leaf module, so engagement can depend on it without a require cycle. */
+// How far a combining cluster (or a sliding part) parks off its seat before the drive gesture, in meters
 export const SLIDE_BACKOFF_M = 0.1;
 
-/** The clusters that must already be combined before `id` can be: the targets of its authored combine. The root's list is empty. */
+// The clusters that must already be combined before `id` can be: the targets of its authored combine.
 export function combinePrereqClusters(clusters: Clusters, id: ClusterId): ClusterId[] {
   return [...(clusters?.[id]?.combine?.onto ?? [])];
 }
 
-/** How this cluster meets the assembly: the seed drops into place, a combining cluster travels along its authored axis by its authored kind. Null when the cluster authors neither — the caller then keeps the legacy crossClusterThreads behaviour. */
+// How this cluster meets the assembly: the seed drops into place, a combining cluster travels along its authored axis by its authored kind
 export function clusterCombineEngagement(
   clusters: Clusters,
   id: ClusterId,
@@ -23,7 +23,7 @@ export function clusterCombineEngagement(
   return null;
 }
 
-/** The drive gesture a combining cluster hands off to at its park: the straight glide or the screw dial. */
+// The drive gesture a combining cluster hands off to at its park: the straight glide or the screw dial
 export function clusterDriveKind(clusters: Clusters, id: ClusterId): "slide" | "screw" {
   return clusters?.[id]?.combine?.kind ?? "slide";
 }
@@ -33,7 +33,7 @@ const unit = (v: Vec3): Vec3 | null => {
   return l < 1e-6 ? null : [v[0] / l, v[1] / l, v[2] / l];
 };
 
-/** Where a combining cluster parks before its drive gesture: backed off along its own travel axis by the authored backoff. Null for the seed (it drops, no staging) and for any cluster whose combine has no usable direction. */
+// Where a combining cluster parks before its drive gesture
 export function clusterParkInfo(clusters: Clusters, id: ClusterId): ParkInfo | null {
   const combine = clusters?.[id]?.combine;
   if (!combine?.dir) return null;

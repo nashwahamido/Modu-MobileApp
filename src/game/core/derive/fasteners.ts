@@ -1,7 +1,6 @@
-// FASTENERS defs, validated and lowered at GENERATION time: every def checked against its instances' mesh-name bindings, its ROLE facts landed on them through the structure overlay.
-// Sequencing is NOT lowered here — composition/composeActions.ts expands the same defs into actions at runtime, reading the roles off the parts.
-// `primaryFor` is shared with that expansion, so the validator and the sequencing can never pair an extra differently.
-// `lifecycle` lowers to the per-instance drive distances; an instance that differs from its group authors the flat field in STRUCTURE, which wins.
+// FASTENERS defs validated at GENERATION time against their instances' mesh-name bindings, their ROLE facts landed through the structure overlay.
+// Sequencing is NOT lowered here — composeActions.ts expands the same defs at runtime, and `primaryFor` is shared with it so the two can never pair an extra differently.
+// `lifecycle` lowers to per-instance drive distances; an instance differing from its group authors the flat field in STRUCTURE, which wins.
 import type { FastenerDef, FastenerEntry, FastenerMap, FastenerPreload, FastenerRole, GroupId, PartDef, PartId } from "@/src/game/core/type";
 import { primaryFor } from "../composition/composeActions";
 import type { StructureOverlay } from "../model/liaisons";
@@ -14,7 +13,7 @@ export type FastenerFacts = Record<PartId, { fastenerRole: FastenerRole; preload
 const roleOf = (d: FastenerDef): "connector" | "securer" | "extra" | "cap" =>
   d.home === "part" ? "cap" : typeof d.home === "object" ? "extra" : d.role;
 
-/** What a def puts on each instance: the role, a connector's preload, then the lifecycle's drive distances. Key order is for the generated file's readability only. */
+// What a def puts on each instance: the role, a connector's preload, then the lifecycle's drive distances. Key order is for the generated file's readability only.
 const factsOf = (d: FastenerDef): FastenerFacts[PartId] => {
   const role = roleOf(d);
   const lc = d.lifecycle;
@@ -27,7 +26,7 @@ const factsOf = (d: FastenerDef): FastenerFacts[PartId] => {
   };
 };
 
-/** Every authoring error as a plain message — path-free so `fastenerFacts` (which throws) and a recipe validator (which maps them to wizard steps) share the checks. */
+// Every authoring error as a plain message — path-free so `fastenerFacts` (which throws) and a recipe validator (which maps them to wizard steps) share the checks.
 export function fastenerIssues(fasteners: FastenerMap, parts: Parts): string[] {
   const out: string[] = [];
   const defs = Object.entries(fasteners) as [GroupId, FastenerEntry][];
@@ -104,7 +103,7 @@ export function fastenerIssues(fasteners: FastenerMap, parts: Parts): string[] {
   return out;
 }
 
-/** Every instance's role facts, keyed by part. Throws on any authoring error, so no structure.gen is written from a def that does not fit its instances. */
+// Every instance's role facts, keyed by part. Throws on any authoring error, so no structure.gen is written from a def that does not fit its instances.
 export function fastenerFacts(fasteners: FastenerMap, parts: Parts): FastenerFacts {
   const issues = fastenerIssues(fasteners, parts);
   if (issues.length) throw new Error(`invalid FASTENERS:\n` + issues.map((m) => "  - " + m).join("\n"));
@@ -116,8 +115,8 @@ export function fastenerFacts(fasteners: FastenerMap, parts: Parts): FastenerFac
   return out;
 }
 
-/** Land the role facts on the overlay, so `applyStructure` carries them onto the parts like any other authored field.
- * Authored fields win — a hand-written `fastenerRole` is the escape hatch for one instance that differs from its group. */
+// Land the role facts on the overlay, so `applyStructure` carries them onto the parts like any other authored field.
+// Authored fields win — a hand-written `fastenerRole` is the escape hatch for one instance that differs from its group.
 export function withFastenerFacts(overlay: StructureOverlay, facts: FastenerFacts): StructureOverlay {
   const out: StructureOverlay = { ...overlay };
   for (const [id, facts_] of Object.entries(facts) as [PartId, FastenerFacts[PartId]][]) {

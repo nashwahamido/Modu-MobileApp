@@ -11,13 +11,13 @@ import { useMirror } from "@/src/game/ui/system/handedness";
 
 interface Props {
   action: AssemblyAction;
-  /** The held part's driver — sunk toward the seat as the rotation accrues. */
+  // The held part's driver — sunk toward the seat as the rotation accrues.
   driver?: OffsetDriver;
-  /** Parked back-off from the seat (engagement.screwParkOffset — non-null only  when the parked part is the joint's SPINNER). When set, the part visibly  SCREWS IN: it travels this delta to flush as you rotate. */
+  // Parked back-off from the seat (engagement.screwParkOffset — non-null only  when the parked part is the joint's SPINNER). When set, the part visibly  SCREWS IN: it travels this delta to flush as you rotate.
   sinkDelta?: Vec3 | null;
 }
 
-/** Orientation correction panel. The part is parked at the target socket; tracing the circle gives the player a second, deliberate step before the snap commits. For a threaded engagement the part is parked BACKED OFF and sinks home with the rotation — the screwing motion, same staging as a loose fastener. */
+// Orientation correction panel. The part is parked at the target socket; tracing the circle gives the player a second, deliberate step before the snap commits. For a threaded engagement the part is parked BACKED OFF and sinks home with the rotation — the screwing motion, same staging as a loose fastener.
 export function RotateControl({ action, driver, sinkDelta }: Props) {
   const m = useMirror();
   const deg = useGameStore((s) => s.orientationDeg[action.actionId] ?? 0);

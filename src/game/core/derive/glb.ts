@@ -1,24 +1,25 @@
-// Environment-neutral GLB reading — DataView + TextDecoder only, no Node APIs, so browser bytes and fs buffers both work.
-// The analyzer's twin of helper-scripts/read-parts.mts: read-parts is the codegen script for bundled furniture, the portal consumes this.
+// GLB reading — DataView + TextDecoder only, no Node APIs, so browser bytes and fs buffers both work.
+// IN: the raw bytes of a .glb container. OUT: every named mesh node in world space, name parsed by the identity convention.
+// Twin of helper-scripts/read-parts.mts, which stays the codegen script for bundled furniture; the portal consumes this.
 import type { Quat, Vec3 } from "@/src/game/core/type";
 
 export interface GlbMesh {
-  /** Raw node name — the identity convention (scripts/NAMING.md): cluster _ group [_ index] [__ attachedA [& attachedB]]. */
+  // Raw node name — the identity convention (scripts/NAMING.md): cluster _ group [_ index] [__ attachedA [& attachedB]].
   meshName: string;
   partId: string;
   group: string;
   cluster: string;
   index?: number;
-  /** The mesh-name binding — 1 or 2 structural part ids a fastener attaches. The analyzer validates proposals against it, never derives from it alone. */
+  // The mesh-name binding — 1 or 2 structural part ids a fastener attaches. The analyzer validates proposals against it, never derives from it alone.
   attached?: string[];
   pose: { position: Vec3; rotation: Quat };
-  /** World scale composed down the hierarchy (shipped models: [1,1,1]). */
+  // World scale composed down the hierarchy (shipped models: [1,1,1]).
   scale: Vec3;
-  /** Raw LOCAL bounds of the mesh, unscaled — what read-parts needs for the origin→bounds offsets. */
+  // Raw LOCAL bounds of the mesh, unscaled — what read-parts needs for the origin→bounds offsets.
   bounds: { min: Vec3; max: Vec3 };
-  /** World-space vertices, hierarchy composed — shipped models are flat, but a parented export must not shift facts silently. */
+  // World-space vertices, hierarchy composed — shipped models are flat, but a parented export must not shift facts silently.
   verts: Vec3[];
-  /** World-space triangles. */
+  // World-space triangles.
   tris: [Vec3, Vec3, Vec3][];
 }
 
@@ -51,7 +52,7 @@ export function parseMeshName(name: string): { partId: string; group: string; cl
 
 const COMP_SIZE: Record<number, number> = { 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 };
 
-/** Read every named mesh node of a GLB into world space. Accepts the raw bytes of the .glb container. */
+// Read every named mesh node of a GLB into world space.
 export function readGlbMeshes(bytes: Uint8Array): GlbMesh[] {
   const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (dv.getUint32(0, true) !== 0x46546c67) throw new Error("not a GLB container");
@@ -126,5 +127,5 @@ export function readGlbMeshes(bytes: Uint8Array): GlbMesh[] {
   return out;
 }
 
-/** Rotate a vector by an xyzw quaternion. */
+// Rotate a vector by an xyzw quaternion.
 export const rotateByQuat = rotQ;

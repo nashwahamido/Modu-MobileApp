@@ -10,11 +10,12 @@ import { useMirror } from "@/src/game/ui/system/handedness";
 
 interface Props {
   action: AssemblyAction;
-  /** Drives the part's loose offset toward flush as it's tapped in. */
+  // Drives the part's loose offset toward flush as it is tapped in.
   sinkDriver: OffsetDriver;
 }
 
-/** Strike control: tap the target repeatedly; each hit drives the part one step toward flush (heavy haptic per hit). Counterpart of TightenControl's circular gesture for struck fasteners — reached via tool "mallet" OR motion "strike", so a bare-hand tap-in (BEKVÄM's wood dowel) lands here too and shows a hand instead of the mallet. Motion "press" is the ONE-shot variant: a single press seats it (EKET's rear cam locks + pins, already resting flush via insertProud 0). */
+// Tap repeatedly; each hit drives the part one step toward flush. The counterpart of TightenControl's circular gesture for struck fasteners.
+// Reached via tool "mallet" OR motion "strike", so a bare-hand tap-in lands here too and shows a hand. Motion "press" is the ONE-shot variant, where a single press seats a fastener already resting flush.
 export function TapControl({ action, sinkDriver }: Props) {
   const m = useMirror();
   const struck = action.tool === "mallet" || action.tool === "hammer";
@@ -31,7 +32,7 @@ export function TapControl({ action, sinkDriver }: Props) {
     const p = Math.min(1, total / TIGHTEN_TOTAL_DEG);
     const part = action.partId ? store.furniture?.parts[action.partId] : undefined;
     if (part) {
-      // signed axis, not baked engageDir — in the reverse path (later endpoint placed first) the fastener sinks in from the opposite side
+      // signed axis, not baked engageDir: in the reverse path the fastener sinks in from the opposite side
       const ld = looseDelta(part, engageAxis(part, new Set(store.completed)));
       sinkDriver.set([ld[0] * (1 - p), ld[1] * (1 - p), ld[2] * (1 - p)]);
     }
@@ -42,7 +43,7 @@ export function TapControl({ action, sinkDriver }: Props) {
   return (
     <View style={m(styles.wrap)} pointerEvents="box-none">
       <PressPad icon={struck ? "🔨" : HAND_ICON} resetKey={action.actionId} onPress={press} />
-      {/* hintInk: this control's caption is dark where its siblings' are cream. Kept as it was — see PressPad */}
+      {/* hintInk is a no-op now — see PressPad */}
       <Text style={[styles.hint, styles.hintInk]}>
         {single ? "Press it home" : `Tap to drive it in · ${hits}/${taps}`}
       </Text>

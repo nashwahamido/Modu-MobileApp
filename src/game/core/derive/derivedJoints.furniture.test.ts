@@ -40,21 +40,21 @@ import { JOINT_GEOMETRY as EKET_GEN } from "@/src/game/content/furnitures/EKET/j
 import { STRUCTURE_COMPOSED as EKET_COMPOSED } from "@/src/game/content/furnitures/EKET/structure.gen";
 import { LIAISONS as EKET_GAMMA } from "@/src/game/content/furnitures/EKET/liaisons.gen";
 
-/** Measured corpus state — a changed count means the geometry, the authoring or the rule moved: re-measure and understand WHY before touching these. */
+// Measured corpus state — a changed count means the geometry, the authoring or the rule moved: re-measure and understand WHY before touching these.
 // Re-measured 2026-09-02 when `hookAndSlot` joined ACROSS: four keyholes left the slab-long SHEAR branch for the contact normal, each landing exactly on its device-verified value, so MATCHED and DERIVED rose by four and UNDETERMINED fell by four.
 const DERIVED = 49;
 const MATCHED = 12;
 const UNDETERMINED = 12;
-/** Derived vectors on parts that author none, so pin 2 cannot check them. Two populations: parts nothing has ever confirmed, and parts MIGRATED to JOINTS.
- * The migrated ones gave up their authored value on purpose and are guarded by jointsMigration.furniture.test.ts, so a migration moves a part from MATCHED to here and both counts move together. */
+// Derived vectors on parts that author none, so pin 2 cannot check them. Two populations: parts nothing has ever confirmed, and parts MIGRATED to JOINTS.
+// The migrated ones gave up their authored value on purpose and are guarded by jointsMigration.furniture.test.ts, so a migration moves a part from MATCHED to here and both counts move together.
 const UNVALIDATED = 37;
-/** A derived vector that legitimately disagrees with an authored one: partId → why. Empty is the healthy state. */
+// A derived vector that legitimately disagrees with an authored one: partId → why. Empty is the healthy state.
 const KNOWN_DIVERGENT = new Map<string, string>();
-/** Derived vectors the JOINING HARDWARE contradicts — open BUGS, not accepted exceptions: the contact slab got these wrong and nothing else can catch them, since neither part authors a placeDir.
- * Listed so no NEW one appears unnoticed. Delete an entry when the rule stops producing it; the pin fails if a listed one starts agreeing. */
+// Derived vectors the JOINING HARDWARE contradicts — open BUGS, not accepted exceptions: the contact slab got these wrong and nothing else can catch them, since neither part authors a placeDir.
+// Listed so no NEW one appears unnoticed. Delete an entry when the rule stops producing it; the pin fails if a listed one starts agreeing.
 const KNOWN_WRONG_AXIS = new Map<string, string>();
-/** Derived vectors a joint-defining connector can adjudicate — the only independent check reaching the UNVALIDATED ones.
- * Ten of forty-three, because most joints are made by securers, whose drive axis says nothing about how the parts came together. */
+// Derived vectors a joint-defining connector can adjudicate — the only independent check reaching the UNVALIDATED ones.
+// Ten of forty-three, because most joints are made by securers, whose drive axis says nothing about how the parts came together.
 const CONNECTOR_SCORED = 11;
 
 const glbBoxes = (file: string): Record<string, PartBox> => boxesByName(readGlbMeshes(fs.readFileSync(file)));
@@ -67,8 +67,8 @@ const CORPUS = [
   ["EKET", EKET as unknown as Mod, EKET_PARTS, EKET_SWEEP, EKET_GEN, EKET_COMPOSED, EKET_GAMMA],
 ] as const;
 
-/** Recompute one furniture's geometry through the SAME function derive-structure.mts calls, so the pin cannot drift from the script.
- * Everything specific to a pin stays here; nothing about the derivation does. */
+// Recompute one furniture's geometry through the SAME function derive-structure.mts calls, so the pin cannot drift from the script.
+// Everything specific to a pin stays here; nothing about the derivation does.
 function recompute(id: string, mod: Mod, raw: unknown, sweep: unknown) {
   const named = glbBoxes(path.join(process.cwd(), "src", "assets", "models", "furnitures", id, `${id}.glb`));
   return deriveFurnitureGeometry(raw as Record<PartId, PartDef>, mod, named, sweep as SweepMap, HARDWARE);

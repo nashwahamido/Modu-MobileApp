@@ -1,4 +1,4 @@
-// World AABB + oriented box per mesh — the `PartBox` the joint-frame and sweep passes read.
+// IN: GLB meshes. OUT: world AABB + oriented box per mesh — the `PartBox` the joint-frame and sweep passes read.
 // One copy, imported by derive-structure.mts and the pin tests instead of each walking the GLB itself.
 import type { PartBox, Vec3 } from "@/src/game/core/type";
 import { rotateByQuat, type GlbMesh } from "./glb";
@@ -21,7 +21,7 @@ export function boxOf(m: GlbMesh): PartBox {
   };
 }
 
-/** Boxes keyed by mesh NAME (the GLB node name), not by part id — consumers map afterwards. */
+// Boxes keyed by mesh NAME (the GLB node name), not by part id — consumers map afterwards.
 export function boxesByName(meshes: readonly GlbMesh[]): Record<string, PartBox> {
   const out: Record<string, PartBox> = {};
   for (const m of meshes) out[m.meshName] = boxOf(m);

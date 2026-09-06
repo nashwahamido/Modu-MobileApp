@@ -12,21 +12,21 @@ import { useMirror } from "@/src/game/ui/system/handedness";
 import { useTrackLength } from "./trackFit";
 import type { OffsetDriver } from "../../scene/offsetDriver";
 
-/** The lock shove is a SHORT travel, so this track asks for less than the slider family's full length; on a phone useTrackLength can still trim it. */
+// The lock shove is a SHORT travel, so this track asks for less than the slider family's full length; on a phone useTrackLength can still trim it.
 const LOCK_TRACK = 140;
 
-/** Fraction of driveProgress the press leg owns; the lock drag owns the rest. */
+// Fraction of driveProgress the press leg owns; the lock drag owns the rest.
 const PRESS_PHASE = 0.5;
 
 interface Props {
   action: AssemblyAction;
-  /** The held part's driver — pressed to the hooked pose, then shoved along the lock axis to the seat. */
+  // The held part's driver — pressed to the hooked pose, then shoved along the lock axis to the seat.
   driver?: OffsetDriver;
-  /** Press staging (engagement.pressParkInfo) WITH its `lock` leg — the control decomposes the combined park into the two legs. */
+  // Press staging (engagement.pressParkInfo) WITH its `lock` leg — the control decomposes the combined park into the two legs.
   park?: ParkInfo | null;
 }
 
-/** Two-phase keyhole placement (part.lockDir — EKET side↔top): PHASE A is PressControl's pad — each tap shoves the panel along its press axis until the dowels sit in the big keyhole ends (the hooked pose: already at target height, overshot along the slot axis) — then the pad becomes a short SlideControl-style track and PHASE B drags the panel the slot length along lockDir to lock; only that commits. The track lies along the slot's dominant screen sense: vertical for a downward lock, horizontal for the EKET depth shove. One placePart action, one progress scalar: 0..PRESS_PHASE is the press leg, the rest is the lock leg, and the offset is the sum of both legs' remainders so undoing nothing and rebuilding mid-way stays consistent. */
+// Two-phase keyhole placement (part.lockDir — EKET side↔top): PHASE A is PressControl's pad — each tap shoves the panel along its press axis until the dowels sit in the big keyhole ends (the hooked pose: already at target height, overshot along the slot axis) — then the pad becomes a short SlideControl-style track and PHASE B drags the panel the slot length along lockDir to lock; only that commits. The track lies along the slot's dominant screen sense: vertical for a downward lock, horizontal for the EKET depth shove. One placePart action, one progress scalar: 0..PRESS_PHASE is the press leg, the rest is the lock leg, and the offset is the sum of both legs' remainders so undoing nothing and rebuilding mid-way stays consistent.
 export function HookPressControl({ action, driver, park }: Props) {
   const m = useMirror();
   // Drawn length AND drag scale, trimmed to what the screen has room for.

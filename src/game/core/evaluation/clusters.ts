@@ -1,7 +1,7 @@
 import { ActionId, ClusterId, Furniture, PartDef, PartId } from "@/src/game/core/type";
 import { isPickupType } from "@/src/game/core/ids";
 
-/** True once any pickup beat of `cluster` is complete — the cluster has left its untouched opening state (used to suspend free mode's grab-anything until the cluster's first part is out). */
+// True once any pickup beat of `cluster` is complete
 export function clusterStarted(
   f: Furniture,
   cluster: ClusterId,
@@ -16,7 +16,7 @@ export function clusterStarted(
   );
 }
 
-/** Distinct cluster ids present in a furniture's parts. */
+// Distinct cluster ids present in a furniture's parts.
 export function clustersOf(parts: Record<PartId, PartDef>): ClusterId[] {
   return [...new Set(Object.values(parts).map((p) => p.cluster))];
 }
@@ -48,12 +48,7 @@ export function actionCluster(
 
 export function actionsForClusterFocus<
   T extends { partId?: PartId; cluster?: ClusterId; type?: string },
->(
-  f: Furniture,
-  actions: readonly T[],
-  activeCluster: ClusterId | null,
-): T[] {
-  // A COMBINE surfaces in every focus state. The combine stage runs unfocused, and the cluster-less filter below used to be how combines reached it — but the cluster overlay gave every combine an explicit `cluster` (the id it joins), so the filter silently dropped them: at DALFRED's combine the offered list went empty, nextAction named nothing, and the objective bar fell back to "Switch focus" while the tray was asking for the real gesture and the authored beat text sat unused. The combine tray itself shows regardless of focus; the offered list has to agree with it.
+>(f: Furniture, actions: readonly T[], activeCluster: ClusterId | null): T[] {
   const passes = (action: T): boolean => {
     if (action.type === "combineClusters") return true;
     const cluster = actionCluster(f, action);
@@ -61,7 +56,7 @@ export function actionsForClusterFocus<
     return cluster == null || cluster === activeCluster;
   };
   if (!requiresClusterFocus(f)) return [...actions];
-  // No focus is a real state, not an error: the combine stage runs unfocused, and its actions (combines above, plus cluster-less finishing/test beats) must surface there — returning [] swallowed every post-combine beat.
+  // No focus is a real state, not an error
   return actions.filter(passes);
 }
 
@@ -86,7 +81,7 @@ export function currentStageForClusterFocus(
   return stages[0] ?? f.actions[f.actions.length - 1]?.stage ?? 1;
 }
 
-/** Lowest stage among a cluster's still-incomplete actions (Infinity if done).  Drives PLAN mode: an action is offered only at its cluster's current stage. */
+// Lowest stage among a cluster's still-incomplete actions (Infinity if done).  Drives PLAN mode: an action is offered only at its cluster's current stage.
 export function clusterCurrentStage(
   f: Furniture,
   clusterId: ClusterId,
@@ -98,7 +93,7 @@ export function clusterCurrentStage(
   return stages.length ? Math.min(...stages) : Infinity;
 }
 
-/** Complete when every action whose part belongs to the cluster is done.  Actions without a partId (combine, finishing beats) belong to no cluster,  so a cluster can't depend on the very combine that consumes it. */
+// Complete when every action whose part belongs to the cluster is done.  Actions without a partId (combine, finishing beats) belong to no cluster,  so a cluster can't depend on the very combine that consumes it.
 export function clusterComplete(
   f: Furniture,
   clusterId: ClusterId,
@@ -123,15 +118,7 @@ export function clusterPrereqsMet(
   );
 }
 
-/** A combineClusters action is ready when all (prerequisite) clusters are  complete. Uses authored ClusterDef ids when present, else the clusters  derived from parts. Single-combine furniture = "all clusters"; multi-combine  would reference specific clusters per action (future). */
-/**
- * Which node of the BUILD MAP the player is on, 1-based: base → seat → combine.
- *
- * Deliberately NOT the authored `stage` number. Those count the beats inside the whole
- * build (DALFRED authors its combine as stage 4), which is the right unit for gating what
- * may be done next but the wrong one for telling the player where they are: the map shows
- * three nodes, so "Stage 4 of 3" is nonsense. This counts the same things the map draws.
- */
+// Which node of the BUILD MAP the player is on, 1-based: base → seat → combine.
 export function buildPhase(
   f: Furniture,
   done: ReadonlySet<ActionId>,
@@ -139,7 +126,7 @@ export function buildPhase(
 ): { index: number; total: number } {
   const ids = focusableClusterIds(f);
 
-  // A build with no sub-assemblies to choose between (LACK) has no map phases to count, so it falls back to the AUTHORED stage — which is the only meaningful progress marker it has. Counting nodes there would pin it at "Stage 1" for the whole build.
+  // A build with no sub-assemblies to choose between (LACK) has no map phases to count, so it falls back to the AUTHORED stage
   if (ids.length === 0) {
     const stages = f.actions.map((a) => a.stage);
     return {
@@ -164,23 +151,7 @@ export function combineReady(
   return ids.every((cid) => clusterComplete(f, cid, done));
 }
 
-/**
- * Whether the build map is on screen right now.
- *
- * ONE RULE, IN ONE PLACE — and it lives here rather than in the component because a second reader
- * appeared and immediately got it wrong. The map arrives THREE ways and only one of them is the
- * `mapOpen` flag:
- *
- *   mustChoose — several sub-assemblies and none picked yet. The map IS the chooser.
- *   intro      — a single-cluster build showing what lies ahead, once per loaded furniture.
- *   mapOpen    — opened deliberately, mid-build, from the Map button.
- *
- * Anything that needs to stay out of the map's way has to ask about all three. Testing `mapOpen`
- * alone looks right and is wrong for the two commonest openings: the HUD coach that points AT the
- * Map button drew itself straight over the chooser on any multi-stage build.
- *
- * `overviewOnly` is the tutorial's pause-only overview, which must never inherit the one-time intro.
- */
+// Whether the build map is on screen right now.
 export function buildMapVisible(
   f: Furniture | null | undefined,
   done: ReadonlySet<ActionId>,

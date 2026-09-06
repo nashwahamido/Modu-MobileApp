@@ -1,4 +1,6 @@
-// The pick confirmer's contract, pinned where the box gate's history says the bodies are buried. Every identity-only visibility rule tried before was falsified in play (receiver exemptions: legs snapped through plates; face heuristics: EKET's cam lock, twice), so these tests are organized around the cases that killed them: the same receiver entity answers a pick from the bore side AND through the panel's far side, and only depth separates the two.
+// The pick confirmer's contract, pinned where the box gate's history says the bodies are buried.
+// Every identity-only rule was falsified in play — receiver exemptions let legs snap through plates, face heuristics died twice on EKET's cam lock — so these tests are built around the cases that killed them.
+// The same receiver entity answers a pick from the bore side AND through the panel's far side, and only depth separates the two.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -16,7 +18,7 @@ const NEAR = 0.1;
 const id = (s: string) => s as ActionId;
 const EYE: Vec3 = [1, 0.8, 1];
 
-/** Buffer value that puts the frontmost surface at `axialM` — the inverse of the reversed-Z mapping, so tests speak metres. */
+// Buffer value that puts the frontmost surface at `axialM` — the inverse of the reversed-Z mapping, so tests speak metres.
 const bufAt = (axialM: number) => NEAR / axialM;
 
 test("reversed-Z mapping: 1.0 is the near plane, smaller values are further", () => {
@@ -34,7 +36,7 @@ test("hitting the receiver AT the socket confirms visible — the hole is a feat
 });
 
 test("the SAME receiver through its far side stays blocked — the case every identity rule died on", () => {
-  // Rear cam lock viewed from the front: frontmost surface is the back panel's FRONT face, 15mm before the anchor, against a 4mm burial allowance. pickEntity without depth returns the same entity in both tests.
+  // Rear cam lock from the front: the frontmost surface is the back panel's FRONT face, 15mm before the anchor, against a 4mm burial allowance. Without depth, pickEntity returns the same entity in both tests.
   const v = judgePick({ ...base, hit: { partId: "backPanel" as never, ghost: false, depth: bufAt(0.985) } });
   assert.equal(v, "blocked");
 });
@@ -59,7 +61,7 @@ test("a ghost is never an occluder, whoever it belongs to", () => {
 });
 
 test("the along-ray obliquity correction scales the axial gap", () => {
-  // Anchor 1m axial but 2m euclid (a steep corner-of-screen ray): a 10mm axial gap is 20mm on the sightline — over a 6mm-slack threshold with zero burial, blocked; the same hit judged without the correction would pass.
+  // Anchor 1m axial but 2m euclid, a steep corner-of-screen ray: a 10mm axial gap is 20mm on the sightline, blocked against a 6mm slack — while the same hit judged without the correction passes.
   const v = judgePick({ ...base, anchorEuclidDistM: 2.0, hit: { partId: "seat" as never, ghost: false, depth: bufAt(0.99) } });
   assert.equal(v, "blocked");
 });

@@ -49,7 +49,7 @@ function useStableOrbitManipulator(
               // the hook's return type includes undefined, so the array can hold one
               m?.release();
             } catch {
-              // already gone: releasing twice is not worth a crash on the way out of a screen
+              // already gone: releasing twice is not worth a crash
             }
           }
         }, 200);
@@ -65,7 +65,7 @@ const HOME_EYE: [number, number, number] = [1.0, 0.85, 1.0];
 const QUARTER_TURN_PX = Math.PI / 2 / 0.005;
 const NO_PLACED_PARTS = new Set<string>();
 
-// orbit pivot: centre of what's visible — a focused cluster, else everything built up to the stage
+// orbit pivot: centre of what's placed & visible
 function pivotFor(
   parts: Record<string, PartDef>,
   partStage: Record<string, number>,
@@ -90,7 +90,7 @@ function pivotFor(
 }
 
 // orbit / zoom / pan for the assembly camera. Deflection goes to stickShared, OrbitDrive integrates it per frame
-// pivot follows the assembly built so far. A pivot change rebuilds the manipulator (target is set at construction), carrying the eye over so only the gaze re-aims
+// pivot follows the assembly built so far. A pivot change rebuilds the manipulator, carrying the eye over so only the gaze re-aims
 export function useOrbitCamera(
   {
     stableFraming = false,
@@ -121,7 +121,8 @@ export function useOrbitCamera(
     if (!furniture) return set;
     const done = new Set(completed);
     for (const a of furniture.actions) {
-      if (a.type === "placePart" && a.partId && done.has(a.actionId)) set.add(a.partId);
+      if (a.type === "placePart" && a.partId && done.has(a.actionId))
+        set.add(a.partId);
     }
     return set;
   }, [furniture, completed]);
@@ -143,7 +144,9 @@ export function useOrbitCamera(
     if (!furniture) return false;
     const cluster = focusCluster ?? framingCluster;
     for (const p of Object.values(furniture.parts)) {
-      const inFrame = cluster ? p.cluster === cluster : (partStage[p.partId] ?? 9) <= stage;
+      const inFrame = cluster
+        ? p.cluster === cluster
+        : (partStage[p.partId] ?? 9) <= stage;
       if (inFrame && placed.has(p.partId)) return true;
     }
     return false;
@@ -180,7 +183,13 @@ export function useOrbitCamera(
   const { height: winH } = useWindowDimensions();
   const [home, setHome] = useState(() => ({
     eye: HOME_EYE,
-    target: pivot(stage, framingCluster, heldFocusPoint, examinePartId, focusCluster),
+    target: pivot(
+      stage,
+      framingCluster,
+      heldFocusPoint,
+      examinePartId,
+      focusCluster,
+    ),
   }));
 
   useEffect(() => {
@@ -198,7 +207,13 @@ export function useOrbitCamera(
     if (useGameStore.getState().heldActionId) return;
     // tutorial: keep the pickup's target after placement, so the ring stays aligned and the part does not jump
     if (stableFraming && framedHasPlaced) return;
-    const nextTarget = pivot(stage, framingCluster, null, examinePartId, focusCluster);
+    const nextTarget = pivot(
+      stage,
+      framingCluster,
+      null,
+      examinePartId,
+      focusCluster,
+    );
     setHome((h) =>
       h.target.every((v, i) => Math.abs(v - nextTarget[i]) < 1e-5)
         ? h
@@ -235,7 +250,10 @@ export function useOrbitCamera(
   // panning left alone — it reads the live lookAt and re-anchors on its own onPanStart
   useEffect(() => {
     if (!manipulator || !grabbing.current) return;
-    if (__DEV__) console.log("[orbit] manipulator swapped mid-grab — reopening stick session");
+    if (__DEV__)
+      console.log(
+        "[orbit] manipulator swapped mid-grab — reopening stick session",
+      );
     manipulator.grabBegin(0, 0, false);
   }, [manipulator]);
 
@@ -243,7 +261,10 @@ export function useOrbitCamera(
     // guards a double grabBegin only. The pan opens no session, so the two compose — no cross-guard
     if (grabbing.current) {
       // the swap effect above closes the one known path here. If this fires on device there is another, and the camera is about to stop turning
-      if (__DEV__) console.warn("[orbit] stick start refused — a grab session is already open");
+      if (__DEV__)
+        console.warn(
+          "[orbit] stick start refused — a grab session is already open",
+        );
       return;
     }
     grabbing.current = true;
@@ -352,7 +373,13 @@ export function useOrbitCamera(
 
   const resetCamera = useCallback(() => {
     resetTick.current += 1;
-    const target = pivot(stage, framingCluster, heldFocusPoint, examinePartId, focusCluster);
+    const target = pivot(
+      stage,
+      framingCluster,
+      heldFocusPoint,
+      examinePartId,
+      focusCluster,
+    );
     eyeRef.current = HOME_EYE;
     // recentre means recentre — the accumulated pan is part of what is being undone
     panShared.value = { x: 0, y: 0, z: 0 };
@@ -364,10 +391,18 @@ export function useOrbitCamera(
         target[2],
       ],
     });
-  }, [stage, framingCluster, heldFocusPoint, examinePartId, focusCluster, pivot, panShared]);
+  }, [
+    stage,
+    framingCluster,
+    heldFocusPoint,
+    examinePartId,
+    focusCluster,
+    pivot,
+    panShared,
+  ]);
 
   // opening a cluster is a fresh view — the eye carried over by the pivot effect describes parts that just left the screen. Declared after resetCamera so it commits after that effect
-  // real clusters only: null is the combine, which has its own choreography
+  // real clusters only: null is the combine
   const framedRef = useRef(framingCluster);
   useEffect(() => {
     if (framedRef.current === framingCluster) return;
@@ -419,6 +454,7 @@ export function useOrbitCamera(
     resetCamera,
     isViewingUnderside,
     orbitBy,
-    rotateQuarter: (direction: -1 | 1) => orbitBy(QUARTER_TURN_PX * direction, 0),
+    rotateQuarter: (direction: -1 | 1) =>
+      orbitBy(QUARTER_TURN_PX * direction, 0),
   };
 }

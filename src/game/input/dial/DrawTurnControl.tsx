@@ -15,11 +15,11 @@ const DRAW_TRACK = 220; // horizontal slider length
 
 interface Props {
   action: AssemblyAction;
-  /** Drives the fastener's offset + rotation. Shared with the other gestures (never active simultaneously). */
+  // Drives the fastener's offset + rotation. Shared with the other gestures (never active simultaneously).
   sinkDriver: OffsetDriver;
 }
 
-/** Two-STEP tighten for `drawTurn` fasteners (EKET stabiliser-rod dowels): (1) DRAW OUT — a HORIZONTAL SLIDER (matching the dowel's travel) translates it from its loose (retracted-in-rod) pose out to flush in the slider; then (2) ROTATE LOCK — turn the dial to lock it home. The dial is prompt-only: the dowel stays baked at its final rotation throughout (a knurled cylinder's spin is unreadable anyway), the dial just accrues degrees. Commits the tightenFastener when the rotation completes. */
+// Two-STEP tighten for `drawTurn` fasteners (EKET stabiliser-rod dowels): (1) DRAW OUT — a HORIZONTAL SLIDER (matching the dowel's travel) translates it from its loose (retracted-in-rod) pose out to flush in the slider; then (2) ROTATE LOCK — turn the dial to lock it home. The dial is prompt-only: the dowel stays baked at its final rotation throughout (a knurled cylinder's spin is unreadable anyway), the dial just accrues degrees. Commits the tightenFastener when the rotation completes.
 export function DrawTurnControl({ action, sinkDriver }: Props) {
   const m = useMirror();
   const t = useTheme();

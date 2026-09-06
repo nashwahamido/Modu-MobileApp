@@ -14,7 +14,7 @@ import {
 } from "./wallCulling";
 
 test("the rest pose hides exactly the two walls the diorama always had open", () => {
-  // restTheta 3π/4 puts the eye in the +x / -z quadrant. That is outside x-max and z-min, which are the two sides the shell used to simply not have — so the starting view is unchanged by adding them.
+  // restTheta 3π/4 puts the eye in the +x/-z quadrant, outside x-max and z-min — the two sides the shell used not to have, so the starting view is unchanged by adding them.
   assert.deepEqual(hiddenWalls(ORBIT.restTheta).sort(), ["x-max", "z-min"]);
   const alphas = wallAlphas(ORBIT.restTheta);
   assert.equal(alphas["x-min"], 1);
@@ -24,7 +24,8 @@ test("the rest pose hides exactly the two walls the diorama always had open", ()
 });
 
 test("one or two adjacent walls are hidden at every azimuth, never an opposite pair", () => {
-  // The invariant that makes the trick work: the walls between the eye and the room are hidden — two at a generic angle, one when the camera lines up with an axis and the others go edge-on. A mis-signed normal shows up here as 0, 3, 4, or an opposite pair (looking through the room from both sides at once).
+  // The invariant that makes the trick work: two walls hidden at a generic angle, one when the camera lines up with an axis.
+  // A mis-signed normal shows up as 0, 3, 4, or an opposite pair — looking through the room from both sides at once.
   for (let i = 0; i < 720; i += 1) {
     const theta = (i / 720) * 2 * Math.PI;
     const hidden = hiddenWalls(theta);
@@ -35,7 +36,7 @@ test("one or two adjacent walls are hidden at every azimuth, never an opposite p
 });
 
 test("a wall seen edge-on stays solid", () => {
-  // theta 0 looks along +z: the z walls face the camera and the x walls are edge-on, blocking nothing. Hiding a wall that is not in the way would just delete part of the room.
+  // theta 0 looks along +z: the x walls go edge-on and block nothing, and hiding a wall that is not in the way just deletes part of the room.
   assert.equal(wallAlpha("x-min", 0), 1);
   assert.equal(wallAlpha("x-max", 0), 1);
   assert.equal(wallAlpha("x-min", Math.PI), 1);
@@ -59,7 +60,7 @@ test("alpha is continuous across the fade band — no pop at any boundary", () =
 });
 
 test("the fade band is one-sided: solid until blocking, gone shortly after", () => {
-  // x-max starts to block as theta passes 0 going positive. Right up to that instant it must be fully solid — the straight-on view of a room is a solid back wall between two solid slivers — and by the end of the band it is fully gone.
+  // x-max starts to block as theta passes 0. Right up to that instant it must be fully solid — a straight-on room is a solid back wall between two solid slivers — and by the band's end fully gone.
   const gone = Math.asin(WALL_FADE_BAND);
   assert.equal(wallAlpha("x-max", 0), 1);
   assert.equal(wallAlpha("x-max", -0.01), 1);
@@ -83,17 +84,18 @@ test("rotation is periodic — a full turn returns the same alphas", () => {
 });
 
 test("a wall item's opacity is its wall's, at every angle — no second curve to drift from it", () => {
-  // The renderer drives a window's alpha straight off wallAlpha for the wall it hangs on (see LoadedItem), so there is no separate schedule that could disagree. This pins the property that replaced the old pop thresholds: the whole point of the change is that a window is never more or less present than the wall holding it, ANYWHERE in the band — the mismatch is what read as a glitch, and any future item-side easing would put it straight back.
+  // The renderer drives a window's alpha straight off its wall's, so no separate schedule can disagree.
+  // This pins what replaced the old pop thresholds: a window is never more or less present than the wall holding it, anywhere in the band. Any item-side easing puts the glitch straight back.
   for (const wall of SHELL_WALL_IDS) {
     for (let i = 0; i <= 4_000; i += 1) {
       const theta = -Math.PI + (i / 4_000) * 2 * Math.PI;
       const alpha = wallAlpha(wall, theta);
       assert.ok(alpha >= 0 && alpha <= 1, `${wall} item alpha out of range at ${theta}`);
-      // The one threshold left is the renderer's: below an alpha byte the piece leaves the scene instead of costing a transparent draw for nothing. It must sit inside the invisible end of the fade, never partway up it, or a still-visible window would vanish.
+      // The one threshold left is the renderer's: below an alpha byte the piece leaves the scene rather than cost a transparent draw. It must sit at the invisible end of the fade, or a still-visible window vanishes.
       if (alpha > WALL_ALPHA_EPSILON) assert.ok(alpha > 0, `${wall} drawn at zero alpha at ${theta}`);
     }
   }
-  // And no hysteresis is needed on that boundary, which is the proof the fade works: on either side of it the piece is equally invisible, so a camera parked exactly there can flicker between the two states all it likes and there is nothing to see.
+  // No hysteresis is needed there, which is the proof the fade works: either side of it the piece is equally invisible, so a camera parked exactly there can flicker freely with nothing to see.
   assert.ok(WALL_ALPHA_EPSILON <= 1 / 255);
 });
 
