@@ -5,7 +5,8 @@ import type { GridPlacement, SurfaceId } from "./grid";
 import { removeWithChildren, sanitizeLayout } from "./layoutSanitise";
 import { registerPlaceables } from "./placeableItems";
 
-// The registry is module state. Every test starts from the bundled built set plus one bought floor row, matching the shape placeableItems.test.ts uses — one flagged HOST so furniture-surface rows have somewhere to stand, and one onTop item to stand on it (a bundled dalfred-stool has no onTop of its own — a stool does not stand on a table — so the furniture-surface child needs its own fixture row, not the built set).
+// The registry is module state. Every test starts from the built set plus one bought floor row: a flagged HOST for furniture-surface rows to stand on, and an onTop item to stand there.
+// The child needs its own fixture row because a bundled dalfred-stool has no onTop of its own — a stool does not stand on a table.
 beforeEach(() => {
   registerPlaceables([
     { id: "malm-chest", source: "bought", category: "fur", size: { x: 0.804, y: 1.004, z: 0.483 }, baseOffsetY: 0, mount: "floor" },
@@ -45,7 +46,7 @@ test("of two rows that now collide, the EARLIER one is kept", () => {
 });
 
 test("a row whose item is not in the catalog is KEPT, not dropped", () => {
-  // The catalog syncs after first paint. Dropping unknowns here would delete bought furniture on every cold start; the scene already skips rendering them.
+  // The catalog syncs after first paint, so dropping unknowns here would delete bought furniture on every cold start. The scene already skips rendering them.
   const unknown = row("a", "not-in-the-catalog-yet", { x: 2, y: 2 });
   assert.deepEqual(sanitizeLayout([unknown]), [unknown]);
 });

@@ -8,8 +8,9 @@ import { useHudInsets } from '@/src/hooks/use-safe-insets';
 import { FilamentScene } from "react-native-filament";
 
 import { AssemblyScene } from "@/src/game/scene/AssemblyScene";
+import { useSceneSlot } from "@/src/game/scene/sceneSlot";
 import { useAssemblyDrivers } from "@/src/game/scene/useAssemblyDrivers";
-import { useSceneState } from "@/src/game/scene/useSceneState";
+import { actionableFirst, useSceneState } from "@/src/game/scene/useSceneState";
 
 import { Joystick } from "@/src/game/input/camera/Joystick";
 import { useOrbitCamera } from "@/src/game/input/camera/useOrbitCamera";
@@ -33,7 +34,10 @@ import { useStepObjective } from "@/src/game/core/presentation/useStepObjective"
 import { useAssemblySfx } from "@/src/game/audio/useAssemblySfx";
 
 import { useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import { useCurrentUserId, useRepos } from "@/src/data";
+import { useProfileStore } from "@/src/data/player/profileStore";
+import { useShopStore } from "@/src/data/shop/store";
 import { asFurnitureId } from "@/src/game/core/ids";
 import {
   pressParkInfo,
@@ -60,14 +64,14 @@ import {
   FocusToggleButton,
 } from "@/src/game/ui/hud/ToggleChips";
 import { SceneBackdrop } from "@/src/game/ui/backdrop/SceneBackdrop";
-import { ThemeScope } from "@/src/game/ui/system/theme";
+import { isTabletScreen, ThemeScope } from "@/src/game/ui/system/theme";
 import type { ThemeId } from "@/src/game/core/type";
 import { backdropSource } from "@/src/game/ui/backdrop/backdrops";
 import { useScreenOrientationLock } from "@/src/hooks/use-screen-orientation-lock";
 import {
   requiresClusterFocus,
 } from "@/src/game/core/evaluation/clusters";
-import { availableInMode } from "@/src/game/core/evaluation/availability";
+import { availableInMode, nextAction } from "@/src/game/core/evaluation/availability";
 import { TutorialTarget } from "@/src/game/tutorial/TutorialTarget";
 import { MascotGuideOverlay } from "@/src/game/tutorial/MascotGuideOverlay";
 import { GripCoach } from "@/src/game/tutorial/GripCoach";
@@ -86,6 +90,20 @@ import {
   TUTORIAL_STEP_REWARD_TOKENS,
   type ToolTutorialKind,
 } from "@/src/game/tutorial/steps";
+
+/**
+ * Is the run sitting on the card that TEACHES Undo and Recenter?
+ *
+ * Read at press time rather than subscribed to, so it costs nothing on the frames in between and
+ * cannot go stale between a render and a tap.
+ *
+ * Matched on the TARGET, not the step id: all four runs name this step `visual-undo-recenter` today,
+ * but the target is what the spotlight actually rings, so a rename cannot quietly re-arm the buttons.
+ */
+function isUndoRecenterStep(): boolean {
+  const t = useTutorialStore.getState();
+  return t.steps[t.currentIndex]?.targetId === "undoRecenter";
+}
 
 const TUTORIAL_FURNITURE_ID = asFurnitureId("lack-table");
 const TUTORIAL_SPOT_MS = 2800;
@@ -121,6 +139,7 @@ function TutorialScreen() {
     manipulator,
     stickActive,
     panShared,
+    getLookAt,
     onStickStart,
     onStickMove,
     onStickEnd,
@@ -142,26 +161,18 @@ function TutorialScreen() {
   const [undoPreviewActive, setUndoPreviewActive] = useState(false);
   const undoPreviewProgress = useRef(new Animated.Value(0)).current;
 
-  // THE GHOST, AND ONLY THE GHOST.
+  // THE GHOST BELONGS TO THE UNDO PREVIEW, AND TO NOTHING ELSE.
   //
-  // `undoPreviewActive` drives TWO separate things: this scene animation, and a whole card takeover
-  // in MascotGuideOverlay — header replaced with "UNDO PREVIEW", its own copy, the spotlight moved
-  // to the assembly area, and a full-screen Pressable that dismisses by firing `step_undone`.
+  // `undoPreviewActive` is `hud-undo`'s whole-card takeover in MascotGuideOverlay — its own header
+  // and copy, the spotlight on the assembly area, a full-screen Pressable to close it. This scene
+  // animation is one part of that takeover and runs for as long as it is up.
   //
-  // Lumi's step can have the first but NOT the second. `visual-undo-recenter` closes on
-  // `controls_acknowledged`, so that Pressable's `step_undone` would match nothing and the tap would
-  // do nothing at all — a player stuck on a card with no way off it. The takeover would also throw
-  // away her authored line and its recorded clip. So the scene animation reads this flag while
-  // `showingUndoPreview` below, which is what the overlay receives, stays pinned to `hud-undo`.
-  // Its own subscription rather than the `tutorialStepId` further down: this sits above that
-  // declaration, and a const reading it from here would be in its temporal dead zone.
-  const onVisualUndoStep = useTutorialStore(
-    (s) => s.steps[s.currentIndex]?.id === "visual-undo-recenter",
-  );
-  const undoGhostRunning = undoPreviewActive || onVisualUndoStep;
-
+  // It also ran on `visual-undo-recenter`, the read-only card every profile actually reaches.
+  // Removed 2026-08-29: it slid and faded the WHOLE build, which is not what Undo does — undo takes
+  // back the last part — and players read the movement as their press having undone the table. The
+  // card rings both buttons and says what they do; nothing has to move for that to land.
   useEffect(() => {
-    if (!undoGhostRunning) {
+    if (!undoPreviewActive) {
       undoPreviewProgress.stopAnimation();
       undoPreviewProgress.setValue(0);
       return;
@@ -182,25 +193,15 @@ function TutorialScreen() {
         }),
         Animated.delay(220),
       ]),
-      // TWO PASSES ON LUMI'S STEP, then the scene sits still.
-      //
-      // Looping forever is right for `hud-undo`, whose card waits on the player and whose whole
-      // screen IS the preview — so -1 stays the default for it. On `visual-undo-recenter` the ghost
-      // is a one-off demonstration beside a card the player is reading, and left looping it was
-      // still travelling when the tap moved them to step 8, so the scene slid and faded under a card
-      // about Spot and Auto that has nothing to do with undo.
-      //
-      // Two rather than one: a single pass reads as a glitch, a second says it was deliberate. The
-      // sequence ends on a timing back to 0, so when it finishes the tabletop is already home and
-      // nothing has to put it there.
-      { iterations: onVisualUndoStep ? 2 : -1 },
+      // Forever: the preview's card waits on the player, and the whole screen IS the preview.
+      { iterations: -1 },
     );
     animation.start();
     return () => {
       animation.stop();
       undoPreviewProgress.setValue(0);
     };
-  }, [undoGhostRunning, onVisualUndoStep, undoPreviewProgress]);
+  }, [undoPreviewActive, undoPreviewProgress]);
 
   const undoPreviewSceneStyle = {
     opacity: undoPreviewProgress.interpolate({
@@ -226,11 +227,21 @@ function TutorialScreen() {
   const handleTutorialUndo = useCallback(() => {
     const tutorial = useTutorialStore.getState();
     // A step the player is only READING closes on this press — the undo/recenter card names this
-    // button, so using it is an acknowledgement. The undo itself still happens below: the step is
-    // explaining what the control does, not asking the player to leave it alone.
+    // button, so using it is an acknowledgement.
     if (tutorial.steps[tutorial.currentIndex]?.event === "controls_acknowledged") {
       tutorial.completeEvent("controls_acknowledged");
     }
+    // …AND ON THAT ONE STEP THE PRESS DOES NOTHING ELSE.
+    //
+    // The card is explaining what Undo does; it is not asking for an undo. Doing one here removes
+    // the part the next step asks the player to build on — on Felix's and Sparky's runs this lands
+    // right after the tabletop goes down, so the press the card seems to invite is the press that
+    // deletes their work.
+    //
+    // The button still LOOKS exactly as it always does: no `disabled`, no dimming. Only this step,
+    // only in the tutorial — the same card in every run reaches it, and play.tsx never comes through
+    // this handler at all.
+    if (isUndoRecenterStep()) return;
     if (tutorial.steps[tutorial.currentIndex]?.id !== "hud-undo") {
       useGameStore.getState().undoLastAction();
       return;
@@ -285,6 +296,7 @@ function TutorialScreen() {
       mode: state.mode,
       manualTools: state.settings.manualTools,
       softHints: state.settings.softHints,
+      tablet: isTabletScreen(),
     });
     loadFurnitureById(TUTORIAL_FURNITURE_ID)
       .then((f) => {
@@ -362,23 +374,32 @@ function TutorialScreen() {
   }, [spotPartId, hintPulse]);
   const profile = useGameStore((s) => s.profile);
   const heldActionId = useGameStore((s) => s.heldActionId);
-  const renderStyle = useGameStore((s) => s.renderStyle);
-  const backdrop = useGameStore((s) => s.backdrop);
+  const renderStyle = usePrefsStore((s) => s.renderStyle);
+  const backdrop = usePrefsStore((s) => s.backdrop);
   // The BUILD's theme, not the app's: "Assemble in Dark Mode" darkens this screen only. Everything
   // under ThemeScope below (the HUD, the settings panel, the toasts) resolves through it.
-  const theme: ThemeId = useGameStore((s) => s.assembleDark) ? "dark" : "light";
+  const theme: ThemeId = usePrefsStore((s) => s.assembleDark) ? "dark" : "light";
   const focus = settings.focusMode;
   // Recenter means nothing until there IS a build on the canvas — same rule as play.tsx.
   const sceneHasParts = Object.values(sceneState.modes).some(
     (m) => m !== "hidden" && m !== "socket_hint",
   );
   const dark = theme === "dark";
-  const firstAvailable = useMemo(
+  const offered = useMemo(
     () =>
       furniture
-        ? availableInMode(furniture, completedSet, mode, activeCluster)[0]?.actionId
-        : undefined,
+        ? availableInMode(furniture, completedSet, mode, activeCluster)
+        : [],
     [furniture, completedSet, mode, activeCluster],
+  );
+  const offeredIds = useMemo(
+    () => new Set(offered.map((a) => a.actionId)),
+    [offered],
+  );
+  // nextAction, not [0]. LACK composes its four legs BEFORE its bolts, so from the first tighten onwards `[0]` is a leg no matter what the player is doing — push the second bolt into its hole and the objective bar still read "Install leg 1 of 4" over a screw waiting to be turned, with its own tighten control on screen. See the note on nextAction.
+  const nextActionId = useMemo(
+    () => (furniture ? nextAction(furniture, offered, completedSet)?.actionId : undefined),
+    [furniture, offered, completedSet],
   );
   const completedCount = useGameStore((s) => s.completed.length);
   const [skipAsked, setSkipAsked] = useState(false);
@@ -432,7 +453,7 @@ function TutorialScreen() {
   const repeatedAssemblyLabel = useMemo(() => {
     if (tutorialStepId !== "install-four-legs") return null;
     const nextAction = furniture?.actions.find(
-      (action) => action.actionId === firstAvailable,
+      (action) => action.actionId === nextActionId,
     );
     const ordinal = Math.min(installedLegCount + 1, 4);
 
@@ -452,7 +473,7 @@ function TutorialScreen() {
       return `Install leg ${ordinal} of 4`;
     }
     return `Install all four legs · ${installedLegCount}/4`;
-  }, [firstAvailable, furniture, installedLegCount, tutorialStepId]);
+  }, [nextActionId, furniture, installedLegCount, tutorialStepId]);
   // THE PER-ACTION CARD IS GONE. It used to rewrite the last step's message to name whatever came
   // next — "Tighten bolt 2 of 4", "Long-press leg 3" — and retarget the spotlight to the tool on a
   // tighten beat.
@@ -517,8 +538,13 @@ function TutorialScreen() {
           item.action?.type === "insertFastener",
       );
     }
-    return sceneState.trayItems;
-  }, [sceneState.allTrayItems, sceneState.trayItems, tutorialStepId]);
+    // AND THE SAME PROBLEM ON EVERY OTHER STEP, which the exception above only fixed for the bolt.
+    //
+    // The spotlight is one rectangle over the FIRST CARD (see partsTrayTarget) because a step that says "long-press a part" means one card, not the column. Which card is first comes from the tray, and in free mode the tray is in AUTHORED order — LACK composes its legs before its bolts, so the Leg card leads the column from the tabletop onwards. Finish a leg and the only legal move is the next bolt, but the ring is still sitting on the Leg: the tutorial reads as asking for a leg the model will not accept, and free mode's grab-anything makes that card liftable, so the player gets to carry it around and fail to place it.
+    //
+    // Actionable-first, the same sort guide and strict already get from useSceneState — the tutorial is a guided run whatever mode the profile pins, and this is what makes "the first card" and "the card the step is about" the same card. Stable, so nothing else reshuffles: the tray still holds every group, in its authored order within each half.
+    return actionableFirst(sceneState.trayItems, offeredIds);
+  }, [sceneState.allTrayItems, sceneState.trayItems, offeredIds, tutorialStepId]);
 
   useEffect(() => {
     setGuideCollapsed(false);
@@ -571,11 +597,45 @@ function TutorialScreen() {
   useEffect(() => {
     if (lackBuilt && !lackRecorded.current) {
       lackRecorded.current = true;
-      repos.builds.complete(me, TUTORIAL_FURNITURE_ID).catch((err) => {
-        console.warn("[tutorial] could not record the completed LACK build", err);
-        lackRecorded.current = false;
-        setRecordAttempt((n) => (n < 3 ? n + 1 : n));
-      });
+      // REWARD FIRST, THEN RECORD — the same order and the same reason as useBuildPersistence:
+      // complete() deletes the in-progress save, so running them together means a failed reward
+      // loses both the coins and the progress that would let the player earn them again.
+      //
+      // The reward was missing entirely. This screen passes `settleOnFinish: false`, which tells the
+      // persistence hook to leave a finished build alone — no reward, no completion record — and then
+      // recorded the completion here by hand while never granting anything. So the tutorial's LACK
+      // table counted toward assembly_count and appeared in the room, and paid nothing: the same
+      // table built from the catalogue paid its 178 XP, which is why only the tutorial looked broken.
+      //
+      // reward_build is idempotent on (user, furniture), so a player who does the tutorial and then
+      // rebuilds LACK from the catalogue is paid once, not twice — the ledger's unique index decides
+      // that, not this call.
+      repos.builds
+        .reward(me, TUTORIAL_FURNITURE_ID)
+        .then((granted) => {
+          // The grant put this in user_buy server-side; this is the client catching up, exactly as
+          // the play screen does.
+          if (granted.rewardItemId) useShopStore.getState().markOwned(granted.rewardItemId);
+          return repos.builds.complete(me, TUTORIAL_FURNITURE_ID);
+        })
+        .then(() => {
+          // RE-READ, rather than writing the totals the RPC handed back.
+          //
+          // It does return the new coin and XP totals, so a direct write is tempting. But the room's
+          // pill renders `xpIntoLevel` / `xpForNextLevel` — the position WITHIN the current level —
+          // and those are derived against the levels reference table when a profile is read. This
+          // store cannot recompute them, so writing raw totals would move the number the profile page
+          // shows and leave the pill under the star exactly as it was.
+          //
+          // No race here: this is sequenced after the grant rather than running beside it, so unlike
+          // the room's own focus refetch it cannot read the profile before the reward lands.
+          void useProfileStore.getState().load(repos, me);
+        })
+        .catch((err) => {
+          console.warn("[tutorial] could not reward/record the completed LACK build", err);
+          lackRecorded.current = false;
+          setRecordAttempt((n) => (n < 3 ? n + 1 : n));
+        });
     }
   }, [lackBuilt, me, repos, recordAttempt]);
   const displayedCompletedCount = guideCompleted
@@ -617,7 +677,7 @@ function TutorialScreen() {
     !activeCluster;
   const objective = useStepObjective({
     furniture,
-    firstAvailable,
+    nextActionId,
     needsFocusChoice,
     mode,
     textLevel: settings.textLevel,
@@ -723,7 +783,7 @@ function TutorialScreen() {
   );
 
   const { gestureFor, canvasGestureFor, clusterGestureFor, ringOverlay } = usePartDrag({
-    manipulator,
+    getLookAt,
     heldDriver,
     slideDriver,
     carryShared,
@@ -1045,8 +1105,15 @@ function TutorialScreen() {
           <RecenterButton
             enabled={sceneHasParts}
             onPress={() => {
-              resetCamera();
               const t = useTutorialStore.getState();
+              // Same rule as Undo beside it — see handleTutorialUndo. The two buttons are named in
+              // one sentence, so a card where one works and the other does not would teach the wrong
+              // thing about both.
+              if (isUndoRecenterStep()) {
+                t.completeEvent("controls_acknowledged");
+                return;
+              }
+              resetCamera();
               t.completeEvent("camera_recentered");
               // …and closes a step the player is only READING. The undo/recenter card names both
               // buttons; pressing either is at least as good an acknowledgement as tapping the
@@ -1171,6 +1238,9 @@ function SuppressHintText() {
 }
 
 export default function TutorialRoute() {
+  // Held for one commit while the room hands the engine slot over — see sceneSlot.
+  const granted = useSceneSlot("tutorial");
+  if (!granted) return null;
   return (
     <FilamentScene>
       <TutorialScreen />

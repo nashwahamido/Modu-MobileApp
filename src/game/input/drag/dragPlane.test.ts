@@ -9,7 +9,8 @@ import { quatConjugate, quatMultiply, quatRotateVec3, quatSlerp, screenRay } fro
 import { FOV_Y_DEG } from "@/src/game/scene/cameraConfig";
 import { projectToScreen } from "@/src/game/scene/projectToScreen";
 import type { Vec3 } from "@/src/game/core/type";
-import { AIM_BAND_MAX_PX, aimBandScale, CARRY_CLEARANCE_ENABLED, CARRY_NEAR_MARGIN_M, clusterCarryAnchor, holdReachFrom, dragPlanePoint, dragRayPoint, DRIFT_CAP_FACTOR, RAY_CARRY_MIN_FRACTION, RAY_CARRY_MIN_M, burialDepthM, rayBoxEntryT, rayPointNearest, sightlineGapM, VIS_GAP_SLACK_M, segmentHitsBox, segmentInFrame } from "./dragPlane";
+import type { Float3 } from "./dragSession";
+import { AIM_BAND_MAX_PX, aimBandScale, CARRY_CLEARANCE_ENABLED, CARRY_NEAR_MARGIN_M, clusterCarryAnchor, clusterCarryOffset, holdReachFrom, dragPlanePoint, dragRayPoint, DRIFT_CAP_FACTOR, RAY_CARRY_MIN_FRACTION, RAY_CARRY_MIN_M, burialDepthM, ghostSamplePoints, rayBoxEntryT, rayPointNearest, sightlineGapM, VIS_GAP_SLACK_M, segmentHitsBox, segmentInFrame } from "./dragPlane";
 import { MIN_ORBIT_DISTANCE_M } from "@/src/game/scene/cameraConfig";
 
 // Landscape, the only orientation the game runs in (app.json).
@@ -20,21 +21,21 @@ const H = 390;
 const TRAY_X = 787;
 const CARD_YS = [74, 120, 180, 240, 320];
 
-/** The build camera: orbit home eye, aimed at an assembly centred near the bench origin. */
+// The build camera: orbit home eye, aimed at an assembly centred near the bench origin.
 function camera(scale = 1, eyeY = 0.85 * scale) {
   const eye: Vec3 = [1.0 * scale, eyeY, 1.0 * scale];
   const center: Vec3 = [0, 0.1, 0];
   return { eye, center, up: [0, 1, 0] as Vec3 };
 }
 
-/** Distance along the VIEW AXIS, which is the quantity the carry has to hold steady — not distance from the eye, which legitimately grows toward the screen corners on a fixed-depth plane. */
+// Distance along the VIEW AXIS, the quantity the carry holds steady — not distance from the eye, which legitimately grows toward the screen corners on a fixed-depth plane.
 function axialDepth(look: { eye: Vec3; center: Vec3 }, p: readonly number[]): number {
   const f: Vec3 = [look.center[0] - look.eye[0], look.center[1] - look.eye[1], look.center[2] - look.eye[2]];
   const fl = Math.hypot(f[0], f[1], f[2]) || 1;
   return ((p[0] - look.eye[0]) * f[0] + (p[1] - look.eye[1]) * f[1] + (p[2] - look.eye[2]) * f[2]) / fl;
 }
 
-/** Camera-to-pivot distance — the carry's reference depth. */
+// Camera-to-pivot distance — the carry's reference depth.
 function pivotDist(look: { eye: Vec3; center: Vec3 }): number {
   return Math.hypot(look.center[0] - look.eye[0], look.center[1] - look.eye[1], look.center[2] - look.eye[2]);
 }
@@ -163,8 +164,25 @@ test("a vertically-parking cluster gets a camera-plane anchor at its park pose; 
   assert.ok(clusterCarryAnchor([0, 0.5, 0], [0.05, 0.15, 0]));
   // EKET's drawers park OUT the front, in-plane: the horizontal glide already tracks the finger there.
   assert.equal(clusterCarryAnchor([0, 0.3, 0], [0.16, 0, 0]), null);
-  // The seed cluster has no park offset at all.
-  assert.equal(clusterCarryAnchor([0, 0.3, 0], [0, 0, 0]), null);
+  // The seed cluster has no park offset at all: it anchors on its own seat, because its glide plane holds the target and a level orbit grazes it there.
+  assert.deepEqual(clusterCarryAnchor([0, 0.3, 0], [0, 0, 0]), [0, 0.3, 0]);
+});
+
+test("an anchored cluster carry follows the finger's height; the glide keeps its park height", () => {
+  const centroid: Float3 = [0.1, 0.5, -0.2];
+  const park: Float3 = [0, 0.15, 0];
+  const near = (got: Float3, want: Float3) =>
+    assert.ok(
+      Math.hypot(got[0] - want[0], got[1] - want[1], got[2] - want[2]) < 1e-9,
+      `got ${got.join(",")}, wanted ${want.join(",")}`,
+    );
+  // Finger on the camera plane ABOVE the anchor: the carry rises with it.
+  // Freezing y at the park height left DALFRED's seat at one world height for the whole drag, a third of a metre off the finger at the bottom of the screen.
+  near(clusterCarryOffset([0.1, 0.85, -0.2], centroid, park, true), [0, 0.35, 0]);
+  // Finger dead on the target ring (anchor = centroid + park): the offset IS the park offset, so the parked lift falls out of the geometry.
+  near(clusterCarryOffset([0.1, 0.65, -0.2], centroid, park, true), park);
+  // The horizontal glide is unchanged: its own plane pins the height, and the carry rides at the park's.
+  near(clusterCarryOffset([0.4, 0.5, 0.1], centroid, [0.16, 0, 0], false), [0.3, 0, 0.3]);
 });
 
 test("a leashed point still projects under the finger (the on-ray invariant)", () => {
@@ -248,7 +266,8 @@ test("drag-no-plane: the ray point rides under the finger, just in front of the 
       assert.ok(sp, `(${x},${y}) zoom ${scale}: point fell behind the camera`);
       const miss = Math.hypot(sp.x - x, sp.y - y);
       assert.ok(miss < 1, `(${x},${y}) zoom ${scale}: missed the finger by ${miss.toFixed(1)} px`);
-      // AXIAL depth = the pivot's distance minus the model radius, floored. Stated on the view axis rather than as distance-from-eye: on a fixed-depth plane the distance to a corner is legitimately larger, and it was exactly that conflation that let the old formula drift.
+      // AXIAL depth = the pivot's distance minus the model radius, floored.
+      // Stated on the view axis, not distance-from-eye: on a fixed-depth plane the distance to a corner is legitimately larger, and that conflation is what let the old formula drift.
       const D = pivotDist(look);
       const want = Math.max(RAY_CARRY_MIN_M, D * RAY_CARRY_MIN_FRACTION, D - R);
       const got = axialDepth(look, p);
@@ -258,7 +277,7 @@ test("drag-no-plane: the ray point rides under the finger, just in front of the 
 });
 
 test("holdReachFrom measures from the HOLD point, so an end-held part reads its full length", () => {
-  // A LACK leg: 0.4 m tall, held at its top face by its joint anchor. The reach downward is the whole leg, and it is that asymmetry — not the box's own half-size — that decides how far the carry has to clear the lens.
+  // A LACK leg: 0.4m tall, held at its top face by its joint anchor. The reach downward is the whole leg, and that asymmetry — not the box's half-size — decides how far the carry clears the lens.
   const box = { min: [0.224, 0, -0.273] as Vec3, max: [0.273, 0.4, -0.224] as Vec3 };
   const heldAtTop = holdReachFrom(box, [0.248, 0.4, -0.248]);
   assert.ok(Math.abs(heldAtTop - 0.4) < 0.005, `held at the top, reach should be the leg's length, got ${heldAtTop.toFixed(3)}`);
@@ -268,7 +287,9 @@ test("holdReachFrom measures from the HOLD point, so an end-held part reads its 
 });
 
 test("drag-no-plane: the carry holds ONE depth across the whole screen", () => {
-  // The reported bug: "when I drag the leg to the left or right side of the screen it becomes too close". screenRay's dir is deliberately NOT normalised (|dir| reaches 1.364 at the horizontal edge of an 844x390 landscape frame), and the old formula subtracted a METRE radius from a ray PARAMETER taken at the ray's closest approach to the pivot — so the carry depth collapsed toward the edges. Measured at bench range: 1.101 m at screen centre, 0.380 m at both edges, the same part nearly 3x closer for no reason the player asked for.
+  // The reported bug: "when I drag the leg to the left or right side of the screen it becomes too close".
+  // screenRay's dir is deliberately NOT normalised (|dir| reaches 1.364 at the edge of an 844x390 frame), and the old formula subtracted a METRE radius from a ray PARAMETER taken at closest approach to the pivot.
+  // So the depth collapsed toward the edges: 1.101m at screen centre against 0.380m at both edges, the same part nearly 3× closer for no input the player gave.
   const R = 0.5;
   for (const scale of [0.7, 1.0, 1.4]) {
     const look = camera(scale);
@@ -281,7 +302,9 @@ test("drag-no-plane: the carry holds ONE depth across the whole screen", () => {
 });
 
 test("drag-no-plane: at the zoom floor a long part is carried entirely in front of the lens", { skip: CARRY_CLEARANCE_ENABLED ? false : "clearance floor is switched off — flip CARRY_CLEARANCE_ENABLED to re-arm this guard" }, () => {
-  // The zoomed-in report. MIN_ORBIT_DISTANCE_M is 0.65, and at that distance LACK's and DALFRED's assembly radius (~0.42 m) leaves pivot-minus-radius at 0.23 m while the zoom-scaled floor gives 0.29 m. But a leg now reaches 0.40-0.43 m from its hold point, because the joint anchor holds it at its TOP. Carrying at 0.29 m therefore put the foot end at NEGATIVE depth — measured -0.108 m on LACK and -0.134 m on DALFRED — sweeping the part through the camera's near plane, where projection inverts and the part reads as huge and moving wrongly. The carry has to clear the part it is carrying.
+  // The zoomed-in report. At the 0.65m zoom floor a ~0.42m assembly radius leaves pivot-minus-radius at 0.23m and the zoom-scaled floor at 0.29m.
+  // But the joint anchor holds a leg at its TOP, so it reaches 0.40-0.43m: carrying at 0.29m put the foot at NEGATIVE depth (-0.108m on LACK, -0.134m on DALFRED), sweeping through the near plane where projection inverts.
+  // The carry has to clear the part it is carrying.
   const R = 0.42;
   const reach = 0.43;
   const look = { eye: [0.4, 0.45, 0.4] as Vec3, center: [0, 0.1, 0] as Vec3, up: [0, 1, 0] as Vec3 };
@@ -297,7 +320,7 @@ test("drag-no-plane: at the zoom floor a long part is carried entirely in front 
 });
 
 test("drag-no-plane: a compact part is NOT pushed away by the long-part floor", () => {
-  // The clearance floor must be the part's own reach, not a blanket minimum: BEKVAM's legs reach 0.089 m and EKET's drawer sides 0.133 m, and shoving those out to a leg's distance would shrink them on screen for nothing.
+  // The clearance floor must be the part's own reach, not a blanket minimum: BEKVAM's legs reach 0.089m and EKET's drawer sides 0.133m, and pushing those out to a leg's distance would shrink them for nothing.
   const R = 0.42;
   const look = { eye: [0.4, 0.45, 0.4] as Vec3, center: [0, 0.1, 0] as Vec3, up: [0, 1, 0] as Vec3 };
   const D = pivotDist(look);
@@ -306,7 +329,8 @@ test("drag-no-plane: a compact part is NOT pushed away by the long-part floor", 
 });
 
 test("drag-no-plane: zoomed inside the model's radius, the carry scales with the camera instead of pinning to a fixed floor", () => {
-  // DALFRED zoomed in: the pivot is ~0.53 m away while the assembly's bounding radius is 0.45 m, so the camera is INSIDE the bounding sphere and "just in front of the model" is unsatisfiable. The old absolute 12 cm floor then carried a 0.43 m leg 12 cm from the lens at every screen position — the second half of the "too close" report. A fraction of the pivot distance degrades gracefully instead, because it keeps shrinking with the zoom rather than hitting a wall.
+  // DALFRED zoomed in: the pivot is ~0.53m away against a 0.45m bounding radius, so the camera is INSIDE the sphere and "just in front of the model" is unsatisfiable.
+  // The old absolute 12cm floor then carried a 0.43m leg 12cm from the lens at every screen position — the second half of the "too close" report. A fraction of the pivot distance keeps shrinking with the zoom instead.
   const R = 0.45;
   const look = camera(0.35);
   const D = pivotDist(look);
@@ -320,7 +344,7 @@ test("drag-no-plane: zoomed inside the model's radius, the carry scales with the
 });
 
 test("hold-point pinning: the slerp-rotated anchor keeps the joint where the drag put it", () => {
-  // A leg-like part: anchor 0.43 m from the node origin, socket rotations 90 deg apart in yaw. The raw values are 3-decimal probe output, so normalize before treating them as unit quaternions.
+  // A leg-like part: anchor 0.43m from the node origin, socket rotations 90° apart in yaw. The raw values are 3-decimal probe output, so normalize before treating them as unit quaternions.
   const unit = (q: [number, number, number, number]): [number, number, number, number] => {
     const l = Math.hypot(...q);
     return [q[0] / l, q[1] / l, q[2] / l, q[3] / l];
@@ -352,6 +376,35 @@ test("sightline gap replaces halo sampling for the under-rim leg socket: blocked
   assert.ok(sightlineGapM([0, 1.6, 0.2], anchor, [plate]).gap > thr);
   // From below/side the anchor is the first thing the eye meets.
   assert.ok(sightlineGapM([0.5, 0.1, 0.3], anchor, [plate]).gap <= thr);
+});
+
+test("ghost body second chance: a leg hanging under a tabletop is seen from anywhere its seat is not", () => {
+  // LACK, measured: the top is a 55cm slab at y 0.400-0.449 and a leg's seat is its own top face at y=0.400 — ON the slab's underside plane, 26mm inside the footprint edge.
+  // Judged as a point, that seat exists only for an eye BELOW the plane (elevation ≤5° at a 1.2m orbit): one step up the gap is 27mm against a 6mm threshold, so there is no near-miss band to widen.
+  const top = { min: [-0.275, 0.4, -0.275] as Vec3, max: [0.275, 0.449, 0.275] as Vec3, pid: "tableTop" };
+  const seat: Vec3 = [0.2485, 0.4, -0.2485];
+  const thr = burialDepthM(seat, [top]) + VIS_GAP_SLACK_M;
+  assert.equal(burialDepthM(seat, [top]), 0, "the seat sits on the underside face, not inside the slab");
+  const eyeAt = (elevDeg: number, r = 1.2): Vec3 => {
+    const el = (elevDeg * Math.PI) / 180;
+    // Out along the leg's own diagonal, the most favourable azimuth there is.
+    return [r * Math.cos(el) * 0.7071, 0.224 + r * Math.sin(el), -r * Math.cos(el) * 0.7071];
+  };
+  assert.ok(sightlineGapM(eyeAt(3), seat, [top]).gap <= thr, "under the tabletop plane the seat is seen");
+  assert.ok(sightlineGapM(eyeAt(20), seat, [top]).gap > thr, "a normal raised view is blocked by the top");
+  // The GHOST is 40cm of leg at the delivered pose, visible from every ordinary angle — the whole claim being that if you can see where the part goes, you can put it there.
+  const leg = { min: [0.224, 0, -0.273] as Vec3, max: [0.273, 0.4, -0.224] as Vec3, pid: "leg_1" };
+  const samples = ghostSamplePoints(leg, [0, -0.045, 0]);
+  assert.equal(samples.length, 9, "centre plus eight corners");
+  const seen = (elevDeg: number) =>
+    samples.some((p) => sightlineGapM(eyeAt(elevDeg), p, [top]).gap <= VIS_GAP_SLACK_M);
+  for (const elev of [20, 35, 60]) assert.ok(seen(elev), `the ghost must be visible at ${elev}°`);
+  // Not a blank cheque: from nearly overhead the tabletop covers the leg's whole length and the gate still says turn the camera.
+  assert.ok(!seen(85), "near-overhead must still be blocked");
+  // Samples are pulled IN from the corners: a corner is the one place a box is guaranteed to be air, and a sample there reports a part visible that is not.
+  for (const p of samples) {
+    assert.ok(p[1] > leg.min[1] - 0.045 + 1e-9 && p[1] < leg.max[1] - 0.045 - 1e-9, "no sample sits on the box face");
+  }
 });
 
 test("sightline gap: one visibility rule for cam, countersunk screw, dowel bridge, and buried rod", () => {

@@ -1,42 +1,29 @@
 // The round tap-pad every press-to-drive control shows, and the wrap/hint frame around it.
-//
-// Five controls use it: PressControl (seat a push-fit part), TapControl (drive a struck fastener), InsertPressControl (press a 3-phase fastener from stage to loose), HookPressControl's first phase (press a panel onto its keyhole pins) and PushTestControl's first beat (tap a push-open drawer). All five had their own copy of the pad, the pulse ring, the squash spring and the haptic — around 300 duplicated lines whose only job is to feel identical, which is exactly the kind that drifts unnoticed.
-//
-// What is NOT here: what a tap DOES. Each control keeps its own driver maths and its own store writes, because those genuinely differ. This owns the feel and nothing else.
+// Five controls use it, and each had its own copy of the pad, pulse ring, squash spring and haptic — ~300 duplicated lines whose only job is to feel identical, which is exactly the kind that drifts unnoticed.
+// What a tap DOES is NOT here: each control keeps its own driver maths and store writes. This owns the feel and nothing else.
 import * as Haptics from "expo-haptics";
 import { useEffect, useRef } from "react";
 import { Animated, Easing, Image, StyleSheet, Text, type ImageSourcePropType } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 
 import { CONTROL, FONT } from "@/src/game/ui/system/theme";
+import { TASK_CONTROL_BOTTOM } from "@/src/game/ui/hud/hudChrome";
 
-/** The pad's diameter. Exported because the slider tracks some of these controls switch to are sized against it. */
+// The pad's diameter. Exported because the slider tracks some of these controls switch to are sized against it.
 export const PRESS_PAD_SIZE = 120;
 
-/**
- * A round pad that squashes and thumps when tapped, under a slow outward pulse that says "tap me".
- *
- * The pulse runs forever rather than once: this pad is the only thing to do at that moment, and a
- * one-shot hint is missed by anyone who looked at the model first.
- *
- * @param icon      the glyph in the middle — the tool the action reads as
- * @param resetKey  changing this re-arms the squash; pass the action id
- * @param onPress   applies the tap, and decides how it should FEEL. Return nothing for the default weight,
- *                  an ImpactFeedbackStyle to override it (HookPress softens its final tap, PushTest's is a
- *                  light test), or `false` to REJECT the tap outright — one the control ignored must not
- *                  squash or thump, or the pad lies about having done something
- * @param pulse     set false to drop the ring, for a pad whose tap is a test rather than an instruction
- */
+// A round pad that squashes and thumps when tapped, under a slow outward pulse saying "tap me".
+// The pulse loops rather than firing once: this pad is the only thing to do at that moment, and a one-shot hint is missed by anyone who looked at the model first.
+// `resetKey` re-arms the squash — pass the action id. `pulse` false drops the ring, for a pad whose tap is a test rather than an instruction.
+// `onPress` applies the tap AND decides how it feels: nothing for the default weight, an ImpactFeedbackStyle to override, or `false` to REJECT outright — a tap the control ignored must not squash or thump, or the pad lies about having done something.
 export function PressPad({
   icon,
   resetKey,
   onPress,
   pulse: showPulse = true,
 }: {
-  /** A glyph, or an image. HAND_ICON below is the drawn hand every "press it home" pad uses — the ✋
-   *  emoji it replaced is rendered by the SYSTEM font, so it looked like a different hand on every
-   *  device and matched nothing else in the app. The hammer and screwdriver are still emoji: they
-   *  read consistently and no drawn pair exists for them yet. */
+  // A glyph or an image. HAND_ICON is the drawn hand every "press it home" pad uses: the ✋ emoji it replaced renders in the SYSTEM font, so it looked different on every device.
+  // The hammer and screwdriver stay emoji — they read consistently and no drawn pair exists yet.
   icon: string | ImageSourcePropType;
   resetKey: string;
   onPress: () => void | false | Haptics.ImpactFeedbackStyle;
@@ -70,7 +57,7 @@ export function PressPad({
       if (outcome === false) return;
       // Heavy by default: most of these actions are a shove or a strike, and the weight is the point.
       Haptics.impactAsync(outcome ?? Haptics.ImpactFeedbackStyle.Heavy);
-      // Snap DOWN then spring back, rather than animating both ways — the compression should already have happened by the time the finger registers it.
+      // Snap DOWN then spring back rather than animating both ways: the compression should already have happened by the time the finger registers it.
       squash.setValue(0.82);
       Animated.spring(squash, {
         toValue: 1,
@@ -109,34 +96,25 @@ export function PressPad({
   );
 }
 
-/** The frame the five controls share: where the cluster sits, and the caption under it. `wrap` is MIRRORED BY EACH CONTROL at its own render site (useMirror), not here — this is a plain StyleSheet with no hook to hang it on, and the controls are the things that know they are on screen. */
-/** The drawn hand every "press it home" pad shows, in place of the ✋ emoji. */
+// The frame the five controls share. `wrap` is MIRRORED BY EACH CONTROL at its render site, not here: this is a plain StyleSheet with no hook to hang useMirror on.
+// The drawn hand every "press it home" pad shows, in place of the ✋ emoji.
 export const HAND_ICON = require("@/src/assets/ui/icons/icon-hand.png");
 
 export const pressPadStyles = StyleSheet.create({
   wrap: {
     position: "absolute",
     right: 160,
-    // 72, was 36. The toggles row (auto / Focus / Spot) sits at bottom:16 and stands 44 tall, so its
-    // top edge is at 60 — and at 36 the pad's own bottom was 24 points INSIDE it, in the same
-    // horizontal band. 72 clears that top edge by 12.
-    //
-    // The caption moved above the pad for the same reason and is not enough on its own: the pill
-    // came clear, the circle it belongs to did not.
-    bottom: 72,
+    // TASK_CONTROL_BOTTOM lives in ui/hud/hudChrome because the sliders read it too: pads and tracks share this corner and must clear the same toggles row, so the number belongs in neither folder.
+    // Moving the caption above the pad was not enough on its own — the pill came clear of that row, the circle it belongs to did not.
+    bottom: TASK_CONTROL_BOTTOM,
     alignItems: "center",
     gap: 8,
-    // The caption is FIRST in the column, so it sits above the pad. It used to hang below, where the
-    // auto / Focus / Spot row crosses it — the one band of this screen that is never free.
+    // The caption is FIRST in the column, so it sits above the pad rather than below, where the toggles row crosses it.
     flexDirection: "column-reverse",
   },
-  // A LAVENDER PILL, not bare text on the scene. Bare text had to win against whatever backdrop the
-  // player had chosen and against the model itself, and the five controls had drifted into two
-  // different colours trying: four cream, TapControl's dark. A pill settles it — the text always has
-  // the same ground under it, so one colour is right everywhere.
-  //
-  // fontFamily is deliberate: four of the five copies set only fontWeight, which React Native renders
-  // in the SYSTEM font rather than Lexend (see convention 5 in ui/theme).
+  // A PILL, not bare text on the scene: bare text had to win against whatever backdrop the player chose, and the five controls had drifted into two colours trying.
+  // A pill settles it — the text always has the same ground under it, so one colour is right everywhere.
+  // fontFamily is deliberate: setting only fontWeight renders in the SYSTEM font rather than Lexend.
   hint: {
     fontFamily: FONT,
     fontSize: 12,
@@ -148,8 +126,7 @@ export const pressPadStyles = StyleSheet.create({
     borderRadius: 999,
     overflow: "hidden",
   },
-  // Kept as a no-op so the call sites that pass it still read: the colour they were arguing over is
-  // decided by the pill above now.
+  // A no-op, kept so the call sites passing it still read: the pill above decides the colour they were arguing over.
   hintInk: {},
 });
 
@@ -164,7 +141,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  // Sits behind the pad at the same size, and scales outward as it fades.
+  // Sits behind the pad at the same size, scaling outward as it fades.
   pulseRing: {
     position: "absolute",
     width: PRESS_PAD_SIZE,
@@ -174,8 +151,6 @@ const styles = StyleSheet.create({
     borderColor: CONTROL.fill,
   },
   icon: { fontSize: 44 },
-  // Sized to the emoji it replaced rather than to the pad: 44 was the glyph's box, and the drawn
-  // hand fills its own canvas edge to edge where an emoji leaves its own padding, so it takes a
-  // little less to read at the same weight.
+  // Sized to the emoji it replaced, not to the pad: the drawn hand fills its canvas edge to edge where an emoji leaves padding, so it takes a little less to read at the same weight.
   iconImage: { width: 40, height: 40 },
 });

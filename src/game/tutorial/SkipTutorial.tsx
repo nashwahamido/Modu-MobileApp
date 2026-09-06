@@ -1,12 +1,3 @@
-// "Skip tutorial", and the confirmation that goes with it.
-//
-// The button is quiet — a small ghost chip in the corner — because a tutorial that advertises its
-// own exit invites people out of it before they have seen anything. But it is present from the
-// first step, because a player who already knows how this works should never have to sit through
-// being taught, and one who is stuck needs a way out that is not the back button.
-//
-// The confirmation exists for one reason: to say the build is not lost. Without it "skip" reads as
-// "throw this away", and the honest answer is that the model is waiting in the catalogue.
 import { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Pressable } from "@/src/components/Pressable";
@@ -29,10 +20,6 @@ import type { Theme } from "@/src/game/ui/system/theme";
 export function SkipTutorialButton({ onPress }: { onPress: () => void }) {
   const styles = useFixedStyles(makeStyles);
   return (
-    // A full-width SLOT that centres the link, rather than an absolutely-positioned Pressable with
-    // alignSelf: an absolute box with no left/right has no row to align itself in, which is why the
-    // link stayed where its old top/right put it. The slot spans the screen and does the centring;
-    // the Pressable inside it is just the button.
     <View style={styles.skipSlot} pointerEvents="box-none">
       <Pressable
         style={({ pressed }) => [styles.skip, pressed && styles.skipPressed]}
@@ -66,8 +53,6 @@ export function SkipTutorialConfirm({
 
   return (
     <View style={styles.root}>
-      {/* Tapping outside cancels: a confirmation that can only be answered by choosing one of two
-          buttons is a trap when the player opened it by accident. */}
       <Pressable style={StyleSheet.absoluteFill} onPress={onCancel} />
       <Animated.View style={[styles.card, card]}>
         <Text style={styles.title}>Skip the tutorial?</Text>
@@ -75,8 +60,6 @@ export function SkipTutorialConfirm({
           You can finish assembling this model later — it will be waiting in your catalogue.
         </Text>
         <View style={styles.actions}>
-          {/* Staying is the PRIMARY action: the player is mid-tutorial, and the button that keeps
-              them where they are should be the easy one to hit. */}
           <Button label="Keep going" pill variant="primary" onPress={onCancel} />
           <Button label="Skip" pill variant="secondary" onPress={onConfirm} />
         </View>
@@ -87,12 +70,6 @@ export function SkipTutorialConfirm({
 
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
-    // Bottom-centre, away from the joystick and the tray — the two places a thumb already lives.
-    // The slot: bottom of the screen, full width, centring its child.
-    //
-    // 24, not 16: the chips sit at bottom:16 and are 36 tall, so their CENTRE line is 34 up. This
-    // link is ~22 tall with its padding, so 24 puts its own centre on that same line — matching the
-    // chips' baseline instead left it sitting low against them.
     skipSlot: {
       position: "absolute",
       left: 0,
@@ -108,9 +85,6 @@ const makeStyles = (t: Theme) =>
       zIndex: 40,
     },
     skipPressed: { opacity: 0.6 },
-    // Cream with a shadow, not a theme colour. This sits over the 3D SCENE rather than on a panel,
-    // and t.textFaint is a dim ink meant for cream surfaces — on the assembly backdrop it was close
-    // to invisible. Bigger too: an exit a stuck player cannot find is not an exit.
     skipText: {
       color: "#F7F2E8",
       fontFamily: FONT,

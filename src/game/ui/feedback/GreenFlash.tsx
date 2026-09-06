@@ -3,7 +3,6 @@ import { useEffect, useRef } from 'react';
 import { StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 
-/** Full-screen green completion flash; fires whenever `trigger` increases. */
 export function GreenFlash({ trigger }: { trigger: number }) {
   const styles = useFixedStyles(makeStyles);
   const opacity = useSharedValue(0);
@@ -22,6 +21,5 @@ export function GreenFlash({ trigger }: { trigger: number }) {
 
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
-  // The completion pulse. SUCCESS green — the one moment the colour is earned.
     flash: { ...StyleSheet.absoluteFillObject, backgroundColor: t.success },
   });

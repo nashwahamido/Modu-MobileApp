@@ -121,7 +121,6 @@ export default function EngineTestScreen() {
         },
       ]}
     >
-      {}
       <Text style={{ color: C.text, fontSize: t.title, fontWeight: "800" }}>{furniture.meta.id}</Text>
       <View style={styles.chipRow}>
         {chip(`${completedCount}/${totalCount} steps`, C.primary, C.onPrimary)}
@@ -219,7 +218,6 @@ export default function EngineTestScreen() {
         </>
       ) : null}
 
-      {}
       <Text style={[styles.h, { color: C.muted, fontSize: t.caption }]}>
         {done ? "✓ BUILT!" : `AVAILABLE NOW — ${available.length}`}
       </Text>
@@ -251,7 +249,6 @@ export default function EngineTestScreen() {
         );
       })}
 
-      {}
       <Text style={[styles.h, { color: C.muted, fontSize: t.caption }]}>INTERACTION STATE</Text>
       <View style={styles.stateGrid}>
         {stateRow("Furniture", furniture.meta.id)}
@@ -274,7 +271,6 @@ export default function EngineTestScreen() {
         ) : null}
       </View>
 
-      {}
       <View style={[styles.settingsPanel, { backgroundColor: C.card, borderColor: C.border }]}>
         <Text style={[styles.h, { color: C.muted, fontSize: t.caption }]}>TEXT</Text>
         <View style={styles.compactRow}>

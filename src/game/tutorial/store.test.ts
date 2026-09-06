@@ -6,6 +6,8 @@ import { useTutorialStore } from "./store";
 const wait = (milliseconds: number) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
+// The window is the grip card's own advance hold: Lumi's run pairs pick-up and snap in ONE card, so a player who has already snapped by the time that hold ends satisfies the next card before it is ever shown.
+// Written against the composed list's separate pick-up and snap cards until the per-profile runs landed; index 1 there was "long-press-part", which no run has any more.
 test("a fast pick-up and snap skips the already-satisfied card without flashing it", async () => {
   const tutorial = useTutorialStore.getState();
   tutorial.configureTutorial({
@@ -15,18 +17,14 @@ test("a fast pick-up and snap skips the already-satisfied card without flashing 
     softHints: true,
   });
 
-  // Start past the grip step: it is acknowledged by a button, not a gesture, so the
-  // fast-gesture latch this test exercises begins at the first touch step.
-  useTutorialStore.setState({ currentIndex: 1 });
-
-  useTutorialStore.getState().completeEvent("part_picked_up");
+  useTutorialStore.getState().completeEvent("grip_acknowledged");
   useTutorialStore.getState().completeEvent("part_snapped");
 
   assert.deepEqual(useTutorialStore.getState().latchedEvents, ["part_snapped"]);
   await wait(1250);
 
   const state = useTutorialStore.getState();
-  assert.equal(state.steps[state.currentIndex]?.id, "background-settings");
+  assert.equal(state.steps[state.currentIndex]?.id, "visual-settings");
   assert.equal(state.stepRewardsClaimed, 20);
   assert.equal(state.latchedEvents.length, 0);
   state.resetTutorial();
@@ -75,8 +73,6 @@ test("the completion card waits for the final step to settle", async () => {
     manualTools: false,
     softHints: true,
   });
-  // The last step is installing the fourth leg now — "stand-table-upright" was removed with the
-  // ceremonial beat it waited on. What this test pins is the SETTLING, not which step settles.
   const finalStep = tutorial.steps.find(
     (step) => step.id === "install-four-legs",
   );

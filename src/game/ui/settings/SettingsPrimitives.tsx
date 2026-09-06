@@ -1,6 +1,4 @@
-// The row vocabulary every settings surface is built from, and the styles they share. Visual language adopted from the on-release engine: a compact arrow Stepper (‹ Value ›) for multi-choice settings, Switch rows for booleans.
-//
-// Split out of SettingsControls so the two panels — the tabbed /settings screen and the reduced in-build gear panel — compose the SAME rows instead of each carrying a copy that can drift.
+import { createContext, useContext, type ReactNode } from "react";
 import {
   StyleSheet,
   Switch,
@@ -8,8 +6,30 @@ import {
   View,
 } from "react-native";
 import { Pressable } from "@/src/components/Pressable";
-import { useFixedStyles, useTheme, FONT } from "@/src/game/ui/system/theme";
+import { useScaledStyles, useTheme, FONT } from "@/src/game/ui/system/theme";
 import type { Theme } from "@/src/game/ui/system/theme";
+
+const SettingsSize = createContext<{ k: number; wide: boolean }>({ k: 1, wide: false });
+
+export function SettingsSizeScope({
+  k,
+  wide,
+  children,
+}: {
+  k: number;
+  wide: boolean;
+  children: ReactNode;
+}) {
+  return <SettingsSize.Provider value={{ k, wide }}>{children}</SettingsSize.Provider>;
+}
+
+export function useSettingsStyles() {
+  return useScaledStyles(makeSettingsStyles, useContext(SettingsSize).k);
+}
+
+export function useSettingsWide(): boolean {
+  return useContext(SettingsSize).wide;
+}
 
 export function Stepper<T extends string>({
   label,
@@ -26,7 +46,7 @@ export function Stepper<T extends string>({
   onChange: (v: T) => void;
   disabled?: boolean;
 }) {
-  const styles = useFixedStyles(makeSettingsStyles);
+  const styles = useSettingsStyles();
   const idx = Math.max(0, options.findIndex((o) => o.value === value));
   const go = (dir: number) =>
     onChange(options[(idx + dir + options.length) % options.length].value);
@@ -63,7 +83,6 @@ export function Stepper<T extends string>({
   );
 }
 
-/** Two/N pills in a row (the "old" segmented style) — clearer than arrows for a small option set. */
 export function Segmented<T extends string>({
   label,
   desc,
@@ -79,38 +98,48 @@ export function Segmented<T extends string>({
   onChange: (v: T) => void;
   disabled?: boolean;
 }) {
-  const styles = useFixedStyles(makeSettingsStyles);
+  const styles = useSettingsStyles();
+  const wide = useSettingsWide();
+  const pills = options.map((o) => {
+    const active = o.value === value;
+    return (
+      <Pressable
+        key={o.value}
+        onPress={() => onChange(o.value)}
+        hitSlop={4}
+        disabled={disabled}
+        accessibilityState={{ selected: active, disabled }}
+        style={[styles.segBtn, wide && styles.segBtnTight, active && styles.segBtnActive]}
+      >
+        <Text
+          style={[styles.segText, active && styles.segTextActive]}
+          numberOfLines={1}
+        >
+          {o.label}
+        </Text>
+      </Pressable>
+    );
+  });
+  if (wide) {
+    return (
+      <View style={[styles.stepperRow, disabled && styles.controlIdle]}>
+        <View style={styles.rowText}>
+          <Text style={styles.rowLabel}>{label}</Text>
+          {desc ? <Text style={styles.rowDesc}>{desc}</Text> : null}
+        </View>
+        <View style={styles.segRowTight}>{pills}</View>
+      </View>
+    );
+  }
   return (
     <View style={[styles.segBlock, disabled && styles.controlIdle]}>
       <Text style={styles.rowLabel}>{label}</Text>
       {desc ? <Text style={styles.rowDesc}>{desc}</Text> : null}
-      <View style={styles.segRow}>
-        {options.map((o) => {
-          const active = o.value === value;
-          return (
-            <Pressable
-              key={o.value}
-              onPress={() => onChange(o.value)}
-              hitSlop={4}
-              disabled={disabled}
-              accessibilityState={{ selected: active, disabled }}
-              style={[styles.segBtn, active && styles.segBtnActive]}
-            >
-              <Text
-                style={[styles.segText, active && styles.segTextActive]}
-                numberOfLines={1}
-              >
-                {o.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <View style={styles.segRow}>{pills}</View>
     </View>
   );
 }
 
-/** Auto-pick the control: pills for a small set (<3), arrow stepper for more. */
 export function Choice<T extends string>(props: {
   label: string;
   desc?: string;
@@ -133,10 +162,9 @@ export function Row({
   desc?: string;
   value: boolean;
   onValueChange: (v: boolean) => void;
-  /** Greyed and unresponsive, but still READ: a setting that has no effect right now is better shown inert with its reason in `desc` than removed, because a row that vanishes leaves the player hunting for a switch that is not there. Same 0.45 opacity ActionRow uses, so "inert" looks the same everywhere in this panel. */
   disabled?: boolean;
 }) {
-  const styles = useFixedStyles(makeSettingsStyles);
+  const styles = useSettingsStyles();
   const t = useTheme();
   return (
     <View style={[styles.switchRow, disabled && styles.actionRowIdle]}>
@@ -157,11 +185,10 @@ export function Row({
 }
 
 export function SectionHeader({ children }: { children: string }) {
-  const styles = useFixedStyles(makeSettingsStyles);
+  const styles = useSettingsStyles();
   return <Text style={styles.section}>{children}</Text>;
 }
 
-/** A row that ACTS rather than storing a value — Restart assembly, Log out, Delete account. `tone` picks the label colour: "danger" for the destructive ones, "text" for the rest. */
 export function ActionRow({
   label,
   desc,
@@ -175,7 +202,7 @@ export function ActionRow({
   disabled?: boolean;
   tone?: "danger" | "text";
 }) {
-  const styles = useFixedStyles(makeSettingsStyles);
+  const styles = useSettingsStyles();
   return (
     <Pressable
       style={[styles.actionRow, disabled && styles.actionRowIdle]}
@@ -236,6 +263,7 @@ export const makeSettingsStyles = (t: Theme) =>
     borderTopColor: t.border,
   },
   segRow: { flexDirection: "row", gap: 6, marginTop: 8 },
+  segRowTight: { flexDirection: "row", gap: 6 },
   segBtn: {
     flex: 1,
     minHeight: 40,
@@ -247,7 +275,7 @@ export const makeSettingsStyles = (t: Theme) =>
     justifyContent: "center",
     paddingHorizontal: 6,
   },
-  // Active segment = ACCENT, not success green. Green means a step is DONE; a chosen setting is a live selection, which is what the accent means.
+  segBtnTight: { flex: 0, minWidth: 92, paddingHorizontal: 12 },
   segBtnActive: { backgroundColor: t.accent, borderColor: t.accent },
   segText: { fontFamily: FONT, fontSize: 12.5, fontWeight: "700", color: t.textDim, textAlign: "center" },
   segTextActive: { color: t.onAccent },
@@ -269,7 +297,6 @@ export const makeSettingsStyles = (t: Theme) =>
     borderColor: t.border,
   },
   fontBtn: { paddingHorizontal: 12, paddingVertical: 6 },
-  // The music meter, in the same shell as the text-size stepper so the two rows read as one family.
   meterRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -279,8 +306,6 @@ export const makeSettingsStyles = (t: Theme) =>
     borderColor: t.border,
   },
   meter: { flexDirection: "row", alignItems: "flex-end", gap: 2, height: 18, paddingHorizontal: 2 },
-  // A rung that is BELOW the level stays visible but unlit — an empty gap would read as a broken
-  // meter rather than as headroom.
   meterBar: {
     width: 4,
     height: "100%",

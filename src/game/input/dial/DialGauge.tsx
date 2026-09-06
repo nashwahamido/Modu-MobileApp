@@ -25,9 +25,9 @@ const PAD = 24; // room for the arrow head so it never clips the canvas
 const R = (RING - STROKE) / 2; // radius of the band's centre line
 const CIRC = 2 * Math.PI * R;
 
-/** The gauge's full canvas, including the padding the arrow head needs. Callers size their dial to this. */
+// The gauge's full canvas, including the padding the arrow head needs. Callers size their dial to this.
 export const DIAL_SIZE = RING + PAD * 2;
-/** The canvas centre, which is also the origin a turn gesture measures its angle from. */
+// The canvas centre, which is also the origin a turn gesture measures its angle from.
 export const DIAL_CENTRE = DIAL_SIZE / 2;
 
 // A head wider than the band — that size difference is most of what makes it read as an arrow rather than a dot.
@@ -35,7 +35,7 @@ const AW = STROKE * 1.5; // half-width
 const AL = STROKE * 1.9; // base to tip
 const BACK = STROKE * 0.9; // how far the base sits BEHIND the arc's centre line, so the two shapes overlap and merge
 
-/** The gauge, filled to `progress` (0..1). Presentation only — the caller owns the gesture and the state. */
+// The gauge, filled to `progress` (0..1). Presentation only — the caller owns the gesture and the state.
 export function DialGauge({ progress }: { progress: number }) {
   const p = Math.min(1, Math.max(0, progress));
   const dashOffset = CIRC * (1 - p);
@@ -106,7 +106,7 @@ export function DialGauge({ progress }: { progress: number }) {
   );
 }
 
-/** The gauge wrapped in its own square, which is what every caller actually renders. */
+// The gauge wrapped in its own square, which is what every caller actually renders.
 export function Dial({ progress, gesture }: { progress: number; gesture: PanGesture }) {
   return (
     <GestureDetector gesture={gesture}>
@@ -127,41 +127,38 @@ const dialStyles = StyleSheet.create({
 });
 
 export interface DialTurnOptions {
-  /** Changing this resets the gesture's angle memory and tick count — pass the action id. */
+  // Changing this resets the gesture's angle memory and tick count — pass the action id.
   resetKey: string;
-  /** Degrees between haptic ticks. A quarter turn for a screw or a tighten; less for a shorter total travel. */
+  // Degrees between haptic ticks. A quarter turn for a screw or a tighten; less for a shorter total travel.
   tickDeg: number;
-  /**
-   * Whether a turn counts in EITHER direction. An orientation correction does; a screw or a tighten does
-   * not, because a screw does not advance counter-clockwise.
-   */
+  //
+  // Whether a turn counts in EITHER direction. An orientation correction does; a screw or a tighten does
+  // not, because a screw does not advance counter-clockwise.
   bidirectional?: boolean;
-  /** Applies the turn, and returns the new ACCUMULATED total in degrees — which is what the ticks count from. */
+  // Applies the turn, and returns the new ACCUMULATED total in degrees — which is what the ticks count from.
   onTurn: (deltaDeg: number) => number;
 }
 
-/**
- * The clockwise-drag gesture that drives the dial.
- *
- * Converts a finger position into a signed angular delta about the dial's centre, drops the jumps, and
- * fires one haptic tick per `tickDeg` of accumulated travel. What the turn DOES is entirely the caller's:
- * `onTurn` applies it and hands back the running total.
- */
-/**
- * Tightening degrees per degree of FINGER travel around the dial.
- *
- * At 1 the two were the same, which meant a 720° fastener needed two complete laps of the dial with
- * one thumb — accurate to the real motion and exhausting to perform. The gain keeps the fastener
- * turning its full two turns on screen while the hand does less work.
- *
- * 2.6 overshot: a leg finished in barely a quarter of a lap, which reads as the gesture doing the
- * work rather than the player. 1.7 lands a 720° fastener at about 1.2 laps — still well under the
- * original two, but far enough that a deliberate turn is still a turn.
- *
- * PER PROFILE, because effort is exactly the axis these profiles differ on. Momentum is built around
- * low friction and frequent small wins — a two-lap grind is the opposite of that, and it is the
- * profile most likely to be abandoned mid-turn. The others keep the deliberate weight.
- */
+//
+// The clockwise-drag gesture that drives the dial.
+//
+// Converts a finger position into a signed angular delta about the dial's centre, drops the jumps, and
+// fires one haptic tick per `tickDeg` of accumulated travel. What the turn DOES is entirely the caller's:
+// `onTurn` applies it and hands back the running total.
+//
+// Tightening degrees per degree of FINGER travel around the dial.
+//
+// At 1 the two were the same, which meant a 720° fastener needed two complete laps of the dial with
+// one thumb — accurate to the real motion and exhausting to perform. The gain keeps the fastener
+// turning its full two turns on screen while the hand does less work.
+//
+// 2.6 overshot: a leg finished in barely a quarter of a lap, which reads as the gesture doing the
+// work rather than the player. 1.7 lands a 720° fastener at about 1.2 laps — still well under the
+// original two, but far enough that a deliberate turn is still a turn.
+//
+// PER PROFILE, because effort is exactly the axis these profiles differ on. Momentum is built around
+// low friction and frequent small wins — a two-lap grind is the opposite of that, and it is the
+// profile most likely to be abandoned mid-turn. The others keep the deliberate weight.
 const TURN_GAIN_DEFAULT = 1.7;
 const TURN_GAIN: Partial<Record<ProfileId, number>> = {
   momentum: 2.7,

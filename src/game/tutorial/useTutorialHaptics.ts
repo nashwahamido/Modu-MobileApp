@@ -19,11 +19,6 @@ function playCue(cue: TutorialHapticCue) {
   }
 }
 
-/**
- * Adds only the tutorial feedback that the physical assembly controls do not
- * already provide. This stays outside the Zustand stores so their state
- * transitions remain deterministic and testable.
- */
 export function useTutorialHaptics() {
   const profile = useGameStore((state) => state.profile);
   const stepRewardsClaimed = useTutorialStore(

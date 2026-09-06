@@ -1,7 +1,5 @@
-
 import { useEffect, useRef } from "react";
 import { Animated } from "react-native";
-
 
 export function useHighlightPulse(active: boolean) {
   const value = useRef(new Animated.Value(0)).current;
@@ -15,7 +13,6 @@ export function useHighlightPulse(active: boolean) {
       Animated.sequence([
         Animated.timing(value, { toValue: 1, duration: 240, useNativeDriver: true }),
         Animated.timing(value, { toValue: 0, duration: 240, useNativeDriver: true }),
-        // A beat between pulses, so it reads as a tap on the shoulder rather than a strobe.
         Animated.delay(520),
       ]),
     );

@@ -5,6 +5,7 @@ import { applyBuild, snapshotBuild } from "@/src/game/core/buildSave";
 import { useGameStore } from "@/src/game/core/store";
 import type { FurnitureId } from "@/src/game/core/type";
 import { useCurrentUserId, useRepos } from "@/src/data";
+import { useProfileStore } from "@/src/data/player/profileStore";
 import { useShopStore } from "@/src/data/shop/store";
 
 // Wait this long after the last progress change before writing, so a burst of taps is one save.
@@ -71,6 +72,21 @@ export function useBuildPersistence(
             // The grant already put this in user_buy; this is the CLIENT catching up. useShopStore.load() skips the fetch when the user's data is already cached, and the Inventory popup opens seconds later from the completion screen — so without this the item is granted server-side and simply missing from the list the player is looking at. Purchases mark themselves owned the same way, for the same reason.
             if (granted.rewardItemId) useShopStore.getState().markOwned(granted.rewardItemId);
             return repos.builds.complete(me, save.furnitureId);
+          })
+          .then(() => {
+            // RE-READ THE PROFILE, because the room has almost certainly already read it.
+            //
+            // This whole chain runs from the effect's UNMOUNT cleanup — the moment the player leaves
+            // play — and the room refetches on FOCUS. Focus fires first and the RPC is a round trip,
+            // so the room reliably read the balance from BEFORE the grant: the build finished, the
+            // completion screen promised coins and XP, and the HUD they landed on showed neither.
+            // Nothing was lost — the server had the right numbers all along — but there was no second
+            // read to go and find them until something else blurred the room.
+            //
+            // The amounts in `granted` are what the build PAYS, not the balance it paid into, so they
+            // cannot just be added to the store. A read is the only thing that gives the
+            // authoritative totals, and it is one query on a screen that has just finished animating.
+            void useProfileStore.getState().load(repos, me);
           })
           // The repos THROW on any Postgrest error. This runs from an effect cleanup, so there is no UI left to tell — but an uncaught rejection here meant a finished build silently paid nothing while BuildComplete promised the player coins and XP.
           .catch((err) => console.warn(`[build] reward/complete failed for ${save.furnitureId}`, err));

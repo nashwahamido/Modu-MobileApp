@@ -12,11 +12,13 @@ const DEG_PER_TAP = TIGHTEN_TOTAL_DEG / MALLET_TAPS;
 
 interface Props {
   action: AssemblyAction;
-  /** Drives the fastener's offset from STAGE toward LOOSE as it is pressed in. Shared with the tighten (they are never active at the same time). */
+  // Drives the fastener from STAGE toward LOOSE as it is pressed in. Shared with the tighten, which is never active at the same time.
   sinkDriver: OffsetDriver;
 }
 
-/** Insert-press control for 3-phase fasteners (part.insertStage set): tap the pad to PRESS the fastener from its STAGE pose (fully outside the hole) into the LOOSE pose (partly in). Sibling of TapControl — that drives loose→flush on the tighten; this drives stage→loose on the insert. Each tap eases the sink offset from stage to loose; at full taps `addTightenDeg` commits the insertFastener. The carrier's staging offset is folded in so a dowel pressed into a still-staged rod stays with the rod. */
+// Tap to PRESS a 3-phase fastener from its STAGE pose, fully outside the hole, into the LOOSE pose. At full taps the insertFastener commits.
+// Sibling of TapControl: that drives loose→flush on the tighten, this drives stage→loose on the insert.
+// The carrier's staging offset is folded in, so a dowel pressed into a still-staged rod stays with the rod.
 export function InsertPressControl({ action, sinkDriver }: Props) {
   const m = useMirror();
   const deg = useGameStore((s) => s.tightenDeg[action.actionId] ?? 0);
@@ -31,9 +33,9 @@ export function InsertPressControl({ action, sinkDriver }: Props) {
     if (part && parts) {
       const carrier = stageShiftFor(part, parts) ?? [0, 0, 0];
       const s = stageDelta(part);
-      // signed axis for parity with TapControl/TightenControl; retract dowels ignore it by design (looseDelta uses their baked engageDir)
+      // signed axis for parity with TapControl/TightenControl; retract dowels ignore it by design, since looseDelta uses their baked engageDir
       const l = looseDelta(part, engageAxis(part, new Set(store.completed)));
-      // lerp stage → loose, plus the carrier's staging offset (the rod is still out during the press)
+      // lerp stage → loose, plus the carrier's staging offset — the rod is still out during the press
       sinkDriver.set([
         carrier[0] + s[0] * (1 - p) + l[0] * p,
         carrier[1] + s[1] * (1 - p) + l[1] * p,

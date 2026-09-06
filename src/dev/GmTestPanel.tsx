@@ -14,15 +14,6 @@ type GmTarget = {
   label: string;
   route: Href;
   note: string;
-  /**
-   * Applied to the game store BEFORE navigating.
-   *
-   * The tutorial builds its step list from `useGameStore.profile` — Lumi's run is a hand-written
-   * list returned only for `visual`, and the other three share the composed one. Onboarding sets the
-   * profile on its way out (avatar-recommendation calls applyProfile), so the tutorial it opens
-   * always matches the avatar just chosen; jumping here set nothing, so you got whatever the store
-   * happened to hold and the tutorial looked like the wrong version of itself.
-   */
   profile?: ProfileId;
 };
 
@@ -34,9 +25,6 @@ const targets: GmTarget[] = [
     route: "/avatar-recommendation?mode=momentum&secondary=visual" as Href,
     note: "Recommendation result",
   },
-  // FOUR entries, not one. The four profiles run genuinely different tutorials — Lumi's is her own
-  // list, the other three are composed and differ again by mode and by softHints — so a single
-  // button could only ever test one of them, and silently.
   { label: "Tut · Lumi", route: "/tutorial" as Href, note: "Visual", profile: "visual" },
   { label: "Tut · Sparky", route: "/tutorial" as Href, note: "Momentum", profile: "momentum" },
   { label: "Tut · Pebble", route: "/tutorial" as Href, note: "Clear Path", profile: "clearPath" },
@@ -44,31 +32,23 @@ const targets: GmTarget[] = [
   { label: "Task", route: "/catalogue" as Href, note: "Task catalogue" },
   { label: "Room", route: "/room" as Href, note: "Virtual room" },
   { label: "Profile", route: "/profile" as Href, note: "Profile & friends" },
-  // No ownerId on purpose: real owner ids are uuids that only exist in the database, so a hardcoded one would rot. This target proves the route registers and exercises the missing-param branch; a real friend's room is reached through the picker in Task 6.
   { label: "Visit", route: "/visit" as Href, note: "Visit route (no owner)" },
   { label: "Engine", route: "/engine-test" as Href, note: "Engine test (dev)" },
 ];
 
-// What the panel occupies below its own top edge: the root's bottom offset plus the panel's marginBottom. The height cap is solved from these rather than typed in, so moving the panel cannot silently leave the cap wrong.
 const PANEL_BOTTOM_INSET = 132 + 10;
-// Clearance left above the panel so it never runs to the very top of the screen.
 const PANEL_TOP_GUTTER = 24;
 
 export function GmTestPanel() {
   const [open, setOpen] = useState(false);
-  // The app is landscape-LOCKED, so the tall axis is the short one: a phone gives roughly 250 points above the panel's bottom edge, and the roster alone is taller than that once a build lists more than about three accounts. Uncapped, the lower rows — Sign out and Purge among them — render off the top of the screen where no touch can reach them. Cap against the live window rather than a constant so a tablet still gets the whole panel without scrolling.
   const { height } = useWindowDimensions();
   const repos = useRepos();
   const me = useCurrentUserId();
   const maxPanelHeight = Math.max(180, height - PANEL_BOTTOM_INSET - PANEL_TOP_GUTTER);
 
-  // The catalogue picks the furniture now, so nothing here needs the old "/play + an id chosen from the active profile" special case — that guessed one piece when the point was to choose.
   const jumpTo = (target: GmTarget) => {
     setOpen(false);
     if (target.profile) {
-      // Same two calls onboarding makes, in the same order: applyProfile rewrites the settings and
-      // the mode for that profile, and resetTutorial clears any run already in progress so the
-      // screen configures from scratch rather than resuming someone else's script.
       useGameStore.getState().applyProfile(target.profile);
       useTutorialStore.getState().resetTutorial();
     }
@@ -79,7 +59,6 @@ export function GmTestPanel() {
     <View pointerEvents="box-none" style={styles.root}>
       {open ? (
         <View style={[styles.panel, { maxHeight: maxPanelHeight }]} pointerEvents="auto">
-          {/* Outside the scroller on purpose: the close button has to stay reachable no matter how far down the roster you have scrolled. */}
           <View style={styles.header}>
             <View>
               <Text style={styles.title}>GM Test</Text>
@@ -107,9 +86,6 @@ export function GmTestPanel() {
                 </Pressable>
               ))}
             </View>
-            {/* The Map coach is once per ACCOUNT and remembered in two places, so without this there
-                is no way to see it a second time on the same login — which makes "it did not show"
-                impossible to tell apart from "it already has". */}
             <Pressable
               onPress={() => {
                 void resetMapCoachSeen(repos.profiles, me).then(() => setOpen(false));
@@ -120,7 +96,6 @@ export function GmTestPanel() {
               <Text style={styles.targetLabel}>Reset Map coach</Text>
               <Text style={styles.targetNote}>Show it again on the next task</Text>
             </Pressable>
-            {/* Renders nothing unless a roster is live in this build. Closes the panel before it navigates. */}
             <AccountSwitcher onDone={() => setOpen(false)} />
           </ScrollView>
         </View>
@@ -138,7 +113,6 @@ export function GmTestPanel() {
 }
 
 const styles = StyleSheet.create({
-  // Sits above the room's bottom-left rotate controls (left:24, bottom:78, 44px tall) rather than in the corner, which the joystick claims on the assembly screen. This panel is mounted globally, so the slot has to be clear on every screen.
   root: {
     position: "absolute",
     left: 24,
@@ -146,7 +120,6 @@ const styles = StyleSheet.create({
     zIndex: 999,
     alignItems: "flex-start",
   },
-  // Faint at rest: a dev affordance riding on top of the real UI should read as an overlay, not as a game control. Opening it brings it back to full strength.
   fab: {
     width: 48,
     height: 48,
@@ -216,11 +189,9 @@ const styles = StyleSheet.create({
     lineHeight: 25,
     fontWeight: "800",
   },
-  // flexShrink, not flex: 1 — the panel must still hug its content on a screen tall enough to hold all of it, and only give way once maxHeight actually binds.
   scroll: {
     flexShrink: 1,
   },
-  // The roster's last row would otherwise sit flush against the panel's bottom edge with nothing to show it is the end.
   scrollContent: {
     paddingBottom: 4,
   },

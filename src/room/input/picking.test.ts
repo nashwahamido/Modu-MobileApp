@@ -84,7 +84,7 @@ const pressAt = (cell: { x: number; y: number }, upFraction: number, angles = RE
 };
 
 test("a press anywhere on a piece's BODY picks that piece, not the floor behind it", () => {
-  // The whole bug: the ray through the visible model carries on and meets the floor one to three cells further back, so a floor-plane pick only ever answered for the piece's base sliver.
+  // The bug: the ray through the visible model carries on and meets the floor one to three cells further back, so a plane pick only ever answered for the base sliver.
   const cell = { x: 4, y: 4 };
   const boxes = [floorPlacementBox(standing(cell), STOOL, STOOL_HEIGHT)];
   for (const angles of ANGLE_SAMPLES) {
@@ -97,13 +97,13 @@ test("a press anywhere on a piece's BODY picks that piece, not the floor behind 
       );
     }
   }
-  // And the floor-plane pick it replaces is demonstrably wrong at the same points — this is the regression, pinned so nobody "simplifies" the box test back into a plane test.
+  // The plane pick it replaces is wrong at the same points — pinned so nobody "simplifies" the box test back into one.
   const mid = pressAt(cell, 0.5);
   assert.notDeepEqual(screenPointToFloorCell(mid.x, mid.y, VIEWPORT, REST), cell);
 });
 
 test("the NEAREST piece under the finger wins", () => {
-  // Two stools, one directly behind the other from the rest pose's camera. Pressing the front one's body must never reach through it to the piece behind.
+  // Two stools, one directly behind the other from the rest camera: pressing the front one must never reach through to the piece behind.
   const front = { x: 5, y: 5 };
   const behind = { x: 4, y: 6 };
   const boxes = [
@@ -121,7 +121,8 @@ test("pressing empty floor picks nothing", () => {
 });
 
 test("the screen centre picks just off the open corner — and clamps back onto the grid", () => {
-  // The camera aims at the room's AIR centre, so the ray through the screen centre overshoots the floor toward the diorama's open side and lands a few centimetres off-grid. That is correct behaviour: the drag pipeline runs every picked cell through clampToSurface, which is what this pins down.
+  // The camera aims at the room's AIR centre, so the screen-centre ray overshoots toward the open side and lands a few centimetres off-grid.
+  // That is correct: the drag pipeline runs every picked cell through clampToSurface, which is what this pins.
   const picked = screenPointToFloorCell(VIEWPORT.width / 2, VIEWPORT.height / 2, VIEWPORT, REST);
   assert.ok(picked);
   // Off-grid, but only barely — a wildly wrong basis would land tens of cells away.
@@ -132,7 +133,7 @@ test("the screen centre picks just off the open corner — and clamps back onto 
   assert.ok(clamped.y >= 0 && clamped.y < FLOOR_CELLS.d);
 });
 
-// The four diagonal azimuths, and the pair of walls the camera sees at each. Every wall appears here twice — once as a hop SOURCE and once as a TARGET — which is what makes the eight ordered pairs below cover a hop FROM each of the four walls and ONTO each of the four walls.
+// The four diagonal azimuths and the wall pair visible at each. Every wall appears twice, once as a hop SOURCE and once as a TARGET, so the eight ordered pairs cover a hop from and onto each wall.
 const DIAGONALS: { theta: number; visible: [WallId, WallId] }[] = [
   { theta: Math.PI / 4, visible: ["x-min", "z-min"] },
   { theta: (3 * Math.PI) / 4, visible: ["x-min", "z-max"] },
@@ -150,7 +151,7 @@ function aimAtWall(wall: WallId, theta: number) {
 }
 
 test("a wall ghost hops onto the wall the finger actually points at, from every one of the four walls", () => {
-  // The regression: the hop target used to be hardcoded as `here === "z-max" ? "x-min" : "z-max"`, from when the shell had two walls. With four, an x-max or z-min ghost hopped to z-max no matter where the finger pointed, and a z-max ghost could only ever reach x-min.
+  // The regression: the hop target was hardcoded from the two-wall shell, so an x-max or z-min ghost hopped to z-max wherever the finger pointed, and a z-max ghost could only reach x-min.
   for (const { theta, visible } of DIAGONALS) {
     assert.deepEqual([...visibleWalls(theta)].sort(), [...visible].sort(), `theta ${theta} sees other walls`);
     for (const here of visible) {
@@ -166,7 +167,7 @@ test("a wall ghost hops onto the wall the finger actually points at, from every 
 });
 
 test("a ghost never hops onto a wall the camera is standing outside of", () => {
-  // Every wall plane is infinite, and the two culled walls are precisely the ones a forward ray crosses from outside — they answer a pick as happily as the visible ones. Hopping onto one would drop the piece behind the player's back.
+  // Every wall plane is infinite, and the two culled walls are exactly the ones a forward ray crosses from outside — they answer a pick as happily as the visible ones.
   for (const { theta, visible } of DIAGONALS) {
     const angles = { ...REST, theta };
     const here = visible[0];
@@ -186,7 +187,7 @@ test("a ghost never hops onto a wall the camera is standing outside of", () => {
 });
 
 test("the ghost stays loyal to its own wall while the finger is over its run, and crosses the corner once", () => {
-  // Drag straight across the corner the camera faces. Loyalty is the whole hysteresis rule: while the finger is anywhere over the ghost's own run the answer must be that wall, even where the other visible wall is the one square-on to the camera. A nearest-plane pick strobes here instead.
+  // Drag straight across the corner the camera faces. Loyalty is the hysteresis rule: while the finger is over the ghost's own run the answer must be that wall, even where the other is square-on. A nearest-plane pick strobes here.
   for (const { theta, visible } of DIAGONALS) {
     for (const here of visible) {
       const angles = { ...REST, theta };
@@ -212,7 +213,8 @@ test("the ghost stays loyal to its own wall while the finger is over its run, an
   }
 });
 
-// pointsAtSurface is the drag layer's OWNERSHIP question: while a ghost is up, does this finger belong to the piece or to the camera? The rule it encodes is "point where the piece can actually go and you move it; anywhere else you move the view", so the tests below are exactly the four answers that rule has to give — own surface yes, other surface no, backdrop no.
+// The drag layer's OWNERSHIP question: while a ghost is up, does this finger belong to the piece or the camera?
+// The rule is "point where the piece can go and you move it, anywhere else you move the view" — so these are the answers that rule has to give.
 const FLOOR = { kind: "floor" } as const;
 
 test("a floor ghost owns the floor", () => {
@@ -230,7 +232,7 @@ test("a floor ghost owns the floor", () => {
 });
 
 test("a floor ghost does NOT own the walls or the backdrop — that is where the camera takes over", () => {
-  // The whole point of the split: a drag that starts off the floor has to orbit instead of teleporting the piece to whatever the floor plane says is behind the wall.
+  // The point of the split: a drag starting off the floor must orbit rather than teleport the piece to whatever the floor plane says is behind the wall.
   for (const { theta, visible } of DIAGONALS) {
     for (const wall of visible) {
       const { angles, screen } = aimAtWall(wall, theta);
@@ -245,7 +247,7 @@ test("a floor ghost does NOT own the walls or the backdrop — that is where the
 });
 
 test("a wall ghost owns every wall the camera can see, including the one it may hop to", () => {
-  // Ownership is asked at touch-down, before any hop has happened, so a drag aimed at the OTHER visible wall must belong to the piece too — that is how a window gets carried round a corner.
+  // Ownership is asked at touch-down, before any hop, so a drag aimed at the OTHER visible wall must belong to the piece too — that is how a window gets carried round a corner.
   for (const { theta, visible } of DIAGONALS) {
     for (const here of visible) {
       for (const aimed of visible) {
@@ -373,7 +375,7 @@ test("a press on a deep wall item's visible front face picks it via its pick vol
 // so that revert would fail here.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Everything the room can resolve, at real-world sizes. eket-cabinet is the reported case: 0.35 m deep, so its visible face is nearly two wall cells off its anchor.
+// Everything the room can resolve, at real sizes. eket-cabinet is the reported case: 0.35m deep, so its visible face is nearly two wall cells off its anchor.
 const RESOLVE: PickResolver = (itemId) =>
   itemId === "eket-cabinet"
     ? { def: cabinet, size: { x: 0.5, y: 0.75, z: CABINET_DEPTH } }

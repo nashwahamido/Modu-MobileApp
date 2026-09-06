@@ -33,7 +33,6 @@ export function VisualLongPressCue({ frame }: Props) {
   }, [pulse]);
 
   const centerX = frame.x + frame.width / 2;
-  // The first item in the parts tray is the tabletop. Keep the cue near the top card rather than centring it over the entire vertical tray.
   const centerY = frame.y + Math.min(52, frame.height * 0.16);
 
   return (

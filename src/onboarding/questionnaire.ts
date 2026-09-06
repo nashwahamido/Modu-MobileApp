@@ -1,4 +1,3 @@
-// Defined with the other UI axes (game/core/type) and re-exported here, so the questionnaire's answer and the thing the build reads are the same type rather than two that happen to match.
 export type { Handedness } from "@/src/game/core/type";
 export type HintId = "voice" | "navigation" | null;
 export type ModeId = "visual" | "momentum" | "clearPath" | "control";
@@ -16,7 +15,6 @@ export const questionnaireHandednessPrompt =
 export const questionnaireIntroVoiceText =
   `${questionnaireIntroText} ${questionnaireHandednessPrompt}`;
 
-// ORDER IS THE CONTRACT. scoreRules below is indexed by question and then by OPTION POSITION, and getRecommendedModes resolves an answer through options.indexOf — so reordering or removing an option silently re-points its score, while rewording one is free. Answers are persisted as the raw string, so past rows keep the wording they were given; nothing reads them back for scoring.
 export const questions: QuestionnaireQuestion[] = [
   {
     prompt:

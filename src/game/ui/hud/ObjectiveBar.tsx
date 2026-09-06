@@ -1,36 +1,33 @@
-// The centred objective pill: instruction line + [★ star | progress track | XP label] row. SHARED by the play screen and the tutorial fork — edit here and both stay in sync.
 import { useEffect, type ReactNode } from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { ProgressBar } from "@/src/game/ui/system/Button";
-import { ELEVATION, FONT, RADIUS, SPACE, TYPE, Theme, useFixedStyles } from "@/src/game/ui/system/theme";
+import { ELEVATION, FONT, RADIUS, SPACE, TYPE, Theme, useFixedStyles, useUiScale } from "@/src/game/ui/system/theme";
 
 interface Props {
-  /** The objective sentence; null hides the text row and collapses the bar to the slim fixed pill (instructions off). */
   line: string | null;
-  /** Font size for the line, already scaled by the caller's fontScale setting. */
   fontSize: number;
-  /** Progress fraction feeding the bar. */
   value: number;
   total: number;
-  /** Running XP total shown beside the track. */
   xp: number;
-  /** Optional structured content replacing the objective sentence. */
   header?: ReactNode;
 }
 
-/** A light wash of the Continue blue (#A9BFD9), lifted toward white. Light enough that ink on it
- *  reads at 10.7:1, dark enough to still separate from the bar's cream — at the paler end of the
- *  ramp the pill stops looking like an inset and starts looking like a gap. */
 const OBJECTIVE_WASH = "#C3D3E6";
+
+const BAR_W = 420;
+const SLIM_W = 260;
+const STRUCTURED_W = 360;
+const TOP_ROW_RESERVE = 210;
 
 export function ObjectiveBar({ line, fontSize, value, total, xp, header }: Props) {
   const styles = useFixedStyles(makeStyles);
-  // The instruction IS the reading surface of the assembly screen.
+  const k = useUiScale();
+  const { width: winW } = useWindowDimensions();
+  const grow = Math.max(1, Math.min(k, (winW - TOP_ROW_RESERVE * 2) / BAR_W));
   const expanded = line !== null || header != null;
-  // Derived, not a constant: fontSize is already scaled by the caller's accessibility setting, so a fixed box height would clip the text at the larger scales.
   const lineHeight = Math.round(fontSize * 1.18);
-  // Each new instruction drops in from above. Keyed on the line itself, so it fires on a real change of copy and not on every re-render the progress row causes.
+  const oneLine = lineHeight + 6;
   const enter = useSharedValue(1);
   useEffect(() => {
     enter.value = 0;
@@ -46,32 +43,25 @@ export function ObjectiveBar({ line, fontSize, value, total, xp, header }: Props
         styles.objectiveBar,
         header != null && styles.objectiveBarStructured,
         !expanded && styles.objectiveBarSlim,
+        { width: Math.round((header != null ? STRUCTURED_W : !expanded ? SLIM_W : BAR_W) * grow) },
       ]}
       pointerEvents="none"
     >
       {header ?? (line !== null ? (
-        // ONE line, fixed. The instruction changes on every step and its length changes with it, so a box that sizes to its content made the bar breathe in and out under the player's eyes. overflow:hidden is load-bearing — it is what the new line drops in from behind.
         <View
-          style={[styles.objectivePill, { height: lineHeight + 6 }]}
+          style={[styles.objectivePill, { minHeight: oneLine }]}
         >
           <Animated.View style={[styles.objectiveLineRow, lineAnim]}>
-            {/* A bullet, not a bare line: it marks the instruction as the ONE thing being asked for
-                right now, and gives the eye a fixed point to return to as the words change. */}
             <View style={styles.objectiveBullet} />
             <Text
               style={[styles.objectiveText, { fontFamily: FONT, fontSize, lineHeight }]}
-              numberOfLines={1}
-              // Shrink rather than wrap: a second line would take the height back, and truncating an instruction is the one outcome this screen cannot afford.
-              adjustsFontSizeToFit
-              minimumFontScale={0.72}
+              numberOfLines={3}
             >
               {line}
             </Text>
           </Animated.View>
         </View>
       ) : null)}
-      {/* [★ star] [progress track] [XP label] — the badge sits ON the bar's left,
-          the way the reference integrates the level star into the track. */}
       <View
         style={[
           styles.progressRow,
@@ -84,12 +74,8 @@ export function ObjectiveBar({ line, fontSize, value, total, xp, header }: Props
           style={styles.xpBadge}
           resizeMode="contain"
         />
-        {/* Badge and total together on the left: they are one fact, and splitting them across the track made the track a divider between a picture and a number that belong to each other. */}
         <Text style={styles.xpLabel} numberOfLines={1}>{xp}</Text>
         <ProgressBar value={value} total={total} style={styles.xpTrack} />
-        {/* Progress as a PERCENTAGE, not a step ratio: "43%" answers "how far along am I"
-            directly, where "6/14" asks the player to do the division themselves. Whole
-            numbers only — decimal places would imply a precision the step count doesn't have. */}
         <Text style={styles.stepPct}>
           {total > 0 ? Math.round((value / total) * 100) : 0}%
         </Text>
@@ -102,8 +88,7 @@ const makeStyles = (t: Theme) =>
   StyleSheet.create({
     objectiveBar: {
       justifyContent: "center",
-      // FIXED, not capped. A max width still lets the bar shrink to a short instruction and grow back on the next one, which is the jitter itself. 360 + the pause button keeps the group clear of the cluster chips at right:14.
-      width: 360,
+      width: BAR_W,
       backgroundColor: t.surface,
       borderColor: t.border,
       borderWidth: StyleSheet.hairlineWidth * 2,
@@ -112,34 +97,29 @@ const makeStyles = (t: Theme) =>
       borderRadius: RADIUS.panel,
       ...ELEVATION.card,
     },
-    // Instructions hidden — just the XP row. FIXED to the cluster panel's height (its paddingTop 6 + chip 32 + paddingBottom 8 = 46); both sit at top:10, so their bottom edges line up at y=56. No vertical padding: the 46 is the whole height.
-    objectiveBarSlim: { width: 260, height: 46, paddingVertical: 0 },
+    objectiveBarSlim: { width: SLIM_W, height: 46, paddingVertical: 0 },
     objectiveBarStructured: {
-      width: 360,
+      width: STRUCTURED_W,
       paddingVertical: 4,
     },
-    // The instruction gets its own inset pill inside the bar: a light wash of the interactive lavender, so the line reads as the live task rather than as a caption on a panel.
     objectivePill: {
       justifyContent: "center",
       overflow: "hidden",
       borderRadius: RADIUS.pill,
       backgroundColor: OBJECTIVE_WASH,
       paddingHorizontal: SPACE.md,
+      paddingVertical: 3,
     },
     objectiveLineRow: { flexDirection: "row", alignItems: "center", gap: SPACE.sm },
     objectiveBullet: {
       width: 7,
       height: 7,
       borderRadius: 4,
-      // Stays lavender: it marks the live task, and the accent is what "act on this" means here.
       backgroundColor: t.accent,
     },
     objectiveText: {
       ...TYPE.body,
       flex: 1,
-      // INK, not t.text: the pill behind it is OBJECTIVE_WASH, a fixed light blue in BOTH themes,
-      // so a theme-following colour turned the instruction near-white on pale blue in dark mode.
-      // The text has to answer to what it sits on, not to the app theme.
       color: "#231F20",
       fontWeight: "800",
       textAlign: "left",
@@ -147,27 +127,14 @@ const makeStyles = (t: Theme) =>
     progressGap: { marginTop: 2 },
     structuredProgressGap: { marginTop: 3 },
 
-    // The XP badge sits INSIDE the bar, on the progress track's left — a star that overlaps the track's start, with the running total beside it. (There is no level system in the data — just xpPerStep — so this shows the honest running total, not a fake N/500.)
-    // gap xs, not sm: the row's width is fixed, so every point of gap is a point the track loses.
     progressRow: { flexDirection: "row", alignItems: "center", gap: SPACE.xs },
     xpBadge: {
       width: 24,
       height: 24,
       pointerEvents: "none",
-      // Pull it left so it straddles the track's start, as the star did.
       marginRight: -2,
     },
     xpTrack: { flex: 1 },
-    // minWidth on both flanks: without it the track resizes every time a number gains a digit, which
-    // is the same jitter one level down. The two flanks are the SAME width so the track sits centred
-    // between them — 26 vs 44 put a visible hole between the bar and the percentage while the XP
-    // side sat tight against it. 40 fits the widest content either flank can hold ("100%").
-    // The XP number sits TIGHT against its badge — the two are one fact — so it takes its natural
-    // width with no reserved box: a minWidth here parks empty space between the number and the
-    // track, which is what pushed the track off centre.
     xpLabel: { ...TYPE.numeric, color: t.gold },
-    // The percentage keeps a fixed box (so the track can't resize as 9% → 100%) but its text hugs
-    // the track, putting that reserved space on the OUTSIDE. With the XP tight on the left and the
-    // percentage tight on the right, the track has an equal gap on each side.
     stepPct: { ...TYPE.numeric, color: t.text, minWidth: 34, textAlign: "left" },
   });

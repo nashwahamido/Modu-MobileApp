@@ -1,4 +1,3 @@
-// The zoom floor's contract: inward scrolls stop at the floor, outward scrolls always escape it.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 

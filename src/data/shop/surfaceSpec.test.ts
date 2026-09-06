@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { parseSurfaceSpec } from "./surfaceSpec";
 
-// A conforming public.item_surfaces row (migration 017). Fixtures override individual columns from this so a test names only what it is actually about.
+// a conforming row — fixtures override individual columns, so a test names only what it is about
 const row = (over: Record<string, unknown> = {}) => ({
   scale_x: 3,
   scale_y: 3,

@@ -20,6 +20,14 @@ import {
   type RoomAvatarKind,
 } from "../character/avatarChoice";
 import {
+  AVATAR_ARRIVAL_EPSILON,
+  AVATAR_CONFIG,
+  AVATAR_CROSS_FADE_SECONDS,
+  AVATAR_FLOOR_CLEARANCE_METRES,
+  AVATAR_TURN_SPEED,
+  AVATAR_WALK_SPEED,
+} from "../character/avatarConfig";
+import {
   cellKey,
   cellsFor,
   floorCellToRoom,
@@ -31,86 +39,8 @@ import { FLOOR_CELLS, ROOM_SHELL, SCENE_SCALE, roomToScene } from "../core/roomS
 import { isScenePaused } from "./scenePaused";
 import { useGameStore } from "../../game/core/store";
 
-const CAT_FOOTPRINT = { w: 1, d: 1 } as const;
-
-type AvatarConfig = {
-  model: number;
-  size: { x: number; y: number; z: number };
-  animation: {
-    walk: number;
-    idle: number;
-    idleRate?: number;
-    walkRate?: number;
-    walkWindow?: { start: number; end: number };
-  };
-  specials: readonly { index: number; duration: number }[];
-};
-
-const AVATAR_CONFIG: Record<RoomAvatarKind, AvatarConfig> = {
-  felix: {
-    model: require("../../assets/models/avatars/cute-cat.glb"),
-    size: { x: 0.797974, y: 0.979004, z: 0.697937 },
-    // The refreshed export includes a clean, symmetric walk loop as
-    // NlaTrack.003, replacing the old measured sub-window workaround. Freeze
-    // the first frame of NlaTrack for a stable standing pose.
-    animation: { walk: 3, idle: 0, idleRate: 0 },
-    specials: [
-      { index: 1, duration: 2.25 },
-      { index: 2, duration: 3.708 },
-      { index: 4, duration: 15.375 },
-    ],
-  },
-  sparky: {
-    model: require("../../assets/models/avatars/sparky.glb"),
-    size: { x: 0.679871, y: 0.980042, z: 0.516876 },
-    // The refreshed export preserves the previously verified walk cycle as
-    // NlaTrack (index 0). Freeze the first frame of the arm-led long clip for
-    // a stable standing pose instead of letting an idle performance twitch.
-    animation: { walk: 0, idle: 2, idleRate: 0 },
-    // Complete one-shot actions. Unified scheduling keeps them out of walking,
-    // turning and furniture-edit states and prevents immediate repetition.
-    specials: [
-      { index: 1, duration: 2.083 },
-      { index: 3, duration: 15.625 },
-      { index: 4, duration: 2.208 },
-    ],
-  },
-  lumi: {
-    model: require("../../assets/models/avatars/lumi.glb"),
-    size: { x: 0.719726, y: 0.979431, z: 0.636903 },
-    // This Lumi export contains five clips. NlaTrack.004 is the symmetric,
-    // alternating leg cycle used for navigation. A frozen first frame of the
-    // arm-led NlaTrack.001 provides a stable standing pose between routes.
-    animation: { walk: 4, idle: 1, idleRate: 0 },
-    specials: [
-      { index: 0, duration: 2.625 },
-      { index: 2, duration: 17.625 },
-    ],
-  },
-  pebble: {
-    model: require("../../assets/models/avatars/pebble.glb"),
-    size: { x: 0.827881, y: 0.97937, z: 0.674011 },
-    // NlaTrack.003 is the short, leg-led locomotion cycle. Keep the long,
-    // subtle NlaTrack.004 on its first frame while standing; the remaining
-    // clips are complete one-shot actions governed by the shared scheduler.
-    animation: { walk: 3, idle: 4, idleRate: 0 },
-    specials: [
-      { index: 0, duration: 2.625 },
-      { index: 1, duration: 2.25 },
-      { index: 2, duration: 9.125 },
-    ],
-  },
-};
-
-// This GLB's authored forward axis already matches the yaw convention below:
-// yaw 0 walks toward +Z. Adding PI made the cat face away from every target and
-// therefore appear to moonwalk along an otherwise-correct path.
+const AVATAR_FOOTPRINT = { w: 1, d: 1 } as const;
 const MODEL_FORWARD_OFFSET = 0;
-const WALK_SPEED = 0.55;
-const TURN_SPEED = 7;
-const ARRIVAL_EPSILON = 0.025;
-const ANIMATION_CROSS_FADE_SECONDS = 0.18;
-const FLOOR_CLEARANCE_METRES = 0.005;
 const HIDDEN_SCENE_Y = -10;
 
 type Point = { x: number; z: number };
@@ -128,7 +58,7 @@ const shortestAngle = (from: number, to: number): number =>
   Math.atan2(Math.sin(to - from), Math.cos(to - from));
 
 const pointForCell = (cell: { x: number; y: number }): Point => {
-  const point = floorCellToRoom(cell, CAT_FOOTPRINT);
+  const point = floorCellToRoom(cell, AVATAR_FOOTPRINT);
   return { x: point.x, z: point.z };
 };
 
@@ -136,8 +66,6 @@ export function RoomAvatar() {
   const profile = useGameStore((state) => state.profile);
   const avatarKind = roomAvatarKindForProfile(profile);
 
-  // A recommendation change must create fresh native model/animator state rather
-  // than asking one Filament wrapper to change the asset underneath itself.
   return <WalkingRoomAvatar key={avatarKind} avatarKind={avatarKind} />;
 }
 
@@ -146,9 +74,6 @@ function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
   const maxExtent = Math.max(config.size.x, config.size.y, config.size.z);
   const bodyRadiusCells = Math.ceil((config.size.x / 2) / ROOM_SHELL.cellSize);
   const model = useModel(config.model);
-  // useModel returns a fresh wrapper object on React re-renders; the loaded asset
-  // has stable identity. Keying the animator to the asset prevents accidentally
-  // creating a second native animator when furniture/layout state changes.
   const asset = model.state === "loaded" ? model.asset : null;
   const animator = useAnimator(asset ?? undefined);
   const { transformManager } = useFilamentContext();
@@ -242,7 +167,7 @@ function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
 
       if (previousAnimationIndex.value >= 0) {
         const transitionTime = passedSeconds - transitionStartedAt.value;
-        if (transitionTime < ANIMATION_CROSS_FADE_SECONDS) {
+        if (transitionTime < AVATAR_CROSS_FADE_SECONDS) {
           const previousTime =
             previousAnimationIndex.value === walkAnimationIndex &&
             walkWindowDuration > 0
@@ -255,7 +180,7 @@ function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
           animator.applyCrossFade(
             previousAnimationIndex.value,
             previousTime,
-            transitionTime / ANIMATION_CROSS_FADE_SECONDS,
+            transitionTime / AVATAR_CROSS_FADE_SECONDS,
           );
         } else {
           previousAnimationIndex.value = -1;
@@ -339,9 +264,7 @@ function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
       return false;
     };
 
-    // The pose the transform manager was last given. Filament RETAINS a transform once set, so a frame that would rewrite the same numbers can simply not write them — and while the avatar is standing (POST_PATH_STANDING_MS between routes) or playing a one-shot action (up to 17.6 s for the long clips) the pose does not move at all, which is most of any given minute. Seeded to NaN so the first paint of every effect run always lands, whatever the previous run left behind.
-    //
-    // WHAT THIS SAVES IS ALLOCATION, not arithmetic. Mat4's scaling/rotate/translate each RETURN A NEW MATRIX rather than mutating the receiver — that is what makes composing off a cached base safe (see the note on baseTransform) and it is also what made this the scene's steadiest source of garbage: three JSI HybridObjects per frame, each holding a native C++ object released only when the JS collector finalises it, sixty times a second for as long as the room is open. The animation itself is unaffected; the animator drives the skeleton through the render callback and never reads this transform.
+    // Avoid allocating native Mat4 wrappers while the avatar is stationary.
     const painted = { x: NaN, z: NaN, yaw: NaN, visible: true };
 
     const paint = (visible = true) => {
@@ -364,7 +287,8 @@ function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
         .translate([
           centre.x,
           visible
-            ? centre.y + ((config.size.y / 2) + FLOOR_CLEARANCE_METRES) * SCENE_SCALE
+            ? centre.y +
+              (config.size.y / 2 + AVATAR_FLOOR_CLEARANCE_METRES) * SCENE_SCALE
             : HIDDEN_SCENE_Y,
           centre.z,
         ]);
@@ -374,7 +298,6 @@ function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
     const tick = (now: number) => {
       if (stopped) return;
       frame = requestAnimationFrame(tick);
-      // Nothing here is worth doing under a popup: the walk would not be drawn, and choosePath's A* is the most expensive thing this component can do in a frame. `previous` is still advanced so the first frame back resumes with a real delta rather than a pause-long one — dt is clamped anyway, but a clamped 50 ms jump is still a visible lurch on the step the avatar happens to be mid-way through.
       if (isScenePaused()) {
         previous = now;
         return;
@@ -446,7 +369,7 @@ function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
       const dx = target.x - state.position.x;
       const dz = target.z - state.position.z;
       const distance = Math.hypot(dx, dz);
-      if (distance <= ARRIVAL_EPSILON) {
+      if (distance <= AVATAR_ARRIVAL_EPSILON) {
         state.position = target;
         state.path.shift();
         if (state.path.length === 0) {
@@ -466,13 +389,13 @@ function WalkingRoomAvatar({ avatarKind }: { avatarKind: RoomAvatarKind }) {
         turnError,
         specialActive: false,
       });
-      state.yaw += turnError * Math.min(1, TURN_SPEED * dt);
+      state.yaw += turnError * Math.min(1, AVATAR_TURN_SPEED * dt);
       if (phase === "turning") {
         setAnimation(config.animation.idle);
         paint();
         return;
       }
-      const step = Math.min(distance, WALK_SPEED * dt);
+      const step = Math.min(distance, AVATAR_WALK_SPEED * dt);
       state.position = {
         x: state.position.x + (dx / distance) * step,
         z: state.position.z + (dz / distance) * step,

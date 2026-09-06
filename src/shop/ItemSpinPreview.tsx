@@ -4,6 +4,18 @@
 // drawn over a room that stays mounted behind it. So the two never share state — this one is created
 // when the popup opens and torn down when it closes.
 //
+// DELIBERATELY DOES NOT CLAIM THE SHARED SLOT (game/scene/sceneSlot), and that is a decision rather
+// than an oversight. Claiming it would UNMOUNT the room, so closing a purchase dialog would reload
+// every room GLB behind RoomLoadingOverlay — a heavy stall on a common path, to buy back memory the
+// room is not spending: this preview's engine holds ONE item, not a furnished room. The room instead
+// stays mounted and STOPPED. Both dialogs that use this render inside ShopOverlay, which only exists
+// while shopOpen, and that is what sets scenePaused in RoomExperience — so by the time a preview can
+// appear the room's choreographer is already stopped and every rAF loop with it.
+//
+// What that leaves is two engines resident at once, which is the thing sceneSlot exists to prevent.
+// It is survivable HERE and nowhere else, because the second engine is one item deep. Two engines
+// each holding a room's assets is what jetsammed the app on an iPad — see the note in sceneSlot.
+//
 // The spin is driven on the RENDER thread, not by React. A state update per frame would re-render the
 // popup sixty times a second; instead the render callback multiplies a small yaw delta onto the
 // entity's transform each frame, the same way the assembly scene carries a held cluster.

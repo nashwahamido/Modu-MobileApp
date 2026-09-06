@@ -109,6 +109,29 @@ test("? with one target goes singular and names no step", () => {
   assert.ok(!s.hint!.startsWith("Try: "));
 });
 
+test("? marks the screw waiting to be tightened even while its group still has a card in the tray", () => {
+  // THE TUTORIAL'S OWN STATE, and the one the group-wide rule got wrong: one bolt inserted, three still in the box. The tighten of bolt 1 is available and card-less, and the inserts of bolts 2-4 are available and carded — all four in group bolt115980. Marking the scene only when NO action of a group has a card left the one move actually in front of the player, the screw in its hole, as the single unlit thing on the screen.
+  const done = [actionNamed(LACK_FIXTURE, "place_tableTop"), actionNamed(LACK_FIXTURE, "insert_bolt115980_1")];
+  setup(LACK_FIXTURE, done);
+  const avail = useGameStore.getState().availableForMode();
+  const tighten = avail.find((a) => a.actionId === actionNamed(LACK_FIXTURE, "tighten_bolt115980_1"));
+  const insert = avail.find((a) => a.actionId === actionNamed(LACK_FIXTURE, "insert_bolt115980_2"));
+  assert.ok(tighten && insert, "this state must offer BOTH a card-less tighten and a carded insert of the same group, or the test is not exercising the collision it claims to");
+  assert.equal(LACK_FIXTURE.parts[tighten.partId!].group, LACK_FIXTURE.parts[insert.partId!].group, "guard: the two actions must share a group — that sharing is the whole bug");
+  useGameStore.getState().suggestNext("hint");
+  const s = useGameStore.getState();
+  assert.ok(s.hintParts.includes(tighten.partId!), `the screw to tighten must be marked in the scene, got ${JSON.stringify(s.hintParts)}`);
+  assert.ok(s.hintGroups.includes(LACK_FIXTURE.parts[insert.partId!].group!), "the tray card for the bolts still in the box stays lit — both moves are legal");
+});
+
+test("a group whose every available action is carded marks nothing in the scene", () => {
+  // The other side of the per-action rule: at the start LACK offers one carded placePart and nothing card-less, so a per-action split must not start marking parts that already have a card to point at.
+  setup(LACK_FIXTURE);
+  useGameStore.setState({ hintParts: ["seedPart"] } as never);
+  useGameStore.getState().suggestNext("hint");
+  assert.deepEqual(useGameStore.getState().hintParts, []);
+});
+
 test("? still works in focus mode — the tutorial's hint button depends on it", () => {
   setup(LACK_FIXTURE, [], {
     settings: { ...useGameStore.getState().settings, focusMode: true },
@@ -142,6 +165,19 @@ test("Spot is untouched — it still names the step and sets the single-part fie
   assert.ok(s.hintPartId, "Spot sets the single-part spotlight");
   assert.deepEqual(s.hintGroups, [], "Spot does not use the ? highlight list");
   assert.deepEqual(s.hintParts, []);
+});
+
+test("Spot demonstrates the screw already in the hole, not a leg still in the box", () => {
+  // Spot took avail[0], which on LACK is a leg from the first tighten onwards — so a player halfway through the next bolt was shown a ghost fetching a different part entirely. See nextAction.test.ts for the ordering underneath.
+  const done = ["place_tableTop", "insert_bolt115980_1", "tighten_bolt115980_1", "insert_bolt115980_2"].map(
+    (a) => actionNamed(LACK_WITH_TEXT, a),
+  );
+  setup(LACK_WITH_TEXT, done, { profile: "momentum" });
+  useGameStore.getState().suggestNext("spot");
+  const s = useGameStore.getState();
+  assert.equal(s.hintPartId, "bolt115980_2", `expected the pending screw, got ${s.hintPartId}`);
+  // A tighten is not a pickup, so there is no card to flash — the demonstration is entirely in the scene.
+  assert.equal(s.hintGroup, null);
 });
 
 test("clearHint drops the ? highlight groups", () => {

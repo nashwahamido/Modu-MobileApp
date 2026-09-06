@@ -2,9 +2,6 @@ import {
   AssetSrc,
   GroupId,
   LabelMap,
-  RenderStyle,
-  RenderStyleId,
-  StyleSet,
   TextLevel,
   ThemeId,
   ThumbMap,
@@ -38,12 +35,4 @@ export function thumbFor(
 ): AssetSrc | undefined {
   const set = thumbs[group];
   return set ? pickThumb(set, theme) : undefined;
-}
-
-/** The chosen render style (realistic/cartoon), falling back to `realistic` (or  undefined → the scene uses each model's own GLB materials). Its own axis,  independent of theme — a model can be cartoon in light OR dark. */
-export function styleFor(
-  styles: StyleSet | undefined,
-  style: RenderStyleId = "realistic",
-): RenderStyle | undefined {
-  return styles?.[style] ?? styles?.realistic;
 }

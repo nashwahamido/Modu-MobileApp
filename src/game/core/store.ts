@@ -1,13 +1,11 @@
 import { create } from "zustand";
-import type { TimeOfDayId } from "@/src/room/core/timeOfDay";
-import type { RoomBackgroundId } from "@/src/room/ui/roomBackdrops";
-// Type-only: the room's backdrop table carries image require()s, and the store must not pull those in.
 import { isPickupType } from "@/src/game/core/ids";
 import {
   actionableGroups,
   availableActions,
   availableInMode,
   currentStage,
+  nextAction,
   openWayCount,
 } from "@/src/game/core/evaluation/availability";
 // Setting TYPES live in accessibility.ts; their defaults + the profiles in profile.ts.
@@ -23,15 +21,11 @@ import {
   ActionId,
   AssemblyAction,
   AssemblyMode,
-  BackdropId,
   ClusterId,
   Furniture,
   GroupId,
-  Handedness,
   PartBox,
   PartId,
-  RenderStyleId,
-  ThemeId,
   ToolId,
 } from "@/src/game/core/type";
 import { blockReason } from "@/src/game/core/evaluation/blockReason";
@@ -118,24 +112,7 @@ interface GameState {
   profile: ProfileId;
   /** How the assembly task is gated: free | plan | guide. */
   mode: AssemblyMode;
-  /** 3D render style for the scene: realistic | cozy | cartoon (own axis, not theme). */
-  renderStyle: RenderStyleId;
-  /** Scene background: clean | studio | dot (independent of the model look). */
-  backdrop: BackdropId;
-  /** Which hour of the day the room's sun is set to. Chosen, not clock-driven: the light's angle is a look the player picks, and every preset is authored to enter through walls the camera can see (see src/room/core/timeOfDay.ts). Also picks which of the three shots (day/sunset/night) roomBackground's photo shows — see timeOfDayPhase. */
-  roomTimeOfDay: TimeOfDayId;
-  /** Which photo hangs outside the room's window — Settings > General > "Room Background". Independent of roomTimeOfDay: that picks the HOUR shown in whichever background this names. Defaults to "bg7". */
-  roomBackground: RoomBackgroundId;
-  /** Whether the wandering companion is in the room — Settings > General > "Show avatar", beside Room Background. WHICH avatar it is stays the profile's business (roomAvatarKindForProfile); this only says whether it is there at all. Off UNMOUNTS it rather than hiding it, and that is the point: the component owns a GLB with three textures (~12 MB of VRAM after scripts/compress-avatar-glb.mjs), a Filament animator over a skinned mesh, and a per-frame rAF loop whose pathfinder is the most expensive thing the room can do in a single frame. Parking it out of sight would keep every one of those. Session state, exactly like roomBackground and roomTimeOfDay beside it — see the note on the setter. */
-  roomAvatarVisible: boolean;
-  /** Display theme (backdrop + thumbnails): light | dark | high_contrast. */
-  theme: ThemeId;
-  /** Which hand drives the build — it MIRRORS the HUD, so the joystick, the trays, the button column and every task control move to the other side. Answered in onboarding's first question and read back at the loading gate (src/app/(onboarding)/loading.tsx). Deliberately out of `settings`: applyProfile replaces that object wholesale, so it would reset on every avatar change. */
-  handedness: Handedness;
-  /** "Assemble in dark mode": the BUILD screens render dark while the rest of the app stays as it
-   *  is. Deliberately separate from `theme` — that one is the whole app's, and a player who wants a
-   *  dark workbench is not asking for a dark shop. */
-  assembleDark: boolean;
+  // Display preferences moved to core/prefsStore.ts — nothing there takes part in an assembly transition.
 
   loadFurniture: (f: Furniture) => void;
   reset: () => void;
@@ -147,14 +124,6 @@ interface GameState {
   stage: () => number;
   progress: () => { completedCount: number; totalCount: number };
   setMode: (mode: AssemblyMode) => void;
-  setRenderStyle: (style: RenderStyleId) => void;
-  setBackdrop: (backdrop: BackdropId) => void;
-  setRoomTimeOfDay: (time: TimeOfDayId) => void;
-  setRoomBackground: (background: RoomBackgroundId) => void;
-  setRoomAvatarVisible: (visible: boolean) => void;
-  setTheme: (theme: ThemeId) => void;
-  setHandedness: (handedness: Handedness) => void;
-  setAssembleDark: (on: boolean) => void;
 
   completeAction: (id: ActionId) => void;
   /** Undo history for redo: actions undone since the last new completion. */
@@ -364,18 +333,6 @@ export const useGameStore = create<GameState>()((set, get) => ({
   settings: settingsForProfile("control"),
   profile: "control",
   mode: "free",
-  renderStyle: "realistic",
-  backdrop: "grid",
-  // Afternoon: the longest warm pool of the day, and the look the room was tuned against.
-  roomTimeOfDay: "afternoon",
-  roomBackground: "bg7",
-  // ON by default: the companion is a large part of what makes the room read as lived-in rather than as a showroom, so a player has to choose to be without it.
-  roomAvatarVisible: true,
-  // Light by default. The palette (ui/theme.ts) was designed against the dark reference, but light is the safer default for a study: it survives a bright room, a projector, and a participant's own phone brightness, none of which we control. Dark and high-contrast are the SAME product in different light — same three accent hues, same meanings — so switching costs nothing but the setting.
-  theme: "light",
-  // RIGHT by default, because the HUD was authored right-handed and that is what every screenshot, spotlight offset and tuned margin in the build assumes. A left-hander gets the mirror from their own answer to onboarding's first question; nobody gets it by accident.
-  handedness: "right",
-  assembleDark: false,
 
   loadFurniture: (f) =>
     set({
@@ -443,15 +400,15 @@ export const useGameStore = create<GameState>()((set, get) => ({
     completedCount: get().completed.length,
     totalCount: get().furniture?.actions.length ?? 0,
   }),
-  setMode: (mode) => set({ mode }),
-  setRenderStyle: (renderStyle) => set({ renderStyle }),
-  setBackdrop: (backdrop) => set({ backdrop }),
-  setRoomTimeOfDay: (roomTimeOfDay) => set({ roomTimeOfDay }),
-  setRoomBackground: (roomBackground) => set({ roomBackground }),
-  // NOT persisted, which matches roomBackground and roomTimeOfDay beside it rather than being an oversight — every room display preference in this store is session state today. It is the weakest fit of the three though: a background is a look a player re-picks for fun, while "I don't want the companion" is a decision they expect to stick, so this is the one that will read as a bug when it comes back on at launch. Persisting it means the AsyncStorage pair below (never `settings`, which applyProfile replaces wholesale on every avatar change — the exact event most likely to accompany this choice).
-  setRoomAvatarVisible: (roomAvatarVisible) => set({ roomAvatarVisible }),
-  setTheme: (theme) => set({ theme }),
-  setAssembleDark: (assembleDark) => set({ assembleDark }),
+  setMode: (mode) => {
+    set({ mode });
+    // Guided mode without the step text is a dead mode: the guidance it turns on is the text. So entering it switches instructions on — unless the player has turned that switch themselves, which stays honoured the same way a profile switch honours it.
+    if (mode !== "free" && !get().settings.showInstructions && !touched.has("showInstructions")) {
+      const settings = { ...get().settings, showInstructions: true };
+      set({ settings });
+      void persistSettings(settings);
+    }
+  },
 
   completeAction: (id) => {
     const s = get();
@@ -605,19 +562,18 @@ export const useGameStore = create<GameState>()((set, get) => ({
     // "?" (Hint) SHOWS rather than tells. It highlights every actionable target and names none of them: with several moves legal, writing out one of them is an arbitrary pick presented as the answer. The count is by GROUP so eight legal tightens of one screw read as a single target.
     if (source === "hint") {
       const groups = actionableGroups(f, avail);
-      // A group is highlighted on the TRAY if any of its available actions earns a card, and in the SCENE otherwise — tightens, insert-presses, staged seats and beats have no card, and "tighten these eight screws" is a real state where every available action is card-less.
+      // An ACTION is highlighted on the TRAY if it earns a card, and in the SCENE if it does not — tightens, insert-presses, staged seats and beats have no card, and "tighten these eight screws" is a real state where every available action is card-less.
+      // PER ACTION, NOT PER GROUP, and the difference is a whole legal move. It used to mark a part in the scene only when NO action of its group had a card, which sounds equivalent and is not: a group with a bolt still in the box and a bolt already inserted has both an insert (carded) and a tighten (card-less) available, and the tighten was swallowed by its own group's tray card. The player asked what to do next, was pointed at the tray, and the move actually in front of them — the screw sitting in its hole waiting to be turned — was the one thing left unlit. LACK's tutorial is exactly this state: bolt in, three in the box.
       const carded = new Set<GroupId>();
-      for (const a of avail) {
-        if (a.partId && hasTrayCard(f, a)) {
-          const g = f.parts[a.partId]?.group;
-          if (g) carded.add(g);
-        }
-      }
       const hintParts: PartId[] = [];
       for (const a of avail) {
         if (!a.partId) continue;
-        const g = f.parts[a.partId]?.group;
-        if (g && !carded.has(g)) hintParts.push(a.partId);
+        if (hasTrayCard(f, a)) {
+          const g = f.parts[a.partId]?.group;
+          if (g) carded.add(g);
+        } else if (!hintParts.includes(a.partId)) {
+          hintParts.push(a.partId);
+        }
       }
       // A partless action names no part, so nothing above can point at it. The combine stage is entirely partless — that is where the toast used to claim a highlight that did not exist — and its cards live in the cluster tray, so the section IS the target.
       const hintClusters: ClusterId[] = [];
@@ -664,7 +620,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
     // Spot is the DEMONSTRATION: the ghost travels into its socket (hintPartId) and the tray flashes
     // the card to pick up (hintGroup) — the two halves of "which part, and where". No text in Control,
     // which has "?" for the words; kept on profiles without a "?" button so they still get a nudge.
-    const next = avail[0];
+    // nextAction, not avail[0]: with a fastener half-driven, `[0]` is whatever the model happened to author first — on LACK a leg — so Spot demonstrated fetching a new part while the screw the player had just pushed in sat there waiting to be turned.
+    const next = nextAction(f, avail, new Set(s.completed)) ?? avail[0];
     const text = instructionText(f.instructions, next.actionId, s.settings.textLevel);
     // A pickup step also names a tray card — its group lets the tray flash it and scroll it into view.
     const part = next.partId ? f.parts[next.partId] : undefined;
@@ -783,7 +740,6 @@ export const useGameStore = create<GameState>()((set, get) => ({
     for (const key of Object.keys(patch)) touched.add(key);
     void persistSettings(get().settings);
   },
-  setHandedness: (handedness) => set({ handedness }),
   applyProfile: (profile) => {
     // The profile's defaults, WITH the player's own choices laid back over the top.
     //

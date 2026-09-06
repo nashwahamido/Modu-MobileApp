@@ -70,7 +70,7 @@ export function reasonActionable(
   }
 }
 
-/** Every plausible blocker for `action`, most-specific first: authored requires → requiresAny → the stability lock's own allowed steps → the slide/thread frontier → liaison neighbours → half-made preload joints → the cluster prerequisite. The caller picks the first ACTIONABLE one, so listing several loose candidates here is fine. */
+// Every plausible blocker for `action`, most-specific first: authored requires → requiresAny → the stability lock's own allowed steps → the slide/thread frontier → liaison neighbours → half-made preload joints → the cluster prerequisite. The caller picks the first ACTIONABLE one, so listing several loose candidates here is fine.
 function candidateReasons(
   f: Furniture,
   action: AssemblyAction,
@@ -141,7 +141,6 @@ function candidateReasons(
   return out;
 }
 
-/** The most actionable reason `actionId` isn't available — or null if it's actually available (or unknown). Candidates are ranked most-specific-first, but a recommendation the player cannot act on right now is worse than a vaguer one they can, so the first ACTIONABLE candidate wins; a synthesized pointer at any doable step in the same cluster backstops the rare state where none is. */
 export function blockReason(
   f: Furniture,
   actionId: ActionId,

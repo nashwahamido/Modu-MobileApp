@@ -1,22 +1,32 @@
-// resumeFocusCluster — a resumed mid-build lands in the section where its next available action lives, instead of the section chooser re-asking a question the save already answers. The device finding that forced this (2026-08-25): the autosave never carried activeCluster, so relaunching a 24%-built EKET greeted the player with "choose a section" mid-cabinet. Real EKET fixture throughout: the derivation must hold on the furniture that exposed it.
+// resumeFocusCluster
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { composeFurnitureActions } from "@/src/game/core/composition/composeActions";
 import { applyStructure, buildLiaisons } from "@/src/game/core/model/liaisons";
-import { buildComponents, memberPlaceIdsForLead } from "@/src/game/core/model/components";
+import {
+  buildComponents,
+  memberPlaceIdsForLead,
+} from "@/src/game/core/model/components";
 import { availableInMode, resumeFocusCluster } from "./availability";
 import { actionCluster } from "./clusters";
 import { HARDWARE } from "@/src/game/content/hardware";
 import * as EKET from "@/src/game/content/furnitures/EKET/authored";
 import { PARTS } from "@/src/game/content/furnitures/EKET/parts.gen";
 import type { ActionId, ClusterId, Furniture } from "@/src/game/core/type";
+import { STRUCTURE_COMPOSED as EKET_COMPOSED } from "@/src/game/content/furnitures/EKET/structure.gen";
 
-const parts = applyStructure(PARTS, EKET.STRUCTURE);
+const parts = applyStructure(PARTS, EKET_COMPOSED);
 const f = {
   meta: { id: "eket-cabinet" },
   parts,
-  actions: composeFurnitureActions(EKET.AUTHORED_ACTIONS, EKET.FASTENER_RULES, parts, HARDWARE, EKET.CLUSTERS),
+  actions: composeFurnitureActions(
+    EKET.AUTHORED_ACTIONS,
+    EKET.FASTENERS,
+    parts,
+    HARDWARE,
+    EKET.CLUSTERS,
+  ),
   gates: EKET.GATES,
   liaisons: buildLiaisons(parts),
   components: buildComponents(EKET.COMPONENTS, parts),
@@ -24,12 +34,19 @@ const f = {
 } as unknown as Furniture;
 
 /** Play `steps` legal actions focused on `cluster` (guide mode, member cascade like the store), returning the completed set. */
-function play(cluster: ClusterId, steps: number, done = new Set<ActionId>()): Set<ActionId> {
+function play(
+  cluster: ClusterId,
+  steps: number,
+  done = new Set<ActionId>(),
+): Set<ActionId> {
   for (let i = 0; i < steps; i++) {
-    const next = availableInMode(f, done, "guide", cluster).find((a) => actionCluster(f, a) === cluster);
+    const next = availableInMode(f, done, "guide", cluster).find(
+      (a) => actionCluster(f, a) === cluster,
+    );
     if (!next) break;
     done.add(next.actionId);
-    for (const m of memberPlaceIdsForLead(f.components, next.actionId)) done.add(m);
+    for (const m of memberPlaceIdsForLead(f.components, next.actionId))
+      done.add(m);
   }
   return done;
 }

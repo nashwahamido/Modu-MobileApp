@@ -1,5 +1,5 @@
 // Home. The workbench palette: a warm near-black, one lavender action, everything else quiet. animations css for landing come from here
-import { Link } from "expo-router";
+import { Link, router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo } from "react";
 import { Image, StyleSheet, useWindowDimensions, View } from "react-native";
@@ -19,6 +19,20 @@ import { useSafeInsets } from "@/src/hooks/use-safe-insets";
 
 
 const BG_CREAM = "#F3ECE0";
+
+/**
+ * THE LOADING GATE, not the room itself.
+ *
+ * That screen is the only place the player's saved MODE is restored: it reads `avatar_id` off the
+ * profile row and calls applyProfile, then continues to /room on its own. Sending Home straight to
+ * /room skipped it, so a returning player — and especially one coming back after a crash — arrived
+ * with their build progress intact but their mode reset to the store's declared default, `control`,
+ * whatever they had actually chosen.
+ *
+ * It restores handedness the same way, and it is where hydrateSettings lays the player's own touched
+ * settings back over the profile's defaults. All three were being lost by the shortcut.
+ */
+const HOME_ROUTE = "/loading" as const;
 
 const clayPattern = require("@/src/assets/ui/landing/clay-pattern.png");
 const wordmark = require("@/src/assets/ui/brand/logo-modu.png");
@@ -137,19 +151,50 @@ function useWaveSizes() {
   }, [screenW]);
 }
 
+// RESUME THE SIGNED-IN ACCOUNT, rather than offering to pick one again.
+//
+// The session already lives on the device — supabase-js writes it to AsyncStorage and refreshes it
+// itself (src/config/supabase.ts) — so a cold start, a reload, or a crash is NOT a logout, and the
+// app should not behave as though it were. The only thing that ends a session is Settings → Account
+// → Log out (services/auth signOut) or a deliberate account switch; everything else lands back on
+// the same player.
+//
+// Deciding here rather than letting the room's own gate sort it out keeps it to one navigation: the
+// landing screen is the app's entry route, so without this a returning player meets the picker on
+// every launch and has to choose the account they never left.
 export default function App() {
+  const { user, loading } = useAuth();
+  // Includes `loading`: reading the persisted session off AsyncStorage is async, so on the first
+  // frame a signed-in player is indistinguishable from a signed-out one. Holding through that window
+  // is the difference between resuming silently and flashing the landing screen on the way to the room.
+  const resuming = SESSION_REQUIRED && (loading || Boolean(user));
+
+  useEffect(() => {
+    if (SESSION_REQUIRED && !loading && user) router.replace(HOME_ROUTE);
+  }, [loading, user]);
+
+  // Flat cream, not <Landing /> muted: the intro sequence runs off a mount effect, so mounting it
+  // here would spend its first second behind a redirect — and a player who turns out to be signed
+  // OUT would then arrive partway through their own opening animation.
+  if (resuming) return <View style={{ flex: 1, backgroundColor: BG_CREAM }} />;
+
+  return <Landing />;
+}
+
+function Landing() {
   const styles = useStyles(makeStyles);
   const safe = useSafeInsets();
   const waveSize = useWaveSizes();
   const k = useUiScale();
   const isTablet = useIsTablet();
+  // For Home. `loading` matters as much as `user`: on a cold start the session resolves a beat after
+  // the first paint, so a tap during that window would read a null user and send a signed-in player
+  // to the picker. Waiting is the honest answer — see onHome.
+  const { user, loading } = useAuth();
   const { width: winW, height: winH } = useWindowDimensions();
   const isS22UltraLike =
     !isTablet &&
     Math.abs(Math.max(winW, winH) / Math.min(winW, winH) - S22_ULTRA_ASPECT) < S22_ULTRA_ASPECT_TOLERANCE;
-  const { user } = useAuth();
-  const homeRoute = SESSION_REQUIRED && !user ? SIGN_IN_ROUTE : "/room";
-
   const wordmarkOpacity = useSharedValue(1);
   const wordmarkScale = useSharedValue(1);
   const figureOpacity = useSharedValue(0);
@@ -200,6 +245,24 @@ export default function App() {
     opacity: figureOpacity.value,
     transform: [{ translateX: figureXShift }],
   }));
+  // HOME GOES HOME, or to the picker if there is nobody to go home as.
+  //
+  // The room is a protected route, so navigating there signed-out does not fail quietly — the
+  // session gate bounces it straight back to /auth. That would work, in the sense that the player
+  // ends up in the right place, but it would flash the room's loading state on the way and read as
+  // the app changing its mind. Deciding here means one navigation either way.
+  //
+  // A tap while the session is still resolving does nothing rather than guessing. That window is a
+  // few hundred milliseconds at most, and guessing wrong sends someone who IS signed in to a login
+  // screen — the more annoying of the two failures by far.
+  //
+  // On the in-memory backend there is no session to have: SESSION_REQUIRED is false, every screen
+  // runs as the demo user, and Home should just go home.
+  const onHome = () => {
+    if (SESSION_REQUIRED && loading) return;
+    router.push(!SESSION_REQUIRED || user ? HOME_ROUTE : SIGN_IN_ROUTE);
+  };
+
   const actionsStyle = useAnimatedStyle(() => ({
     opacity: actionsOpacity.value,
     transform: [{ translateY: actionsY.value }],
@@ -273,16 +336,7 @@ export default function App() {
           },
         ]}
       >
-        <Link href="/onboarding-questionnaire" asChild>
-          <Button
-            label="New User"
-            variant="primary"
-            pill
-            style={{ ...styles.actionButton, ...(isTablet ? styles.actionButtonTablet : null) }}
-            labelStyle={isTablet && styles.actionLabelTablet}
-          />
-        </Link>
-        <Link href={homeRoute} asChild>
+        <Link href={SIGN_IN_ROUTE} asChild>
           <Button
             label="Choose Account"
             variant="primary"
@@ -291,6 +345,16 @@ export default function App() {
             labelStyle={isTablet && styles.actionLabelTablet}
           />
         </Link>
+        {/* push, not replace — the picker adds a Back that returns here, and that only works if this
+            screen is still on the stack under it. */}
+        <Button
+          label="Home"
+          variant="primary"
+          pill
+          onPress={onHome}
+          style={{ ...styles.actionButton, ...(isTablet ? styles.actionButtonTablet : null) }}
+          labelStyle={isTablet && styles.actionLabelTablet}
+        />
       </Animated.View>
 
       {/* D */}

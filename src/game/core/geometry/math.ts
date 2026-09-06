@@ -27,7 +27,7 @@ export function quatFromAxisAngle(axis: Vec3, rad: number): Quat {
   ];
 }
 
-/** Conjugate = inverse for the unit quaternions all poses here use. */
+// Conjugate = inverse for the unit quaternions all poses here use.
 export function quatConjugate(q: Quat): Quat {
   return [-q[0], -q[1], -q[2], q[3]];
 }
@@ -48,7 +48,7 @@ export function quatAngleDeg(a: Quat, b: Quat): number {
   return (2 * Math.acos(Math.min(1, dot)) * 180) / Math.PI;
 }
 
-/** Spherical-linear interpolation between two unit quaternions (xyzw). t=0 → a, t=1 → b, taking the shortest arc. Used to ease a held part's rotation toward the socket it's approaching so the drop has no orientation pop. */
+// Slerp between two unit quaternions, taking the shortest arc. Eases a held part's rotation toward the socket it approaches, so the drop has no orientation pop.
 export function quatSlerp(a: Quat, b: Quat, t: number): Quat {
   let dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
   let bx = b[0],
@@ -82,7 +82,7 @@ export function quatSlerp(a: Quat, b: Quat, t: number): Quat {
   ];
 }
 
-/** Unit quaternion (xyzw) as axis-angle — the form filament's setEntityRotation wants. Returns null for the identity (no rotation needed). */
+// Unit quaternion as axis-angle, the form setEntityRotation wants. Null for the identity.
 export function quatToAxisAngle(
   q: Quat,
 ): { angleRad: number; axis: [number, number, number] } | null {
@@ -97,7 +97,7 @@ export function quatToAxisAngle(
   };
 }
 
-/** Shortest rotation taking unit vector `from` onto unit vector `to`, as axis-angle (the form filament's setEntityRotation wants). Antiparallel inputs rotate pi about an arbitrary perpendicular axis. */
+// Shortest rotation taking `from` onto `to`, as axis-angle. Antiparallel inputs rotate π about an arbitrary perpendicular axis.
 export function axisAngleBetween(
   from: Vec3,
   to: Vec3,
@@ -126,7 +126,8 @@ export interface LookAt {
   up: Vec3;
 }
 
-/** The world-space ray a screen point aims along. `dir` is NOT normalized — its length is whatever the frustum maths produced, which is all any plane intersection needs. fovYDeg is the full vertical field of view; screen coords share the viewport's units, origin top-left, y down. */
+// The world-space ray a screen point aims along. `dir` is NOT normalized — its length is whatever the frustum maths produced, which is all a plane intersection needs.
+// fovYDeg is the FULL vertical field of view; screen coords share the viewport's units, origin top-left, y down.
 export function screenRay(
   look: LookAt,
   fovYDeg: number,
@@ -165,7 +166,7 @@ export function screenRay(
   return { eye, dir };
 }
 
-/** Unproject a screen point through the camera and intersect the horizontal plane y = planeY. Returns the world point, or null when the ray runs parallel to the plane or away from it. */
+// Unproject a screen point and intersect the horizontal plane y = planeY. Null when the ray runs parallel to it or away from it.
 export function screenPointOnPlane(
   look: LookAt,
   fovYDeg: number,

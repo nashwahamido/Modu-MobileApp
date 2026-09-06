@@ -15,24 +15,11 @@ const DEFAULT_CONTEXT: TutorialContext = {
   softHints: true,
 };
 
-// How long a completed step shows its reward before advancing. The event
-// cooldown matches it exactly; actions completed during this window are
-// latched and consumed atomically when the tutorial advances.
 const STEP_ADVANCE_DELAY_MS = 1200;
 
-// These actions are recorded by the game as soon as their success threshold is
-// reached, while the final tightening/turning animation may still be settling.
-// Keep the current instruction visible briefly so the next card (or completion
-// reward) cannot appear over an action that still looks unfinished.
 const EVENT_SETTLE_DELAY_MS: Partial<Record<TutorialEvent, number>> = {
   connector_tightened: 450,
-  // The tutorial's CLOSING event since the ceremonial reorient beat was removed (2026-08-19). It
-  // needs the pause more than the others did, not less: the fourth leg is recorded the moment it
-  // seats, while the part is still settling, and what follows is no longer another instruction card
-  // but the completion reward — which would otherwise land on top of a leg still visibly moving.
   all_legs_installed: 500,
-  // Kept although no step waits on it any more: tutorial.tsx still raises it for ANY reorient
-  // action, and a furniture that reintroduces one should not also have to rediscover this delay.
   assembly_reoriented: 500,
 };
 
@@ -52,7 +39,6 @@ interface TutorialState {
   acceptsEventsAfter: number;
   pendingCompletionStepId: string | null;
   pendingAdvanceStepId: string | null;
-  /** Events fired during a reward/cooldown window, consumed on advance so a fast pick-up → snap gesture is neither lost nor briefly re-rendered. */
   latchedEvents: TutorialEvent[];
   configureTutorial: (context: TutorialContext) => void;
   beginSettingsTutorial: () => void;
@@ -126,9 +112,6 @@ export const useTutorialStore = create<TutorialState>()((set, get) => ({
     } = get();
     if (skipped || completed) return;
     const step = steps[currentIndex];
-    // While an action settles, the previous reward animates, or a cooldown is
-    // active, an event for the current/next step would otherwise be dropped.
-    // Latch it and consume it during the advance below.
     if (
       pendingCompletionStepId ||
       pendingAdvanceStepId ||
@@ -219,10 +202,6 @@ export const useTutorialStore = create<TutorialState>()((set, get) => ({
           });
         }
       } else {
-        // If the player already completed the next physical action during this
-        // reward window, consume that step atomically. Rendering it first and
-        // immediately completing it caused instructions such as "Release your
-        // finger" to flash for a single frame.
         const nextStep = state.steps[nextIndex];
         const { latchedEvents } = get();
         if (nextStep && latchedEvents.includes(nextStep.event)) {

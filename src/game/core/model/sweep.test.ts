@@ -11,6 +11,7 @@ import type { ActionId, AssemblyAction, Furniture, PartId, SweepMap } from "@/sr
 import { STRUCTURE as EKET_STRUCTURE } from "@/src/game/content/furnitures/EKET/authored";
 import { PARTS as EKET_PARTS } from "@/src/game/content/furnitures/EKET/parts.gen";
 import { SWEEP as EKET_SWEEP } from "@/src/game/content/furnitures/EKET/sweep.gen";
+import { STRUCTURE_COMPOSED as EKET_COMPOSED } from "@/src/game/content/furnitures/EKET/structure.gen";
 
 const placed = (...ids: string[]) => {
   const s = new Set(ids);
@@ -63,7 +64,7 @@ test("adaptSignedDir keeps the authored vector when its corridor is viable, flip
 
 // The July 2026 order-dependence case, end to end through the real EKET data: the back panel's static placeDir [0,1,0] could only say the authored top-first order (slide UP through the open bottom); after a bottom-first close — legal in free mode through the symmetric groove-trap gates — the same panel must slide DOWN through the open top, and the static value shipped a colliding branch. The sweep now flips the sign per build order; the axis stays authored (a groove's axis is not derivable — the device-proven lesson).
 test("EKET backPanel slides UP after top-first and DOWN after bottom-first — the placeDir sign follows the build order", () => {
-  const parts = applyStructure(EKET_PARTS, EKET_STRUCTURE);
+  const parts = applyStructure(EKET_PARTS, EKET_COMPOSED);
   const f = { parts, liaisons: buildLiaisons(parts), sweep: EKET_SWEEP } as unknown as Furniture;
   const back = asPartId("backPanel");
   const action = { actionId: placeId(back), type: "placePart", partId: back } as unknown as AssemblyAction;
@@ -78,7 +79,7 @@ test("EKET backPanel slides UP after top-first and DOWN after bottom-first — t
 
 // The AXIS half of order-dependence (the sign tests above cover the slider half): a press horizontal's approach follows its placed MATES. One standing side pulls it sideways toward that side — either side, so the authored sign mirrors; both standing sides cancel laterally and the approach collapses to the closing axis, the motion the bottom panel already authors for ITS close-over-both. The suspension bracket is the guard-rail case: its mate centroid points down, but the closed top vetoes a vertical approach and the authored sideways tap must stand.
 test("EKET topPanel approach follows the standing sides: toward one, straight DOWN over both", () => {
-  const parts = applyStructure(EKET_PARTS, EKET_STRUCTURE);
+  const parts = applyStructure(EKET_PARTS, EKET_COMPOSED);
   const f = { parts, liaisons: buildLiaisons(parts), sweep: EKET_SWEEP } as unknown as Furniture;
   const top = parts[asPartId("topPanel")]!;
   const done = (...ids: string[]): ReadonlySet<ActionId> => new Set(ids.map((i) => placeId(asPartId(i))));
@@ -95,7 +96,7 @@ test("EKET topPanel approach follows the standing sides: toward one, straight DO
 });
 
 test("EKET bottomPanel's authored close-over-both survives byte-identical, and the suspension bracket's cross-axis pull is vetoed", () => {
-  const parts = applyStructure(EKET_PARTS, EKET_STRUCTURE);
+  const parts = applyStructure(EKET_PARTS, EKET_COMPOSED);
   const f = { parts, liaisons: buildLiaisons(parts), sweep: EKET_SWEEP } as unknown as Furniture;
   const done = (...ids: string[]): ReadonlySet<ActionId> => new Set(ids.map((i) => placeId(asPartId(i))));
   // authored order: back seated, bottom closes UP over both sides — mates agree with the authored axis, exact vector kept

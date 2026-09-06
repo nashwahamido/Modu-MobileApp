@@ -38,6 +38,74 @@ const NEUTRAL_SOURCES = {
   rough: require("../../assets/textures/neutral_rough.tex"),
 } as const;
 
+// Derived rather than imported: neither type is re-exported from the package root.
+type SurfaceBuffer = Parameters<RenderableManager["createTexture"]>[0];
+type WorkletContext = ReturnType<typeof useFilamentContext>["workletContext"];
+
+// UPLOAD EACH MAP ONCE PER ENGINE. A Texture cannot be freed on demand — TextureWrapper owns its Filament texture and destroys it only when Hermes collects the wrapper, and Hermes sizes that wrapper at a few bytes while it owns ~5.6 MB of GPU memory, so it feels no pressure to collect one. Re-resolving a surface therefore uploaded the same bytes again and left the previous upload resident. Three of these hooks are live at once (floor, wall, trim), so one account switch re-resolved up to eighteen maps with nothing reclaimed. Not creating the duplicate is the fix available to us, because releasing is not.
+//
+// KEYED ON THE RENDERABLE MANAGER, never module-global: a Texture belongs to the Engine that made it, so a scene remount has to start from an empty cache — handing a new engine a texture from a destroyed one is a use-after-free. The WeakMap drops each engine's cache along with the engine.
+//
+// The key is the VERSIONED url (probeRemote's ?v=<etag>), so a re-uploaded texture is a cache miss by construction — the same property the HTTP cache-bust already relies on.
+const textureCaches = new WeakMap<RenderableManager, Map<string, Promise<Texture>>>();
+
+function textureCacheFor(manager: RenderableManager): Map<string, Promise<Texture>> {
+  let cache = textureCaches.get(manager);
+  if (!cache) {
+    cache = new Map();
+    textureCaches.set(manager, cache);
+  }
+  return cache;
+}
+
+/**
+ * Drop every cached upload for an engine that is going away.
+ *
+ * NOT MERELY TIDINESS, and not optional: TextureWrapper holds a STRONG shared_ptr to the Engine — its
+ * own header says the failure signature of a leaked one is "the Engine never dies", because a single
+ * surviving texture pins the whole GPU context, every asset and every material with it. Caching the
+ * textures for the life of the engine is what makes the upload happen once; holding them PAST it
+ * would keep a dead scene's entire engine resident, which is the difference between a few megabytes
+ * and a few hundred. The WeakMap alone cannot be relied on for that — it drops the entry only once
+ * the manager itself is unreachable, and a JS reference lingering anywhere defers the whole engine.
+ */
+function releaseTextureCache(manager: RenderableManager): void {
+  textureCaches.delete(manager);
+}
+
+/**
+ * The cached upload for `key`, creating it only on a miss.
+ *
+ * PROMISES ARE CACHED, NOT TEXTURES, and that is the point rather than a convenience: two effects
+ * racing for the same map await ONE upload instead of starting a second and discarding the loser's,
+ * and a discarded upload is a leak rather than a no-op.
+ */
+function uploadOnce(
+  manager: RenderableManager,
+  workletContext: WorkletContext,
+  key: string,
+  buffer: SurfaceBuffer | null,
+  flags: TextureFlags,
+): Promise<Texture> | null {
+  const cache = textureCacheFor(manager);
+  const existing = cache.get(key);
+  if (existing) return existing;
+  // No buffer and no cache entry means the fetch was skipped for a hit that has since been dropped.
+  if (!buffer) return null;
+  // On the FILAMENT WORKLET THREAD — see the note in stage 2 for why createTexture cannot run here.
+  // ADOPTED WITH Promise.resolve, and it must stay that way: runAsync hands back a worklets-core THENABLE, not a Promise — it has .then but no .catch, and it is not safe to await more than once. Both matter here, because this value is cached and then awaited by every effect that asks for the same map. Unadopted, the .catch below threw a synchronous TypeError BEFORE the return, so a cache miss never delivered its texture at all and left the upload stranded in the map. Same adoption the shader material cache does, for the same reason — see ensureMaterial in game/scene/shaders.tsx.
+  const created = Promise.resolve(
+    workletContext.runAsync(() => {
+      "worklet";
+      return manager.createTexture(buffer, flags);
+    }),
+  );
+  cache.set(key, created);
+  // A failed upload must not stay cached, or one bad fetch makes the miss permanent for the session.
+  void created.catch(() => cache.delete(key));
+  return created;
+}
+
 export type NeutralMaps = { normal: Texture; rough: Texture };
 
 /**
@@ -69,15 +137,13 @@ export function useNeutralMaps(renderableManager: RenderableManager | null): Neu
       if (!alive) return;
 
       // On the FILAMENT WORKLET THREAD, for the reason stage 2 below spells out at length: createTexture spawns JobSystem work, and Filament aborts the process when that is entered from a thread it has not adopted. Both maps are LINEAR ("none"), never sRGB — a normal and a metallic-roughness carry data, not colour, and decoding them as sRGB would bend the very values chosen above to be exactly neutral.
-      const normal = await workletContext.runAsync(() => {
-        "worklet";
-        return renderableManager.createTexture(normalBuffer, "none");
-      });
+      // Through uploadOnce like every other map: these two outlive the scene, so a remount that reuses the same engine must not upload them twice.
+      const normalUpload = uploadOnce(renderableManager, workletContext, normalUri, normalBuffer, "none");
+      const roughUpload = uploadOnce(renderableManager, workletContext, roughUri, roughBuffer, "none");
+      if (!normalUpload || !roughUpload) return;
+      const normal = await normalUpload;
       if (!alive) return;
-      const rough = await workletContext.runAsync(() => {
-        "worklet";
-        return renderableManager.createTexture(roughBuffer, "none");
-      });
+      const rough = await roughUpload;
       if (!alive) return;
 
       setNeutral({ normal, rough });
@@ -85,6 +151,11 @@ export function useNeutralMaps(renderableManager: RenderableManager | null): Neu
 
     return () => {
       alive = false;
+      // THE CACHE DIES WITH THE SCENE. This hook is instantiated exactly once per RoomScene, which
+      // makes it the one owner that can say when an engine's uploads are finished with — the three
+      // useSurfaceTextures instances share the same cache and unmount alongside it. See
+      // releaseTextureCache for why holding textures past the engine is the expensive mistake.
+      releaseTextureCache(renderableManager);
     };
   }, [renderableManager, workletContext]);
 
@@ -119,6 +190,7 @@ export function useSurfaceTextures(
       // Stage 1 — resolve every URL and fetch its bytes IN PARALLEL. This is plain I/O (HEAD probe +
       // buffer fetch), nothing here runs the native busy-spin, so there is no reason to serialise it —
       // the "requested in parallel" cost-nothing claim above is about this stage.
+      const cache = textureCacheFor(renderableManager);
       const fetched = await Promise.all(
         spec.maps.map(async (map) => {
           const url = surfaceMapUrl(source, item.id, map);
@@ -132,9 +204,11 @@ export function useSurfaceTextures(
           // TypeError per map on every room mount, which is noise rather than a symptom: a missing
           // map is already a supported outcome (null drops just this one, leaving the shell's own
           // texture), so an unavailable proxy takes exactly that path instead of rejecting.
+          // A map this engine has already uploaded needs neither the download nor a second upload — see uploadOnce. Checked BEFORE loadAsset rather than after, so a re-resolve costs no network either.
+          if (cache.has(versioned)) return { map, key: versioned, buffer: null };
           if (!FilamentProxy?.loadAsset) return null;
           const buffer = await FilamentProxy.loadAsset(versioned);
-          return { map, buffer };
+          return { map, key: versioned, buffer };
         }),
       );
       if (!alive) return;
@@ -161,13 +235,11 @@ export function useSurfaceTextures(
         // paying for texture creation the moment it is known to be discarded, rather than running to
         // completion for nothing.
         if (!alive) return;
-        const { map, buffer } = ready[i];
-        const flags = FLAGS[map];
-        const texture = await workletContext.runAsync(() => {
-          "worklet";
-          return renderableManager.createTexture(buffer, flags);
-        });
-        byMap.set(map, texture);
+        const { map, key: cacheKey, buffer } = ready[i];
+        const upload = uploadOnce(renderableManager, workletContext, cacheKey, buffer, FLAGS[map]);
+        // Null only where the fetch was skipped for a cache entry that has since been dropped by a failed upload. Skipping the map leaves that slot to the neutral stand-in, which is the same outcome as a map the portal never published.
+        if (!upload) continue;
+        byMap.set(map, await upload);
       }
       if (!alive) return;
 

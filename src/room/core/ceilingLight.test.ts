@@ -21,7 +21,8 @@ test("the fitting hangs at the centre of the room, inside it", () => {
   assert.ok(CEILING_LIGHT_DROP > 2.5 && CEILING_LIGHT_DROP < 3, `drop of ${CEILING_LIGHT_DROP} m is not a ceiling`);
 });
 
-// THE invariant of this module, and the one most likely to be "helpfully" widened away later. With no visible fixture — the camera sits above the ceiling plane, so a fitting can never be drawn — the ONLY cue that a bulb hangs overhead is the shape of the falloff. A cone that reaches the corners has no shape, which is exactly the flat point light this rig replaced.
+// THE invariant of this module, and the one most likely to be "helpfully" widened away.
+// With no visible fixture — the camera sits above the ceiling plane — the ONLY cue that a bulb hangs overhead is the shape of the falloff, and a cone that reaches the corners has no shape.
 test("the key cone covers the usable floor but leaves the corners to the fill", () => {
   const outer = poolRadius(CEILING_LIGHT_RIG.outerDeg);
   assert.ok(
@@ -36,7 +37,7 @@ test("the key cone covers the usable floor but leaves the corners to the fill", 
 
 test("the cone is soft-edged and expressed the way Filament wants it", () => {
   const [inner, outer] = ceilingCone();
-  // Half-angles in RADIANS, ascending. NOT the form item_lights.cone_deg uses for bought lamps, which stores the full outer angle in degrees and is halved by RoomLit on the way in.
+  // Half-angles in RADIANS, ascending — not item_lights.cone_deg's form, which stores the full outer angle and is halved by RoomLit.
   assert.ok(inner < outer, "inner must be inside outer");
   assert.ok(outer < Math.PI / 2, "a half-angle at or past 90 degrees is a hemisphere, i.e. a point light with extra steps");
   assert.equal(inner, outer * CEILING_LIGHT_RIG.innerRatio);
@@ -48,7 +49,7 @@ test("the fill is a fill and not a second key", () => {
   assert.ok(CEILING_LIGHT_RIG.fillRatio > 0, "a fill at zero leaves the corners black in a room players arrange furniture in");
   assert.ok(CEILING_LIGHT_RIG.fillRatio < 1, "a fill at or above the key is not a fill");
   assert.equal(fillLumens(100_000), 100_000 * CEILING_LIGHT_RIG.fillRatio);
-  // The fill must never out-reach LESS far than the key: the corners are outside the key's CONE, so the fill is the only light on them, and the key is bounded by its cone rather than by its radius. Equal radii are fine and are what both currently use.
+  // The fill must never reach LESS far than the key: the corners sit outside the key's cone, so the fill is the only light on them. Equal radii are fine and are what both use.
   assert.ok(CEILING_LIGHT_RIG.fillReachMetres >= CEILING_LIGHT_RIG.keyReachMetres);
   assert.ok(
     CEILING_LIGHT_RIG.fillReachMetres > FLOOR_CORNER_DISTANCE,
@@ -56,7 +57,8 @@ test("the fill is a fill and not a second key", () => {
   );
 });
 
-// Filament attenuates by (1 - (d/r)^4)^2 on top of inverse-square, which is already down to ~15% at d/r = 0.89 — so a falloff radius chosen as "just past the farthest thing to light" darkens everything near the edge. Setting the key's radius to 4.5 m against a 3.99 m beam did exactly that and blacked out the outer pool on the first device check. Both radii must keep the room's far corner well inside the window, not near its lip.
+// Filament attenuates by (1 - (d/r)^4)^2 on top of inverse-square, already down to ~15% at d/r = 0.89, so a radius chosen as "just past the farthest thing to light" darkens everything near the edge.
+// A 4.5m radius against a 3.99m beam blacked out the outer pool on device. Both radii must keep the far corner well inside the window, not near its lip.
 test("both falloff radii keep the room inside the window, not on its lip", () => {
   const slantToCorner = Math.hypot(FLOOR_CORNER_DISTANCE, CEILING_LIGHT_DROP);
   for (const [name, reach] of [

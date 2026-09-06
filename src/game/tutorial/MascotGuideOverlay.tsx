@@ -55,7 +55,6 @@ interface Props {
   focusReturnPrompt?: boolean;
   undoPreviewActive?: boolean;
   onDismissUndoPreview?: () => void;
-  /** Lets a repeated physical step follow the currently actionable control. */
   guideTargetOverride?: TutorialTargetId | null;
   guideMessageOverride?: string | null;
 }
@@ -76,23 +75,16 @@ export function MascotGuideOverlay({
   guideMessageOverride = null,
 }: Props) {
   const styles = useFixedStyles(makeStyles);
-  // Read HERE, above every early return below — this component has eight of them, and a hook called past any one of them changes the hook order between renders.
   const handedness = useHandedness();
-  // The tutorial is the most read text in the app.
   const overlayRef = useRef<View>(null);
   const windowSize = useWindowDimensions();
   const [overlaySize, setOverlaySize] = useState<{ width: number; height: number } | null>(null);
-  // THE HUD'S AUDIO CHIP, not a switch of its own. It used to be local state behind a button on the
-  // bubble, which meant the tutorial's voice and the build's spoken steps were two different mutes
-  // in two different places — and the one on the card moved with every step. `settings.audio` is the
-  // one the chip beside the gear already flips, and the one the visual profile turns on by default.
   const visualSpeechEnabled = useGameStore((s) => s.settings.audio);
   const width = overlaySize?.width ?? windowSize.width;
   const height = overlaySize?.height ?? windowSize.height;
   const currentIndex = useTutorialStore((s) => s.currentIndex);
   const profile = useGameStore((s) => s.profile);
   const mapOpen = useGameStore((s) => s.mapOpen);
-  // HEAD art, not the full body: at 78pt the whole character was a speck.
   const mascotImage = avatarHeadForProfile(profile);
   const presentation = tutorialPresentationForProfile(profile);
   const steps = useTutorialStore((s) => s.steps);
@@ -127,14 +119,6 @@ export function MascotGuideOverlay({
       !rewardReady,
   );
 
-  // LUMI'S VOICE. A recorded clip where the step has one, expo-speech where it does not — see
-  // game/audio/useTutorialVoice. This used to synthesise every line unconditionally; the gating
-  // below is unchanged, and only what happens once a step qualifies is different.
-  //
-  // The grip step is silent, as before. Its card is a full-screen coach with its own art and its own
-  // "Got it" button (GripCoach), and the mascot's bubble is not even up yet — so the line was read
-  // aloud over a screen that showed no bubble to read it from. Passing `undefined` as the step id is
-  // what keeps it that way: the hook silences both voices rather than falling back to speaking it.
   const spokenStepId =
     presentation.showVisualDemo && step && step.id !== GRIP_STEP_ID
       ? step.id
@@ -145,11 +129,6 @@ export function MascotGuideOverlay({
         guideMessageOverride ?? step.shortLabel ?? step.message,
       )
     : '';
-  // NOT GATED ON `blocked`. That flag means the card has been collapsed out of the way because the
-  // player has picked a part up and the bubble would sit over the tray they are reaching into — the
-  // guidance is hidden, not cancelled. Silencing the line there took the instruction away at the
-  // exact moment the player was carrying it out, on the profile that relies on hearing it. The
-  // OVERLAY still returns null for `blocked` (see below); only the voice carries on.
   useTutorialVoice(
     spokenStepId,
     spokenMessage,
@@ -163,17 +142,6 @@ export function MascotGuideOverlay({
       !rewardReady,
   );
 
-  // THE GRIP STEP IS NOT NUMBERED. It teaches how to hold the device, not how to use a control, and
-  // it is acknowledged by a button rather than by doing anything — so counting it made the first
-  // real instruction "2/10" and set the player's expectation one higher than the tutorial delivers.
-  //
-  // Both halves shift together: it comes out of the denominator as well as the numerator, so the
-  // long-press step reads 1 of 9 rather than 1 of 10.
-  //
-  // A step flagged `unnumbered` leaves the count the same way — see the field on TutorialStep. It is
-  // only ever the LAST step, which is what lets `stepNumber` below stay a simple offset: an
-  // unnumbered step in the middle would need every step after it shifted down, and nothing authors
-  // one there. The counter is not rendered at all while such a step is up.
   const gripIndex = steps.findIndex((s) => s.id === GRIP_STEP_ID);
   const uncounted =
     (gripIndex >= 0 ? 1 : 0) + steps.filter((s) => s.unnumbered).length;
@@ -209,34 +177,16 @@ export function MascotGuideOverlay({
     const overlayNode = findNodeHandle(overlayRef.current);
     if (!step || !targetId || !overlayNode || !targetNode) return;
 
-    // The SECOND control this step rings, if it has one — see SECONDARY_TARGET_BY_STEP.
-    //
-    // IT HAS TO BE MEASURED HERE. This effect used to measure the step's own target and nothing
-    // else, which meant the stuck-help card's second ring never drew: its render branch reads
-    // `frames['auto']`, no step declares `auto` as its target, and so nothing ever wrote that frame.
-    // The ring code was correct and unreachable.
-    //
-    // Suppressed while a takeover is up (the undo preview, the focus-return prompt, a guide
-    // override): those replace the step's own target, so a second ring left over from the step
-    // underneath would mark a control the card on screen is not talking about.
     const secondaryTargetId =
       undoPreviewActive || focusReturnPrompt || guideTargetOverride
         ? undefined
         : SECONDARY_TARGET_BY_STEP[step.id];
     const secondaryNode = secondaryTargetId ? nodes[secondaryTargetId] : null;
 
-    // Filament adds native containers whose layout origin is not the visual origin of the overlay. Window coordinates are global, so subtracting the overlay's window origin gives a frame that the cutout and border share.
     const measureTarget = () => {
       UIManager.measureInWindow(overlayNode, (overlayX, overlayY) => {
-        // ONE overlay measurement for both rings, so the two frames cannot be resolved against
-        // different origins — a window origin read twice across a layout pass could differ, and the
-        // rings would sit a few points apart from the buttons they mark.
         const measureInto = (id: TutorialTargetId, node: number) => {
           UIManager.measureInWindow(node, (targetX, targetY, measuredWidth, measuredHeight) => {
-            // A zero-sized measurement is a control that is not on screen, not a control at the
-            // origin. Auto is exactly that in a release build — DevAutoStep renders itself away
-            // outside __DEV__ and showcase — so this guard is what makes the second ring degrade to
-            // no ring rather than to a rectangle in the corner.
             if (measuredWidth > 0 && measuredHeight > 0) {
               setFrame(id, {
                 x: targetX - overlayX,
@@ -259,16 +209,6 @@ export function MascotGuideOverlay({
     return () => clearTimeout(retry);
   }, [completed, currentIndex, focusReturnPrompt, guideTargetOverride, nodes, overlaySize, rewardReady, setFrame, skipped, steps, undoPreviewActive]);
 
-  // The pause button opens the same build-map modal used by a normal task.
-  // Hide tutorial chrome while it is open so the shared modal remains the
-  // only interactive layer and its close/resume behaviour stays unchanged.
-  //
-  // `blocked` DOES NOT APPLY ONCE THE TUTORIAL IS OVER. It means "the step guide is collapsed
-  // because the player is mid-gesture on the tray" — a reason to hide an instruction, never a reason
-  // to withhold the reward. And it does not clear itself here: the screen resets it when the step ID
-  // changes, which never happens on the last step, because finishing the fourth leg ends the
-  // tutorial instead of advancing it. So a player who picked up that leg — which is the only way to
-  // install it — had `blocked` stuck true and got no completion card at all.
   const finished = settingsReady || rewardReady;
   if (skipped || mapOpen || attentionOverlayActive || (blocked && !finished)) return null;
 
@@ -320,7 +260,6 @@ export function MascotGuideOverlay({
           <View style={styles.rewardCopy}>
             <Text style={styles.rewardTitle}>Tutorial completed!</Text>
             <Text style={styles.rewardMessage}>Your LACK table is ready for its first home.</Text>
-            {/* XP on the left, the CTA on the right, sharing one baseline row. */}
             <View style={styles.rewardActionRow}>
               <View style={styles.rewardXpRow}>
                 <Image
@@ -361,8 +300,6 @@ export function MascotGuideOverlay({
       ? 'focus'
       : guideTargetOverride ?? step.targetId;
   const rawFrame = frames[activeTargetId];
-  // Targets can briefly unmount while the assembly advances (notably when the
-  // Allen key step hands over to the leg step). Do not manufacture a fallback message for that gap: it flashes for a frame and competes with the next cue.
   if (!rawFrame) {
     return <View ref={overlayRef} style={styles.layer} pointerEvents="none" onLayout={handleLayout} />;
   }
@@ -370,9 +307,6 @@ export function MascotGuideOverlay({
     undoPreviewActive
       ? {
           ...rawFrame,
-          // The normal assembly target begins beside the joystick. During the
-          // wide Undo preview, move only this spotlight farther into the scene
-          // so its border does not collide with the joystick control.
           x: rawFrame.x + 48,
         }
       : rawFrame,
@@ -391,20 +325,8 @@ export function MascotGuideOverlay({
       : presentation.reducedText
         ? visualMessageForStep(step.id, step.shortLabel ?? step.message)
         : step.message;
-  // UN-MIRROR IN, MIRROR OUT — and both halves are needed.
-  //
-  // `frame` is the MEASURED rectangle of the control being pointed at, so in left-hand mode it has already crossed the screen with that control. Mirroring only the RESULT therefore flipped a placement that was already correct, and every bubble landed on the far side of the screen from its target.
-  //
-  // Nor is doing nothing right: the branches below encode a SIDE ("beside the target, to its right", "hard against the left edge"), and a side preference authored for a right-handed HUD has to flip with the HUD. Reflecting the frame back into right-handed space lets that logic run exactly as written, and reflecting its answer back out puts it where a mirrored screen wants it. One reflection at each end, one set of placement rules in the middle.
-  // Null unless this step is one the player READS. The scrim rects below take it: tapping the dimmed
-  // area closes the card, and the lit target keeps its own taps.
-  // Auto's own measured rectangle, for the second ring above. Undefined on every other step and
-  // whenever Auto is not on screen — which is any build that is not __DEV__ or showcase.
   const secondaryTargetId = SECONDARY_TARGET_BY_STEP[step.id];
   const autoFrame = secondaryTargetId ? frames[secondaryTargetId] : undefined;
-  // The stuck-help card marks two buttons and dims nothing: greying the screen to say "help lives
-  // here" reads as an interruption rather than an offer. The panes still render — see Scrim — they
-  // are just invisible, because they are what a tap to continue lands on.
   const dimTarget = !secondaryTargetId;
 
   const onDismissRead =
@@ -412,8 +334,6 @@ export function MascotGuideOverlay({
       ? () => useTutorialStore.getState().completeEvent("controls_acknowledged")
       : undefined;
 
-  // The counter line, or '' for a step that has none. Empty is the signal not to render the row —
-  // see the card below.
   const counterText = undoPreviewActive
     ? 'UNDO PREVIEW'
     : focusReturnPrompt
@@ -450,11 +370,6 @@ export function MascotGuideOverlay({
         <>
           {step.id === 'stand-table-upright' ? null : (
             <>
-              {/* On a READ-ONLY step these four become the dismiss surface, and the hole between them
-                  stays live — which is the point. The whole-screen Pressable that did this before
-                  covered the very buttons the card was describing, so "Press Undo to go back, or
-                  Recenter to adjust the view" pointed at two controls that could not be pressed.
-                  The scrim already has the shape we need: everything except the target. */}
               <Scrim style={{ left: 0, top: 0, right: 0, height: frame.y }} onDismiss={onDismissRead} dim={dimTarget} styles={styles} />
               <Scrim style={{ left: 0, top: frame.y, width: frame.x, height: frame.height }} onDismiss={onDismissRead} dim={dimTarget} styles={styles} />
               <Scrim
@@ -476,28 +391,9 @@ export function MascotGuideOverlay({
               />
             </>
           )}
-          {/* Keyed on BOTH ids. Lumi's own list renamed this step to `visual-pickup-and-place` when
-              pick-up and drag were merged, and the cue — the arrow over the tray — went quiet the
-              moment it did, because nothing here matched any more. The composed profiles still use
-              the old id, so both have to be listed. */}
-          {/* The SECOND ring, on Auto. This step names two buttons and they sit at opposite ends of
-              the toggles row with Focus between, so one rectangle cannot hold just the two — it
-              would light Focus as well. Two rings and no dimming instead: both named controls are
-              marked, the one between them is not, and nothing else on screen is greyed out for a
-              card that is only telling the player where help lives. */}
           {autoFrame ? (
             <TutorialHighlight frame={autoFrame} emphasized={presentation.emphasizeTarget} styles={styles} />
           ) : null}
-          {/* The arrow, on every step that asks the player to take something OUT OF THE TRAY. That is
-              two steps: the first part and the first bolt. Both begin with the same long-press on the
-              same column, so both want the same cue — it was keyed to the first step alone, which
-              taught the gesture once and then left the player to remember it a few screens later.
-
-              NOT `install-four-legs`. That step is "Continue assembling": the teaching is over, the
-              player has already long-pressed the tray twice, and the step spans the whole rest of the
-              build rather than one action. An arrow pinned over the tray for all of it points at a
-              gesture they have shown they know, on top of the card and the part they are choosing
-              between. The two steps above are where the cue earns its place. */}
           {!undoPreviewActive &&
           presentation.showVisualDemo &&
           (step.id === 'long-press-part' ||
@@ -516,9 +412,6 @@ export function MascotGuideOverlay({
       <View style={[styles.bubble, bubbleStyle]} pointerEvents="box-none">
         {!presentation.showMomentumCompanion ? (
           <View style={styles.mascotPortrait}>
-            {/* White at the centre falling to cream at the rim — the same pool of light the hint
-                toast uses, so one character reads identically in both places. SVG because RN has no
-                radial gradient. */}
             <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
               <Defs>
                 <RadialGradient id="mascotglow" cx="50%" cy="45%" r="65%">
@@ -536,17 +429,9 @@ export function MascotGuideOverlay({
           </View>
         ) : null}
         <View style={styles.copy} pointerEvents="box-none">
-          {/* NO ROW AT ALL on an unnumbered step, rather than a blank one. An empty <Text> still
-              occupies its line box — 11pt of type plus the 4pt margin below it — so rendering ''
-              left the card as tall as a numbered one with a gap where the counter used to be, which
-              is the opposite of what "no number" should look like. */}
           {counterText ? (
             <Text style={styles.stepText}>{counterText}</Text>
           ) : null}
-          {/* NO voice button on the card. Muting is a property of the SCREEN, not of one step, and a
-              toggle that moves with the bubble means hunting for it — the HUD's own audio chip sits
-              in the same place on every step and every screen. `visualSpeechEnabled` below is still
-              the switch; the chip is what flips it now. */}
           <View style={styles.messageRow}>
             <Text style={[styles.message, { fontFamily: FONT }, presentation.showVisualDemo && styles.visualMessage]}>
               {message}
@@ -568,14 +453,6 @@ export function MascotGuideOverlay({
                 ? 'Tap anywhere to continue.'
                 : focusReturnPrompt
                 ? 'Tap the highlighted Focus button.'
-                /* A STEP THE PLAYER ONLY READS SAYS SO. `onDismissRead` is set for exactly the steps
-                   whose event is `controls_acknowledged` — the undo/recenter card and the stuck-help
-                   card, in every run that has them — and those close on a tap ANYWHERE, which is
-                   what the scrim behind this card is for.
-                   They were being told the opposite. Both lines below name a target and demand it be
-                   used, so the card explaining what Undo does read as an instruction to undo
-                   something, and the card offering Spot and Auto read as an instruction to press
-                   one. The step never required either; only the copy did. */
                 : onDismissRead
                 ? 'Tap anywhere to continue.'
                 : presentation.reducedText
@@ -603,24 +480,6 @@ export function MascotGuideOverlay({
   );
 }
 
-/**
- * The visual profile's wording for a step — now a passthrough.
- *
- * It used to hold a short form per step id, from when the visual run shared the other profiles'
- * steps and needed terser copy against them. Lumi has its own list since (VISUAL_TUTORIAL_STEPS),
- * written at the length it should be spoken and shown, so overriding it here would replace those
- * sentences with three-word stubs — including on the steps the two lists still share by id, which is
- * exactly how "Turn clockwise" would have survived a rewrite of "Turn clockwise to tighten the bolt
- * by hand."
- *
- * Kept as a function rather than deleted: it is called in two places, and it is the hook to hang a
- * per-step spoken variant on if the bubble text and the voice line ever need to differ.
- */
-/**
- * One pane of the spotlight's dim. A Pressable only when the step is one to READ — otherwise it
- * stays `pointerEvents="none"` exactly as before, so a step that asks for a gesture never has a
- * swallow-everything layer over the scene.
- */
 function Scrim({
   style,
   onDismiss,
@@ -629,9 +488,6 @@ function Scrim({
 }: {
   style: ViewStyle;
   onDismiss?: () => void;
-  /** False draws the pane INVISIBLE but still present. The stuck-help step highlights two buttons
-   *  and greys nothing — but the panes are what a tap lands on, so removing them removed the only
-   *  way to dismiss the card. Transparent and tappable is the shape that step needs. */
   dim?: boolean;
   styles: { scrim: ViewStyle };
 }) {
@@ -647,24 +503,8 @@ function Scrim({
   );
 }
 
-/** The mascot bubble's width — the CARD and the placement maths both, which is why it is one
- *  constant rather than two 286s that have to be remembered together.
- *
- *  372, up from 286. The visual profile's copy is written as full sentences and its type is a point
- *  larger than the other profiles', so a step like "Tap Focus to reduce the screen to the controls
- *  you need, and tap it again to show UI." ran to four and five lines in a card sized for terse ones.
- *
- *  Sized to the LONGEST step in Lumi's run rather than picked: at 372 that step is the one that just
- *  fits in three lines, and three is the ceiling worth having — past it the card starts covering the
- *  control it is pointing at. 340 left it at four; 360 is the true minimum and this keeps a little
- *  slack for a reworded step.
- *
- *  Bounded by the screen, not by taste: the placement below insets it 16 from either edge, so on the
- *  narrowest phone this app supports (~640 landscape) the card and its two margins still fit. */
 const BUBBLE_W = 372;
 
-
-/** The grip step's id, in one place: it is special-cased twice above — not numbered, not spoken. */
 const GRIP_STEP_ID = 'hold-like-controller';
 
 function visualMessageForStep(_stepId: string, fallback: string): string {
@@ -692,10 +532,6 @@ function bubblePosition(
   const left = Math.min(Math.max(edge, frame.x), Math.max(edge, screenW - bubbleW - edge));
   const targetCoversMostScreen = frame.width > screenW * 0.72 || frame.height > screenH * 0.6;
 
-  // The final stand-upright instruction uses the same placement in every
-  // profile. Keeping this outside the profile-specific branches prevents the
-  // Momentum bubble from drifting above the swipe card while Visual places it
-  // beside that same control.
   if (targetId === 'beatControl') {
     return {
       right: Math.max(edge, screenW - frame.x + 18),
@@ -703,7 +539,6 @@ function bubblePosition(
     };
   }
 
-  // Visual guidance belongs beside the real control it describes. These placements keep a fixed gap around the registered target so the bubble cannot intercept the action required to advance the tutorial.
   if (visualMode && targetId === 'partsTray') {
     return {
       right: Math.max(edge, screenW - frame.x + 18),
@@ -720,40 +555,18 @@ function bubblePosition(
     };
   }
   if (targetId === 'joystick') {
-    // DIRECTLY ABOVE the stick, not beside it. Beside meant to its right, which is the middle of the
-    // screen — the bubble sat over the model the player is about to rotate, so the instruction hid
-    // the thing it was asking them to look at. Above the stick it is over empty canvas, and the
-    // thumb that works the joystick never crosses it.
-    //
-    // NO LONGER VISUAL-ONLY. Every profile's joystick step asks the player to WATCH the model while
-    // they steer — Pebble's now says so outright ("until you can see the highlighted areas clearly")
-    // — so the reason this placement exists was never about the profile. The old right-hand-side
-    // rule for the other three is below and is now unreachable for this target; it is left in place
-    // as the generic fallback it always was.
     return {
       left: Math.max(edge, Math.min(frame.x, screenW - bubbleW - edge)),
       bottom: Math.max(edge, screenH - frame.y + 18),
     };
   }
   if (targetId === 'stuckHelp') {
-    // Above the row it lights, left-aligned to it. The row runs along the bottom-right, so the
-    // generic rule below would clamp the card over the parts tray — the same trap the focus step
-    // fell into.
     return {
       left: Math.max(edge, Math.min(frame.x, screenW - bubbleW - edge)),
       bottom: Math.max(edge, screenH - frame.y + 18),
     };
   }
   if (targetId === 'focus') {
-    // DIRECTLY ABOVE the Focus chip. Left-aligned to the chip rather than to the screen: hard left
-    // put the card across the canvas with nothing under it to explain, and the generic rule below
-    // put it over the parts tray. Above its own control it points at what it names, and the clamp
-    // keeps it on screen when the chip sits near the right edge.
-    //
-    // NO LONGER VISUAL-ONLY. The chip is in the same corner for every profile, so the generic rule's
-    // failure here — the card landing over the parts tray — was never visual-specific either; it was
-    // simply only ever noticed on the run that was looked at hardest. control, momentum and
-    // clearPath all reach this step and all had it.
     return {
       left: Math.max(edge, Math.min(frame.x, screenW - bubbleW - edge)),
       bottom: Math.max(edge, screenH - frame.y + 18),
@@ -766,8 +579,6 @@ function bubblePosition(
     };
   }
 
-  // Momentum's tool is supplied automatically, so its instruction belongs
-  // beside the real turn control rather than in a remote corner of the HUD.
   if (momentumMode && targetId === 'tool') {
     const gap = 18;
     const roomOnRight = screenW - frame.x - frame.width - edge;
@@ -800,14 +611,6 @@ function bubblePosition(
     };
   }
   if (targetId === 'undoRecenter') {
-    // BESIDE the pair, top-aligned to it — the same shape as the gear above, because it is the same
-    // situation: a narrow 36pt column of buttons stacked against the top edge, with the whole canvas
-    // free to its side.
-    //
-    // The generic rule below placed it UNDER them instead (there is room, so `canPlaceBelow` is
-    // true), which put a 372pt card down the same edge the joystick sits on — the two met on a short
-    // screen, and the card covering the stick during the step that teaches re-framing is the worst
-    // possible overlap. Beside is clear of both, and clear of the parts tray on the far side.
     return {
       left: Math.min(screenW - bubbleW - edge, frame.x + frame.width + 18),
       top: Math.max(20, frame.y),
@@ -840,21 +643,6 @@ function bubblePosition(
   return { bottom: Math.max(20, screenH - frame.y + 16), left };
 }
 
-/**
- * The mark on the control a step is asking the player to press.
- *
- * PULSES, and does not outline. It is the same pulse the parts tray uses when Spot lights a card and
- * the same one the stuck and Map coaches use — one gesture for "this one" across the whole app,
- * instead of a static border here and a flash there.
- *
- * NO BORDER, deliberately: the coaches need a halo because they sit on a live scene where an accent
- * wash can be lost against whatever is behind it, but this overlay DIMS everything else. A target
- * lifting out of that dim is already unambiguous, and a stroke on top of it was a second signal
- * saying the same thing twice.
- *
- * The mint stays. In the tutorial that colour is doing its own job — completion, "you did this here"
- * — and which colour it is was never the thing that read as heavy-handed.
- */
 function TutorialHighlight({
   frame,
   emphasized,
@@ -872,9 +660,6 @@ function TutorialHighlight({
         styles.highlight,
         { left: frame.x, top: frame.y, width: frame.width, height: frame.height },
         {
-          // Never fully out: the floor keeps the target lit between pulses, so a player who looks up
-          // mid-beat still sees which control the step means. Only the peak differs when a step asks
-          // for emphasis.
           opacity: pulse.interpolate({
             inputRange: [0, 1],
             outputRange: [0.12, emphasized ? 0.55 : 0.4],
@@ -889,9 +674,6 @@ const makeStyles = (t: Theme) =>
   StyleSheet.create({
     layer: { ...StyleSheet.absoluteFillObject, zIndex: 50 },
     scrim: { position: 'absolute', backgroundColor: t.scrim },
-    // Green ring = "you did this here": completion colour marks the highlighted control.
-    // A WASH, not a frame. Opacity is animated at the call site; `highlightEmphasized` is gone with
-    // the border it used to thicken — emphasis is now a stronger peak on the same pulse.
     highlight: {
       position: 'absolute',
       borderRadius: 18,
@@ -904,30 +686,17 @@ const makeStyles = (t: Theme) =>
       alignItems: 'center',
       gap: 10,
     },
-    // 72, DOWN FROM 88. The bubble is a row with `alignItems: 'center'`, so the taller of portrait
-    // and copy sets the card's height — and at 88 (plus 3pt of border each side, 94 in all) the
-    // portrait was ALWAYS the taller one. Every card was sized by the mascot rather than by its own
-    // words, which is why trimming the copy changed nothing on screen.
-    //
-    // 72 puts it just under a two-line card, so the copy leads again: the shortest card in the run
-    // ("Continue assembling.", no counter) is now the shortest card on screen, and a long one grows
-    // for its text instead of sitting in a fixed frame. The head art carries its own padding and the
-    // image is scaled past the tile at 124%, so the face loses none of its size to this — only the
-    // cream around it gets tighter.
     mascotPortrait: {
       width: 72,
       height: 72,
       borderRadius: 16,
       borderWidth: 3,
       borderColor: t.surface,
-      // Only the corners the gradient's square Rect can't reach — matched to its OUTER stop.
       backgroundColor: '#EADFCB',
       overflow: 'hidden',
       alignItems: 'center',
       justifyContent: 'center',
     },
-    // OVER 100%, same reason as the hint toast's tile: the head art has its own padding, so filling
-    // the frame exactly still left the face small. The overflow is cropped by the tile.
     mascotPortraitImage: { width: '124%', height: '124%' },
     copy: {
       flex: 1,
@@ -939,13 +708,8 @@ const makeStyles = (t: Theme) =>
       borderColor: t.border,
       ...ELEVATION.card,
     },
-    // paddingRight clears the voice button's corner: the counter shares that line, and "SETTINGS · 2/9"
-    // is long enough to run under it.
     stepText: { color: t.success, fontSize: 11, fontWeight: '800', marginBottom: 4, paddingRight: 30 },
-    // Absolute, so it never shifts with the message's line count. Inset to the card's own padding.
     voiceSlot: { position: 'absolute', top: 8, right: 10, zIndex: 2 },
-    // flex + minWidth 0: without them a long line ran out of the card in visual mode, where a demo
-    // cue shares the row.
     message: { flex: 1, minWidth: 0, color: t.text, fontSize: 14, lineHeight: 19, fontWeight: '700' },
     messageRow: {
       flexDirection: 'row',
@@ -988,7 +752,6 @@ const makeStyles = (t: Theme) =>
       paddingVertical: 8,
       ...ELEVATION.card,
     },
-    // Gold = earned: the token toast text carries the XP colour on the plain surface.
     stepRewardText: { color: t.gold, fontSize: 13, fontWeight: '800' },
     rewardLayer: {
       ...StyleSheet.absoluteFillObject,
@@ -1031,5 +794,4 @@ const makeStyles = (t: Theme) =>
       justifyContent: 'center',
     },
     rewardXpIcon: { width: 24, height: 24 },
-    // Positioning only — the shared Button owns the primary action's fill and label.
   });

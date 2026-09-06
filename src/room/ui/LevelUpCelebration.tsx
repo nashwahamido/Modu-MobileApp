@@ -480,7 +480,9 @@ export function LevelUpCelebration({
                             // A full screen height, with the extra over 0.9 as margin: the mascot
                             // sits slightly BELOW centre in the stage, so it has further to travel
                             // than half a screen.
-                            outputRange: [0, -(screenH * 1.05 + MASCOT_H)],
+                            // MASCOT_H takes the scale like every other distance here: it is his own
+                            // height being cleared, and on a tablet he is that much taller.
+                            outputRange: [0, -(screenH * 1.05 + MASCOT_H * k)],
                           }),
                         ),
                       ),
@@ -658,7 +660,11 @@ export function LevelUpCelebration({
                     {
                       translateX: reveal.interpolate({
                         inputRange: [0, 1],
-                        outputRange: [-(badgeW || 280), 0],
+                        // The fallback is a phone-width guess for the frame before onLayout reports
+                        // the real one, so it takes the scale too — an unscaled guess starts the wipe
+                        // part-way across a tablet's wider plate and the first frame shows a sliver
+                        // of it already in place.
+                        outputRange: [-(badgeW || 280 * k), 0],
                       }),
                     },
                   ],

@@ -11,8 +11,8 @@ import type {
 
 interface StepObjectiveInput {
   furniture: Furniture | null | undefined;
-  /** actionId of the first offered action (undefined when none offered). */
-  firstAvailable: ActionId | undefined;
+  /** actionId of the action this step is ABOUT — `nextAction` over the offered list, not `offered[0]`; undefined when nothing is offered. See the note on nextAction for why the two differ, and why naming the wrong one is what a player reads as the bar talking about a different build. */
+  nextActionId: ActionId | undefined;
   needsFocusChoice: boolean;
   mode: AssemblyMode;
   textLevel: TextLevel;
@@ -23,7 +23,7 @@ interface StepObjectiveInput {
 
 export function useStepObjective({
   furniture,
-  firstAvailable,
+  nextActionId,
   needsFocusChoice,
   mode,
   textLevel,
@@ -35,8 +35,8 @@ export function useStepObjective({
     mode,
     needsFocusChoice,
     stepText:
-      furniture && firstAvailable
-        ? instructionText(furniture.instructions, firstAvailable, textLevel)
+      furniture && nextActionId
+        ? instructionText(furniture.instructions, nextActionId, textLevel)
         : null,
     completedCount,
     totalCount,
@@ -56,7 +56,7 @@ export function useStepObjective({
   // choosing which area to work on.
   useStepAudio(
     furniture,
-    needsFocusChoice ? undefined : firstAvailable,
+    needsFocusChoice ? undefined : nextActionId,
     audioOn,
     textLevel,
   );

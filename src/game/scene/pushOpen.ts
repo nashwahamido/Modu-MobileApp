@@ -1,10 +1,8 @@
 import type { ClusterDriver, DriverRegistry } from "./offsetDriver";
 import type { PartId, PushOpenSpec } from "@/src/game/core/type";
 
-/** Registry key for one telescoping rigid group (level × ratio). */
 const pushKey = (level: string, ratio: number) => `push:${level}:${ratio}`;
 
-/** partId → the ClusterDriver of its telescoping group. Parts in a group share one driver, so the whole group moves as a rigid body — same mechanism the combine staging uses. */
 export function buildPushDriverMap(
   spec: PushOpenSpec,
   registry: DriverRegistry,
@@ -20,13 +18,11 @@ export function buildPushDriverMap(
 const easeOutCubic = (k: number) => 1 - (1 - k) ** 3;
 const easeInOutQuad = (k: number) =>
   k < 0.5 ? 2 * k * k : 1 - (1 - k) * (1 - k) * 2;
-// Overshoots ~10% past the target then settles — the spring of a push-latch ejecting the drawer.
 const easeOutBack = (k: number) => {
   const c1 = 1.70158;
   return 1 + (c1 + 1) * (k - 1) ** 3 + c1 * (k - 1) ** 2;
 };
 
-/** Set one level's travel: every group of that level offsets by axis·d·ratio. */
 export function setTravel(spec: PushOpenSpec, registry: DriverRegistry, level: string, d: number) {
   for (const g of spec.groups) {
     if (g.level !== level) continue;
@@ -57,10 +53,8 @@ function tween(
 
 const hold = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-/** Depth the drawer front presses INWARD before the latch releases, in meters. */
 const PRESS_IN_M = 0.004;
 
-/** The push-latch pop: the drawer presses in a touch (the latch giving way), then springs OUT to `pop` with an overshoot bounce. Resolves with the travel resting exactly at `pop`; `onRelease` fires the moment the spring lets go (the haptic hook). */
 export async function popOpen(
   spec: PushOpenSpec,
   registry: DriverRegistry,
@@ -74,7 +68,6 @@ export async function popOpen(
   setTravel(spec, registry, level, pop);
 }
 
-/** The finishing beat's motion: each drawer level pops OPEN (ease-out, the spring), rests a moment, then glides CLOSED — one level after the other. Ends with every driver back at zero, so the scene is bit-identical to the static flush render. */
 export async function runPushOpen(
   spec: PushOpenSpec,
   registry: DriverRegistry,

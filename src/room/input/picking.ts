@@ -1,4 +1,5 @@
-// Screen point → floor cell, by analytic ray-vs-plane intersection — no physics raycaster. The camera is fully known (orbit state + the 68 mm lens + viewport), so a finger position maps to a grid cell with plain algebra. Pure math: testable by projecting a known cell centre to the screen and picking it back.
+// Screen point → floor cell by analytic ray-vs-plane intersection, no physics raycaster: the camera is fully known, so a finger maps to a grid cell with plain algebra.
+// Pure maths, testable by projecting a known cell centre to the screen and picking it back.
 import { eyeFor, ORBIT, type OrbitAngles } from "./orbit";
 import { floorPlacementBox, hostTopExtent, resolveHost, roomPointToFloorCell, roomPointToTopCell, roomPointToWallCell, surfaceExtent, topPlacementBox, wallPlacementBox, type Cell, type GridPlacement, type HostContext, type PlaceableItemDef, type SurfaceId } from "../core/grid";
 import { ROOM_SHELL, ROOM_TARGET, roomToScene, sceneToRoom, type Vec3, type WallId,
@@ -51,7 +52,7 @@ function screenRay(
   };
 }
 
-// The scene-space point where the ray through (px, py) meets the floor plane, or null when the finger points above the horizon of the floor.
+// Where the ray through (px, py) meets the floor plane, or null when the finger points above the floor's horizon.
 export function screenPointToFloorScene(
   px: number,
   py: number,
@@ -65,7 +66,7 @@ export function screenPointToFloorScene(
   return { x: eye.x + dir.x * t, y: floorY, z: eye.z + dir.z * t };
 }
 
-// The wall cell under a finger — the same analytic pick against the wall's inner-face plane instead of the floor. May be off-grid (past the wall's run or above its top); callers clamp or reject via canPlace, exactly like the floor path.
+// The wall cell under a finger: the same analytic pick against the wall's inner-face plane. May be off-grid, and callers clamp or reject via canPlace as on the floor.
 export function screenPointToWallCell(
   px: number,
   py: number,
@@ -87,7 +88,10 @@ export function screenPointToWallCell(
   return roomPointToWallCell(wall, sceneToRoom(hit));
 }
 
-// Which wall a wall-ghost being dragged belongs on now, and the cell under the finger there — the corner-hop, with HYSTERESIS. The ghost stays LOYAL to the wall it is already on while the finger is anywhere over that wall's run, and hops only once the finger has left that run AND points inside another wall's run. A naive nearest-plane pick teleported the piece every time the ray grazed a corner, because at a corner the finger is a pixel away from being over either wall. The hop candidates are the walls the camera can actually SEE (visibleWalls, already sorted best-facing first), never all four. Every wall plane is infinite and a forward ray crosses the two walls BETWEEN the eye and the room from outside, so a hidden wall answers a pick perfectly happily — and would drop the piece on a surface the player is standing behind. Best-facing first settles the remaining ambiguity in the player's favour: with two walls visible and the finger over both runs, the piece lands on the one being looked at most squarely. Null means the finger is over no candidate's run at all, which the caller reads as "leave the ghost where it is" — the same answer the old two-wall code gave by falling off its second `if`.
+// The corner-hop, with HYSTERESIS: a ghost stays LOYAL to its current wall while the finger is anywhere over that wall's run, and hops only once the finger has left it AND points inside another's.
+// A naive nearest-plane pick teleported the piece whenever the ray grazed a corner, where the finger is a pixel from being over either wall.
+// Candidates are the walls the camera can SEE, never all four: every wall plane is infinite and a forward ray crosses the near ones from outside, so a hidden wall answers happily and would drop the piece behind the player.
+// Best-facing first settles the rest in the player's favour. Null means the finger is over no candidate's run, which the caller reads as "leave the ghost where it is".
 export function dragWallTarget(
   here: WallId,
   px: number,
@@ -105,14 +109,17 @@ export function dragWallTarget(
   return null;
 }
 
-// Does this finger point at the surface a ghost lives on? The drag layer's OWNERSHIP question: while a piece is being placed, a finger on its surface moves the PIECE and a finger anywhere else — another surface, the cornice, the backdrop past the diorama — orbits the CAMERA instead. Both used to be the piece, which left no way to look behind a wall mid-placement. "Where the piece can go" is the whole rule, so this tests the full grid on both axes rather than dragWallTarget's run-only loyalty test: the sky above a wall's top row is backdrop, and the floor in front of it is not a wall. The candidates for a wall ghost are its OWN wall plus the ones the camera can see, because ownership is asked at touch-down, before any hop — a drag aimed at the wall round the corner has to belong to the piece too, or carrying a window round that corner would orbit instead. The answer is only ever needed at touch-down: the drag latches its mode there and holds it, so a piece being dragged to the room's edge keeps its finger even as that finger strays off the floor.
+// The drag layer's OWNERSHIP question: while a piece is being placed, a finger on its surface moves the PIECE and a finger anywhere else orbits the CAMERA. Both used to be the piece, which left no way to look behind a wall mid-placement.
+// "Where the piece can go" is the rule, so this tests the full grid on both axes rather than dragWallTarget's run-only loyalty: the sky above a wall's top row is backdrop, and the floor in front of it is not a wall.
+// A wall ghost's candidates are its OWN wall plus the visible ones, because ownership is asked at touch-down before any hop — otherwise carrying a window round a corner would orbit instead.
+// Only ever needed at touch-down: the drag latches its mode there, so a piece dragged to the room's edge keeps its finger even as that finger strays off the floor.
 export function pointsAtSurface(
   px: number,
   py: number,
   viewport: { width: number; height: number },
   angles: OrbitAngles,
   surface: SurfaceId,
-  // For a furniture-surface ghost: ITS host's top, resolved by the caller (the store knows the layout, this module does not). Absent, a furniture surface owns nothing — the conservative pre-stacking answer.
+  // For a furniture-surface ghost: ITS host's top, resolved by the caller, since the store knows the layout and this module does not. Absent, a furniture surface owns nothing.
   topTarget?: TopTarget,
 ): boolean {
   if (surface.kind === "floor") {
@@ -137,12 +144,12 @@ function onSurfaceGrid(cell: Cell, surface: SurfaceId): boolean {
   return cell.x >= 0 && cell.x < w && cell.y >= 0 && cell.y < h;
 }
 
-// Only the RUN decides which wall a finger is over, never the height: a finger above the cornice or below the floor is still pointing at that wall, and clamping the row is the drag pipeline's job (clampToSurface) exactly as it is on the floor.
+// Only the RUN decides which wall a finger is over, never the height: a finger above the cornice still points at that wall, and clamping the row is clampToSurface's job as on the floor.
 function onWallRun(wall: WallId, cell: Cell): boolean {
   return cell.x >= 0 && cell.x < surfaceExtent({ kind: "wall", wall }).w;
 }
 
-// The floor cell under a finger. May be off-grid — callers run it through anchor/clamp/canPlace, which is what keeps the ghost inside the room.
+// The floor cell under a finger. May be off-grid — callers run it through anchor/clamp/canPlace, which keeps the ghost inside the room.
 export function screenPointToFloorCell(
   px: number,
   py: number,
@@ -154,10 +161,10 @@ export function screenPointToFloorCell(
   return roomPointToFloorCell(sceneToRoom(hit));
 }
 
-// A host whose top a finger might target: the resolved host plus its rendered top height in authored room units (size.y × fitScale, computed by the caller who has the catalog).
+// A host whose top a finger might target: the resolved host plus its rendered top height, computed by the caller who has the catalog.
 export type TopTarget = { host: HostContext; topHeight: number };
 
-// The host-frame cell under a finger on a host's TOP PLANE — the floor pick lifted to y = floor + topHeight, then turned into the host's frame. Null when the finger points above the plane's horizon; may be off the host's grid, callers bound-check.
+// The host-frame cell under a finger on a host's TOP PLANE: the floor pick lifted to floor + topHeight, then turned into host frame. Null above the plane's horizon, and may be off-grid for callers to bound-check.
 export function screenPointToTopCell(
   px: number,
   py: number,
@@ -173,7 +180,7 @@ export function screenPointToTopCell(
   return roomPointToTopCell(target.host, hit);
 }
 
-// Which host's top the finger is over, current-host-first so a drag near a table edge does not flap between the table and its neighbour — the same own-surface-first hysteresis dragWallTarget uses.
+// Which host's top the finger is over, current-host-first so a drag near a table edge does not flap between neighbours — the same hysteresis dragWallTarget uses.
 export function dragTopTarget(
   current: string | null,
   px: number,
@@ -199,13 +206,12 @@ export function dragTopTarget(
 // A pickable volume in authored room units — see floorPlacementBox in ../core/grid.
 export type PickBox = { min: Vec3; max: Vec3 };
 
-// Where the ray enters a scene-space box, or null if it misses. Standard slab test, with tmin starting at 0 so a ray that begins INSIDE a box (the camera zoomed into a wardrobe) still counts as a hit rather than reporting the entry behind the eye.
+// Where the ray enters a scene-space box, or null on a miss. Standard slab test with tmin at 0, so a ray beginning INSIDE a box still counts as a hit rather than reporting an entry behind the eye.
 function rayBoxEntry(eye: Vec3, dir: Vec3, min: Vec3, max: Vec3): number | null {
   let tmin = 0;
   let tmax = Infinity;
   for (const axis of ["x", "y", "z"] as const) {
-    // A ray parallel to this pair of slabs either runs down the box forever or misses it outright;
-    // dividing by the near-zero component would hand the slab test a NaN to swallow.
+    // A ray parallel to this pair of slabs either runs down the box forever or misses outright, and dividing by the near-zero component hands the slab test a NaN to swallow.
     if (Math.abs(dir[axis]) < 1e-12) {
       if (eye[axis] < min[axis] || eye[axis] > max[axis]) return null;
       continue;
@@ -220,7 +226,7 @@ function rayBoxEntry(eye: Vec3, dir: Vec3, min: Vec3, max: Vec3): number | null 
   return tmin;
 }
 
-// The index of the NEAREST box the finger's ray enters, or null when it points at none of them. Nearest rather than first, so pressing a piece can never reach through it to something standing behind: that is the whole of the occlusion the room needs, since the pieces are the only things a player can pick up.
+// The index of the NEAREST box the ray enters, or null. Nearest rather than first, so pressing a piece can never reach through it to something behind — the whole of the occlusion the room needs.
 export function pickBoxAt(
   px: number,
   py: number,
@@ -232,7 +238,7 @@ export function pickBoxAt(
   let best: number | null = null;
   let bestT = Infinity;
   boxes.forEach((box, index) => {
-    // roomToScene is a positive uniform scale about a fixed centre, so the box's min/max corners stay its min/max corners — no re-sorting needed.
+    // roomToScene is a positive uniform scale about a fixed centre, so min/max corners stay min/max — no re-sorting needed.
     const t = rayBoxEntry(eye, dir, roomToScene(box.min), roomToScene(box.max));
     if (t !== null && t < bestT) {
       bestT = t;
@@ -242,22 +248,20 @@ export function pickBoxAt(
   return best;
 }
 
-// What a piece has to be picked against: its resolved definition and its real-world size, already scaled by fitScale. Null for an id the catalog cannot resolve yet, which simply cannot be picked up.
+// What a piece is picked against: its def and its real-world size, already scaled by fitScale. Null for an id the catalog cannot resolve yet, which cannot be picked up.
 export type PickResolver = (
   itemId: string,
 ) => { def: PlaceableItemDef; size: Vec3 } | null;
 
 // EVERY PIECE IN THE ROOM AS A PICKABLE VOLUME, whatever surface it stands on.
-//
-// Extracted out of RoomScene's pickUpAt so it can be tested directly, and that is not incidental: this function's whole content is the answer to "which boxes get built", and when a merge on 2026-08-20 quietly reverted the wall arm of it to plane-picking, every test still passed. They passed because they exercised wallPlacementBox and pickBoxAt by hand, which is to say they tested the pieces this assembles rather than the assembly — so the one thing that had broken was the one thing nothing covered.
-//
-// A piece is picked against its VOLUME and never against the plane it sits on. A piece stands up out of its cells (or out of the wall), so the ray through the body the player can actually see meets that plane one to three cells BEHIND it — one per 20 cm of height or depth at the rest camera. Plane-picking therefore leaves only a thin sliver at a piece's base live, and for a wall item with real depth like the eket cabinet (0.35 m, nearly two cells) it leaves nothing reachable at all: the press lands on a wall cell the cabinet does not own and is refused. Worse, the offset's DIRECTION follows the camera azimuth, so the live band slides around as the room turns and the whole thing reads as the long-press being unreliable rather than as a geometry bug.
-//
-// Returning them in ONE array is what makes pickBoxAt's nearest-wins rule reach across surface kinds: a chair standing in front of a wall painting is genuinely nearer the camera than the painting, so it wins on distance rather than on a "floor beats wall" precedence rule that would be wrong exactly when the two overlap.
+// A piece is picked against its VOLUME, never the plane it sits on: it stands up out of its cells, so the ray through the body the player sees meets that plane one to three cells BEHIND it.
+// Plane-picking therefore leaves only a sliver at the base live, and for a wall item with real depth (the eket cabinet, nearly two cells) nothing reachable at all. Worse, the offset's DIRECTION follows the azimuth, so the live band slides as the room turns and reads as an unreliable long-press.
+// ONE array is what makes pickBoxAt's nearest-wins reach across surface kinds: a chair in front of a wall painting is genuinely nearer, so it wins on distance rather than a "floor beats wall" rule that would be wrong exactly when the two overlap.
+// Extracted from RoomScene's pickUpAt so it can be tested directly — a merge once reverted the wall arm to plane-picking and every test passed, because they exercised the pieces this assembles rather than the assembly.
 export function placementPickBoxes(
   layout: readonly GridPlacement[],
   resolve: PickResolver,
-  // Only walls the camera can actually SEE — picking a hidden wall would hand the player a piece they cannot look at.
+  // Only walls the camera can SEE — picking a hidden wall hands the player a piece they cannot look at.
   wallVisible: (wall: WallId) => boolean,
 ): { placement: GridPlacement; box: PickBox }[] {
   const defs = new Map<string, PlaceableItemDef>();
@@ -280,7 +284,7 @@ export function placementPickBoxes(
         box: wallPlacementBox(placement.surface.wall, placement, def, size.z),
       });
     } else {
-      // A stacked piece's box stands on its host's top, which is what lets the ray hit IT before the larger host box beneath — no priority code, just geometry.
+      // A stacked piece's box stands on its host's top, which lets the ray hit IT before the larger host box beneath — geometry, not priority code.
       const host = resolveHost(placement.surface.hostInstanceId, layout, defs);
       const hostSize = host ? resolve(host.placement.itemId) : null;
       if (!host || !hostSize) continue;
@@ -293,7 +297,7 @@ export function placementPickBoxes(
   return out;
 }
 
-// Forward projection — room point to screen — used by tests to prove pick(project(cell)) round-trips, and by any UI that wants to badge a placement.
+// Forward projection, room point to screen: used by tests to prove pick(project(cell)) round-trips, and by any UI badging a placement.
 export function roomPointToScreen(
   point: Vec3,
   viewport: { width: number; height: number },

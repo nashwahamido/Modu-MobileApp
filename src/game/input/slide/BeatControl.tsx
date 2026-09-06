@@ -7,11 +7,12 @@ import { AssemblyAction } from "@/src/game/core/type";
 import { useGameStore } from "@/src/game/core/store";
 import type { DriverRegistry } from "@/src/game/scene/offsetDriver";
 import { runPushOpen } from "@/src/game/scene/pushOpen";
+import { useMirror } from "@/src/game/ui/system/handedness";
 
-/** How far (px) the swipe must travel in the beat's direction. */
+// How far (px) the swipe must travel in the beat's direction.
 const SWIPE_PX = 80;
 
-/** Swipe direction per beat: up = lift/stand, down = lower/press. */
+// Swipe direction per beat: up = lift/stand, down = lower/press.
 const BEAT_DIRECTION: Record<string, "up" | "down"> = {
   combine_assemblies: "down",
   // finishing_checks removed 2026-08-19 with the ceremonial beat itself. What is left here are the
@@ -23,7 +24,7 @@ const HINTS: Record<"up" | "down", { arrow: string; verb: string }> = {
   down: { arrow: "↓", verb: "Swipe down" },
 };
 
-/** Player-facing control for reorient/combine beats: a card the player swipes in the indicated direction. Beats are symbolic (parts stay at their baked poses; the free camera makes a literal flip unnecessary — user decision) — EXCEPT the push-open beat: when the furniture authors a PushOpenSpec matching this action, the swipe plays the telescoping open/close of each drawer before completing. */
+// Player-facing control for reorient/combine beats: a card the player swipes in the indicated direction. Beats are symbolic (parts stay at their baked poses; the free camera makes a literal flip unnecessary — user decision) — EXCEPT the push-open beat: when the furniture authors a PushOpenSpec matching this action, the swipe plays the telescoping open/close of each drawer before completing.
 export function BeatControl({
   action,
   pushDrivers,
@@ -33,6 +34,7 @@ export function BeatControl({
   pushDrivers?: DriverRegistry;
   onSwipeStart?: () => void;
 }) {
+  const m = useMirror();
   const direction = BEAT_DIRECTION[action.actionId] ?? "up";
   const fired = useRef(false);
   const started = useRef(false);
@@ -93,7 +95,7 @@ export function BeatControl({
 
   const hint = HINTS[direction];
   return (
-    <View style={styles.wrap} pointerEvents="box-none">
+    <View style={m(styles.wrap)} pointerEvents="box-none">
       <GestureDetector gesture={pan}>
         <View
           style={[
@@ -114,6 +116,7 @@ export function BeatControl({
 }
 
 const styles = StyleSheet.create({
+  // A full-screen box holding the card in one corner, so what mirrors here is the alignment and the padding rather than an edge offset — the mirror flips `alignItems` on a column and swaps the padding side, which puts the card in the opposite corner for a left-handed player.
   wrap: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "flex-end",

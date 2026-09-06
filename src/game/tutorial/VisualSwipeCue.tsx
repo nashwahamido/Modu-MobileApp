@@ -8,7 +8,6 @@ interface Props {
   frame: TutorialFrame;
 }
 
-/** Tutorial-only motion cue layered over the existing finishing BeatControl. */
 export function VisualSwipeCue({ frame }: Props) {
   const styles = useStyles(makeStyles);
   const progress = useRef(new Animated.Value(0)).current;

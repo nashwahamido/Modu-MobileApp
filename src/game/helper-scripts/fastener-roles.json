@@ -1,0 +1,16 @@
+{
+  "_comment": "SINGLE SOURCE for hardware-name → FastenerDef PREFILL. A fastener GROUP's leading word (before the article number) suggests what the hardware is for; the furniture's own FASTENERS def is what DECIDES it, and lowering writes the decided role onto every instance. So this table is a prefill for a GLB nobody has authored yet (helper-scripts/read-parts.mjs fastener detection, analyze.ts's suggestion to the upload wizard) plus the fallback for a fastener whose group has no def — never the last word on a shipped furniture. First matching prefix wins; a group matching NO prefix is still a fastener if its mesh name joins two parts (…__a&b) and then falls back to 'securer', the inert choice: it never defines a joint and never preloads. A 'cap'-prefixed group is disambiguated by the mesh name, not by this table: one attached part means it dresses that part (role 'cap'), two means it locks their joint (role 'securer') — EKET's suspCap is the second case. 'cam' prefills 'securer' on the corpus evidence: the only cams we have (EKET cam139434 x8) lock an already-slid back panel, and a true Minifix fitting is a bolt plus a separate disc — a connector plus an extra, two parts, which is why the old 'cam' KIND was retired.",
+  "prefixes": {
+    "screw": { "role": "securer" },
+    "nail": { "role": "securer" },
+    "cap": { "role": "securer" },
+    "nut": { "role": "securer" },
+    "washer": { "role": "securer" },
+    "rivet": { "role": "securer" },
+    "cam": { "role": "securer" },
+    "bolt": { "role": "connector", "preload": { "completesOn": "tighten", "counterpartMountsBy": "screw" } },
+    "dowel": { "role": "connector", "preload": { "completesOn": "insert", "counterpartMountsBy": "press" } },
+    "barrel": { "role": "connector", "preload": { "completesOn": "insert", "counterpartMountsBy": "press" } },
+    "peg": { "role": "connector", "preload": { "completesOn": "insert", "counterpartMountsBy": "press" } }
+  }
+}

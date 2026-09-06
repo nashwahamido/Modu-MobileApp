@@ -32,7 +32,6 @@ export function VisualToolboxCue({ frame }: Props) {
     return () => animation.stop();
   }, [progress]);
 
-  // The toolbox button sits at the right-hand end of the registered toolbar.
   const toolboxX = frame.x + frame.width - 34;
   const toolboxY = frame.y + frame.height / 2;
 

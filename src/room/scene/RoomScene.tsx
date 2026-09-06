@@ -75,6 +75,7 @@ import { setCameraAzimuth, usePlacementStore } from "../core/placement";
 import { AIM_DOWN, aimToDirection, aimTuple } from "../core/lightAim";
 import { CEILING_LIGHT_AT, CEILING_LIGHT_RIG, ceilingCone, fillLumens } from "../core/ceilingLight";
 import { useGameStore } from "../../game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import { WALL_FILL_DIRECTIONS, sunDirection, sunPreset, type CeilingLight } from "../core/timeOfDay";
 import {
   dragTopTarget,
@@ -1187,9 +1188,9 @@ export function RoomScene({
 }: RoomSceneProps) {
   const [loaded, setLoaded] = useState(false);
   // The player's chosen hour. Every preset is authored to enter through walls the resting camera can see — see src/room/core/timeOfDay.ts for why that constraint exists and what breaks without it.
-  const hour = useGameStore((s) => s.roomTimeOfDay);
+  const hour = usePrefsStore((s) => s.roomTimeOfDay);
   // Read HERE rather than passed down from RoomExperience, so it reaches every route that mounts this scene — the hub and a friend's room alike. It is the player's own display preference, not a fact about whose room is being drawn, so a visited room honours it too.
-  const avatarVisible = useGameStore((s) => s.roomAvatarVisible);
+  const avatarVisible = usePrefsStore((s) => s.roomAvatarVisible);
   const sun = sunPreset(hour);
   const handleReady = useCallback(() => setLoaded(true), []);
   const win = useWindowDimensions();
@@ -1616,7 +1617,7 @@ export function RoomScene({
     () =>
       Gesture.LongPress()
         // 420 ms was long enough that a hold felt like nothing was happening. 300 is iOS's own long-press default and still well clear of a tap.
-        .minDuration(300)
+        .minDuration(250)
         // How far the finger may drift and still count as a hold. The 10 dp default is barely more than the platform's pan slop, so an ordinary steady finger broke the hold; 14 dp is about 2 mm of tremor. It is also what a drag must now travel before the camera starts to orbit (see the Exclusive note below), so it stays modest.
         .maxDistance(14)
         // While a ghost is up, the finger belongs to the ghost: pickUpAt would no-op anyway, but leaving this enabled makes pan wait 300 ms for it to fail before the ghost can be dragged.

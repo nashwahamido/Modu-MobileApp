@@ -4,24 +4,15 @@ import type { Quat, Vec3 } from '@/src/game/core/type';
 
 type Float3 = [number, number, number];
 
-/** The baked pose an offset is measured from. */
 interface Base {
   position: Float3;
   rotation: Quat;
 }
 
-/**
- * Imperatively drives one entity's pose: a world-space translation offset from its baked position, plus an (optional) absolute rotation. Both are applied together each frame via the same `setEntityRotation(false)+setEntityPosition` sequence the static placement uses, so a held part can ease its orientation toward the socket it's approaching without an orientation pop on drop.
- *
- * Plain JS arrays only — worklets-core 1.6 shared-value arrays arrive in filament's native layer as objects and are rejected ("expected an array").
- */
 export interface OffsetDriver {
   attach(tm: TransformManager, entity: Entity, initial: Float3, base: Base): void;
-  /** Move to a new translation offset from the baked position. */
   set(offset: Float3): void;
-  /** Set the absolute rotation (xyzw). Defaults to the baked rotation. */
   setRotation(rotation: Quat): void;
-  /** Set offset AND rotation together in a single apply — the drag hot path calls this every frame, where separate set+setRotation would push the entity's transform twice. */
   setPose(offset: Float3, rotation: Quat): void;
   detach(): void;
   readonly value: Float3;
@@ -85,12 +76,9 @@ export function createOffsetDriver(): OffsetDriver {
   };
 }
 
-/** Like OffsetDriver but for a WHOLE cluster: many entities share one offset and move in unison (used to lower a finished sub-assembly onto another at combine). Each part registers its entity; `set` applies the offset to all of them. */
 export interface ClusterDriver {
-  /** Register one part's entity at its baked pose; returns an unregister fn. */
   register(tm: TransformManager, entity: Entity, base: Base): () => void;
   set(offset: Float3): void;
-  /** Offset PLUS a rigid spin of the whole cluster: every member orbits the axis line through the members' shared centroid by `angleRad` (its own orientation turning with it) — the screwing motion of a threaded combine. A plain `set` clears the spin. */
   setSpin(offset: Float3, axis: Vec3, angleRad: number): void;
   readonly value: Float3;
 }
@@ -102,12 +90,10 @@ export function createClusterDriver(): ClusterDriver {
     tm: TransformManager;
     entity: Entity;
     base: Base;
-    /** Baked rotation as axis-angle, computed ONCE at register — it never changes, and recomputing it per member per frame was pure waste on the drag hot path. */
     aa: ReturnType<typeof quatToAxisAngle>;
   }
   const members = new Set<Member>();
 
-  // Spin pivot: the axis line runs through the members' shared centroid (a screwing cluster is built around its thread axis, so the centroid sits on it); the y component is irrelevant to a rotation about that vertical line but harmless.
   const centroid = (): Float3 => {
     const c: Float3 = [0, 0, 0];
     for (const m of members) {
@@ -152,23 +138,11 @@ export function createClusterDriver(): ClusterDriver {
     m.tm.setEntityPosition(m.entity, pos, true);
   };
 
-  // COALESCED: a 120Hz pan spits touch samples faster than frames render, and applying ~60 members × 2 native transform calls on every sample is what made the cluster carry crawl. set() just records the offset; one rAF applies the latest value per frame, so extra samples cost nothing.
-  let pending = false;
-  const flush = () => {
-    pending = false;
+  const apply = () => {
+    if (members.size === 0) return;
     const q = spin && Math.abs(spin.angleRad) > 1e-6 ? quatFromAxisAngle(spin.axis, spin.angleRad) : null;
     const pivot = q ? centroid() : null;
     for (const m of members) applyOne(m, q, pivot);
-  };
-
-  const schedule = () => {
-    if (pending || members.size === 0) return;
-    if (typeof requestAnimationFrame === "function") {
-      pending = true;
-      requestAnimationFrame(flush);
-    } else {
-      flush();
-    }
   };
 
   return {
@@ -181,12 +155,12 @@ export function createClusterDriver(): ClusterDriver {
     set(next) {
       offset = [...next];
       spin = null;
-      schedule();
+      apply();
     },
     setSpin(next, axis, angleRad) {
       offset = [...next];
       spin = { axis, angleRad };
-      schedule();
+      apply();
     },
     get value() {
       return offset;
@@ -194,7 +168,6 @@ export function createClusterDriver(): ClusterDriver {
   };
 }
 
-/** Ease-out tween of a driver's offset (JS-thread rAF). */
 export function animateDriver(driver: OffsetDriver, to: Float3, ms: number, onDone?: () => void) {
   const from: Float3 = [...driver.value];
   const t0 = Date.now();
@@ -212,7 +185,6 @@ export function animateDriver(driver: OffsetDriver, to: Float3, ms: number, onDo
   requestAnimationFrame(step);
 }
 
-/** Ease-out tween of a cluster driver's offset (JS-thread rAF). */
 export function animateClusterDriver(
   driver: ClusterDriver,
   to: Float3,
@@ -235,11 +207,8 @@ export function animateClusterDriver(
   requestAnimationFrame(step);
 }
 
-/** A lazily-populated map of ClusterDrivers, so independent moving groups (each parked stage, or each telescoping push-open group) can be staged and animated separately in the shared scene. */
 export interface DriverRegistry {
-  /** The driver for `id`, created on first access. */
   get(id: string): ClusterDriver;
-  /** Ids that have a driver so far. */
   ids(): string[];
 }
 

@@ -14,6 +14,7 @@ import type { ParkInfo } from "@/src/game/core/evaluation/engagement";
 import { clusterThumbSet } from "@/src/game/core/presentation/finish";
 import { pickThumb } from "@/src/game/core/presentation/labels";
 import { useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import { Theme, useFixedStyles } from "@/src/game/ui/system/theme";
 import type { ActionId, AssemblyAction, ClusterId } from "@/src/game/core/type";
 import { clusterSink, type OffsetSink } from "@/src/game/scene/combineDriver";
@@ -22,7 +23,6 @@ import { useColorScheme } from "@/src/hooks/use-color-scheme";
 
 interface Props {
   clusterDriver: ClusterDriver;
-  /** usePartDrag's camera-projected cluster drag: render-thread free carry, then the `sink` takes over at the park handoff. */
   clusterGestureFor: (
     action: AssemblyAction,
     sink: OffsetSink,
@@ -30,19 +30,17 @@ interface Props {
   ) => GestureType;
 }
 
-/** The combine stage's tray: one card per FINISHED cluster, shown until that cluster's own combine is done. The seed cluster's card enables first (its combine gates the others via the derived requires); dragging a card spawns the real cluster — the seed drops into place, a slide-joined cluster parks along its travel axis and is driven home by SlideControl, telescoping its runners. During the build phase a finished cluster earns a celebration, not a card here (this tray only renders with no cluster focus). */
 export function ClusterTray({ clusterDriver, clusterGestureFor }: Props) {
   const styles = useFixedStyles(makeStyles);
   const furniture = useGameStore((s) => s.furniture);
   const completed = useGameStore((s) => s.completed);
   const combiningCluster = useGameStore((s) => s.combiningCluster);
-  const renderStyle = useGameStore((s) => s.renderStyle);
+  const renderStyle = usePrefsStore((s) => s.renderStyle);
   const hintClusters = useGameStore((s) => s.hintClusters);
   const hintPulse = useGameStore((s) => s.hintPulse);
   const scheme = useColorScheme();
 
   const done = useMemo(() => new Set(completed), [completed]);
-  // every cluster's OWN combine action, so a card can never fire another cluster's step
   const combineFor = useMemo(() => {
     const m = new Map<ClusterId, ActionId>();
     if (furniture) {
@@ -52,7 +50,6 @@ export function ClusterTray({ clusterDriver, clusterGestureFor }: Props) {
     }
     return m;
   }, [furniture]);
-  // cards exist ONLY in the combine stage — no card while any cluster is still being built (a finished cluster earns a celebration then stays out of the way); once every cluster is done, each shows a card until ITS OWN combine completes
   const cards = useMemo(
     () =>
       !furniture || !combineReady(furniture, done)
@@ -78,11 +75,9 @@ export function ClusterTray({ clusterDriver, clusterGestureFor }: Props) {
   }, [furniture, cards, combineFor, done, clusterDriver, clusterGestureFor]);
 
   const flash = useSharedValue(0);
-  // Keyed by VALUE, not array identity — the store hands back a fresh array each update and re-running the flash on every one would strobe.
   const hintKey = hintClusters.join(" ");
   useEffect(() => {
     if (!hintKey) return;
-    // Three gentle accent pulses, matching the parts tray — enough to draw the eye without strobing. One shared value drives every highlighted card.
     flash.value = 0;
     flash.value = withRepeat(
       withSequence(withTiming(1, { duration: 240 }), withTiming(0, { duration: 240 })),
@@ -97,7 +92,6 @@ export function ClusterTray({ clusterDriver, clusterGestureFor }: Props) {
   return (
     <View style={styles.container} pointerEvents="box-none">
       {cards.map((c) => {
-        // The same resolution the build map uses, so a card in the tray and its circle on the map are never two different finishes of one sub-assembly.
         const set = clusterThumbSet(furniture, c, renderStyle);
         const thumb = set ? pickThumb(set, theme) : undefined;
         const g = gestures.get(c);

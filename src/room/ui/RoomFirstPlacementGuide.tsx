@@ -281,7 +281,7 @@ export function RoomFirstPlacementGuide({
               <Button
                 label="Build more furniture"
                 variant="primary"
-                small
+                labelStyle={s.primaryActionLabel}
                 onPress={() => {
                   finish();
                   router.push("/catalogue");
@@ -321,6 +321,8 @@ const makeStyles = (t: Theme) =>
     fullLayer: {
       ...StyleSheet.absoluteFillObject,
       zIndex: 24,
+      alignItems: "center",
+      justifyContent: "center",
     },
     guideCard: {
       position: "absolute",
@@ -366,12 +368,9 @@ const makeStyles = (t: Theme) =>
       color: t.textDim,
     },
     completeCard: {
-      position: "absolute",
-      left: "50%",
-      top: "28%",
       width: 560,
+      maxWidth: "86%",
       minHeight: 190,
-      transform: [{ translateX: -280 }],
       flexDirection: "row",
       alignItems: "center",
       gap: 20,
@@ -414,6 +413,10 @@ const makeStyles = (t: Theme) =>
       flexDirection: "row",
       alignItems: "center",
       gap: 18,
+    },
+    primaryActionLabel: {
+      ...LEXEND.bold,
+      fontSize: 13,
     },
     secondaryAction: {
       ...LEXEND.bold,

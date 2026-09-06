@@ -14,7 +14,6 @@ type VoiceButtonProps = {
   onPress: PressableProps["onPress"];
   size?: "default" | "small";
   style?: StyleProp<ViewStyle>;
-  /** Which glyph to show. Defaults to the "on" speaker; pass playing=false for the muted X. */
   playing?: boolean;
 };
 

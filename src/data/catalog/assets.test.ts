@@ -7,7 +7,8 @@ test("a surface's catalogue picture is its own tile image, not a per-variation r
   assert.equal(tilePath("bought", "linen-wallpaper"), "room/bought/linen-wallpaper/tile.png");
 });
 
-// The bug this pins: a one-look model-item resolves to a NULL default variation exactly as a surface does, so anything that routes on nullness sends the windows to a tile.png that was never uploaded.
+// the bug this pins: a one-look model item resolves to a null default exactly as a surface does
+// so anything routing on nullness sends the windows to a tile.png nobody uploaded
 test("a one-look model-item still shows its default render, so nullness alone cannot pick the path", () => {
   assert.equal(thumbPath("bought", "window-wood-classic", null), "room/bought/window-wood-classic/default.png");
   assert.notEqual(thumbPath("bought", "window-wood-classic", null), tilePath("bought", "window-wood-classic"));
@@ -51,7 +52,8 @@ test("workshop assembly drafts stage under the workshop prefix, published assets
   assert.equal(workshopAssemblyDir("draft-1"), "room/workshop-assembly/draft-1");
 });
 
-// The regression filterKnownSourceRows exists to prevent: a dev build persists a "workshop"-sourced row into placeableStore's AsyncStorage cache, then a showcase or release build — which never fetches workshop_drafts and so has no idea the row exists beyond the cache — replays it before any session exists and tries to resolve a room/workshop/<id>/... path nothing in that build's pipeline serves.
+// the regression filterKnownSourceRows exists for: a dev build caches a "workshop" row, a release build replays it
+// resolving a room/workshop/<id>/ path nothing in its pipeline serves
 test("filterKnownSourceRows drops a workshop-sourced row when this build's gate is closed", () => {
   const rows = [{ source: "built" }, { source: "bought" }, { source: "workshop" }];
   assert.deepEqual(filterKnownSourceRows(rows, false), [{ source: "built" }, { source: "bought" }]);

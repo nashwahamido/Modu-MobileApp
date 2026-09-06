@@ -3,14 +3,15 @@ import { applyStructure } from "@/src/game/core/model/liaisons";
 import { metaCounts } from "@/src/game/core/composition/metaCounts";
 import { asFurnitureId } from "@/src/game/core/ids";
 import { FurnitureMeta, ThumbSet } from "@/src/game/core/type";
-import { AUTHORED_ACTIONS, CLUSTERS, FASTENER_RULES, MODE, STRUCTURE } from "./authored";
+import { AUTHORED_ACTIONS, CLUSTERS, FASTENERS, MODE } from "./authored";
+import { STRUCTURE_COMPOSED } from "./structure.gen";
 import { HARDWARE } from "@/src/game/content/hardware";
 import { ALL_PART_IDS, PARTS } from "./parts.gen";
 
-const P = applyStructure(PARTS, STRUCTURE);
+const P = applyStructure(PARTS, STRUCTURE_COMPOSED);
 export const ACTIONS = composeFurnitureActions(
   AUTHORED_ACTIONS,
-  FASTENER_RULES,
+  FASTENERS,
   P,
   HARDWARE,
   CLUSTERS,

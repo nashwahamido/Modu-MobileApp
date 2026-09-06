@@ -9,6 +9,7 @@ import { useHudInsets } from '@/src/hooks/use-safe-insets';
 import { FilamentScene } from "react-native-filament";
 
 import { AssemblyScene } from "@/src/game/scene/AssemblyScene";
+import { useSceneSlot } from "@/src/game/scene/sceneSlot";
 import { useAssemblyDrivers } from "@/src/game/scene/useAssemblyDrivers";
 import { useSceneState } from "@/src/game/scene/useSceneState";
 
@@ -40,6 +41,7 @@ import {
 } from "@/src/game/core/evaluation/engagement";
 
 import { useGameStore } from "@/src/game/core/store";
+import { usePrefsStore } from "@/src/game/core/prefsStore";
 import { useBuildPersistence } from "@/src/hooks/useBuildPersistence";
 import { asFurnitureId } from "@/src/game/core/ids";
 
@@ -83,7 +85,7 @@ import {
   combineReady,
   requiresClusterFocus,
 } from "@/src/game/core/evaluation/clusters";
-import { availableInMode } from "@/src/game/core/evaluation/availability";
+import { availableInMode, nextAction } from "@/src/game/core/evaluation/availability";
 import type { FurnitureId, ThemeId } from "@/src/game/core/type";
 import { LoadingOverlay } from "@/src/game/ui/loading/LoadingOverlay";
 import type { Milestone } from "@/src/game/ui/loading/loadingProgress";
@@ -116,6 +118,7 @@ function GameScreen() {
     manipulator,
     stickActive,
     panShared,
+    getLookAt,
     onStickStart,
     onStickMove,
     onStickEnd,
@@ -192,11 +195,11 @@ function GameScreen() {
 
   // Dev-setting: float mode vs auto return
   const heldActionId = useGameStore((s) => s.heldActionId);
-  const renderStyle = useGameStore((s) => s.renderStyle);
-  const backdrop = useGameStore((s) => s.backdrop);
+  const renderStyle = usePrefsStore((s) => s.renderStyle);
+  const backdrop = usePrefsStore((s) => s.backdrop);
   // The BUILD's theme, not the app's: "Assemble in Dark Mode" darkens this screen only. Everything
   // under ThemeScope below (the HUD, the settings panel, the toasts) resolves through it.
-  const theme: ThemeId = useGameStore((s) => s.assembleDark) ? "dark" : "light";
+  const theme: ThemeId = usePrefsStore((s) => s.assembleDark) ? "dark" : "light";
   const focus = settings.focusMode;
   const dark = theme === "dark";
   const t = useTheme();
@@ -213,10 +216,15 @@ function GameScreen() {
     // styles.root is a dependency now that `styles` comes from useHudChrome rather than a module constant — it changes identity when the player's hand does. `theme` stays because t is derived from it.
     [styles.root, t, backdrop, theme],
   );
-  const firstAvailable = useMemo(
+  // nextAction, not [0]: the offered list is in AUTHORED order, so a part still in the box can sit ahead of the half-finished one in the scene — see the note on nextAction.
+  const nextActionId = useMemo(
     () =>
       furniture
-        ? availableInMode(furniture, completedSet, mode, activeCluster)[0]?.actionId
+        ? nextAction(
+            furniture,
+            availableInMode(furniture, completedSet, mode, activeCluster),
+            completedSet,
+          )?.actionId
         : undefined,
     [furniture, completedSet, mode, activeCluster],
   );
@@ -272,7 +280,7 @@ function GameScreen() {
   const buildPaused = useBuildPaused();
   const objective = useStepObjective({
     furniture,
-    firstAvailable,
+    nextActionId,
     needsFocusChoice,
     mode,
     textLevel: settings.textLevel,
@@ -378,7 +386,7 @@ function GameScreen() {
 
   const { gestureFor, canvasGestureFor, clusterGestureFor, ringOverlay } =
     usePartDrag({
-      manipulator,
+      getLookAt,
       heldDriver,
       slideDriver,
       carryShared,
@@ -474,7 +482,7 @@ function GameScreen() {
             any future caller about who it is for. */}
         <IdleCheckIn />
         {/* Only speaks when Spot is running and its target is somewhere the player cannot see. */}
-        <SpotOrbitCue manipulator={manipulator} />
+        <SpotOrbitCue getLookAt={getLookAt} />
         {/* Focus mode clears the workbench: everything below is chrome the task doesn't
             need. What survives is the shortlist — joystick, the next part (PartsTray), the
             progress bar, Settings, and the Focus toggle itself, since hiding it would trap
@@ -690,6 +698,9 @@ function GameScreen() {
 }
 
 export default function PlayRoute() {
+  // Held for one commit while the room hands the engine slot over — see sceneSlot.
+  const granted = useSceneSlot("play");
+  if (!granted) return null;
   return (
     <FilamentScene>
       <GameScreen />

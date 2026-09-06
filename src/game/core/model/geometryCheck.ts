@@ -44,7 +44,7 @@ export function geometryWarnings(parts: Parts, liaisons: LiaisonMap): string[] {
       out.push(
         `joint "${l.id}" spans ${(frac * 100) | 0}% of the model — its ends are ` +
           `implausibly far apart; check the fastener's "…_a&b" mesh name or the ` +
-          `authored directJoins/slideJoins/screwJoins target`,
+          `authored pressJoins/slideJoins/screwJoins target`,
       );
     }
   }
