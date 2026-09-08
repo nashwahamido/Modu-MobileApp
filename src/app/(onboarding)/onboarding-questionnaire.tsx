@@ -56,7 +56,10 @@ const CARD_SHADOW = {
   shadowColor: "#000",
   shadowOpacity: 0.8,
   shadowRadius: 2,
-  shadowOffset: { width: 0, height: 4 },
+  shadowOffset: {
+    width: 0,
+    height: 4,
+  },
   elevation: 6,
 } as const;
 
@@ -65,7 +68,10 @@ const CARD_SHADOW_RAISED = {
   shadowColor: "#000",
   shadowOpacity: 0.8,
   shadowRadius: 3.5,
-  shadowOffset: { width: 0, height: 7 },
+  shadowOffset: {
+    width: 0,
+    height: 7,
+  },
   elevation: 10,
 } as const;
 
@@ -85,7 +91,14 @@ const INTRO_STAGE = {
 function PopIn({ delay, style, children }: { delay: number; style?: StyleProp<ViewStyle>; children: ReactNode }) {
   const on = useSharedValue(0);
   useEffect(() => {
-    on.value = withDelay(delay, withSpring(1, { damping: 10, stiffness: 180, mass: 0.8 }));
+    on.value = withDelay(
+      delay,
+      withSpring(1, {
+        damping: 10,
+        stiffness: 180,
+        mass: 0.8,
+      }),
+    );
   }, [delay, on]);
   const anim = useAnimatedStyle(() => ({
     opacity: Math.min(1, on.value * 3),
@@ -110,7 +123,13 @@ function BubbleReveal({
   const on = useSharedValue(0);
   const [wiped, setWiped] = useState(false);
   useEffect(() => {
-    on.value = withDelay(delay, withTiming(1, { duration: BUBBLE_WIPE_MS, easing: Easing.out(Easing.cubic) }));
+    on.value = withDelay(
+      delay,
+      withTiming(1, {
+        duration: BUBBLE_WIPE_MS,
+        easing: Easing.out(Easing.cubic),
+      }),
+    );
     const t = setTimeout(() => setWiped(true), delay + BUBBLE_WIPE_MS + 60);
     return () => clearTimeout(t);
   }, [delay, on]);
@@ -124,7 +143,10 @@ function BubbleReveal({
 
 const styles_reveal = StyleSheet.create({
   wiping: { overflow: "hidden" },
-  done: { overflow: "visible", flexShrink: 0 },
+  done: {
+    overflow: "visible",
+    flexShrink: 0,
+  },
 });
 
 function ZoomIn({
@@ -140,7 +162,11 @@ function ZoomIn({
 }) {
   const on = useSharedValue(0);
   useEffect(() => {
-    on.value = withSpring(1, { damping: 14, stiffness: 190, mass: 0.8 });
+    on.value = withSpring(1, {
+      damping: 14,
+      stiffness: 190,
+      mass: 0.8,
+    });
   }, [on]);
   const anim = useAnimatedStyle(() => ({
     opacity: Math.min(1, on.value * 2.5),
@@ -165,7 +191,11 @@ function ScaleOnSelect({
 } & Omit<PressableProps, "style" | "children">) {
   const on = useSharedValue(0);
   useEffect(() => {
-    on.value = withSpring(selected ? 1 : 0, { damping: 12, stiffness: 220, mass: 0.6 });
+    on.value = withSpring(selected ? 1 : 0, {
+      damping: 12,
+      stiffness: 220,
+      mass: 0.6,
+    });
   }, [on, selected]);
   const anim = useAnimatedStyle(() => ({ transform: [{ scale: 1 + on.value * 0.055 }] }));
   return (
@@ -182,7 +212,13 @@ const styles_cardFlex = { flex: 1 };
 function SlideInDown({ delay, style, children }: { delay: number; style?: StyleProp<ViewStyle>; children: ReactNode }) {
   const on = useSharedValue(0);
   useEffect(() => {
-    on.value = withDelay(delay, withTiming(1, { duration: 340, easing: Easing.out(Easing.cubic) }));
+    on.value = withDelay(
+      delay,
+      withTiming(1, {
+        duration: 340,
+        easing: Easing.out(Easing.cubic),
+      }),
+    );
   }, [delay, on]);
   const anim = useAnimatedStyle(() => ({
     opacity: on.value,
@@ -194,7 +230,14 @@ function SlideInDown({ delay, style, children }: { delay: number; style?: StyleP
 function NextHalo() {
   const on = useSharedValue(0);
   useEffect(() => {
-    on.value = withRepeat(withTiming(1, { duration: 1400, easing: Easing.out(Easing.quad) }), -1, false);
+    on.value = withRepeat(
+      withTiming(1, {
+        duration: 1400,
+        easing: Easing.out(Easing.quad),
+      }),
+      -1,
+      false,
+    );
   }, [on]);
   const anim = useAnimatedStyle(() => ({
     opacity: 0.5 * (1 - on.value),
@@ -261,10 +304,22 @@ export default function QuestionnaireScreen() {
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const referenceScaleRef = useRef(1);
   const referencePinchStartScaleRef = useRef(1);
-  const [referenceOffset, setReferenceOffset] = useState({ x: 0, y: 0 });
-  const referenceOffsetRef = useRef({ x: 0, y: 0 });
-  const referencePanStartRef = useRef({ x: 0, y: 0 });
-  const referenceBoxRef = useRef({ w: 0, h: 0 });
+  const [referenceOffset, setReferenceOffset] = useState({
+    x: 0,
+    y: 0,
+  });
+  const referenceOffsetRef = useRef({
+    x: 0,
+    y: 0,
+  });
+  const referencePanStartRef = useRef({
+    x: 0,
+    y: 0,
+  });
+  const referenceBoxRef = useRef({
+    w: 0,
+    h: 0,
+  });
   const navHintAnim = useRef(new Animated.Value(0)).current;
   const question = questions[index];
   const selectedAnswer = answers[index];
@@ -316,8 +371,14 @@ export default function QuestionnaireScreen() {
     referenceScaleRef.current = 1;
     referencePinchStartScaleRef.current = 1;
     setReferenceScale(1);
-    referenceOffsetRef.current = { x: 0, y: 0 };
-    setReferenceOffset({ x: 0, y: 0 });
+    referenceOffsetRef.current = {
+      x: 0,
+      y: 0,
+    };
+    setReferenceOffset({
+      x: 0,
+      y: 0,
+    });
   }, [referenceExpanded]);
 
   useEffect(() => {
@@ -362,7 +423,11 @@ export default function QuestionnaireScreen() {
     }, 650);
   };
 
-  const VOICE = { language: "en-US", pitch: 1.08, rate: 0.92 };
+  const VOICE = {
+    language: "en-US",
+    pitch: 1.08,
+    rate: 0.92,
+  };
 
   const speakIntro = () => {
     Speech.speakLine(introPath(), questionnaireIntroVoiceText, VOICE);
@@ -883,8 +948,17 @@ const makeStyles = (t: Theme) =>
       gap: 14,
       justifyContent: "center",
     },
-    bubbleWrap: { position: "relative", flexShrink: 0, overflow: "visible" },
-    bubbleVoice: { position: "absolute", top: -20, left: 22, zIndex: 3 },
+    bubbleWrap: {
+      position: "relative",
+      flexShrink: 0,
+      overflow: "visible",
+    },
+    bubbleVoice: {
+      position: "absolute",
+      top: -20,
+      left: 22,
+      zIndex: 3,
+    },
     introText: {
       color: t.text,
       fontFamily: FONT, fontSize: 17,
@@ -958,7 +1032,10 @@ const makeStyles = (t: Theme) =>
       backgroundColor: t.accent,
     },
     progressFillComplete: { backgroundColor: PROGRESS_FILL },
-    navArrow: { width: 26, height: 26 },
+    navArrow: {
+      width: 26,
+      height: 26,
+    },
     navArrowDisabled: { opacity: 0.3 },
     navButtons: {
       width: 150,
@@ -1018,7 +1095,10 @@ const makeStyles = (t: Theme) =>
       gap: 4,
       ...ELEVATION.card,
     },
-    voiceHintIconWrap: { alignSelf: "flex-start", marginBottom: 4 },
+    voiceHintIconWrap: {
+      alignSelf: "flex-start",
+      marginBottom: 4,
+    },
     navHintArrowDemo: {
       alignSelf: "flex-end",
       flexDirection: "row",
@@ -1077,8 +1157,16 @@ const makeStyles = (t: Theme) =>
       color: t.success,
       fontWeight: "800",
     },
-    referencePanel: { width: 178, alignItems: "center", gap: 8 },
-    referenceImageClip: { width: "100%", borderRadius: 18, overflow: "hidden" },
+    referencePanel: {
+      width: 178,
+      alignItems: "center",
+      gap: 8,
+    },
+    referenceImageClip: {
+      width: "100%",
+      borderRadius: 18,
+      overflow: "hidden",
+    },
     referencePanelImage: {
       width: "100%",
       height: 172,

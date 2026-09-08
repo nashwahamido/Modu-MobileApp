@@ -1,4 +1,3 @@
-// Home. The workbench palette: a warm near-black, one lavender action, everything else quiet. animations css for landing come from here
 import { Link, router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo } from "react";
@@ -20,18 +19,6 @@ import { useSafeInsets } from "@/src/hooks/use-safe-insets";
 
 const BG_CREAM = "#F3ECE0";
 
-/**
- * THE LOADING GATE, not the room itself.
- *
- * That screen is the only place the player's saved MODE is restored: it reads `avatar_id` off the
- * profile row and calls applyProfile, then continues to /room on its own. Sending Home straight to
- * /room skipped it, so a returning player — and especially one coming back after a crash — arrived
- * with their build progress intact but their mode reset to the store's declared default, `control`,
- * whatever they had actually chosen.
- *
- * It restores handedness the same way, and it is where hydrateSettings lays the player's own touched
- * settings back over the profile's defaults. All three were being lost by the shortcut.
- */
 const HOME_ROUTE = "/loading" as const;
 
 const clayPattern = require("@/src/assets/ui/landing/clay-pattern.png");
@@ -52,31 +39,17 @@ const WORDMARK_W = 300;
 const WORDMARK_H = Math.round(WORDMARK_W * (133 / 600));
 const FIGURE_W = 216;
 const FIGURE_H = Math.round(FIGURE_W * (941 / 915));
-// disk.png 
 const FIGURE_SHADOW_W = Math.round(FIGURE_W * 1.05);
 const FIGURE_SHADOW_H = Math.round(FIGURE_SHADOW_W * (196 / 748));
-/** Phone only. Nudges the mascot and its ground shadow right of the wordmark's own centre line —
- *  the wordmark itself (swapped out before this shows) stays centred, and tablet is untouched. */
 const FIGURE_X_SHIFT = 12;
 const BRAND_BOX = Math.max(WORDMARK_H, FIGURE_H) + 12;
 const GROUP_LIFT = 56;
 const ACTIONS_BOTTOM_GAP = 56 + 28;
 
-/** Phone only. Base offset is `2*GROUP_LIFT - SIZE.controlHeight` — the distance that puts the
- *  mascot's own centre exactly halfway between the screen's top edge and the top of this row (see
- *  `groupLift` below). `PHONE_ACTIONS_LIFT` pulls the row up from there, closer under the mascot. */
 const PHONE_ACTIONS_LIFT = 14;
-/** Phone only. Raises the mascot+disk group AND the button row together by this much, on top of
- *  everything above — so the whole composition sits higher on screen while the gap between them
- *  (already tuned via `PHONE_ACTIONS_LIFT`) stays the same. */
 const PHONE_GROUP_RAISE = 20;
 const PHONE_ACTIONS_BOTTOM_GAP = 2 * GROUP_LIFT - 44 + PHONE_ACTIONS_LIFT + PHONE_GROUP_RAISE;
 
-/** Galaxy S22 Ultra (167.3 x 77.9mm) has an unusually long ~19.3:9 aspect ratio that this
- *  fixed-px layout doesn't otherwise account for — on it the buttons crept up far enough to clip
- *  the mascot/disk. Matched by aspect ratio (survives the device's own display-resolution/screen-
- *  zoom setting, since those scale width and height together, unlike a raw dp width/height match)
- *  rather than a hardcoded size, so it still catches the device regardless of display settings. */
 const S22_ULTRA_ASPECT = 167.3 / 77.9;
 const S22_ULTRA_ASPECT_TOLERANCE = 0.015;
 const S22_ULTRA_EXTRA_DROP = 24;
@@ -125,7 +98,6 @@ const WAVE_ASSETS = {
     h: 872,
     frac: 0.23,
   },
-  // The traced corner lines, top-left and top-right.
   lineLeftMain: {
     w: 2200,
     h: 1700,
@@ -145,37 +117,23 @@ function useWaveSizes() {
     for (const key in WAVE_ASSETS) {
       const a = WAVE_ASSETS[key as keyof typeof WAVE_ASSETS];
       const width = screenW * a.frac;
-      out[key as keyof typeof WAVE_ASSETS] = { width, height: width * (a.h / a.w) };
+      out[key as keyof typeof WAVE_ASSETS] = {
+        width,
+        height: width * (a.h / a.w),
+      };
     }
     return out;
   }, [screenW]);
 }
 
-// RESUME THE SIGNED-IN ACCOUNT, rather than offering to pick one again.
-//
-// The session already lives on the device — supabase-js writes it to AsyncStorage and refreshes it
-// itself (src/config/supabase.ts) — so a cold start, a reload, or a crash is NOT a logout, and the
-// app should not behave as though it were. The only thing that ends a session is Settings → Account
-// → Log out (services/auth signOut) or a deliberate account switch; everything else lands back on
-// the same player.
-//
-// Deciding here rather than letting the room's own gate sort it out keeps it to one navigation: the
-// landing screen is the app's entry route, so without this a returning player meets the picker on
-// every launch and has to choose the account they never left.
 export default function App() {
   const { user, loading } = useAuth();
-  // Includes `loading`: reading the persisted session off AsyncStorage is async, so on the first
-  // frame a signed-in player is indistinguishable from a signed-out one. Holding through that window
-  // is the difference between resuming silently and flashing the landing screen on the way to the room.
   const resuming = SESSION_REQUIRED && (loading || Boolean(user));
 
   useEffect(() => {
     if (SESSION_REQUIRED && !loading && user) router.replace(HOME_ROUTE);
   }, [loading, user]);
 
-  // Flat cream, not <Landing /> muted: the intro sequence runs off a mount effect, so mounting it
-  // here would spend its first second behind a redirect — and a player who turns out to be signed
-  // OUT would then arrive partway through their own opening animation.
   if (resuming) return <View style={{ flex: 1, backgroundColor: BG_CREAM }} />;
 
   return <Landing />;
@@ -187,9 +145,6 @@ function Landing() {
   const waveSize = useWaveSizes();
   const k = useUiScale();
   const isTablet = useIsTablet();
-  // For Home. `loading` matters as much as `user`: on a cold start the session resolves a beat after
-  // the first paint, so a tap during that window would read a null user and send a signed-in player
-  // to the picker. Waiting is the honest answer — see onHome.
   const { user, loading } = useAuth();
   const { width: winW, height: winH } = useWindowDimensions();
   const isS22UltraLike =
@@ -245,19 +200,6 @@ function Landing() {
     opacity: figureOpacity.value,
     transform: [{ translateX: figureXShift }],
   }));
-  // HOME GOES HOME, or to the picker if there is nobody to go home as.
-  //
-  // The room is a protected route, so navigating there signed-out does not fail quietly — the
-  // session gate bounces it straight back to /auth. That would work, in the sense that the player
-  // ends up in the right place, but it would flash the room's loading state on the way and read as
-  // the app changing its mind. Deciding here means one navigation either way.
-  //
-  // A tap while the session is still resolving does nothing rather than guessing. That window is a
-  // few hundred milliseconds at most, and guessing wrong sends someone who IS signed in to a login
-  // screen — the more annoying of the two failures by far.
-  //
-  // On the in-memory backend there is no session to have: SESSION_REQUIRED is false, every screen
-  // runs as the demo user, and Home should just go home.
   const onHome = () => {
     if (SESSION_REQUIRED && loading) return;
     router.push(!SESSION_REQUIRED || user ? HOME_ROUTE : SIGN_IN_ROUTE);
@@ -341,23 +283,26 @@ function Landing() {
             label="Choose Account"
             variant="primary"
             pill
-            style={{ ...styles.actionButton, ...(isTablet ? styles.actionButtonTablet : null) }}
+            style={{
+              ...styles.actionButton,
+              ...(isTablet ? styles.actionButtonTablet : null),
+            }}
             labelStyle={isTablet && styles.actionLabelTablet}
           />
         </Link>
-        {/* push, not replace — the picker adds a Back that returns here, and that only works if this
-            screen is still on the stack under it. */}
         <Button
           label="Home"
           variant="primary"
           pill
           onPress={onHome}
-          style={{ ...styles.actionButton, ...(isTablet ? styles.actionButtonTablet : null) }}
+          style={{
+            ...styles.actionButton,
+            ...(isTablet ? styles.actionButtonTablet : null),
+          }}
           labelStyle={isTablet && styles.actionLabelTablet}
         />
       </Animated.View>
 
-      {/* D */}
       <StatusBar style="dark" />
     </View>
   );

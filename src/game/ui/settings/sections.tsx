@@ -26,38 +26,98 @@ import { saveSelectedAvatarMode } from "@/src/services/onboarding";
 import { ROOM_BACKGROUND_IDS, type RoomBackgroundId } from "@/src/room/ui/roomBackdrops";
 
 const PROFILES: { value: ProfileId; label: string }[] = [
-  { value: "control", label: "Control" },
-  { value: "visual", label: "Visual" },
-  { value: "momentum", label: "Momentum" },
-  { value: "clearPath", label: "Clear Path" },
+  {
+    value: "control",
+    label: "Control",
+  },
+  {
+    value: "visual",
+    label: "Visual",
+  },
+  {
+    value: "momentum",
+    label: "Momentum",
+  },
+  {
+    value: "clearPath",
+    label: "Clear Path",
+  },
 ];
 const RELEASE: { value: ReleaseBehavior; label: string }[] = [
-  { value: "autoReturn", label: "Auto-return" },
-  { value: "float", label: "Float" },
+  {
+    value: "autoReturn",
+    label: "Auto-return",
+  },
+  {
+    value: "float",
+    label: "Float",
+  },
 ];
 const MODES: { value: AssemblyMode; label: string }[] = [
-  { value: "free", label: "Free" },
-  { value: "guide", label: "Guided" },
+  {
+    value: "free",
+    label: "Free",
+  },
+  {
+    value: "guide",
+    label: "Guided",
+  },
 ];
 const STYLES: { value: RenderStyleId; label: string }[] = [
-  { value: "realistic", label: "Realistic" },
-  { value: "cozy", label: "Cozy" },
-  { value: "cartoon", label: "Cartoon" },
-  { value: "illustrated", label: "Wooden" },
+  {
+    value: "realistic",
+    label: "Realistic",
+  },
+  {
+    value: "cozy",
+    label: "Cozy",
+  },
+  {
+    value: "cartoon",
+    label: "Cartoon",
+  },
+  {
+    value: "illustrated",
+    label: "Wooden",
+  },
 ];
 const BACKDROPS: { value: BackdropId; label: string }[] = [
-  { value: "grid", label: "Grid" },
-  { value: "clear", label: "Clear" },
-  { value: "calm", label: "Calm" },
-  { value: "craft", label: "Craft" },
-  { value: "garden", label: "Garden" },
+  {
+    value: "grid",
+    label: "Grid",
+  },
+  {
+    value: "clear",
+    label: "Clear",
+  },
+  {
+    value: "calm",
+    label: "Calm",
+  },
+  {
+    value: "craft",
+    label: "Craft",
+  },
+  {
+    value: "garden",
+    label: "Garden",
+  },
 ];
 const LEVELS: { value: TextLevel; label: string }[] = [
-  { value: "standard", label: "Standard" },
-  { value: "simple", label: "Simple" },
+  {
+    value: "standard",
+    label: "Standard",
+  },
+  {
+    value: "simple",
+    label: "Simple",
+  },
 ];
 const ROOM_BACKGROUNDS: { value: RoomBackgroundId; label: string }[] = ROOM_BACKGROUND_IDS.map(
-  (id, i) => ({ value: id, label: i === 0 ? "Default" : `View ${i + 1}` }),
+  (id, i) => ({
+    value: id,
+    label: i === 0 ? "Default" : `View ${i + 1}`,
+  }),
 );
 
 export type SettingsFocusTarget = "backdrop" | "instructions";
@@ -82,7 +142,10 @@ function useFocusHandlers({
   const targetActivated = (target: SettingsFocusTarget) => {
     if (focusTarget === target) onFocusTargetActivated?.();
   };
-  return { targetLayout, targetActivated };
+  return {
+    targetLayout,
+    targetActivated,
+  };
 }
 
 export function RestartRow({ onRestarted }: { onRestarted?: () => void } = {}) {
@@ -91,7 +154,10 @@ export function RestartRow({ onRestarted }: { onRestarted?: () => void } = {}) {
   const confirmReset = () => {
     if (completedCount === 0) return;
     Alert.alert("Start over?", "This clears all assembly progress.", [
-      { text: "Cancel", style: "cancel" },
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
       {
         text: "Reset",
         style: "destructive",
@@ -327,7 +393,10 @@ export function AudioSection() {
         playingDesc="Background music in your room and the catalogue"
         level={settings.musicVolume ?? 0}
         onChange={(next) => {
-          setSettings({ musicVolume: next, music: next > 0 });
+          setSettings({
+            musicVolume: next,
+            music: next > 0,
+          });
           setMusicVolume("ambient", next);
           setMusicEnabled("ambient", next > 0);
         }}
@@ -359,7 +428,10 @@ export function BuildAudioSection() {
         playingDesc="Background music while you build"
         level={settings.buildMusicVolume ?? 0}
         onChange={(next) => {
-          setSettings({ buildMusicVolume: next, buildMusic: next > 0 });
+          setSettings({
+            buildMusicVolume: next,
+            buildMusic: next > 0,
+          });
           setMusicVolume("assembly", next);
           setMusicEnabled("assembly", next > 0);
         }}
@@ -376,7 +448,10 @@ export function RedoTutorialSection() {
       "Redo the tutorial?",
       "You'll build the practice table again, step by step. Any assembly in progress is cleared.",
       [
-        { text: "Cancel", style: "cancel" },
+        {
+        text: "Cancel",
+        style: "cancel",
+      },
         {
           text: "Start",
           onPress: () => {
@@ -440,7 +515,10 @@ const LANDING_ROUTE = "/" as Href;
 export function AccountSection() {
   const confirmLogOut = () =>
     Alert.alert("Log out?", "You'll need to sign in again to reach your room.", [
-      { text: "Cancel", style: "cancel" },
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
       {
         text: "Log out",
         style: "destructive",

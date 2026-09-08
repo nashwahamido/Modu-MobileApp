@@ -1,4 +1,3 @@
-// A friend's room, read-only: their furniture under YOUR light (room decor is a local setting, not saved per room — see the spec). Its own route rather than a layer over the hub because it runs a Filament scene, and only one engine may run at a time: it claims the shared slot in src/game/scene/sceneSlot, which drops the hub's scene a commit before this one is built. The owner id travels as a query param rather than a path segment so this file can sit in a group with no _layout.tsx.
 import { useEffect, useRef, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
@@ -34,12 +33,9 @@ export default function VisitScreen() {
   const repos = useRepos();
   const me = useCurrentUserId();
   const { ownerId } = useLocalSearchParams<{ ownerId?: string }>();
-  // Immersive mode reports 0 insets, so these floors sit UNDER the design's own offsets — the same treatment VisitHud gives its own header.
   const safe = useScreenInsets();
-  // The visitor's own dressing: the backdrop follows the hour AND the Room Background they chose, same as in their own room.
   const hour = usePrefsStore((g) => g.roomTimeOfDay);
   const roomBackground = usePrefsStore((g) => g.roomBackground);
-  // A visitor gets the SAME light controls they have at home, and that is safe precisely because neither half of them is the host's: the hour is the visitor's own store setting and the switch is local state, so relighting a friend's room changes nothing the friend owns and needs no write permission. What you are adjusting is your VIEW of their furniture.
   const setRoomTimeOfDay = usePrefsStore((g) => g.setRoomTimeOfDay);
   const [lightOverride, setLightOverride] = useState<CeilingLightOverride>(null);
   const ceilingLight = ceilingLightOn(hour, lightOverride);
@@ -52,13 +48,10 @@ export default function VisitScreen() {
   const [empty, setEmpty] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  // The two halves of the wait this screen covers: their room's rows, then their furniture's models. Nobody arrives at a friend's house to watch it being furnished, so the overlay stays up for both.
   const [sceneReady, setSceneReady] = useState(false);
   const [revealed, setRevealed] = useState(false);
-  // The hub's room releases its engine before this one is built — see sceneSlot.
   const sceneSlot = useSceneSlot("visit");
 
-  // Camera state is PER SCREEN: returning from a visit must not leave the hub's camera wherever this one was left. Mirrors applyRoomControls in RoomExperience, clamp included, so both paths share one zoom range.
   const [roomRotation, setRoomRotation] = useState(0);
   const [roomZoom, setRoomZoom] = useState(1);
   const roomRotationRef = useRef(roomRotation);
@@ -92,14 +85,11 @@ export default function VisitScreen() {
           repos.likes.hasLiked(ownerId, me),
         ]);
         if (!alive) return;
-        // A null profile means no such player: rooms.get and likes.hasLiked don't throw for an owner row that doesn't exist, so a well-formed but unknown ownerId would otherwise fall through and render as a real, merely-empty room titled "Builder's room". This is NOT the same as a real profile whose layout has no placements — that case is the `empty` state below and stays a normal room, not an error.
         if (profile === null) {
           setLoadError(true);
           return;
         }
-        // The same stale-row filter hydrate() applies to the player's own room. Skipping it would show this room artifacts the OWNER never sees, and a visit is read-only, so nobody could fix them.
         const layout = sanitizeLayout(saved.placements.map(toGrid));
-        // Shape-validated only, same as hydrate() — the ids are checked against the catalogue at render time in RoomScene.
         const finishes = readRoomFinishes(saved);
         startViewing(ownerId, layout, finishes);
         setHost(profile);
@@ -107,7 +97,6 @@ export default function VisitScreen() {
         setLikes(profile?.likes ?? 0);
         setEmpty(layout.length === 0);
       } catch (err) {
-        // The repos THROW on any Postgrest error; without this the screen spins forever on a dropped connection.
         console.warn("[visit] could not open the room:", (err as Error).message);
         if (alive) setLoadError(true);
       } finally {
@@ -119,7 +108,6 @@ export default function VisitScreen() {
     };
   }, [me, ownerId, repos, startViewing]);
 
-  // Leaving hands the scene back to the player's own layout. The synchronicity of stopViewing() is real but it is not what makes this safe — this cleanup runs in React's passive-effect phase, AFTER the commit where RoomExperience already reclaimed the scene slot and re-mounted its RoomScene. What actually protects the hub is that RoomScene gates on `viewing` itself (see the stillViewingFriend selector in RoomExperience.tsx); this effect is what releases that gate, one commit later.
   useEffect(
     () => () => {
       stopViewing();
@@ -129,7 +117,6 @@ export default function VisitScreen() {
 
   const toggleLike = async () => {
     if (!ownerId) return;
-    // Optimistic, rolled back on a throw — the same shape as removeFriend in profile.tsx.
     const wasLiked = liked;
     const previous = likes;
     setLiked(!wasLiked);
@@ -153,14 +140,11 @@ export default function VisitScreen() {
     );
   }
 
-  // The host's name, once known — the ring's initial and the line under it, so the wait says whose door you are standing at rather than just "loading".
   const hostName = host?.username ?? "Builder";
 
   return (
     <View style={s.screen}>
-      {/* The backdrop sits UNDER a transparent Filament view, so the artwork frames the diorama without touching the 3D scene. */}
       <SceneBackdrop {...roomBackgroundView(roomBackground, timeOfDayPhase(hour))} style={s.stage}>
-        {/* Mounted only once the fetch has landed, and that is not merely tidiness: RoomScene reads `viewing ?? layout`, so a scene standing up before startViewing() would load the PLAYER'S OWN furniture into a friend's room and then swap it out piece by piece. */}
         {loading || !sceneSlot ? null : (
           <RoomScene
             rotationY={roomRotation}
@@ -173,12 +157,16 @@ export default function VisitScreen() {
         )}
       </SceneBackdrop>
 
-      {/* Sits under VisitHud's header row, the same way it sits under the settings chip at home: the back chip's own height plus the gap this column uses everywhere else. Both are read from their source rather than written out, so growing the chip cannot leave this behind — which is exactly what the old hardcoded "42 + 8" did. */}
       <RoomLightControls
         hour={hour}
         onHourChange={setRoomTimeOfDay}
         lightOn={ceilingLight}
-        onToggleLight={() => setLightOverride({ hour, on: !ceilingLight })}
+        onToggleLight={() =>
+          setLightOverride({
+            hour,
+            on: !ceilingLight,
+          })
+        }
         style={[
           s.lightControls,
           {
@@ -197,7 +185,6 @@ export default function VisitScreen() {
         onBack={() => router.back()}
       />
 
-      {/* Last child, and opaque: the room and its HUD both assemble underneath. Its own error state is unused here — a room that cannot be fetched at all takes the loadError branch above, and a single piece that will not load is not worth refusing the visit over. */}
       {revealed ? null : (
         <RoomLoadingOverlay
           dataReady={!loading}
@@ -213,7 +200,6 @@ export default function VisitScreen() {
 
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
-    // Absolute like every other HUD corner; the inset maths lives at the call site with VisitHud's, so the two stay in one column.
     lightControls: {
       position: "absolute",
       zIndex: 12,
@@ -224,6 +210,15 @@ const makeStyles = (t: Theme) =>
       overflow: "hidden",
     },
     stage: StyleSheet.absoluteFillObject,
-    center: { alignItems: "center", justifyContent: "center", gap: SPACE.md },
-    errorText: { ...TYPE.body, color: t.textFaint, textAlign: "center", padding: SPACE.lg },
+    center: {
+      alignItems: "center",
+      justifyContent: "center",
+      gap: SPACE.md,
+    },
+    errorText: {
+      ...TYPE.body,
+      color: t.textFaint,
+      textAlign: "center",
+      padding: SPACE.lg,
+    },
   });

@@ -15,8 +15,14 @@ export const BOARD_EDGE_BREATH = 4;
 export const BOARD_LABEL_OUTLINE = "#FAF7F2";
 
 const BOARD_WIDEN_BY_ASPECT = [
-  { aspect: 4 / 3, widen: 1.02 },
-  { aspect: 16 / 10, widen: 1.06 },
+  {
+    aspect: 4 / 3,
+    widen: 1.02,
+  },
+  {
+    aspect: 16 / 10,
+    widen: 1.06,
+  },
 ];
 
 export function tabletBoardWiden(aspect: number): number {
