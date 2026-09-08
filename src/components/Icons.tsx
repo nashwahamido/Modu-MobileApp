@@ -1,7 +1,11 @@
 import Svg, { Circle, Defs, FeDropShadow, Filter, G, Line, Path, Polyline, Rect } from 'react-native-svg';
 
 type Props = { size?: number; color?: string };
-const base = (size = 28) => ({ width: size, height: size, viewBox: '0 0 24 24' });
+const base = (size = 28) => ({
+  width: size,
+  height: size,
+  viewBox: '0 0 24 24',
+});
 
 export function SettingsIcon({ size = 40, color = '#7b7175' }: Props) {
   return <Svg width={size} height={size} viewBox="0 0 64 64">

@@ -6,16 +6,16 @@ import { useGameStore } from "@/src/game/core/store";
 import { usePrefsStore } from "@/src/game/core/prefsStore";
 
 const PALETTE = {
-  ink900: "#1b1819", // backdrop
-  ink800: "#231e1d", // panel / card
-  ink700: "#2b2523", // card, one step up
-  ink600: "#38322f", // raised: active segment, pressed
-  ink500: "#5a5451", // hairline
+  ink900: "#1b1819",
+  ink800: "#231e1d",
+  ink700: "#2b2523",
+  ink600: "#38322f",
+  ink500: "#5a5451",
 
-  paper100: "#faf7f1", // the light theme's backdrop
-  paper200: "#F5EADD", // light: cards, icon buttons, an UNPRESSED action button — the cream from the joystick dial
-  paper300: "#e6ddcd", // light: raised
-  paper400: "#cfc3ae", // light: hairline
+  paper100: "#faf7f1",
+  paper200: "#F5EADD",
+  paper300: "#e6ddcd",
+  paper400: "#cfc3ae",
   linen: "#EDE7DD",
   lilac: "#A996C2",
 
@@ -155,7 +155,10 @@ export const CARD_CHROME = {
   shadowColor: "#000",
   shadowOpacity: 0.45,
   shadowRadius: 2,
-  shadowOffset: { width: 0, height: 4 },
+  shadowOffset: {
+    width: 0,
+    height: 4,
+  },
   elevation: 6,
 } as const;
 
@@ -164,28 +167,40 @@ export const CREAM_LIFT = {
     shadowColor: "#929292",
     shadowOpacity: 0.22,
     shadowRadius: 18,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
     elevation: 6,
   },
   card: {
     shadowColor: "#929292",
     shadowOpacity: 0.22,
     shadowRadius: 18,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
     elevation: 8,
   },
   control: {
     shadowColor: "#929292",
     shadowOpacity: 0.22,
     shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
     elevation: 2,
   },
   chip: {
     shadowColor: "#000",
     shadowOpacity: 0.2,
     shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
     elevation: 6,
   },
 } as const;
@@ -317,14 +332,20 @@ export const ELEVATION = {
     shadowColor: "#000",
     shadowOpacity: 0.35,
     shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
     elevation: 6,
   },
   raised: {
     shadowColor: "#000",
     shadowOpacity: 0.45,
     shadowRadius: 20,
-    shadowOffset: { width: 0, height: 10 },
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
     elevation: 12,
   },
 } as const;
@@ -339,21 +360,55 @@ export const SIZE = {
 export const FONT = "Lexend";
 
 export const LEXEND = {
-  regular: { fontFamily: FONT, fontWeight: "400" },
-  medium: { fontFamily: FONT, fontWeight: "500" },
-  semibold: { fontFamily: FONT, fontWeight: "600" },
-  bold: { fontFamily: FONT, fontWeight: "700" },
-  extrabold: { fontFamily: FONT, fontWeight: "800" },
-  black: { fontFamily: FONT, fontWeight: "900" },
+  regular: {
+    fontFamily: FONT,
+    fontWeight: "400",
+  },
+  medium: {
+    fontFamily: FONT,
+    fontWeight: "500",
+  },
+  semibold: {
+    fontFamily: FONT,
+    fontWeight: "600",
+  },
+  bold: {
+    fontFamily: FONT,
+    fontWeight: "700",
+  },
+  extrabold: {
+    fontFamily: FONT,
+    fontWeight: "800",
+  },
+  black: {
+    fontFamily: FONT,
+    fontWeight: "900",
+  },
 } as const satisfies Record<string, TextStyle>;
 
 export const TYPE: Record<
   "label" | "labelSm" | "body" | "title" | "numeric",
   TextStyle
 > = {
-  label: { ...LEXEND.bold, fontSize: 14 },
-  labelSm: { ...LEXEND.bold, fontSize: 12 },
-  body: { ...LEXEND.medium, fontSize: 14 },
-  title: { ...LEXEND.extrabold, fontSize: 18 },
-  numeric: { ...LEXEND.bold, fontSize: 13, fontVariant: ["tabular-nums"] },
+  label: {
+    ...LEXEND.bold,
+    fontSize: 14,
+  },
+  labelSm: {
+    ...LEXEND.bold,
+    fontSize: 12,
+  },
+  body: {
+    ...LEXEND.medium,
+    fontSize: 14,
+  },
+  title: {
+    ...LEXEND.extrabold,
+    fontSize: 18,
+  },
+  numeric: {
+    ...LEXEND.bold,
+    fontSize: 13,
+    fontVariant: ["tabular-nums"],
+  },
 };

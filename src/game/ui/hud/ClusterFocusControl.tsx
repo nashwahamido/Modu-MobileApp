@@ -89,9 +89,17 @@ function PulseRing({ style }: { style: StyleProp<ViewStyle> }) {
       style={[
         style,
         {
-          opacity: t.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] }),
+          opacity: t.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0.6, 0],
+          }),
           transform: [
-            { scale: t.interpolate({ inputRange: [0, 1], outputRange: [1, 1.22] }) },
+            {
+              scale: t.interpolate({
+                inputRange: [0, 1],
+                outputRange: [1, 1.22],
+              }),
+            },
           ],
         },
       ]}
@@ -118,7 +126,10 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
 
   const furnitureId = furniture?.meta.id ?? null;
   const catalogRow = useCatalogRow(furnitureId);
-  const [reward, setReward] = useState({ coins: 0, xp: 0 });
+  const [reward, setReward] = useState({
+    coins: 0,
+    xp: 0,
+  });
   useEffect(() => {
     if (!furnitureId) return;
     let alive = true;
@@ -300,7 +311,7 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                     { width: nodeWidth },
                     i % 2 === 1 && styles.nodeLow,
                   ]}
-                  accessibilityLabel={`${n.label}, ${n.doneCount} of ${n.actions.length} steps`}  /* the count lives here now: read aloud, not drawn */
+                  accessibilityLabel={`${n.label}, ${n.doneCount} of ${n.actions.length} steps`}
                 >
                   {n.enabled && !n.finished ? (
                     <TapCue label={n.doneCount > 0 ? "Resume" : "Start"} resuming={n.doneCount > 0} k={k} />
@@ -315,7 +326,13 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                       <View style={styles.doneRing} pointerEvents="none" />
                       <Image
                         source={require("@/src/assets/ui/icons/icon-success.png")}
-                        style={[styles.doneCheck, { bottom: 14 * k, left: 6 * k }]}
+                        style={[
+                    styles.doneCheck,
+                    {
+                      bottom: 14 * k,
+                      left: 6 * k,
+                    },
+                  ]}
                         resizeMode="contain"
                       />
                     </>
@@ -355,7 +372,14 @@ export function BuildMap({ overviewOnly = false }: BuildMapProps = {}) {
                       />
                     ) : null}
                     <View
-                      style={[styles.nodeLabelBox, { left: 4 * k, right: 4 * k, bottom: 12 * k }]}
+                      style={[
+                        styles.nodeLabelBox,
+                        {
+                          left: 4 * k,
+                          right: 4 * k,
+                          bottom: 12 * k,
+                        },
+                      ]}
                       pointerEvents="none"
                     >
                       <Text
@@ -509,7 +533,10 @@ export function ClusterFocusControl() {
               style={[
                 styles.disc,
                 i > 0 && styles.discOverlap,
-                { zIndex: z, elevation: z },
+                {
+                  zIndex: z,
+                  elevation: z,
+                },
                 finished && styles.discFinished,
                 selected && styles.discSelected,
                 !enabled && !selected && styles.discDisabled,
@@ -569,7 +596,10 @@ const makeStyles = (t: Theme) =>
       shadowColor: "#000",
       shadowOpacity: 0.3,
       shadowRadius: 20,
-      shadowOffset: { width: 0, height: 10 },
+      shadowOffset: {
+        width: 0,
+        height: 10,
+      },
       elevation: 12,
     },
     home: {
@@ -606,7 +636,12 @@ const makeStyles = (t: Theme) =>
       gap: 8,
       marginBottom: 10,
     },
-    title: { fontFamily: FONT, fontSize: 18, fontWeight: "800", color: t.text },
+    title: {
+      fontFamily: FONT,
+      fontSize: 18,
+      fontWeight: "800",
+      color: t.text,
+    },
 
     overviewHero: {
       height: 150,
@@ -624,10 +659,16 @@ const makeStyles = (t: Theme) =>
       shadowColor: "#000",
       shadowOpacity: 0.14,
       shadowRadius: 8,
-      shadowOffset: { width: 0, height: 4 },
+      shadowOffset: {
+        width: 0,
+        height: 4,
+      },
       elevation: 4,
     },
-    overviewImage: { width: 154, height: 126 },
+    overviewImage: {
+      width: 154,
+      height: 126,
+    },
 
     nodeRow: {
       flexDirection: "row",
@@ -637,7 +678,13 @@ const makeStyles = (t: Theme) =>
       marginBottom: 12,
     },
     connectorSlot: { width: 24 },
-    connectorLayer: { position: "absolute", top: 0, bottom: 0, left: "50%", zIndex: 0 },
+    connectorLayer: {
+      position: "absolute",
+      top: 0,
+      bottom: 0,
+      left: "50%",
+      zIndex: 0,
+    },
     connectorLine: {
       position: "absolute",
       width: CONNECTOR_LEN,
@@ -647,7 +694,11 @@ const makeStyles = (t: Theme) =>
     },
     connectorDown: { transform: [{ rotate: "13.7deg" }] },
     connectorUp: { transform: [{ rotate: "-13.7deg" }] },
-    node: { alignItems: "center", width: 116, zIndex: 1 },
+    node: {
+      alignItems: "center",
+      width: 116,
+      zIndex: 1,
+    },
     nodeLow: { marginTop: 18 },
     circle: {
       width: 92,
@@ -660,7 +711,10 @@ const makeStyles = (t: Theme) =>
       shadowColor: "#000",
       shadowOpacity: 0.18,
       shadowRadius: 5,
-      shadowOffset: { width: 0, height: 3 },
+      shadowOffset: {
+        width: 0,
+        height: 3,
+      },
       elevation: 4,
     },
     circleFinished: {},
@@ -697,7 +751,11 @@ const makeStyles = (t: Theme) =>
     },
     circleLocked: {},
     dimmed: { opacity: 0.4 },
-    nodeThumb: { width: 46, height: 46, marginBottom: 15 },
+    nodeThumb: {
+      width: 46,
+      height: 46,
+      marginBottom: 15,
+    },
 
     nodeLabelBox: {
       position: "absolute",
@@ -751,7 +809,10 @@ const makeStyles = (t: Theme) =>
       color: INK,
     },
     progressLabelOnFill: { color: t.onAccent },
-    rewardIcon: { width: 22, height: 22 },
+    rewardIcon: {
+      width: 22,
+      height: 22,
+    },
 
     reward: {
       alignSelf: "center",
@@ -759,7 +820,11 @@ const makeStyles = (t: Theme) =>
       width: "44%",
       marginBottom: 4,
     },
-    rewardHeaderRow: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
+    rewardHeaderRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 6,
+    },
     rewardBanner: {
       flex: 1,
       height: 19,
@@ -768,7 +833,12 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       justifyContent: "center",
     },
-    awardIcon: { width: 30, height: 30, marginRight: -16, zIndex: 1 },
+    awardIcon: {
+      width: 30,
+      height: 30,
+      marginRight: -16,
+      zIndex: 1,
+    },
     rewardTile: {
       flex: 1,
       alignItems: "center",
@@ -782,7 +852,10 @@ const makeStyles = (t: Theme) =>
       shadowColor: "#000",
       shadowOpacity: 0.16,
       shadowRadius: 4,
-      shadowOffset: { width: 0, height: 2 },
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
       elevation: 3,
     },
     itemWell: {
@@ -795,19 +868,44 @@ const makeStyles = (t: Theme) =>
       borderWidth: 1,
       borderColor: "rgba(35,31,32,0.12)",
     },
-    itemGlyph: { fontFamily: FONT, fontSize: 14, fontWeight: "800", color: INK },
-    xpIcon: { width: 22, height: 22 },
+    itemGlyph: {
+      fontFamily: FONT,
+      fontSize: 14,
+      fontWeight: "800",
+      color: INK,
+    },
+    xpIcon: {
+      width: 22,
+      height: 22,
+    },
     rewardKicker: {
       fontFamily: FONT, fontSize: 9,
       fontWeight: "800",
       letterSpacing: 1,
       color: "#FBF8F3",
     },
-    rewardRow: { flexDirection: "row", gap: 6, alignSelf: "stretch" },
-    rewardCoin: { width: 26, height: 26 },
-    rewardText: { fontFamily: FONT, fontSize: 10, fontWeight: "700", color: INK },
+    rewardRow: {
+      flexDirection: "row",
+      gap: 6,
+      alignSelf: "stretch",
+    },
+    rewardCoin: {
+      width: 26,
+      height: 26,
+    },
+    rewardText: {
+      fontFamily: FONT,
+      fontSize: 10,
+      fontWeight: "700",
+      color: INK,
+    },
 
-  mapSlot: { position: "absolute", right: 14, top: 8, zIndex: 20 },
+  mapSlot: {
+    position: "absolute",
+    right: 14,
+    top: 8,
+    zIndex: 20,
+  },
   mapButton: {
     width: 86,
     minHeight: SIZE.controlHeightSm,
@@ -819,7 +917,14 @@ const makeStyles = (t: Theme) =>
     borderColor: t.accent,
     boxShadow: "0px 3px 3px rgba(0,0,0,0.28)",
   },
-  mapLabel: { fontFamily: FONT, fontSize: 13, fontWeight: "800", color: t.onAccent, letterSpacing: 0.2, textAlign: "center" },
+  mapLabel: {
+    fontFamily: FONT,
+    fontSize: 13,
+    fontWeight: "800",
+    color: t.onAccent,
+    letterSpacing: 0.2,
+    textAlign: "center",
+  },
   switcher: {
     position: "absolute",
     right: 14,
@@ -828,7 +933,12 @@ const makeStyles = (t: Theme) =>
     zIndex: 20,
   },
   stackScroll: { flexGrow: 0 },
-  stack: { flexDirection: "row", alignItems: "center", paddingVertical: 6, paddingRight: 4 },
+  stack: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingRight: 4,
+  },
 
   disc: {
     width: 46,
@@ -843,7 +953,10 @@ const makeStyles = (t: Theme) =>
     shadowColor: "#000",
     shadowOpacity: 0.18,
     shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
   },
   discOverlap: { marginLeft: -14 },
   discFinished: { backgroundColor: t.surface },
@@ -862,6 +975,10 @@ const makeStyles = (t: Theme) =>
     color: t.text,
     textAlign: "center",
   },
-  discTextSelected: { fontFamily: FONT, fontSize: 11, color: t.onAccent },
+  discTextSelected: {
+    fontFamily: FONT,
+    fontSize: 11,
+    color: t.onAccent,
+  },
   discTextFinished: { color: t.text },
   });

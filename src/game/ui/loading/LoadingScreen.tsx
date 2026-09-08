@@ -13,10 +13,26 @@ const wavyRight1 = require("@/src/assets/ui/landing/wavy-right-1.png");
 const modumascot = require("@/src/assets/images/mascot/modu-mascot.png");
 
 const WAVE_ASSETS = {
-  purpleLeft: { w: 2024, h: 2544, frac: 0.3 },
-  purpleRight: { w: 746, h: 939, frac: 0.26 },
-  left: { w: 1216, h: 1436, frac: 0.21 },
-  right: { w: 960, h: 1173, frac: 0.2 },
+  purpleLeft: {
+    w: 2024,
+    h: 2544,
+    frac: 0.3,
+  },
+  purpleRight: {
+    w: 746,
+    h: 939,
+    frac: 0.26,
+  },
+  left: {
+    w: 1216,
+    h: 1436,
+    frac: 0.21,
+  },
+  right: {
+    w: 960,
+    h: 1173,
+    frac: 0.2,
+  },
 } as const;
 
 function useWaveSizes() {
@@ -26,7 +42,10 @@ function useWaveSizes() {
     for (const key in WAVE_ASSETS) {
       const a = WAVE_ASSETS[key as keyof typeof WAVE_ASSETS];
       const width = screenW * a.frac;
-      out[key as keyof typeof WAVE_ASSETS] = { width, height: width * (a.h / a.w) };
+      out[key as keyof typeof WAVE_ASSETS] = {
+        width,
+        height: width * (a.h / a.w),
+      };
     }
     return out;
   }, [screenW]);
@@ -187,7 +206,11 @@ const makeStyles = (t: Theme) => {
     gap: 10,
   } as const;
   return StyleSheet.create({
-    root: { flex: 1, overflow: "hidden", ...centred },
+    root: {
+      flex: 1,
+      overflow: "hidden",
+      ...centred,
+    },
     overlayRoot: {
       ...StyleSheet.absoluteFillObject,
       overflow: "hidden",
@@ -195,9 +218,21 @@ const makeStyles = (t: Theme) => {
       zIndex: 100,
       elevation: 100,
     },
-    clay: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
-    waveRight: { position: "absolute", top: -24, right: -24 },
-    waveLeft: { position: "absolute", bottom: -24, left: -24 },
+    clay: {
+      ...StyleSheet.absoluteFillObject,
+      width: "100%",
+      height: "100%",
+    },
+    waveRight: {
+      position: "absolute",
+      top: -24,
+      right: -24,
+    },
+    waveLeft: {
+      position: "absolute",
+      bottom: -24,
+      left: -24,
+    },
     avatarRing: {
       width: 72,
       height: 72,
@@ -209,11 +244,33 @@ const makeStyles = (t: Theme) => {
       justifyContent: "center",
       overflow: "hidden",
     },
-    avatarText: { ...LEXEND.bold, color: t.text, fontSize: 28 },
-    mascot: { width: 180, height: Math.round(180 * (941 / 915)) },
-    mascotTablet: { width: 260, height: Math.round(260 * (941 / 915)) },
-    label: { ...LEXEND.semibold, color: t.textDim },
-    bar: { width: "60%", maxWidth: 420, height: 14, marginTop: -8 },
-    actions: { flexDirection: "row", gap: 12, marginTop: 6 },
+    avatarText: {
+      ...LEXEND.bold,
+      color: t.text,
+      fontSize: 28,
+    },
+    mascot: {
+      width: 180,
+      height: Math.round(180 * (941 / 915)),
+    },
+    mascotTablet: {
+      width: 260,
+      height: Math.round(260 * (941 / 915)),
+    },
+    label: {
+      ...LEXEND.semibold,
+      color: t.textDim,
+    },
+    bar: {
+      width: "60%",
+      maxWidth: 420,
+      height: 14,
+      marginTop: -8,
+    },
+    actions: {
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 6,
+    },
   });
 };

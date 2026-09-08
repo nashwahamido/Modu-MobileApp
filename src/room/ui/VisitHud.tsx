@@ -1,4 +1,3 @@
-// The chrome over a visited room: whose room this is, the way out, and the heart. Deliberately thin — a visit is look-and-like, so there is no bar of tools to host.
 import {
   Image,
   StyleSheet,
@@ -15,11 +14,8 @@ import type { Profile } from "@/src/data";
 import { useScreenInsets } from '../../hooks/use-safe-insets';
 import { ROOM_CHIP_RADIUS, ROOM_CHIP_SIZE } from './RoomLightControls';
 
-/** The chips' cream, shared with the room's other chrome. */
 const CHIP_FILL = '#FBFAF3';
 
-// The arrow inside the back chip. Sized so the drawn angle matches the weight the typed "‹" had at
-// 26pt bold — the icon's own box is 14 of its 24 units tall, so this renders about 13pt of chevron.
 const BACK_ICON_SIZE = 22;
 
 
@@ -40,7 +36,6 @@ export function VisitHud({
 }) {
   const s = useFixedStyles(makeStyles);
   const t = useTheme();
-  // Immersive mode reports 0 insets, so these floors sit UNDER the design's own offsets.
   const safe = useScreenInsets();
   const padTop = 12 + safe.top;
   const padL = 22 + safe.left;
@@ -49,7 +44,15 @@ export function VisitHud({
 
   return (
     <>
-      <View style={[s.header, { top: padTop, left: padL }]}>
+      <View
+        style={[
+          s.header,
+          {
+            top: padTop,
+            left: padL,
+          },
+        ]}
+      >
         <Pressable accessibilityRole="button" accessibilityLabel="Back to your room" style={s.backButton} onPress={onBack} hitSlop={10}>
           <BackIcon size={BACK_ICON_SIZE} color={CREAM.ink} />
         </Pressable>
@@ -71,7 +74,13 @@ export function VisitHud({
         accessibilityRole="button"
         accessibilityState={{ selected: liked }}
         accessibilityLabel={liked ? "Unlike this room" : "Like this room"}
-        style={[s.heart, { bottom: padBottom, right: padR }]}
+        style={[
+          s.heart,
+          {
+            bottom: padBottom,
+            right: padR,
+          },
+        ]}
         onPress={onToggleLike}
       >
         <Text style={[s.heartGlyph, liked && { color: t.danger }]}>{liked ? "♥" : "♡"}</Text>
@@ -90,10 +99,6 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       gap: 12,
     },
-    // THE SAME CHIP the light switch and the hour button below it wear — same box, same corner, same
-    // cream, same shadow, taken from their constants rather than matched by eye. It heads that column,
-    // so it has to be one of them: at 42pt and fully round it read as a different kind of control that
-    // happened to be parked above them, and it sat 6pt narrower than the chips it was leading.
     backButton: {
       width: ROOM_CHIP_SIZE,
       height: ROOM_CHIP_SIZE,
@@ -104,8 +109,6 @@ const makeStyles = (t: Theme) =>
       ...CARD_CHROME,
       borderWidth: 0,
     },
-    // Its height follows the chip beside it, and its chrome does too: the two are one row, and a
-    // hairline pill next to a shadowed chip reads as one of them being a mistake.
     hostCard: {
       flexDirection: "row",
       alignItems: "center",
@@ -128,8 +131,6 @@ const makeStyles = (t: Theme) =>
       color: CREAM.ink,
       ...LEXEND.semibold,
       fontSize: 16.5,
-      // Raised WITH the type: at the old 180 a longer name simply hit the ellipsis sooner at the
-      // larger size, which would have read as the name shrinking rather than growing.
       maxWidth: 260,
     },
     emptyNote: {

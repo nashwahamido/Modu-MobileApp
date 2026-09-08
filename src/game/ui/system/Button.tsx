@@ -306,7 +306,10 @@ export function Segmented<T extends string>({
     <View
       style={[
         styles.segTrack,
-        { backgroundColor: t.surfaceInset, borderRadius: RADIUS.control },
+        {
+          backgroundColor: t.surfaceInset,
+          borderRadius: RADIUS.control,
+        },
         style,
       ]}
     >
@@ -359,7 +362,11 @@ export function ProgressBar({
   return (
     <View
       accessibilityRole="progressbar"
-      accessibilityValue={{ min: 0, max: total, now: value }}
+      accessibilityValue={{
+        min: 0,
+        max: total,
+        now: value,
+      }}
       style={[styles.track, { backgroundColor: t.surfaceInset }, style]}
     >
       <View
@@ -398,7 +405,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
     minHeight: SIZE.controlHeight,
   },
-  segTrack: { flexDirection: "row", padding: 3 },
+  segTrack: {
+    flexDirection: "row",
+    padding: 3,
+  },
   segItem: {
     flex: 1,
     minHeight: SIZE.controlHeightSm - 6,
@@ -406,6 +416,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: SPACE.md,
   },
-  track: { height: 8, borderRadius: RADIUS.pill, overflow: "hidden" },
-  fill: { height: "100%", borderRadius: RADIUS.pill },
+  track: {
+    height: 8,
+    borderRadius: RADIUS.pill,
+    overflow: "hidden",
+  },
+  fill: {
+    height: "100%",
+    borderRadius: RADIUS.pill,
+  },
 });

@@ -29,12 +29,32 @@ const CATEGORY_ART: Record<
   ShopCategory,
   { src: number; size: number; nudgeY?: number; tabletLift?: number }
 > = {
-  fur: { src: require("@/src/assets/ui/icons/Furniture.png"), size: 54 },
-  wall: { src: require("@/src/assets/ui/icons/Wallpaper.png"), size: 48 },
-  floor: { src: require("@/src/assets/ui/icons/floor.png"), size: 54, nudgeY: 4, tabletLift: 1.05 },
-  deco: { src: require("@/src/assets/ui/icons/deco.png"), size: 56 },
-  win: { src: require("@/src/assets/ui/icons/Window.png"), size: 44 },
-  lit: { src: require("@/src/assets/ui/icons/Lighting.png"), size: 59 },
+  fur: {
+    src: require("@/src/assets/ui/icons/Furniture.png"),
+    size: 54,
+  },
+  wall: {
+    src: require("@/src/assets/ui/icons/Wallpaper.png"),
+    size: 48,
+  },
+  floor: {
+    src: require("@/src/assets/ui/icons/floor.png"),
+    size: 54,
+    nudgeY: 4,
+    tabletLift: 1.05,
+  },
+  deco: {
+    src: require("@/src/assets/ui/icons/deco.png"),
+    size: 56,
+  },
+  win: {
+    src: require("@/src/assets/ui/icons/Window.png"),
+    size: 44,
+  },
+  lit: {
+    src: require("@/src/assets/ui/icons/Lighting.png"),
+    size: 59,
+  },
 };
 const BOARD_OVERHANG_X = 21;
 const TABLET_MIN_SHORT_DP = 600;
@@ -46,14 +66,38 @@ const TAB_GAP = 36;
 const ROW_PADDING_X = 18;
 const OUTLINE_WIDTH = 0.6;
 const OUTLINE_OFFSETS: { width: number; height: number }[] = [
-  { width: -OUTLINE_WIDTH, height: 0 },
-  { width: OUTLINE_WIDTH, height: 0 },
-  { width: 0, height: -OUTLINE_WIDTH },
-  { width: 0, height: OUTLINE_WIDTH },
-  { width: -OUTLINE_WIDTH, height: -OUTLINE_WIDTH },
-  { width: OUTLINE_WIDTH, height: -OUTLINE_WIDTH },
-  { width: -OUTLINE_WIDTH, height: OUTLINE_WIDTH },
-  { width: OUTLINE_WIDTH, height: OUTLINE_WIDTH },
+  {
+    width: -OUTLINE_WIDTH,
+    height: 0,
+  },
+  {
+    width: OUTLINE_WIDTH,
+    height: 0,
+  },
+  {
+    width: 0,
+    height: -OUTLINE_WIDTH,
+  },
+  {
+    width: 0,
+    height: OUTLINE_WIDTH,
+  },
+  {
+    width: -OUTLINE_WIDTH,
+    height: -OUTLINE_WIDTH,
+  },
+  {
+    width: OUTLINE_WIDTH,
+    height: -OUTLINE_WIDTH,
+  },
+  {
+    width: -OUTLINE_WIDTH,
+    height: OUTLINE_WIDTH,
+  },
+  {
+    width: OUTLINE_WIDTH,
+    height: OUTLINE_WIDTH,
+  },
 ];
 
 export function CategoryBoardTabs({
@@ -63,7 +107,10 @@ export function CategoryBoardTabs({
   category: ShopCategory;
   onCategory: (next: ShopCategory) => void;
 }) {
-  const [row, setRow] = useState({ width: 0, height: 0 });
+  const [row, setRow] = useState({
+    width: 0,
+    height: 0,
+  });
   const [available, setAvailable] = useState(0);
   const { width: screenW, height: screenH } = useWindowDimensions();
 
@@ -121,7 +168,10 @@ export function CategoryBoardTabs({
       <View
         style={s.row}
         onLayout={(e) =>
-          setRow({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })
+          setRow({
+            width: e.nativeEvent.layout.width,
+            height: e.nativeEvent.layout.height,
+          })
         }
       >
         {SHOP_CATEGORY_TABS.map((id) => {

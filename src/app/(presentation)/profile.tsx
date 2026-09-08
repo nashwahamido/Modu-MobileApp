@@ -29,7 +29,10 @@ const PANEL_SHADOW = {
   shadowColor: "#000",
   shadowOpacity: 0.14,
   shadowRadius: 8,
-  shadowOffset: { width: 0, height: 3 },
+  shadowOffset: {
+    width: 0,
+    height: 3,
+  },
   elevation: 3,
 } as const;
 
@@ -212,7 +215,15 @@ export default function ProfileScreen() {
         },
       ]}
     >
-      <View style={[styles.header, { top: GUTTER_V, left: GUTTER_H + safe.left - BACK_INSET }]}>
+      <View
+        style={[
+          styles.header,
+          {
+            top: GUTTER_V,
+            left: GUTTER_H + safe.left - BACK_INSET,
+          },
+        ]}
+      >
         <Pressable
           style={styles.backButton}
           onPress={() => router.dismissTo("/room")}
@@ -230,10 +241,25 @@ export default function ProfileScreen() {
 
       <View style={styles.body}>
         <View style={[styles.profileCard, { width: cardWidth }]}>
-          <View style={[styles.avatarWrap, { width: avatarSize, height: avatarSize }]}>
+          <View
+            style={[
+              styles.avatarWrap,
+              {
+                width: avatarSize,
+                height: avatarSize,
+              },
+            ]}
+          >
             <Image
               source={avatarForProfile(profile.avatarMode)}
-              style={[styles.avatar, { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }]}
+              style={[
+                styles.avatar,
+                {
+                  width: avatarSize,
+                  height: avatarSize,
+                  borderRadius: avatarSize / 2,
+                },
+              ]}
             />
             <View style={styles.levelBadge}>
               <Image
@@ -422,10 +448,22 @@ export default function ProfileScreen() {
 
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
-    screen: { flex: 1, backgroundColor: BG_FALLBACK },
+    screen: {
+      flex: 1,
+      backgroundColor: BG_FALLBACK,
+    },
     root: { flex: 1 },
-    center: { alignItems: "center", justifyContent: "center", gap: SPACE.md },
-    errorText: { ...TYPE.body, color: t.textFaint, textAlign: "center", padding: SPACE.lg },
+    center: {
+      alignItems: "center",
+      justifyContent: "center",
+      gap: SPACE.md,
+    },
+    errorText: {
+      ...TYPE.body,
+      color: t.textFaint,
+      textAlign: "center",
+      padding: SPACE.lg,
+    },
     header: {
       position: "absolute",
       zIndex: 5,
@@ -436,15 +474,27 @@ const makeStyles = (t: Theme) =>
       alignItems: "center",
       justifyContent: "center",
     },
-    backIcon: { width: BACK_ICON, height: BACK_ICON },
+    backIcon: {
+      width: BACK_ICON,
+      height: BACK_ICON,
+    },
 
-    body: { flex: 1, flexDirection: "row", gap: SPACE.md, minWidth: 0 },
+    body: {
+      flex: 1,
+      flexDirection: "row",
+      gap: SPACE.md,
+      minWidth: 0,
+    },
 
     profileCard: {
       alignItems: "center",
       paddingTop: SPACE.lg,
     },
-    avatarWrap: { width: 150, height: 150, marginBottom: SPACE.lg },
+    avatarWrap: {
+      width: 150,
+      height: 150,
+      marginBottom: SPACE.lg,
+    },
     avatar: {
       width: 150,
       height: 150,
@@ -453,9 +503,23 @@ const makeStyles = (t: Theme) =>
       borderColor: t.border,
       backgroundColor: t.surfaceRaised,
     },
-    levelBadge: { position: "absolute", top: -6, left: -6, alignItems: "center", justifyContent: "center" },
-    levelStar: { width: 44, height: 44 },
-    levelText: { position: "absolute", color: t.onAccent, fontSize: 13, fontWeight: "900" },
+    levelBadge: {
+      position: "absolute",
+      top: -6,
+      left: -6,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    levelStar: {
+      width: 44,
+      height: 44,
+    },
+    levelText: {
+      position: "absolute",
+      color: t.onAccent,
+      fontSize: 13,
+      fontWeight: "900",
+    },
 
     nameRow: {
       flexDirection: "row",
@@ -473,17 +537,53 @@ const makeStyles = (t: Theme) =>
       marginBottom: SPACE.lg,
       ...PANEL_SHADOW,
     },
-    nameText: { ...TYPE.title, color: t.text, flexShrink: 1 },
-    nameInput: { ...TYPE.title, color: t.text, minWidth: 140, padding: 0, textAlign: "center" },
-    pencil: { color: t.textDim, fontSize: 16 },
-    saveText: { ...TYPE.label, color: t.accent },
+    nameText: {
+      ...TYPE.title,
+      color: t.text,
+      flexShrink: 1,
+    },
+    nameInput: {
+      ...TYPE.title,
+      color: t.text,
+      minWidth: 140,
+      padding: 0,
+      textAlign: "center",
+    },
+    pencil: {
+      color: t.textDim,
+      fontSize: 16,
+    },
+    saveText: {
+      ...TYPE.label,
+      color: t.accent,
+    },
 
-    statList: { alignSelf: "center", marginTop: SPACE.xs },
-    statRow: { flexDirection: "row", alignItems: "center", gap: SPACE.md, alignSelf: "stretch", marginBottom: SPACE.md },
-    statIcon: { width: 36, height: 36 },
-    statGlyph: { fontSize: 20, color: t.textDim, width: 26, textAlign: "center" },
+    statList: {
+      alignSelf: "center",
+      marginTop: SPACE.xs,
+    },
+    statRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: SPACE.md,
+      alignSelf: "stretch",
+      marginBottom: SPACE.md,
+    },
+    statIcon: {
+      width: 36,
+      height: 36,
+    },
+    statGlyph: {
+      fontSize: 20,
+      color: t.textDim,
+      width: 26,
+      textAlign: "center",
+    },
     statBody: { flexShrink: 1 },
-    statTitle: { ...TYPE.label, color: t.text },
+    statTitle: {
+      ...TYPE.label,
+      color: t.text,
+    },
     titleBadgeAnchor: {
       position: "absolute",
       bottom: -12,
@@ -499,11 +599,25 @@ const makeStyles = (t: Theme) =>
       backgroundColor: t.surface,
       ...PANEL_SHADOW,
     },
-    titleBadgeText: { ...TYPE.labelSm, color: t.text, letterSpacing: 0.3, textAlign: "center" },
+    titleBadgeText: {
+      ...TYPE.labelSm,
+      color: t.text,
+      letterSpacing: 0.3,
+      textAlign: "center",
+    },
     heartGlyph: { color: "#C2544B" },
 
-    friendsPanel: { flex: 1, minWidth: 0, paddingTop: PANEL_LEAD },
-    searchRow: { flexDirection: "row", alignItems: "center", gap: SPACE.sm, marginBottom: SPACE.sm },
+    friendsPanel: {
+      flex: 1,
+      minWidth: 0,
+      paddingTop: PANEL_LEAD,
+    },
+    searchRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: SPACE.sm,
+      marginBottom: SPACE.sm,
+    },
     searchInput: {
       ...TYPE.labelSm,
       color: t.text,
@@ -516,8 +630,16 @@ const makeStyles = (t: Theme) =>
       backgroundColor: t.surface,
       ...PANEL_SHADOW,
     },
-    searchNote: { ...TYPE.labelSm, color: t.textFaint, paddingHorizontal: SPACE.sm },
-    tabs: { flexDirection: "row", gap: SPACE.sm, marginBottom: SPACE.sm },
+    searchNote: {
+      ...TYPE.labelSm,
+      color: t.textFaint,
+      paddingHorizontal: SPACE.sm,
+    },
+    tabs: {
+      flexDirection: "row",
+      gap: SPACE.sm,
+      marginBottom: SPACE.sm,
+    },
     tab: {
       flex: 1,
       height: SIZE.controlHeightSm,
@@ -529,8 +651,14 @@ const makeStyles = (t: Theme) =>
       backgroundColor: t.surface,
       ...PANEL_SHADOW,
     },
-    tabActive: { backgroundColor: t.surfaceRaised, borderColor: t.borderStrong },
-    tabText: { ...TYPE.label, color: t.textDim },
+    tabActive: {
+      backgroundColor: t.surfaceRaised,
+      borderColor: t.borderStrong,
+    },
+    tabText: {
+      ...TYPE.label,
+      color: t.textDim,
+    },
     tabTextActive: { color: t.text },
 
     list: {
@@ -560,7 +688,12 @@ const makeStyles = (t: Theme) =>
       borderWidth: 1,
       borderColor: t.border,
     },
-    friendName: { ...TYPE.label, color: t.text, flex: 1, minWidth: 0 },
+    friendName: {
+      ...TYPE.label,
+      color: t.text,
+      flex: 1,
+      minWidth: 0,
+    },
     removeBtn: {
       paddingHorizontal: SPACE.md,
       height: 32,
@@ -570,7 +703,10 @@ const makeStyles = (t: Theme) =>
       borderColor: t.border,
       backgroundColor: t.bg,
     },
-    removeText: { ...TYPE.labelSm, color: t.textDim },
+    removeText: {
+      ...TYPE.labelSm,
+      color: t.textDim,
+    },
     acceptBtn: {
       paddingHorizontal: SPACE.md,
       height: 32,
@@ -580,9 +716,17 @@ const makeStyles = (t: Theme) =>
       borderColor: t.accent,
       backgroundColor: t.accent,
     },
-    acceptText: { ...TYPE.labelSm, color: t.onAccent },
+    acceptText: {
+      ...TYPE.labelSm,
+      color: t.onAccent,
+    },
 
-    empty: { ...TYPE.body, color: t.textFaint, textAlign: "center", padding: SPACE.lg },
+    empty: {
+      ...TYPE.body,
+      color: t.textFaint,
+      textAlign: "center",
+      padding: SPACE.lg,
+    },
     emptyPane: {
       flex: 1,
       alignItems: "center",
