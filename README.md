@@ -80,3 +80,7 @@ Models are loaded at runtime via public URLs. To add a new model, upload the `.g
 2. Make your changes
 3. Push and open a pull request
 4. Never commit `.env`, API keys, or large binary files (`.glb`, `.obj`)
+
+
+
+MODU, its name, artwork and design are the property of the MODU team. Built by Astrid Yin, Emma Sun, Ge You, Krystyna Mikava, Nashwa Hamido and Sherin Glady, as an MSc Interactive Digital Media project at Trinity College Dublin. Furniture names are used only to describe the pieces modelled; MODU is not affiliated with IKEA. All rights reserved.
