@@ -4,7 +4,7 @@
 
 MODU is a gamified 3D furniture assembly app for Android, designed around cognitive accessibility. It turns a flat-pack instruction booklet into a 3D build you hold in your hands: one step at a time, with a companion who guides you through it.
 
-- **Website:** [modugamified.vercel.app](https://modugamified.vercel.app)
+- **Website:** [modugamified.vercel.app](https://modugamified.vercel.app) ([source](https://github.com/nashwahamido/MODU-Website))
 - **Project:** MSc Interactive Digital Media team project, Trinity College Dublin (2026)
 
 ## Features
@@ -121,9 +121,18 @@ Furniture models are based on the [IKEA 3D Assembly Dataset](https://github.com/
 
 ## Team
 
-Built by Astrid Yin, Emma Sun, Ge You, Krystyna Mikava, Nashwa Hamido and Sherin Glady, as an MSc Interactive Digital Media project at Trinity College Dublin, supervised by Prof. John Dingliana.
+Built as an MSc Interactive Digital Media project at Trinity College Dublin, supervised by Prof. John Dingliana.
 
-Nashwa Hamido was project manager and full-stack developer.
+| Name | Role |
+| --- | --- |
+| Nashwa Hamido | Project manager, full-stack developer and front-end lead |
+| Ge You | Backend lead (assembly logic and 3D pipeline) |
+| Sherin Glady | Brand and visual designer, illustrator, marketing |
+| Emma Tianyi | UX designer, 3D artist |
+| Astrid Yin | Strategist, narrative designer |
+| Krystyna Mikava | UX/UI designer, front-end developer |
+
+The product website was designed and built by Nashwa Hamido: [MODU-Website](https://github.com/nashwahamido/MODU-Website).
 
 ---
 
