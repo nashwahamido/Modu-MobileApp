@@ -2,7 +2,7 @@
 
 **Furniture assembly, made calmer.**
 
-MODU is a gamified 3D furniture assembly app for Android, designed around cognitive accessibility. It turns a flat-pack instruction booklet into a 3D build you hold in your hands: one step at a time, with a companion who guides you through it.
+MODU is a gamified 3D furniture assembly mobile app for Android and iOS, designed around cognitive accessibility. It turns a flat-pack instruction booklet into a 3D build you hold in your hands: one step at a time, with a companion who guides you through it.
 
 - **Website:** [modugamified.vercel.app](https://modugamified.vercel.app) ([source](https://github.com/nashwahamido/MODU-Website))
 - **Project:** MSc Interactive Digital Media team project, Trinity College Dublin (2026)
@@ -37,7 +37,7 @@ MODU uses native modules, including 3D rendering. That means it runs in a **deve
 ### Prerequisites
 
 - Node.js (LTS) and Git
-- An Android phone or tablet with a MODU development build installed, built with EAS (`eas build --profile development --platform android`)
+- An Android or iOS phone or tablet with a MODU development build installed, built with EAS (`eas build --profile development --platform android` or `--platform ios`)
 - Access to the project's Supabase instance
 
 ### Setup
@@ -66,6 +66,7 @@ npm start            # starts Metro; open the dev build on your device
 | --- | --- |
 | `npm start` | Start the Metro bundler |
 | `npm run android` | Build and run on a connected Android device |
+| `npm run ios` | Build and run on iOS (requires a Mac with Xcode) |
 | `npm test` | Run the test suite |
 | `npm run typecheck` | TypeScript check |
 | `npm run build:room` | Rebuild and verify the room model |
